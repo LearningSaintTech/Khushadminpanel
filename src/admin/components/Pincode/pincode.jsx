@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getPincodes, deletePincode } from "../../apis/PincodeApi";
+import { getPincodes, deletePincode } from "../../apis/Pincodeapi";
 import { Plus, Trash2, Edit } from "lucide-react";
 
 const PincodePage = () => {

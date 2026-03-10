@@ -5,7 +5,7 @@ import {
   createCoupon,
   updateCoupon,
   getCouponById,
-} from "../../apis/CouponApi";
+} from "../../apis/Couponapi";
 
 const CouponForm = () => {
   const { id } = useParams();

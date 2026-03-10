@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCoupons, toggleCouponStatus } from "../../apis/CouponApi";
+import { getCoupons, toggleCouponStatus } from "../../apis/Couponapi";
 import { Plus, Edit } from "lucide-react";
 
 const CouponPage = () => {

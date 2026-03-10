@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { createPincode, updatePincode } from "../../apis/PincodeApi";
+import { createPincode, updatePincode } from "../../apis/Pincodeapi";
 
 const PincodeForm = () => {
   const navigate = useNavigate();

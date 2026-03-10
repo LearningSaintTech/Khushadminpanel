@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   getBrands,
   deleteBrand,
-} from "../../apis/BrandApi";
+} from "../../apis/Brandapi";
 
 const Brand = () => {
   const navigate = useNavigate();
