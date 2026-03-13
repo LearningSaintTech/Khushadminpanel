@@ -55,6 +55,12 @@ import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
 import Profile from "../admin/components/Profile/Profile";
 import Central from "../admin/components/inventory/centralstock";
+import AdminNotificationsPage from "../admin/components/notifications/AdminNotificationsPage";
+import AdminNotificationTemplatesPage from "../admin/components/notifications/AdminNotificationTemplatesPage";
+import AdminBroadcastPage from "../admin/components/notifications/AdminBroadcastPage";
+import AdminNotificationHistoryPage from "../admin/components/notifications/AdminNotificationHistoryPage";
+import AdminNotificationTestPage from "../admin/components/notifications/AdminNotificationTestPage";
+import AdminEmailTemplatesPage from "../admin/components/notifications/AdminEmailTemplatesPage";
 const AdminRoutes = () => {
   return (
     <Routes>
@@ -71,6 +77,13 @@ const AdminRoutes = () => {
         }
       >
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="notifications" element={<AdminNotificationsPage />} />
+        <Route path="notifications/sent" element={<AdminNotificationHistoryPage />} />
+        <Route path="notifications/templates" element={<AdminNotificationTemplatesPage />} />
+        <Route path="notifications/email-templates" element={<AdminEmailTemplatesPage />} />
+        <Route path="notifications/broadcast" element={<AdminBroadcastPage />} />
+        <Route path="notifications/history" element={<AdminNotificationHistoryPage />} />
+        <Route path="notifications/test" element={<AdminNotificationTestPage />} />
         <Route path="inventory/categories" element={<Categories />} />
         <Route path="inventory/categories/create" element={<CategoryForm />} />
         <Route path="inventory/categories/edit/:id" element={<CategoryForm />} />

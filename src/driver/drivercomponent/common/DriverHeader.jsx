@@ -1,11 +1,28 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { Bell } from "lucide-react";
 import { driverToggleOnline, driverGetProfile } from "../../apis/driverApi";
+import { useNotification } from "../../../context/NotificationContext";
 
 const HEADER_HEIGHT_CLASS = "h-[72px]";
+
+function NotificationBadge({ count }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 export default function DriverHeader() {
   const [isAccepting, setIsAccepting] = useState(true);
   const [toggleLoading, setToggleLoading] = useState(false);
+  const { unreadCount, refreshUnreadCount } = useNotification();
+
+  useEffect(() => {
+    refreshUnreadCount().catch(() => {});
+  }, [refreshUnreadCount]);
 
   useEffect(() => {
     driverGetProfile()
@@ -60,9 +77,14 @@ export default function DriverHeader() {
           </button>
         </div>
       </div>
-      <button type="button" className="bg-gray-200 p-2.5 rounded-xl shadow hover:bg-gray-300 transition">
-        <span className="text-lg" aria-hidden>🔔</span>
-      </button>
+      <Link
+        to="/driver/notifications"
+        className="relative bg-gray-200 p-2.5 rounded-xl shadow hover:bg-gray-300 transition"
+        aria-label="Notifications"
+      >
+        <Bell className="w-6 h-6 text-gray-700" />
+        <NotificationBadge count={unreadCount} />
+      </Link>
     </header>
   );
 }

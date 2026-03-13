@@ -11,6 +11,7 @@ import AssignmentDetails from "../driver/drivercomponent/Home/AssignmentDetails.
 import OrderHistory from "../driver/drivercomponent/order/orderHistory.jsx";
 import ExchangeOrderHistory from "../driver/drivercomponent/order/exchangeorderhistory.jsx";
 import Profile from "../driver/drivercomponent/Profile/Profile.jsx";
+import DriverNotificationsPage from "../driver/drivercomponent/notifications/DriverNotificationsPage.jsx";
 
 const DriverRoutes = () => {
   return (
@@ -28,6 +29,7 @@ const DriverRoutes = () => {
             <Route path="exchange-orders" element={<Exchangeorder />} />
             <Route path="order-history" element={<OrderHistory />} />
             <Route path="exchange-order-history" element={<ExchangeOrderHistory />} />
+            <Route path="notifications" element={<DriverNotificationsPage />} />
             <Route path="profile" element={<Profile />} />
           </Route>
         </Route>

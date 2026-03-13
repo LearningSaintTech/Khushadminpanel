@@ -2,11 +2,15 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
+import { NotificationProvider } from "./context/NotificationContext";
+import { NotificationSocketConnector } from "./context/NotificationSocketConnector";
 // import SubAdminRoutes from "./routes/subadminroutes";
 
 function App() {
   return (
-    <Routes>
+    <NotificationProvider>
+      <NotificationSocketConnector />
+      <Routes>
       {/* Admin Routes */}
       <Route path="/admin/*" element={<AdminRoutes />} />
       
@@ -24,7 +28,8 @@ function App() {
       
       {/* 404 fallback */}
       <Route path="*" element={<Navigate to="/admin" replace />} />
-    </Routes>
+      </Routes>
+    </NotificationProvider>
   );
 }
 

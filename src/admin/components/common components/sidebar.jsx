@@ -1,13 +1,19 @@
 // Sidebar.jsx
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Khush from "../../../assets/images/khushh.svg";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useNotification } from "../../../context/NotificationContext";
 import {
   LayoutDashboard,
+  Bell,
+  FileText,
+  Mail,
+  Megaphone,
+  History,
+  FlaskConical,
   Package,
   Tags,
   ShoppingCart,
-  FileText,
   Receipt,
   ChevronDown,
   ChevronRight,
@@ -24,6 +30,9 @@ import { logoutUser } from "../../apis/Authapi";
 
 const Sidebar = () => {
   const [isInventoryOpen, setIsInventoryOpen] = useState(true);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [isBellOpen, setIsBellOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isCouponOpen, setIsCouponOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
@@ -31,8 +40,31 @@ const Sidebar = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const bellRef = useRef(null);
+
+  const { unreadCount, dropdownList, markRead, markAllRead, refreshUnreadCount, refreshList } = useNotification();
 
   const isActive = (path) => location.pathname === path;
+  const isNotificationSectionActive = () => location.pathname.startsWith("/admin/notifications");
+
+  useEffect(() => {
+    refreshUnreadCount().catch(() => {});
+  }, [refreshUnreadCount]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setIsBellOpen(false);
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isNotificationSectionActive() && (location.pathname.includes("templates") || location.pathname.includes("email-templates"))) {
+      setIsNotificationOpen(true);
+      setIsTemplatesOpen(true);
+    }
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     console.log("🚪 Logout button clicked");
@@ -101,17 +133,67 @@ const Sidebar = () => {
           lg:shadow-2xl
         `}
       >
-        {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-gray-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-19 h-15 rounded-xl flex items-center justify-center shadow-md">
-              <img
-                src={Khush} // 🔥 change this to your image path
-                alt="Khush Logo"
-                className="w-full h-full object-contain"
-              />{" "}
+        {/* Logo + Notification icon */}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-800 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-14 h-10 rounded-xl flex items-center justify-center shadow-md shrink-0">
+              <img src={Khush} alt="Khush Logo" className="w-full h-full object-contain" />
             </div>
-            {/* <span className="text-xl font-bold tracking-tight">Khush</span> */}
+          </div>
+          <div className="relative shrink-0" ref={bellRef}>
+            <button
+              type="button"
+              onClick={() => { setIsBellOpen((o) => !o); refreshList(1).catch(() => {}); }}
+              className="relative p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition"
+              aria-label="Notifications"
+            >
+              <Bell size={22} />
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </button>
+            {isBellOpen && (
+              <div className="absolute top-full right-0 mt-1 w-72 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
+                  <span className="text-sm font-medium text-white">Notifications</span>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { markAllRead(); setIsBellOpen(false); }}
+                      className="text-xs text-gray-400 hover:text-white"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {dropdownList.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-gray-500">No notifications</p>
+                  ) : (
+                    dropdownList.map((n) => (
+                      <Link
+                        key={n._id}
+                        to="/admin/notifications"
+                        onClick={() => { markRead(n._id); setIsBellOpen(false); }}
+                        className={`block px-3 py-2.5 hover:bg-white/5 border-b border-gray-800 last:border-0 ${!n.read ? "bg-white/5" : ""}`}
+                      >
+                        <p className="text-sm text-gray-200 font-medium truncate">{n.title}</p>
+                        {n.body && <p className="text-xs text-gray-500 truncate mt-0.5">{n.body}</p>}
+                      </Link>
+                    ))
+                  )}
+                </div>
+                <Link
+                  to="/admin/notifications"
+                  onClick={() => setIsBellOpen(false)}
+                  className="block px-3 py-2.5 text-center text-sm font-medium text-gray-300 hover:bg-white/5 border-t border-gray-700"
+                >
+                  See all
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -131,6 +213,106 @@ const Sidebar = () => {
               />
               <span>Dashboard</span>
             </Link>
+
+            {/* Notifications dropdown */}
+            <div>
+              <button
+                onClick={() => {
+                  setIsNotificationOpen((o) => !o);
+                  if (!isNotificationOpen) setIsTemplatesOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                  isNotificationSectionActive() ? "bg-white/10 text-white" : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Bell size={20} className="text-gray-400 group-hover:text-black" />
+                  <span>Notifications</span>
+                </div>
+                {isNotificationOpen ? (
+                  <ChevronDown size={18} className="text-gray-400" />
+                ) : (
+                  <ChevronRight size={18} className="text-gray-400" />
+                )}
+              </button>
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  isNotificationOpen ? "max-h-[420px] opacity-100 mt-1" : "max-h-0 opacity-0"
+                }`}
+              >
+                <div className="pl-4 pr-2 py-1 space-y-0.5 border-l-2 border-gray-700 ml-5">
+                  <Link
+                    to="/admin/notifications"
+                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
+                      location.pathname === "/admin/notifications"
+                        ? "bg-white/10 text-white"
+                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                    }`}
+                  >
+                    1. All notifications
+                  </Link>
+                  <Link
+                    to="/admin/notifications/sent"
+                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
+                      isActive("/admin/notifications/sent")
+                        ? "bg-white/10 text-white"
+                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                    }`}
+                  >
+                    2. All send notifications
+                  </Link>
+                  <div>
+                    <button
+                      onClick={() => setIsTemplatesOpen((o) => !o)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded text-sm font-medium ${
+                        isActive("/admin/notifications/templates") || isActive("/admin/notifications/email-templates")
+                          ? "bg-white/10 text-white"
+                          : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                      }`}
+                    >
+                      3. Templates
+                      {isTemplatesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <div className={`overflow-hidden ${isTemplatesOpen ? "max-h-24" : "max-h-0"}`}>
+                      <Link
+                        to="/admin/notifications/templates"
+                        className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
+                      >
+                        In-app
+                      </Link>
+                      <Link
+                        to="/admin/notifications/email-templates"
+                        className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
+                      >
+                        Email
+                      </Link>
+                    </div>
+                  </div>
+                  <Link
+                    to="/admin/notifications/broadcast"
+                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
+                      isActive("/admin/notifications/broadcast")
+                        ? "bg-white/10 text-white"
+                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                    }`}
+                  >
+                    4. Broadcast
+                  </Link>
+                  <Link
+                    to="/admin/notifications/history"
+                    className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
+                  >
+                    History
+                  </Link>
+                  <Link
+                    to="/admin/notifications/test"
+                    className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
+                  >
+                    Test
+                  </Link>
+                </div>
+              </div>
+            </div>
 
             {/* Inventory Dropdown */}
             <div>
