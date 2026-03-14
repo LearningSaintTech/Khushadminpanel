@@ -228,22 +228,9 @@ const Showsubcategory = () => {
     navigate(`/admin/inventory/subcategories/${selectedCategoryId}/create`);
   };
 
-  const openEdit = (sub) => {
-    let categoryId =
-      sub.categoryId ||
-      sub.parentCategory ||
-      sub.category?._id ||
-      sub.category?.id ||
-      (typeof sub.category === 'string' ? sub.category : null) ||
-      selectedCategoryId;
-
-    if (!categoryId) {
-      alert("Please select a category from the dropdown first to edit this subcategory.");
-      return;
-    }
-
-    navigate(`/admin/inventory/subcategories/${categoryId}/edit/${sub._id}`);
-  };
+ const openEdit = (sub) => {
+  navigate(`/admin/inventory/subcategories/edit/${sub._id}`);
+};
 
   const toggleActive = async (id) => {
     try {

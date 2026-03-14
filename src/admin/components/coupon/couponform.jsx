@@ -21,6 +21,7 @@ const CouponForm = () => {
     discountValue: "",
     maxDiscountAmount: "",
     minCartValue: "",
+    maxCartValue: "",
     totalUsageLimit: "",
     perUserUsageLimit: "1",
     startDate: "",
@@ -46,10 +47,16 @@ const CouponForm = () => {
             discountValue: coupon.discountValue || "",
             maxDiscountAmount: coupon.maxDiscountAmount || "",
             minCartValue: coupon.minCartValue || "",
+            maxCartValue:
+              coupon.maxCartValue !== undefined && coupon.maxCartValue !== null
+                ? String(coupon.maxCartValue)
+                : "",
             totalUsageLimit: coupon.totalUsageLimit || "",
             perUserUsageLimit: coupon.perUserUsageLimit || "1",
-            startDate: coupon.startDate ? coupon.startDate.split('T')[0] : "",
-            expiryDate: coupon.expiryDate ? coupon.expiryDate.split('T')[0] : "",
+            startDate: coupon.startDate ? coupon.startDate.split("T")[0] : "",
+            expiryDate: coupon.expiryDate
+              ? coupon.expiryDate.split("T")[0]
+              : "",
             applicableOn: coupon.applicableOn || "ALL",
           });
         } else {
@@ -95,10 +102,21 @@ const CouponForm = () => {
       description: formData.description.trim(),
       discountType: formData.discountType,
       discountValue: Number(formData.discountValue),
-      maxDiscountAmount: formData.maxDiscountAmount ? Number(formData.maxDiscountAmount) : undefined,
-      minCartValue: formData.minCartValue ? Number(formData.minCartValue) : undefined,
-      totalUsageLimit: formData.totalUsageLimit ? Number(formData.totalUsageLimit) : undefined,
-      perUserUsageLimit: formData.perUserUsageLimit ? Number(formData.perUserUsageLimit) : 1,
+      maxDiscountAmount: formData.maxDiscountAmount
+        ? Number(formData.maxDiscountAmount)
+        : undefined,
+      minCartValue: formData.minCartValue
+        ? Number(formData.minCartValue)
+        : undefined,
+      maxCartValue: formData.maxCartValue
+        ? Number(formData.maxCartValue)
+        : undefined,
+      totalUsageLimit: formData.totalUsageLimit
+        ? Number(formData.totalUsageLimit)
+        : undefined,
+      perUserUsageLimit: formData.perUserUsageLimit
+        ? Number(formData.perUserUsageLimit)
+        : 1,
       startDate: formData.startDate,
       expiryDate: formData.expiryDate,
       applicableOn: formData.applicableOn,
@@ -132,7 +150,10 @@ const CouponForm = () => {
             onClick={() => navigate("/admin/coupons")}
             className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
           >
-            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <ArrowLeft
+              size={18}
+              className="group-hover:-translate-x-1 transition-transform"
+            />
             <span>Back</span>
           </button>
           <div className="text-right">
@@ -140,7 +161,9 @@ const CouponForm = () => {
               {isEdit ? "Edit Coupon" : "Create Coupon"}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              {isEdit ? "Update coupon information" : "Create a new discount coupon"}
+              {isEdit
+                ? "Update coupon information"
+                : "Create a new discount coupon"}
             </p>
           </div>
         </div>
@@ -208,9 +231,13 @@ const CouponForm = () => {
                 </label>
                 <div className="relative">
                   {formData.discountType === "PERCENT" ? (
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                      %
+                    </span>
                   ) : (
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                      ₹
+                    </span>
                   )}
                   <input
                     type="number"
@@ -228,10 +255,15 @@ const CouponForm = () => {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Max Discount <span className="text-xs text-gray-500 font-normal">(optional)</span>
+                  Max Discount{" "}
+                  <span className="text-xs text-gray-500 font-normal">
+                    (optional)
+                  </span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                    ₹
+                  </span>
                   <input
                     type="number"
                     name="maxDiscountAmount"
@@ -248,7 +280,10 @@ const CouponForm = () => {
             {/* Description */}
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Description <span className="text-xs text-gray-500 font-normal">(optional)</span>
+                Description{" "}
+                <span className="text-xs text-gray-500 font-normal">
+                  (optional)
+                </span>
               </label>
               <textarea
                 name="description"
@@ -264,10 +299,15 @@ const CouponForm = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Min Cart Value <span className="text-xs text-gray-500 font-normal">(optional)</span>
+                  Min Cart Value{" "}
+                  <span className="text-xs text-gray-500 font-normal">
+                    (optional)
+                  </span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                    ₹
+                  </span>
                   <input
                     type="number"
                     name="minCartValue"
@@ -279,10 +319,35 @@ const CouponForm = () => {
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Max Cart Value{" "}
+                  <span className="text-xs text-gray-500 font-normal">
+                    (optional)
+                  </span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    name="maxCartValue"
+                    value={formData.maxCartValue}
+                    onChange={handleInputChange}
+                    min="0"
+                    placeholder="5000"
+                    className="w-full px-4 py-2.5 pl-8 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Total Usage Limit <span className="text-xs text-gray-500 font-normal">(optional)</span>
+                  Total Usage Limit{" "}
+                  <span className="text-xs text-gray-500 font-normal">
+                    (optional)
+                  </span>
                 </label>
                 <input
                   type="number"
@@ -378,8 +443,10 @@ const CouponForm = () => {
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     Saving...
                   </span>
+                ) : isEdit ? (
+                  "Update Coupon"
                 ) : (
-                  isEdit ? "Update Coupon" : "Create Coupon"
+                  "Create Coupon"
                 )}
               </button>
             </div>

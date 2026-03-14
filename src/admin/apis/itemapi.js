@@ -4,6 +4,7 @@ import { apiConnector } from '../services/Apiconnector';
 // Internal item endpoints used by this module
 const ITEMS_API = {
   GET_ITEMS_WITH_SKUS: "/items/skus",
+  BULK_UPLOAD_ITEMS: "/admin/orders/items/bulk-upload",
 };
 
 /**
@@ -190,6 +191,37 @@ export const getItemsWithSkus = (
   return apiConnector("GET", url);
 };
 
+
+/**
+ * Bulk upload items with JSON + images
+ * Endpoint: POST /api/admin/orders/items/bulk-upload
+ *
+ * FormData fields:
+ * - products: JSON file
+ * - images: multiple image files
+ */
+
+export const bulkUploadItems = async (formData) => {
+  try {
+    const response = await apiConnector(
+      "POST",
+      ITEMS_API.BULK_UPLOAD_ITEMS,
+      formData,
+      {
+        "Content-Type": "multipart/form-data",
+      }
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Error bulk uploading items:", error);
+    throw error?.response?.data || {
+      success: false,
+      message: "Bulk upload failed",
+    };
+  }
+};
+
 export default {
   searchItems,
   getItemsBySubcategory,
@@ -198,4 +230,5 @@ export default {
   updateItem,
   getItemsForSelect,
   getItemsWithSkus,
+  bulkUploadItems,
 };

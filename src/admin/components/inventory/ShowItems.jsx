@@ -3,8 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Search, Edit, Plus, ZoomIn, X, Eye, ChevronDown } from "lucide-react";
 import { searchItems, getAllItems } from "../../apis/itemapi";
 import { getAllCategories } from "../../apis/categoryapi";
-import { getAllSubcategories, getSubcategoriesByCategory } from "../../apis/subcategoryapis";
-
+import {
+  getAllSubcategories,
+  getSubcategoriesByCategory,
+} from "../../apis/subcategoryapis";
+import { bulkUploadItems } from "../../apis/itemapi";
 const ShowItems = () => {
   const navigate = useNavigate();
   const categoryDropdownRef = useRef(null);
@@ -26,20 +29,27 @@ const ShowItems = () => {
   const [pagination, setPagination] = useState(null);
   const [limit] = useState(10);
   const [zoomedImage, setZoomedImage] = useState(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [jsonFile, setJsonFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
   // Category dropdown states
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [categorySearchTerm, setCategorySearchTerm] = useState("");
-  const [debouncedCategorySearchTerm, setDebouncedCategorySearchTerm] = useState("");
+  const [debouncedCategorySearchTerm, setDebouncedCategorySearchTerm] =
+    useState("");
   const [categoryCurrentPage, setCategoryCurrentPage] = useState(1);
   const [categoryPagination, setCategoryPagination] = useState(null);
   const [allCategories, setAllCategories] = useState([]);
   const [categoryLimit] = useState(10);
 
   // Subcategory dropdown states
-  const [isSubcategoryDropdownOpen, setIsSubcategoryDropdownOpen] = useState(false);
+  const [isSubcategoryDropdownOpen, setIsSubcategoryDropdownOpen] =
+    useState(false);
   const [subcategorySearchTerm, setSubcategorySearchTerm] = useState("");
-  const [debouncedSubcategorySearchTerm, setDebouncedSubcategorySearchTerm] = useState("");
+  const [debouncedSubcategorySearchTerm, setDebouncedSubcategorySearchTerm] =
+    useState("");
   const [subcategoryCurrentPage, setSubcategoryCurrentPage] = useState(1);
   const [subcategoryPagination, setSubcategoryPagination] = useState(null);
   const [allSubcategories, setAllSubcategories] = useState([]);
@@ -134,7 +144,11 @@ const ShowItems = () => {
   const fetchCategories = async (page = 1) => {
     try {
       setLoadingCategories(true);
-      const res = await getAllCategories(page, categoryLimit, debouncedCategorySearchTerm);
+      const res = await getAllCategories(
+        page,
+        categoryLimit,
+        debouncedCategorySearchTerm,
+      );
       const data = res?.data?.data || res?.data || {};
       const categoryList = data.categories || data || [];
       const pag = data.pagination || null;
@@ -146,7 +160,10 @@ const ShowItems = () => {
       }
 
       if (pag) {
-        const totalPages = pag.pages || pag.totalPages || (pag.total ? Math.ceil(pag.total / categoryLimit) : 1);
+        const totalPages =
+          pag.pages ||
+          pag.totalPages ||
+          (pag.total ? Math.ceil(pag.total / categoryLimit) : 1);
         setCategoryPagination({
           ...pag,
           pages: totalPages,
@@ -172,7 +189,11 @@ const ShowItems = () => {
   const fetchAllSubcategories = async (page = 1) => {
     try {
       setLoadingSubcategories(true);
-      const res = await getAllSubcategories(page, subcategoryLimit, debouncedSubcategorySearchTerm);
+      const res = await getAllSubcategories(
+        page,
+        subcategoryLimit,
+        debouncedSubcategorySearchTerm,
+      );
       const data = res?.data?.data || res?.data || {};
       const subList = data.subcategories || data.subCategories || data || [];
       const pag = data.pagination || null;
@@ -184,7 +205,10 @@ const ShowItems = () => {
       }
 
       if (pag) {
-        const totalPages = pag.pages || pag.totalPages || (pag.total ? Math.ceil(pag.total / subcategoryLimit) : 1);
+        const totalPages =
+          pag.pages ||
+          pag.totalPages ||
+          (pag.total ? Math.ceil(pag.total / subcategoryLimit) : 1);
         setSubcategoryPagination({
           ...pag,
           pages: totalPages,
@@ -215,7 +239,7 @@ const ShowItems = () => {
         selectedCategoryId,
         page,
         subcategoryLimit,
-        debouncedSubcategorySearchTerm
+        debouncedSubcategorySearchTerm,
       );
       const data = res?.data?.data || res?.data || {};
       const subList = data.subcategories || data.subCategories || data || [];
@@ -228,7 +252,10 @@ const ShowItems = () => {
       }
 
       if (pag) {
-        const totalPages = pag.pages || pag.totalPages || (pag.total ? Math.ceil(pag.total / subcategoryLimit) : 1);
+        const totalPages =
+          pag.pages ||
+          pag.totalPages ||
+          (pag.total ? Math.ceil(pag.total / subcategoryLimit) : 1);
         setSubcategoryPagination({
           ...pag,
           pages: totalPages,
@@ -262,9 +289,9 @@ const ShowItems = () => {
         limit,
         debouncedSearchTerm || "",
         selectedCategoryId || "",
-        selectedSubcategoryId || ""
+        selectedSubcategoryId || "",
       );
-      
+
       const data = res?.data?.data || res?.data || res || {};
       const itemsList = data.items || data?.items || data || [];
       const pag = data.pagination || null;
@@ -280,11 +307,12 @@ const ShowItems = () => {
           limit,
         };
         if (selectedCategoryId) queryParams.categoryId = selectedCategoryId;
-        if (selectedSubcategoryId) queryParams.subcategoryId = selectedSubcategoryId;
+        if (selectedSubcategoryId)
+          queryParams.subcategoryId = selectedSubcategoryId;
         if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
           queryParams.search = debouncedSearchTerm.trim();
         }
-        
+
         const res = await searchItems(queryParams);
         const data = res?.data?.data || res?.data || res || {};
         const itemsList = data.items || data?.items || data || [];
@@ -294,7 +322,11 @@ const ShowItems = () => {
         setPagination(pag);
       } catch (fallbackErr) {
         console.error("Fallback API also failed:", fallbackErr);
-        setError(err?.response?.data?.message || err?.message || "Failed to load items");
+        setError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Failed to load items",
+        );
         setItems([]);
         setPagination(null);
       }
@@ -302,7 +334,6 @@ const ShowItems = () => {
       setLoading(false);
     }
   };
-
 
   // Get displayed categories based on search and pagination
   const getDisplayedCategories = () => {
@@ -326,13 +357,20 @@ const ShowItems = () => {
 
   const getSelectedCategoryName = () => {
     if (!selectedCategoryId) return "All Categories";
-    const selected = allCategories.find((cat) => cat._id === selectedCategoryId);
+    const selected = allCategories.find(
+      (cat) => cat._id === selectedCategoryId,
+    );
     return selected?.name || selected?.title || "Unknown Category";
   };
 
   const getSelectedSubcategoryName = () => {
-    if (!selectedSubcategoryId) return selectedCategoryId ? "Select Subcategory" : "Select Category First";
-    const selected = allSubcategories.find((sub) => sub._id === selectedSubcategoryId);
+    if (!selectedSubcategoryId)
+      return selectedCategoryId
+        ? "Select Subcategory"
+        : "Select Category First";
+    const selected = allSubcategories.find(
+      (sub) => sub._id === selectedSubcategoryId,
+    );
     return selected?.name || selected?.title || "Unknown Subcategory";
   };
 
@@ -354,11 +392,19 @@ const ShowItems = () => {
     setSubcategoryCurrentPage(1);
   };
 
-  const categoryTotalPages = categoryPagination?.pages || 
-    (categoryPagination?.total ? Math.ceil(categoryPagination.total / categoryLimit) : 1) || 1;
+  const categoryTotalPages =
+    categoryPagination?.pages ||
+    (categoryPagination?.total
+      ? Math.ceil(categoryPagination.total / categoryLimit)
+      : 1) ||
+    1;
 
-  const subcategoryTotalPages = subcategoryPagination?.pages || 
-    (subcategoryPagination?.total ? Math.ceil(subcategoryPagination.total / subcategoryLimit) : 1) || 1;
+  const subcategoryTotalPages =
+    subcategoryPagination?.pages ||
+    (subcategoryPagination?.total
+      ? Math.ceil(subcategoryPagination.total / subcategoryLimit)
+      : 1) ||
+    1;
 
   // Use items directly from API (search is handled by API)
   const filteredItems = items;
@@ -367,9 +413,11 @@ const ShowItems = () => {
   const openEdit = (item) => {
     const categoryId = item.categoryId || selectedCategoryId;
     const subcategoryId = item.subcategoryId || selectedSubcategoryId;
-    
+
     if (categoryId && subcategoryId) {
-      navigate(`/admin/inventory/items/${categoryId}/${subcategoryId}/edit/${item._id || item.productId}`);
+      navigate(
+        `/admin/inventory/items/${categoryId}/${subcategoryId}/edit/${item._id || item.productId}`,
+      );
     } else {
       // Fallback: navigate to item details if category/subcategory not available
       navigate(`/admin/inventory/items/${item._id || item.productId}`);
@@ -382,9 +430,48 @@ const ShowItems = () => {
 
   const openCreate = () => {
     if (selectedCategoryId && selectedSubcategoryId) {
-      navigate(`/admin/inventory/items/${selectedCategoryId}/${selectedSubcategoryId}/create`);
+      navigate(
+        `/admin/inventory/items/${selectedCategoryId}/${selectedSubcategoryId}/create`,
+      );
     } else {
       alert("Please select both category and subcategory to create a new item");
+    }
+  };
+  const handleBulkUpload = async () => {
+    if (!jsonFile) {
+      alert("Please select JSON file");
+      return;
+    }
+
+    if (imageFiles.length === 0) {
+      alert("Please select product images");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+      formData.append("products", jsonFile);
+
+      imageFiles.forEach((file) => {
+        formData.append("images", file);
+      });
+
+      const res = await bulkUploadItems(formData);
+
+      alert(res?.data?.message || "Bulk upload completed");
+
+      setShowBulkUpload(false);
+      setJsonFile(null);
+      setImageFiles([]);
+
+      fetchItems(1);
+    } catch (err) {
+      console.error(err);
+      alert("Bulk upload failed");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -409,12 +496,16 @@ const ShowItems = () => {
               <div className="relative" ref={categoryDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                  onClick={() =>
+                    setIsCategoryDropdownOpen(!isCategoryDropdownOpen)
+                  }
                   disabled={loadingCategories}
                   className="w-full px-4 py-2.5 text-sm bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-between"
                 >
                   <span className="truncate">
-                    {loadingCategories ? "Loading..." : getSelectedCategoryName()}
+                    {loadingCategories
+                      ? "Loading..."
+                      : getSelectedCategoryName()}
                   </span>
                   <ChevronDown
                     size={20}
@@ -498,7 +589,9 @@ const ShowItems = () => {
                                 disabled={loadingCategories}
                                 className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {loadingCategories ? "Loading..." : "Load More..."}
+                                {loadingCategories
+                                  ? "Loading..."
+                                  : "Load More..."}
                               </button>
                             )}
                         </>
@@ -512,39 +605,53 @@ const ShowItems = () => {
                             {debouncedCategorySearchTerm
                               ? `Found ${getDisplayedCategories().length} result${getDisplayedCategories().length !== 1 ? "s" : ""}`
                               : categoryPagination
-                              ? `Page ${categoryCurrentPage} of ${categoryTotalPages} (${allCategories.length} total)`
-                              : `Showing ${getDisplayedCategories().length} categories`}
+                                ? `Page ${categoryCurrentPage} of ${categoryTotalPages} (${allCategories.length} total)`
+                                : `Showing ${getDisplayedCategories().length} categories`}
                           </span>
-                          {!debouncedCategorySearchTerm && categoryPagination && categoryTotalPages > 1 && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (categoryCurrentPage > 1) {
-                                    setCategoryCurrentPage(categoryCurrentPage - 1);
+                          {!debouncedCategorySearchTerm &&
+                            categoryPagination &&
+                            categoryTotalPages > 1 && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (categoryCurrentPage > 1) {
+                                      setCategoryCurrentPage(
+                                        categoryCurrentPage - 1,
+                                      );
+                                    }
+                                  }}
+                                  disabled={
+                                    categoryCurrentPage === 1 ||
+                                    loadingCategories
                                   }
-                                }}
-                                disabled={categoryCurrentPage === 1 || loadingCategories}
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Prev
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (categoryCurrentPage < categoryTotalPages) {
-                                    setCategoryCurrentPage(categoryCurrentPage + 1);
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Prev
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      categoryCurrentPage < categoryTotalPages
+                                    ) {
+                                      setCategoryCurrentPage(
+                                        categoryCurrentPage + 1,
+                                      );
+                                    }
+                                  }}
+                                  disabled={
+                                    categoryCurrentPage >= categoryTotalPages ||
+                                    loadingCategories
                                   }
-                                }}
-                                disabled={categoryCurrentPage >= categoryTotalPages || loadingCategories}
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Next
-                              </button>
-                            </div>
-                          )}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            )}
                         </div>
                       </div>
                     )}
@@ -575,8 +682,8 @@ const ShowItems = () => {
                     {loadingSubcategories
                       ? "Loading..."
                       : !selectedCategoryId
-                      ? "Select category first"
-                      : getSelectedSubcategoryName()}
+                        ? "Select category first"
+                        : getSelectedSubcategoryName()}
                   </span>
                   <ChevronDown
                     size={20}
@@ -660,7 +767,9 @@ const ShowItems = () => {
                                 disabled={loadingSubcategories}
                                 className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                {loadingSubcategories ? "Loading..." : "Load More..."}
+                                {loadingSubcategories
+                                  ? "Loading..."
+                                  : "Load More..."}
                               </button>
                             )}
                         </>
@@ -674,39 +783,55 @@ const ShowItems = () => {
                             {debouncedSubcategorySearchTerm
                               ? `Found ${getDisplayedSubcategories().length} result${getDisplayedSubcategories().length !== 1 ? "s" : ""}`
                               : subcategoryPagination
-                              ? `Page ${subcategoryCurrentPage} of ${subcategoryTotalPages} (${allSubcategories.length} total)`
-                              : `Showing ${getDisplayedSubcategories().length} subcategories`}
+                                ? `Page ${subcategoryCurrentPage} of ${subcategoryTotalPages} (${allSubcategories.length} total)`
+                                : `Showing ${getDisplayedSubcategories().length} subcategories`}
                           </span>
-                          {!debouncedSubcategorySearchTerm && subcategoryPagination && subcategoryTotalPages > 1 && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (subcategoryCurrentPage > 1) {
-                                    setSubcategoryCurrentPage(subcategoryCurrentPage - 1);
+                          {!debouncedSubcategorySearchTerm &&
+                            subcategoryPagination &&
+                            subcategoryTotalPages > 1 && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (subcategoryCurrentPage > 1) {
+                                      setSubcategoryCurrentPage(
+                                        subcategoryCurrentPage - 1,
+                                      );
+                                    }
+                                  }}
+                                  disabled={
+                                    subcategoryCurrentPage === 1 ||
+                                    loadingSubcategories
                                   }
-                                }}
-                                disabled={subcategoryCurrentPage === 1 || loadingSubcategories}
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Prev
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (subcategoryCurrentPage < subcategoryTotalPages) {
-                                    setSubcategoryCurrentPage(subcategoryCurrentPage + 1);
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Prev
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (
+                                      subcategoryCurrentPage <
+                                      subcategoryTotalPages
+                                    ) {
+                                      setSubcategoryCurrentPage(
+                                        subcategoryCurrentPage + 1,
+                                      );
+                                    }
+                                  }}
+                                  disabled={
+                                    subcategoryCurrentPage >=
+                                      subcategoryTotalPages ||
+                                    loadingSubcategories
                                   }
-                                }}
-                                disabled={subcategoryCurrentPage >= subcategoryTotalPages || loadingSubcategories}
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Next
-                              </button>
-                            </div>
-                          )}
+                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            )}
                         </div>
                       </div>
                     )}
@@ -739,23 +864,34 @@ const ShowItems = () => {
           <div className="text-sm text-gray-600">
             {pagination ? (
               <span>
-                Showing {((currentPage - 1) * limit) + 1} to{" "}
-                {Math.min(currentPage * limit, pagination.total || items.length)} of{" "}
-                {pagination.total || items.length} items
+                Showing {(currentPage - 1) * limit + 1} to{" "}
+                {Math.min(
+                  currentPage * limit,
+                  pagination.total || items.length,
+                )}{" "}
+                of {pagination.total || items.length} items
               </span>
             ) : (
               <span>{items.length} items found</span>
             )}
           </div>
-          <button
-            onClick={openCreate}
-            disabled={!selectedCategoryId || !selectedSubcategoryId}
-            className="flex items-center gap-2 px-6 py-2.5 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-            title={!selectedCategoryId || !selectedSubcategoryId ? "Please select both category and subcategory to add an item" : "Add new item"}
-          >
-            <Plus className="h-4 w-4" />
-            Add Item
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="flex items-center gap-2 px-6 py-2.5 border border-black text-black font-medium rounded-lg hover:bg-black hover:text-white transition"
+            >
+              Bulk Upload
+            </button>
+
+            <button
+              onClick={openCreate}
+              disabled={!selectedCategoryId || !selectedSubcategoryId}
+              className="flex items-center gap-2 px-6 py-2.5 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition disabled:bg-gray-400"
+            >
+              <Plus className="h-4 w-4" />
+              Add Item
+            </button>
+          </div>
         </div>
 
         {/* Error Message */}
@@ -785,13 +921,19 @@ const ShowItems = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                    <td
+                      colSpan={9}
+                      className="px-4 py-12 text-center text-gray-500"
+                    >
                       Loading items...
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                    <td
+                      colSpan={9}
+                      className="px-4 py-12 text-center text-gray-500"
+                    >
                       No items found
                     </td>
                   </tr>
@@ -806,11 +948,17 @@ const ShowItems = () => {
                       </td>
                       <td className="px-4 py-4">
                         <img
-                          src={item?.thumbnail || item?.images?.[0] || "https://via.placeholder.com/50"}
+                          src={
+                            item?.thumbnail ||
+                            item?.images?.[0] ||
+                            "https://via.placeholder.com/50"
+                          }
                           alt={item.name}
                           onClick={() =>
                             setZoomedImage(
-                              item?.thumbnail || item?.images?.[0] || "https://via.placeholder.com/50"
+                              item?.thumbnail ||
+                                item?.images?.[0] ||
+                                "https://via.placeholder.com/50",
                             )
                           }
                           className="h-12 w-12 rounded-lg object-cover border cursor-pointer hover:opacity-80 transition"
@@ -822,7 +970,10 @@ const ShowItems = () => {
                       <td className="px-4 py-4 text-sm text-gray-600">
                         {item.productId || "—"}
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-600 max-w-xs truncate" title={item.shortDescription || item.description}>
+                      <td
+                        className="px-4 py-4 text-sm text-gray-600 max-w-xs truncate"
+                        title={item.shortDescription || item.description}
+                      >
                         {item.shortDescription || item.description || "—"}
                       </td>
                       <td className="px-4 py-4 text-right font-medium">
@@ -894,6 +1045,59 @@ const ShowItems = () => {
             >
               Next
             </button>
+          </div>
+        )}
+
+        {showBulkUpload && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-lg">
+              <h2 className="text-xl font-semibold mb-4">
+                Bulk Upload Products
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Products JSON
+                  </label>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => setJsonFile(e.target.files[0])}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Product Images
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => setImageFiles(Array.from(e.target.files))}
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    onClick={() => setShowBulkUpload(false)}
+                    className="px-4 py-2 border rounded"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={handleBulkUpload}
+                    disabled={uploading}
+                    className="px-4 py-2 bg-black text-white rounded"
+                  >
+                    {uploading ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

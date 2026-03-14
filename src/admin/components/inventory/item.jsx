@@ -1,24 +1,33 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  getItemsBySubcategory,
-} from "../../apis/itemapi";
+import { getItemsBySubcategory, bulkUploadItems } from "../../apis/itemapi";
 
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
   const navigate = useNavigate();
 
   const [items, setItems] = useState([]);
+  const [jsonFile, setJsonFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [pagination, setPagination] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
-  console.log("[Items.jsx] Params → categoryId:", categoryId, "subcategoryId:", subcategoryId);
+  console.log(
+    "[Items.jsx] Params → categoryId:",
+    categoryId,
+    "subcategoryId:",
+    subcategoryId,
+  );
 
   // Fetch items
   const fetchItems = async (page = 1, limit = 10) => {
-    console.log(`[Items.jsx] fetchItems called — page: ${page}, limit: ${limit}, subcategoryId: ${subcategoryId}`);
+    console.log(
+      `[Items.jsx] fetchItems called — page: ${page}, limit: ${limit}, subcategoryId: ${subcategoryId}`,
+    );
 
     try {
       setLoading(true);
@@ -35,7 +44,10 @@ export default function Items() {
       setItems(res.data?.items || []);
       setPagination(res.data?.pagination || null);
 
-      console.log("[Items.jsx] State updated → items:", res.data?.items?.length || 0);
+      console.log(
+        "[Items.jsx] State updated → items:",
+        res.data?.items?.length || 0,
+      );
     } catch (err) {
       console.error("[Items.jsx] Fetch items FAILED");
       console.error("[Items.jsx] Error:", err);
@@ -57,11 +69,13 @@ export default function Items() {
   }, [subcategoryId]);
 
   const filteredItems = items.filter((item) =>
-    item.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    item.name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   if (searchTerm) {
-    console.log(`[Items.jsx] Filtering active — search: "${searchTerm}" → ${filteredItems.length} results`);
+    console.log(
+      `[Items.jsx] Filtering active — search: "${searchTerm}" → ${filteredItems.length} results`,
+    );
   }
 
   // Navigation
@@ -71,17 +85,58 @@ export default function Items() {
   };
 
   const openEdit = (item) => {
-    console.log("[Items.jsx] → Navigate to EDIT product:", item._id || item.productId, item.name);
+    console.log(
+      "[Items.jsx] → Navigate to EDIT product:",
+      item._id || item.productId,
+      item.name,
+    );
     navigate(
       `/admin/inventory/items/${categoryId}/${subcategoryId}/edit/${
         item._id || item.productId
-      }`
+      }`,
     );
   };
 
   const goBackToSubcategory = () => {
     console.log("[Items.jsx] → Back to subcategories list");
     navigate(`/admin/inventory/subcategories/${categoryId}`);
+  };
+
+  const handleBulkUpload = async () => {
+    if (!jsonFile) {
+      alert("Please select products JSON file");
+      return;
+    }
+
+    if (imageFiles.length === 0) {
+      alert("Please select product images");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+
+      formData.append("products", jsonFile);
+
+      imageFiles.forEach((file) => {
+        formData.append("images", file);
+      });
+
+      const res = await bulkUploadItems(formData);
+
+      console.log("Bulk upload response:", res);
+
+      alert(res?.data?.message || "Bulk upload completed");
+
+      fetchItems(1); // refresh list
+    } catch (error) {
+      console.error("Bulk upload failed:", error);
+      alert(error?.message || "Bulk upload failed");
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -103,12 +158,21 @@ export default function Items() {
             </div>
           </div>
 
-          <button
-            onClick={openCreate}
-            className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors"
-          >
-            + Add Product
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full border border-black text-sm font-medium hover:bg-black hover:text-white transition-colors"
+            >
+              Bulk Upload
+            </button>
+
+            <button
+              onClick={openCreate}
+              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors"
+            >
+              + Add Product
+            </button>
+          </div>
         </div>
 
         {/* Sticky Search / Controls Bar */}
@@ -126,7 +190,10 @@ export default function Items() {
                 <input
                   value={searchTerm}
                   onChange={(e) => {
-                    console.log("[Items.jsx] Search term changed:", e.target.value);
+                    console.log(
+                      "[Items.jsx] Search term changed:",
+                      e.target.value,
+                    );
                     setSearchTerm(e.target.value);
                   }}
                   placeholder="Search products by name..."
@@ -146,6 +213,60 @@ export default function Items() {
             </div>
           </div>
         </div>
+
+        {showBulkUpload && (
+  <div className="px-4 sm:px-6 lg:px-8 py-6">
+    <div className="bg-gray-50 border border-black/10 rounded-2xl p-6 max-w-xl">
+
+      <h2 className="text-lg font-semibold mb-4">Bulk Upload Products</h2>
+
+      <div className="flex flex-col gap-4">
+
+        {/* JSON FILE */}
+        <div>
+          <label className="text-sm font-medium">Products JSON File</label>
+          <input
+            type="file"
+            accept=".json"
+            onChange={(e) => setJsonFile(e.target.files[0])}
+            className="mt-2 block w-full text-sm"
+          />
+        </div>
+
+        {/* IMAGES */}
+        <div>
+          <label className="text-sm font-medium">Product Images</label>
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setImageFiles(Array.from(e.target.files))}
+            className="mt-2 block w-full text-sm"
+          />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+
+          <button
+            onClick={handleBulkUpload}
+            disabled={uploading}
+            className="px-4 py-2 rounded bg-blue-600 text-white text-sm"
+          >
+            {uploading ? "Uploading..." : "Upload"}
+          </button>
+
+          <button
+            onClick={() => setShowBulkUpload(false)}
+            className="px-4 py-2 rounded border text-sm"
+          >
+            Cancel
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+)}
       </div>
 
       {/* Table Section */}
@@ -168,13 +289,19 @@ export default function Items() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500 text-sm">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-gray-500 text-sm"
+                  >
                     Loading products...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500 text-sm">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-gray-500 text-sm"
+                  >
                     No products found
                   </td>
                 </tr>
@@ -183,7 +310,11 @@ export default function Items() {
                   <tr
                     key={item._id}
                     onClick={() => {
-                      console.log("[Items.jsx] Row clicked → view details:", item._id, item.name);
+                      console.log(
+                        "[Items.jsx] Row clicked → view details:",
+                        item._id,
+                        item.name,
+                      );
                       navigate(`/admin/inventory/items/${item._id}`);
                     }}
                     className="border-t border-black/5 hover:bg-black/[0.02] cursor-pointer transition-colors"
@@ -195,7 +326,9 @@ export default function Items() {
                     <td className="px-4 py-3 align-middle">
                       <div className="h-11 w-11 rounded-lg overflow-hidden border border-black/10 bg-gray-50">
                         <img
-                          src={item?.thumbnail || "https://via.placeholder.com/50"}
+                          src={
+                            item?.thumbnail || "https://via.placeholder.com/50"
+                          }
                           alt={item.name}
                           className="h-full w-full object-cover"
                         />
@@ -260,7 +393,10 @@ export default function Items() {
             <button
               disabled={pagination.page <= 1}
               onClick={() => {
-                console.log("[Items.jsx] Previous page clicked → page:", pagination.page - 1);
+                console.log(
+                  "[Items.jsx] Previous page clicked → page:",
+                  pagination.page - 1,
+                );
                 fetchItems(pagination.page - 1);
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
@@ -275,7 +411,10 @@ export default function Items() {
             <button
               disabled={pagination.page >= pagination.totalPages}
               onClick={() => {
-                console.log("[Items.jsx] Next page clicked → page:", pagination.page + 1);
+                console.log(
+                  "[Items.jsx] Next page clicked → page:",
+                  pagination.page + 1,
+                );
                 fetchItems(pagination.page + 1);
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"

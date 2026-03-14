@@ -13,6 +13,8 @@ const ItemForm = () => {
   const isEdit = !!id;
 
   const [loading, setLoading] = useState(false);
+  const [backendErrors, setBackendErrors] = useState([]);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [activeTab, setActiveTab] = useState(1);
   const fileInputRefs = useRef({}); // Track file inputs to prevent double-firing
   const [form, setForm] = useState({
@@ -99,6 +101,57 @@ const ItemForm = () => {
       iconFile: null,
     },
   });
+
+  const validateBasicTab = () => {
+    const errors = {};
+
+    if (!form.name?.trim()) {
+      errors.name = "Product name is required.";
+    }
+
+    if (form.price === "" || form.price === null || Number(form.price) <= 0) {
+      errors.price = "MRP must be greater than 0.";
+    }
+
+    if (form.shortDescription && form.shortDescription.length > 70) {
+      errors.shortDescription = "Short description cannot exceed 70 characters.";
+    }
+
+    if (form.longDescription && form.longDescription.length > 150) {
+      errors.longDescription = "Detailed description cannot exceed 150 characters.";
+    }
+
+    if (
+      form.discountedPrice !== "" &&
+      form.discountedPrice !== null &&
+      Number(form.discountedPrice) > Number(form.price || 0)
+    ) {
+      errors.discountedPrice = "Discounted price cannot be greater than actual price.";
+    }
+
+    return errors;
+  };
+
+  const isBasicTabValid = () => {
+    const errors = validateBasicTab();
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateVariantsTab = () => {
+    // At least one variant with a valid color name
+    return form.variants.some(
+      (variant) => variant?.color?.name && variant.color.name.trim()
+    );
+  };
+
+  const validateSizesTab = () => {
+    // At least one size across all variants with stock filled
+    return form.variants.some((variant) =>
+      Array.isArray(variant.sizes)
+        ? variant.sizes.some((s) => s && s.size && s.stock !== "" && s.stock !== null)
+        : false
+    );
+  };
 
   // Load item data if editing
   useEffect(() => {
@@ -330,10 +383,15 @@ const ItemForm = () => {
     console.log("[ItemForm] removeImageFromVariant:", { variantIndex, imageIndex });
     setForm((prev) => {
       const newVariants = [...prev.variants];
-      newVariants[variantIndex].images.splice(imageIndex, 1);
+      const currentImages = newVariants[variantIndex].images || [];
+      const updatedImages = currentImages.filter((_, idx) => idx !== imageIndex);
+      newVariants[variantIndex] = {
+        ...newVariants[variantIndex],
+        images: updatedImages,
+      };
       console.log(
         "[ItemForm] removeImageFromVariant: remaining images:",
-        newVariants[variantIndex].images.length
+        updatedImages.length
       );
       return { ...prev, variants: newVariants };
     });
@@ -562,8 +620,17 @@ const ItemForm = () => {
   const handleSave = async () => {
     console.log("[ItemForm] handleSave: starting with mode:", isEdit ? "edit" : "create");
     console.log("[ItemForm] handleSave: current form state:", form);
+
+    const basicErrors = validateBasicTab();
+    if (Object.keys(basicErrors).length > 0) {
+      setFieldErrors(basicErrors);
+      setActiveTab(1);
+      return;
+    }
+
     try {
       setLoading(true);
+      setBackendErrors([]);
       const formData = new FormData();
 
       // Basic text fields
@@ -767,9 +834,57 @@ const ItemForm = () => {
       navigate(`/admin/inventory/items/${categoryId}/${subcategoryId}`);
     } catch (err) {
       console.error("[ItemForm] handleSave error:", err);
+      // Support both axios-style errors (err.response.data) and plain backend objects thrown from api layer
+      const rawData = err?.response?.data ?? err ?? {};
+      const responseData =
+        typeof rawData === "string" ? { message: rawData } : rawData;
+
+      const collectedBackendErrors = [];
+
+      if (responseData?.errors && typeof responseData.errors === "object") {
+        Object.values(responseData.errors).forEach((val) => {
+          if (Array.isArray(val)) {
+            val.forEach((msg) => {
+              if (msg) collectedBackendErrors.push(String(msg));
+            });
+          } else if (val) {
+            collectedBackendErrors.push(String(val));
+          }
+        });
+      }
+
+      if (typeof responseData?.error === "string") {
+        collectedBackendErrors.push(responseData.error);
+      }
+
+      if (Array.isArray(responseData?.details)) {
+        responseData.details.forEach((d) => {
+          if (typeof d === "string") {
+            collectedBackendErrors.push(d);
+          } else if (d?.message) {
+            collectedBackendErrors.push(String(d.message));
+          }
+        });
+      }
+
+      if (responseData?.message && !collectedBackendErrors.length) {
+        collectedBackendErrors.push(String(responseData.message));
+      }
+
+      if (!collectedBackendErrors.length && err?.message) {
+        collectedBackendErrors.push(String(err.message));
+      }
+
+      if (!collectedBackendErrors.length) {
+        collectedBackendErrors.push(
+          `Failed to ${isEdit ? "update" : "create"} item`
+        );
+      }
+
+      setBackendErrors(collectedBackendErrors);
+
       alert(
-        `Failed to ${isEdit ? "update" : "create"} product: ` +
-          (err.response?.data?.message || "Unknown error")
+        `Failed to ${isEdit ? "update" : "create"} product. Please review the errors shown on the form.`
       );
     } finally {
       setLoading(false);
@@ -782,7 +897,7 @@ const ItemForm = () => {
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <button
-            onClick={() => navigate(`/admin/inventory/items/${categoryId}/${subcategoryId}`)}
+            onClick={() => navigate(-1)}
             className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-2 text-sm font-medium transition-colors duration-200"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -801,17 +916,69 @@ const ItemForm = () => {
         {/* Form Card */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="p-6 sm:p-8 lg:p-10">
+            {backendErrors.length > 0 && (
+              <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <div className="font-semibold mb-1">Please fix the following problems:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  {backendErrors.map((msg, idx) => (
+                    <li key={idx}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {/* Tabs */}
             <div className="flex border-b-2 border-gray-200 overflow-x-auto mb-8">
               {["Basic", "Variants", "Sizes", "Care", "Size Chart", "Policies", "Filters"].map((label, i) => (
                 <button
                   key={label}
-                  onClick={() => setActiveTab(i + 1)}
+                  onClick={() => {
+                    const targetTab = i + 1;
+                    if (targetTab === 1) {
+                      setActiveTab(1);
+                      return;
+                    }
+
+                    const basicErrors = validateBasicTab();
+                    if (Object.keys(basicErrors).length > 0) {
+                      setFieldErrors(basicErrors);
+                      setActiveTab(1);
+                      window.alert(
+                        "Please complete the Basic tab before moving to the next step."
+                      );
+                      return;
+                    }
+
+                    // Block Sizes (tab 3) and anything beyond if Variants not valid
+                    if (targetTab >= 3 && !validateVariantsTab()) {
+                      setActiveTab(2);
+                      window.alert(
+                        "Please complete the Variants tab (add at least one color) before moving to Sizes."
+                      );
+                      return;
+                    }
+
+                    // Block Filters (tab 7) if Sizes not valid
+                    if (targetTab === 7 && !validateSizesTab()) {
+                      setActiveTab(3);
+                      window.alert(
+                        "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
+                      );
+                      return;
+                    }
+
+                    setFieldErrors({});
+                    setActiveTab(targetTab);
+                  }}
                   className={`flex-1 py-4 text-center font-semibold transition-all duration-200 whitespace-nowrap min-w-[100px] border-b-2 ${
                     activeTab === i + 1
                       ? "border-black text-black"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
+                      : `border-transparent ${
+                          i + 1 > 1 && !isBasicTabValid()
+                            ? "text-gray-300 cursor-not-allowed"
+                            : "text-gray-500 hover:text-gray-700"
+                        }`
                   }`}
+                  disabled={i + 1 > 1 && !isBasicTabValid()}
                 >
                   {label}
                 </button>
@@ -832,6 +999,9 @@ const ItemForm = () => {
                     className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
                     required
                   />
+                  {fieldErrors.name && (
+                    <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -855,8 +1025,19 @@ const ItemForm = () => {
                     onChange={(e) => setForm({ ...form, shortDescription: e.target.value })}
                     placeholder="Short description (max 160 chars)"
                     rows={3}
+                    maxLength={70}
                     className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-none"
                   />
+                  <div className="mt-1 flex justify-between items-center">
+                    <span className="text-[11px] text-gray-400">
+                      {form.shortDescription?.length || 0}/70 characters
+                    </span>
+                    {fieldErrors.shortDescription && (
+                      <span className="text-[11px] text-red-600">
+                        {fieldErrors.shortDescription}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -868,8 +1049,19 @@ const ItemForm = () => {
                     onChange={(e) => setForm({ ...form, longDescription: e.target.value })}
                     placeholder="Detailed product description"
                     rows={6}
+                    maxLength={150}
                     className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-none"
                   />
+                  <div className="mt-1 flex justify-between items-center">
+                    <span className="text-[11px] text-gray-400">
+                      {form.longDescription?.length || 0}/150 characters
+                    </span>
+                    {fieldErrors.longDescription && (
+                      <span className="text-[11px] text-red-600">
+                        {fieldErrors.longDescription}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -885,6 +1077,9 @@ const ItemForm = () => {
                       className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
                       required
                     />
+                    {fieldErrors.price && (
+                      <p className="mt-1 text-xs text-red-600">{fieldErrors.price}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -897,6 +1092,11 @@ const ItemForm = () => {
                       placeholder="0"
                       className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
                     />
+                    {fieldErrors.discountedPrice && (
+                      <p className="mt-1 text-xs text-red-600">
+                        {fieldErrors.discountedPrice}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center pt-8">
                     <label className="flex items-center gap-2.5 cursor-pointer group">
@@ -924,6 +1124,24 @@ const ItemForm = () => {
                     placeholder="e.g. Black, White, Red"
                     className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
                   />
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const errors = validateBasicTab();
+                      if (Object.keys(errors).length > 0) {
+                        setFieldErrors(errors);
+                        return;
+                      }
+                      setFieldErrors({});
+                      setActiveTab(2);
+                    }}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Variants
+                  </button>
                 </div>
               </div>
             )}
@@ -1076,6 +1294,30 @@ const ItemForm = () => {
                   </svg>
                   Add another color variant
                 </button>
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(1)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Basic
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!validateVariantsTab()) {
+                        window.alert(
+                          "Please complete the Variants tab (add at least one color) before moving to Sizes."
+                        );
+                        return;
+                      }
+                      setActiveTab(3);
+                    }}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Sizes
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1112,6 +1354,30 @@ const ItemForm = () => {
                     </div>
                   </div>
                 ))}
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(2)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Variants
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!validateSizesTab()) {
+                        window.alert(
+                          "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
+                        );
+                        return;
+                      }
+                      setActiveTab(7);
+                    }}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Filters
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1208,11 +1474,22 @@ const ItemForm = () => {
                               }}
                               className="text-sm text-gray-600"
                             />
-                            {inst.iconFile && (
-                              <span className="text-xs text-gray-500 mt-1 block">
-                                Selected: {inst.iconFile.name}
-                              </span>
-                            )}
+                        {(inst.iconFile || inst.iconUrl) && (
+                          <div className="mt-2 flex items-center gap-3">
+                            <span className="text-xs text-gray-500">
+                              Preview:
+                            </span>
+                            <img
+                              src={
+                                inst.iconFile
+                                  ? URL.createObjectURL(inst.iconFile)
+                                  : inst.iconUrl
+                              }
+                              alt="Care icon preview"
+                              className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
+                        )}
                           </label>
                         </div>
                       ))}
@@ -1497,10 +1774,21 @@ const ItemForm = () => {
                         }
                         className="text-sm text-gray-600"
                       />
-                      {form.shipping.iconFile && (
-                        <span className="text-xs text-gray-500 mt-1 block">
-                          Selected: {form.shipping.iconFile.name}
-                        </span>
+                      {(form.shipping.iconFile || form.shipping.iconUrl) && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            Preview:
+                          </span>
+                          <img
+                            src={
+                              form.shipping.iconFile
+                                ? URL.createObjectURL(form.shipping.iconFile)
+                                : form.shipping.iconUrl
+                            }
+                            alt="Shipping icon preview"
+                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                          />
+                        </div>
                       )}
                     </label>
                   </div>
@@ -1564,10 +1852,21 @@ const ItemForm = () => {
                         }
                         className="text-sm text-gray-600"
                       />
-                      {form.codPolicy.iconFile && (
-                        <span className="text-xs text-gray-500 mt-1 block">
-                          Selected: {form.codPolicy.iconFile.name}
-                        </span>
+                      {(form.codPolicy.iconFile || form.codPolicy.iconUrl) && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            Preview:
+                          </span>
+                          <img
+                            src={
+                              form.codPolicy.iconFile
+                                ? URL.createObjectURL(form.codPolicy.iconFile)
+                                : form.codPolicy.iconUrl
+                            }
+                            alt="COD icon preview"
+                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                          />
+                        </div>
                       )}
                     </label>
                   </div>
@@ -1631,10 +1930,21 @@ const ItemForm = () => {
                         }
                         className="text-sm text-gray-600"
                       />
-                      {form.returnPolicy.iconFile && (
-                        <span className="text-xs text-gray-500 mt-1 block">
-                          Selected: {form.returnPolicy.iconFile.name}
-                        </span>
+                      {(form.returnPolicy.iconFile || form.returnPolicy.iconUrl) && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            Preview:
+                          </span>
+                          <img
+                            src={
+                              form.returnPolicy.iconFile
+                                ? URL.createObjectURL(form.returnPolicy.iconFile)
+                                : form.returnPolicy.iconUrl
+                            }
+                            alt="Return policy icon preview"
+                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                          />
+                        </div>
                       )}
                     </label>
                   </div>
@@ -1698,10 +2008,21 @@ const ItemForm = () => {
                         }
                         className="text-sm text-gray-600"
                       />
-                      {form.exchangePolicy.iconFile && (
-                        <span className="text-xs text-gray-500 mt-1 block">
-                          Selected: {form.exchangePolicy.iconFile.name}
-                        </span>
+                      {(form.exchangePolicy.iconFile || form.exchangePolicy.iconUrl) && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            Preview:
+                          </span>
+                          <img
+                            src={
+                              form.exchangePolicy.iconFile
+                                ? URL.createObjectURL(form.exchangePolicy.iconFile)
+                                : form.exchangePolicy.iconUrl
+                            }
+                            alt="Exchange policy icon preview"
+                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                          />
+                        </div>
                       )}
                     </label>
                   </div>
@@ -1765,10 +2086,21 @@ const ItemForm = () => {
                         }
                         className="text-sm text-gray-600"
                       />
-                      {form.cancellationPolicy.iconFile && (
-                        <span className="text-xs text-gray-500 mt-1 block">
-                          Selected: {form.cancellationPolicy.iconFile.name}
-                        </span>
+                      {(form.cancellationPolicy.iconFile || form.cancellationPolicy.iconUrl) && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <span className="text-xs text-gray-500">
+                            Preview:
+                          </span>
+                          <img
+                            src={
+                              form.cancellationPolicy.iconFile
+                                ? URL.createObjectURL(form.cancellationPolicy.iconFile)
+                                : form.cancellationPolicy.iconUrl
+                            }
+                            alt="Cancellation policy icon preview"
+                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                          />
+                        </div>
                       )}
                     </label>
                   </div>
@@ -1829,7 +2161,7 @@ const ItemForm = () => {
             {/* Footer */}
             <div className="flex flex-col sm:flex-row justify-end gap-4 pt-8 border-t-2 border-gray-200 mt-8">
               <button
-                onClick={() => navigate(`/admin/inventory/items/${categoryId}/${subcategoryId}`)}
+                onClick={() => navigate(-1)}
                 className="px-8 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-sm"
               >
                 Cancel

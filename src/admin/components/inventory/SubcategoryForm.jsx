@@ -6,6 +6,7 @@ import {
   createSubcategory,
   updateSubcategory,
   getSubcategoriesByCategory,
+  
 } from "../../apis/subcategoryapis";
 
 const SubcategoryForm = () => {
@@ -43,18 +44,30 @@ const SubcategoryForm = () => {
               image: null,
               imagePreview: subcategory.imageUrl || null,
               isActive: subcategory.isActive !== false,
-              showInNavbar: subcategory.showInNavbar || subcategory.isNavbar || false,
+              showInNavbar:
+                subcategory.showInNavbar || subcategory.isNavbar || false,
             });
+          } else {
+            console.error("Subcategory not found for id:", id);
+            alert(
+              "Subcategory not found. It may have been deleted or moved. Returning to list."
+            );
+            navigate(-1);
           }
         } catch (err) {
           console.error("Error loading subcategory:", err);
+          alert(
+            err?.response?.data?.message ||
+              "Failed to load subcategory details. Returning to list."
+          );
+          navigate(-1);
         } finally {
           setLoading(false);
         }
       };
       loadSubcategory();
     }
-  }, [id, categoryId, isEdit]);
+  }, [id, categoryId, isEdit, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
@@ -113,7 +126,7 @@ const SubcategoryForm = () => {
         {/* Header with Back Button and Title on Right */}
         <div className="flex items-center justify-between mb-8">
           <button
-            onClick={() => navigate(`/admin/inventory/subcategories/${categoryId}`)}
+          onClick={() => navigate(-1)}
             className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -247,7 +260,7 @@ const SubcategoryForm = () => {
             <div className="flex gap-3 pt-6 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => navigate(`/admin/inventory/subcategories/${categoryId}`)}
+                onClick={() => navigate(-1)}
                 className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
