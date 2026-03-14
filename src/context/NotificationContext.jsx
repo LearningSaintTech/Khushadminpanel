@@ -11,7 +11,7 @@ const DROPDOWN_LIMIT = 5;
 // Match API base: env or fallback to localhost so socket connects to same backend as Apiconnector.
 const API_BASE = typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
   ? import.meta.env.VITE_API_BASE_URL
-  : "https://api.khushpehno.com/api";
+  : "http://localhost:5000/api";
 const SOCKET_URL = API_BASE.replace(/\/api\/?$/, "");
 
 export function NotificationProvider({ children }) {

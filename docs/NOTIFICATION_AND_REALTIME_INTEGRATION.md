@@ -65,9 +65,9 @@ So: **Mail and in-app = admin can create their own templates** in the admin pane
 
 ## 1. Backend Summary (What’s Already There)
 
-- **Base URL:** API host + `/api` (e.g. `https://api.khushpehno.com/api`). Khush-admin currently hardcodes this in `src/admin/services/Apiconnector.js`; consider `VITE_API_BASE_URL` for env switching.
+- **Base URL:** API host + `/api` (e.g. `http://localhost:5000/api`). Khush-admin currently hardcodes this in `src/admin/services/Apiconnector.js`; consider `VITE_API_BASE_URL` for env switching.
 - **Auth:** All requests send `Authorization: Bearer <token>`. Admin, SubAdmin, and Driver use `localStorage.getItem("token")`; `apiConnector` adds it when present.
-- **Socket.IO:** Same host as API, **no** `/api` path (e.g. `https://api.khushpehno.com`). Handshake: `auth: { token }`. Backend joins the client to room **`user:${userId}`** (userId from JWT). One room per user; **role is not part of the room name**. When the backend creates an in-app notification for a given userId, it emits `notification:new` to that user’s room.
+- **Socket.IO:** Same host as API, **no** `/api` path (e.g. `http://localhost:5000`). Handshake: `auth: { token }`. Backend joins the client to room **`user:${userId}`** (userId from JWT). One room per user; **role is not part of the room name**. When the backend creates an in-app notification for a given userId, it emits `notification:new` to that user’s room.
 
 ### 1.1 User Notification REST APIs (Receive – All Authenticated Users)
 
@@ -187,7 +187,7 @@ Implementing the **same** “receive” layer (notification API + socket + bell 
 
 - **Token storage:** `localStorage.getItem("token")` (and `role`; admin also uses `admin_userId`, `admin_phone`; influencer uses `userId`; driver uses `sessionStorage` for driver IDs before OTP, then token in localStorage).
 - **Redux:** `src/redux/GlobalSlice.js` — `token`, `role`, `user`; actions `setToken`, `setRole`, `logout` (clears state and removes `token`/`role` from localStorage). Selectors in `GlobalSelector.js` (e.g. `selectToken`, `selectIsAuthenticated`).
-- **API client:** `src/admin/services/Apiconnector.js` — axios instance with `baseURL: "https://api.khushpehno.com/api"`; request interceptor adds `Authorization: Bearer ${localStorage.getItem("token")}`. Response interceptor returns `response.data`; errors reject with a message string.
+- **API client:** `src/admin/services/Apiconnector.js` — axios instance with `baseURL: "http://localhost:5000/api"`; request interceptor adds `Authorization: Bearer ${localStorage.getItem("token")}`. Response interceptor returns `response.data`; errors reject with a message string.
 - **Logout:** Admin sidebar calls `logoutUser()` then clears localStorage and redirects. Driver/Influencer have their own logout (driverApi, influencer fetch to logout endpoint); all clear token and redirect.
 
 ### 3.3 API Usage Pattern
@@ -230,8 +230,8 @@ So a new **notification service** can live under `src/admin/services/` or a shar
 
 ### 4.2 Environment / Base URL
 
-- **Option A:** Keep current hardcoded base URL; for Socket, derive host (e.g. `https://api.khushpehno.com`) by stripping `/api` from the base URL string.
-- **Option B (recommended):** Add `VITE_API_BASE_URL` (e.g. `https://api.khushpehno.com/api`) in `.env` and use it in `Apiconnector.js` as `baseURL`. Socket URL = same origin without `/api` (e.g. `VITE_API_BASE_URL.replace(/\/api\/?$/, '')` or a separate `VITE_SOCKET_URL`).
+- **Option A:** Keep current hardcoded base URL; for Socket, derive host (e.g. `http://localhost:5000`) by stripping `/api` from the base URL string.
+- **Option B (recommended):** Add `VITE_API_BASE_URL` (e.g. `http://localhost:5000/api`) in `.env` and use it in `Apiconnector.js` as `baseURL`. Socket URL = same origin without `/api` (e.g. `VITE_API_BASE_URL.replace(/\/api\/?$/, '')` or a separate `VITE_SOCKET_URL`).
 
 ### 4.3 Notification REST Service (Shared Across Flows)
 
