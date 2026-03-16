@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect,useRef } from "react";
 import toast from "react-hot-toast";
 import {
   createDelivery,
@@ -23,6 +23,7 @@ const defaultFormData = {
   isActive: true,
 };
 
+
 export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   const [formData, setFormData] = useState(defaultFormData);
   const [selectedPincodes, setSelectedPincodes] = useState([]);
@@ -30,7 +31,7 @@ export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   const [apiErrors, setApiErrors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-
+const formRef = useRef(null);
   const [pincodes, setPincodes] = useState([]);
   const [pincodesLoading, setPincodesLoading] = useState(false);
   const [pincodeSearch, setPincodeSearch] = useState("");
@@ -51,6 +52,15 @@ export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
       setApiErrors([]);
     }
   }, [editId]);
+
+  useEffect(() => {
+  if (editId && formRef.current) {
+    formRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+}, [editId]);
 
   const fetchPincodes = async (page = 1, search = "") => {
     setPincodesLoading(true);
@@ -203,8 +213,10 @@ export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 overflow-hidden">
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
+<div
+  ref={formRef}
+  className="bg-white rounded-2xl shadow-lg border border-slate-200/80 overflow-hidden"
+>      <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-white">
             {editId ? "Edit delivery option" : "New delivery option"}
