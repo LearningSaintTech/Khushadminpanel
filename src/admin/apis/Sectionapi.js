@@ -6,6 +6,7 @@ export const sectionEndpoints = {
   GET_SINGLE: "/sections/getSingle",
   UPDATE_SECTION: "/sections/update",
   TOGGLE_ACTIVE_STATUS: "/sections/activeStatus",
+  DELETE_SECTION: "/sections/delete",
 };
 
 // Create
@@ -67,5 +68,16 @@ export const toggleSectionActiveStatus = (id) => {
   return apiConnector(
     "PATCH",
     `${sectionEndpoints.TOGGLE_ACTIVE_STATUS}/${id}`
+  );
+};
+
+// Delete Section
+export const deleteSection = (id) => {
+  if (!id) {
+    throw new Error("Section ID is required");
+  }
+  return apiConnector(
+    "DELETE",
+    `${sectionEndpoints.DELETE_SECTION}/${id}`
   );
 };

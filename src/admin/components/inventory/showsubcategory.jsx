@@ -228,9 +228,14 @@ const Showsubcategory = () => {
     navigate(`/admin/inventory/subcategories/${selectedCategoryId}/create`);
   };
 
- const openEdit = (sub) => {
-  navigate(`/admin/inventory/subcategories/edit/${sub._id}`);
-};
+  const openEdit = (sub) => {
+    navigate(`/admin/inventory/subcategories/edit/${sub._id}`, {
+      state: {
+        categoryId: sub.categoryId || sub.parentCategory || sub.category?._id,
+        subcategory: sub,
+      },
+    });
+  };
 
   const toggleActive = async (id) => {
     try {

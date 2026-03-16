@@ -44,6 +44,15 @@ const SectionForm = () => {
   const [desktopPreview, setDesktopPreview] = useState(null);
   const [mobilePreview, setMobilePreview] = useState(null);
 
+  // Web info (schema: webinfo.isWeb, webinfo.webOrder, webinfo.isActive)
+  const [isWeb, setIsWeb] = useState(true);
+  const [webOrder, setWebOrder] = useState(0);
+  const [webinfoActive, setWebinfoActive] = useState(true);
+
+  // FLASH section dates
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   // Data states
   const [categories, setCategories] = useState([]);
   const [categorySearchTerm, setCategorySearchTerm] = useState("");
@@ -73,6 +82,7 @@ const SectionForm = () => {
   const [isDiscountAccordionOpen, setIsDiscountAccordionOpen] = useState(false);
   const [isNavigationAccordionOpen, setIsNavigationAccordionOpen] = useState(false);
   const [isBannerAccordionOpen, setIsBannerAccordionOpen] = useState(false);
+  const [isWebInfoAccordionOpen, setIsWebInfoAccordionOpen] = useState(true);
 
   // ─── Debounce ────────────────────────────────────────────────
   useEffect(() => {
@@ -99,6 +109,7 @@ const SectionForm = () => {
 
   // ─── Fetch Categories ────────────────────────────────────────
   const fetchCategories = async (page = 1) => {
+    console.log("[SectionForm] fetchCategories", { page, debouncedCategorySearchTerm });
     try {
       setLoadingCategories(true);
       const res = await getAllCategories(page, categoryLimit, debouncedCategorySearchTerm);
@@ -106,8 +117,9 @@ const SectionForm = () => {
       const cats = Array.isArray(data.categories) ? data.categories : data || [];
       setCategories(cats);
       setCategoryPagination(data.pagination || null);
+      console.log("[SectionForm] fetchCategories success", { count: cats?.length, pagination: data.pagination });
     } catch (err) {
-      console.error("[CATEGORIES] fetch failed:", err);
+      console.error("[SectionForm] fetchCategories failed:", err);
       setCategories([]);
       setCategoryPagination(null);
     } finally {
@@ -186,6 +198,7 @@ const SectionForm = () => {
 
   // ─── Fetch Products ──────────────────────────────────────────
   const fetchProducts = async (page = 1) => {
+    console.log("[SectionForm] fetchProducts", { page, debouncedProductSearchTerm });
     try {
       setLoadingProducts(true);
       const queryParams = { page, limit: productLimit };
@@ -209,8 +222,9 @@ const SectionForm = () => {
 
       setProducts(Array.isArray(prodArray) ? prodArray : []);
       setProductPagination(pag);
+      console.log("[SectionForm] fetchProducts success", { count: prodArray?.length });
     } catch (err) {
-      console.error("[PRODUCTS] fetch failed:", err);
+      console.error("[SectionForm] fetchProducts failed:", err);
       setProducts([]);
       setProductPagination(null);
     } finally {
@@ -225,12 +239,13 @@ const SectionForm = () => {
   // ─── Load Existing Section (Edit) ────────────────────────────
   useEffect(() => {
     if (!id) return;
-
+    console.log("[SectionForm] load section for edit", id);
     const fetchSection = async () => {
       setLoading(true);
       try {
         const res = await getSingleSection(id);
         const sec = res?.data?.data || res?.data || res || {};
+        console.log("[SectionForm] getSingleSection success", { sectionId: sec._id, title: sec.title, type: sec.type });
 
         setTitle(sec.title || "");
         setType(sec.type || "MANUAL");
@@ -260,12 +275,21 @@ const SectionForm = () => {
         setExternalLink(sec.navigation?.externalLink || "");
         setNavigatePath(sec.navigation?.navigate || sec.navigation?.path || "");
 
+        setIsWeb(sec.webinfo?.isWeb !== false);
+        setWebOrder(sec.webinfo?.webOrder ?? 0);
+        setWebinfoActive(sec.webinfo?.isActive !== false);
+
+        const start = sec.startDate ? (typeof sec.startDate === "string" ? sec.startDate.slice(0, 16) : new Date(sec.startDate).toISOString().slice(0, 16)) : "";
+        const end = sec.endDate ? (typeof sec.endDate === "string" ? sec.endDate.slice(0, 16) : new Date(sec.endDate).toISOString().slice(0, 16)) : "";
+        setStartDate(start);
+        setEndDate(end);
+
         const deskUrl = sec.desktopBanner?.[0]?.imageUrl || sec.desktopBanner?.[0]?.url || null;
         const mobUrl = sec.mobileBanner?.[0]?.imageUrl || sec.mobileBanner?.[0]?.url || null;
         setDesktopPreview(deskUrl);
         setMobilePreview(mobUrl);
       } catch (err) {
-        console.error("[EDIT] Failed to load section:", err);
+        console.error("[SectionForm] getSingleSection failed:", err);
         alert("Could not load section data");
         navigate("/admin/sections");
       } finally {
@@ -296,39 +320,84 @@ const SectionForm = () => {
     });
   };
 
+  // ─── Client-side validations (mirror backend) ─────────────────
+  const validateForm = () => {
+    console.log("[SectionForm] validateForm", { title: title?.trim(), type, categoryIds: categoryIds.length, productIds: productIds.length, typeFLASH: type === "FLASH", startDate, endDate });
+    const t = title?.trim();
+    if (!t) {
+      alert("Title is required.");
+      return false;
+    }
+    if (!type) {
+      alert("Section type is required.");
+      return false;
+    }
+    if (type === "CATEGORY") {
+      const hasCategory = categoryIds.length > 0;
+      const hasSubcategory = Object.values(subcategoryMap).flat().length > 0;
+      if (!hasCategory && !hasSubcategory) {
+        alert("Category or subcategory is required for CATEGORY section.");
+        return false;
+      }
+    }
+    if (type === "MANUAL" || type === "FLASH") {
+      if (!productIds.length) {
+        alert("At least one product is required for MANUAL / FLASH section.");
+        return false;
+      }
+    }
+    if (type === "FLASH") {
+      if (!startDate || !endDate) {
+        alert("Start date and end date are required for FLASH section.");
+        return false;
+      }
+      if (new Date(endDate) <= new Date(startDate)) {
+        alert("End date must be after start date.");
+        return false;
+      }
+    }
+    return true;
+  };
+
   // ─── Submit ──────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("[SectionForm] handleSubmit", { id: id || "create", type, title: title?.trim() });
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
-
+      console.log("[SectionForm] building FormData (categoryId, subcategoryId, products, discount, webinfo as JSON)");
       const formData = new FormData();
 
-      formData.append("title", title);
+      formData.append("title", title.trim());
       formData.append("type", type);
       formData.append("text", text || "");
 
-      categoryIds.forEach((id) => {
-        formData.append("categoryId", id);
-      });
-
+      // Backend parseIfString() expects JSON strings for array/object fields
+      formData.append("categoryId", JSON.stringify(categoryIds));
       const flatSubcategories = Object.values(subcategoryMap).flat();
-      flatSubcategories.forEach((subId) => {
-        formData.append("subcategoryId", subId);
-      });
-
-      productIds.forEach((prodId, index) => {
-        formData.append(`products[${index}][itemId]`, prodId);
-      });
+      formData.append("subcategoryId", JSON.stringify(flatSubcategories));
+      formData.append("products", JSON.stringify(productIds.map((itemId) => ({ itemId }))));
 
       if (discountValue > 0) {
-        formData.append("discount[type]", discountType);
-        formData.append("discount[value]", discountValue);
+        formData.append("discount", JSON.stringify({ type: discountType, value: Number(discountValue) }));
       }
 
       formData.append("navigation[externalLink]", externalLink || "");
       formData.append("navigation[navigate]", navigatePath || "");
+
+      // Web info (backend parseIfString expects JSON or object)
+      formData.append("webinfo", JSON.stringify({
+        isWeb: !!isWeb,
+        webOrder: Number(webOrder) || 0,
+        isActive: !!webinfoActive,
+      }));
+
+      if (type === "FLASH" && startDate && endDate) {
+        formData.append("startDate", new Date(startDate).toISOString());
+        formData.append("endDate", new Date(endDate).toISOString());
+      }
 
       if (desktopBanner) {
         formData.append("desktopBanner", desktopBanner);
@@ -338,17 +407,18 @@ const SectionForm = () => {
         formData.append("mobileBanner", mobileBanner);
       }
 
-      let res;
       if (id) {
-        res = await updateSection(id, formData);
+        await updateSection(id, formData);
+        console.log("[SectionForm] updateSection success", id);
       } else {
-        res = await createSection(formData);
+        await createSection(formData);
+        console.log("[SectionForm] createSection success");
       }
 
       alert(id ? "Section updated successfully!" : "Section created successfully!");
       navigate("/admin/sections");
     } catch (err) {
-      console.error("Submit failed:", err);
+      console.error("[SectionForm] submit failed:", err);
       alert(err?.response?.data?.message || "Failed to save section");
     } finally {
       setLoading(false);
@@ -428,6 +498,7 @@ const SectionForm = () => {
                     >
                       <option value="MANUAL">MANUAL (select products manually)</option>
                       <option value="CATEGORY">CATEGORY (select categories & subcategories)</option>
+                      <option value="FLASH">FLASH (products + start/end date)</option>
                     </select>
                   </div>
 
@@ -441,6 +512,38 @@ const SectionForm = () => {
                       className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black resize-none"
                     />
                   </div>
+
+                  {type === "FLASH" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2 border-t border-gray-200">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">
+                          Start Date <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">
+                          End Date <span className="text-red-600">*</span>
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+                        />
+                      </div>
+                      {(!startDate || !endDate) && (
+                        <p className="sm:col-span-2 text-red-600 text-sm bg-red-50 p-3 rounded">
+                          Start date and end date are required for FLASH sections.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -873,6 +976,60 @@ const SectionForm = () => {
                         placeholder={discountType === "PERCENT" ? "e.g. 25" : "e.g. 199"}
                       />
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Web Info (isWeb, webOrder) */}
+              <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setIsWebInfoAccordionOpen(!isWebInfoAccordionOpen)}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-slate-50 to-gray-100 hover:from-slate-100 hover:to-gray-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">🌐</span>
+                    <div className="text-left">
+                      <h3 className="text-base font-bold">Web Settings</h3>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {isWeb ? `Show on web · Order: ${webOrder}` : "Hidden on web"}
+                      </p>
+                    </div>
+                  </div>
+                  {isWebInfoAccordionOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </button>
+                {isWebInfoAccordionOpen && (
+                  <div className="p-6 border-t grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isWeb}
+                        onChange={(e) => setIsWeb(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                      />
+                      <span className="text-sm font-semibold">Show on Web (isWeb)</span>
+                    </label>
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Web Order</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={webOrder}
+                        onChange={(e) => setWebOrder(Number(e.target.value) || 0)}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Lower number appears first on web.</p>
+                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={webinfoActive}
+                        onChange={(e) => setWebinfoActive(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                      />
+                      <span className="text-sm font-semibold">Active on Web (webinfo.isActive)</span>
+                    </label>
                   </div>
                 )}
               </div>

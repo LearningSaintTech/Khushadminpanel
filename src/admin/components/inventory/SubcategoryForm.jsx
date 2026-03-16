@@ -1,7 +1,7 @@
 // SubcategoryForm.jsx - Reusable form component for Create/Edit Subcategory
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import {
   createSubcategory,
   updateSubcategory,
@@ -9,10 +9,13 @@ import {
   
 } from "../../apis/subcategoryapis";
 
+// Used for: create (/:categoryId/create) and category-scoped edit (/:categoryId/edit/:id).
+// Back / success → /admin/inventory/subcategories/:categoryId
 const SubcategoryForm = () => {
   const { categoryId, id } = useParams();
   const navigate = useNavigate();
   const isEdit = !!id;
+  const backUrl = categoryId ? `/admin/inventory/subcategories/${categoryId}` : "/admin/inventory/categories";
 
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -52,7 +55,7 @@ const SubcategoryForm = () => {
             alert(
               "Subcategory not found. It may have been deleted or moved. Returning to list."
             );
-            navigate(-1);
+            navigate(backUrl);
           }
         } catch (err) {
           console.error("Error loading subcategory:", err);
@@ -111,7 +114,7 @@ const SubcategoryForm = () => {
       } else {
         await createSubcategory(categoryId, formData);
       }
-      navigate(`/admin/inventory/subcategories/${categoryId}`);
+      navigate(backUrl);
     } catch (err) {
       console.error("Error saving subcategory:", err);
       alert(err?.response?.data?.message || "Failed to save subcategory");
@@ -202,7 +205,16 @@ const SubcategoryForm = () => {
               </label>
               
               {form.imagePreview && (
-                <div className="mb-3">
+                <div className="mb-3 relative inline-block">
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, image: null, imagePreview: null }))}
+                    className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                    title="Remove image"
+                    aria-label="Remove image"
+                  >
+                    <X size={16} strokeWidth={2.5} />
+                  </button>
                   <img
                     src={form.imagePreview}
                     alt="Preview"
@@ -260,7 +272,7 @@ const SubcategoryForm = () => {
             <div className="flex gap-3 pt-6 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={() => navigate(backUrl)}
                 className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel

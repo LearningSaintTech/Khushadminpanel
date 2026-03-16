@@ -31,10 +31,11 @@ export const updateBanner = async (bannerId, data) => {
 
 /**
  * Get all Banners
+ * @param {Object} params - query params (page, limit, isActive, etc.)
  * @returns {Promise<Object>}
  */
-export const getAllBanners = async () => {
-  return await apiConnector("GET", BANNER_API.GET_ALL);
+export const getAllBanners = async (params = {}) => {
+  return await apiConnector("GET", BANNER_API.GET_ALL, null, {}, params);
 };
 
 /**

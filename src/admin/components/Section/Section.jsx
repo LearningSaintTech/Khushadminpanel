@@ -1,8 +1,8 @@
 // src/admin/pages/Section.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, ZoomIn, X, ArrowLeft, Power, Eye } from "lucide-react";
-import { getAllSections, toggleSectionActiveStatus } from "../../apis/Sectionapi";
+import { Plus, Edit, ZoomIn, X, ArrowLeft, Power, Eye, Trash2 } from "lucide-react";
+import { getAllSections, toggleSectionActiveStatus, deleteSection } from "../../apis/Sectionapi";
 
 const Section = () => {
   const [sections, setSections] = useState([]);
@@ -16,6 +16,7 @@ const Section = () => {
 
   const fetchSections = async (pageNum = 1, type = null) => {
     setLoading(true);
+    console.log("[Section] fetchSections called", { pageNum, type, limit });
     try {
       const params = { page: pageNum, limit };
       if (type && type !== "ALL") {
@@ -23,6 +24,7 @@ const Section = () => {
       }
 
       const response = await getAllSections(params);
+      console.log("[Section] getAllSections response", { status: response?.status, dataKeys: response?.data ? Object.keys(response.data) : [] });
 
       let items = [];
       let pagination = null;
@@ -51,7 +53,7 @@ const Section = () => {
         setTotalPages(Math.ceil(items.length / limit) || 1);
       }
     } catch (error) {
-      console.error("Failed to fetch sections:", error);
+      console.error("[Section] fetchSections failed:", error);
       alert(error?.response?.data?.message || "Failed to load sections");
       setSections([]);
       setTotalPages(1);
@@ -70,14 +72,16 @@ const Section = () => {
 
   const handleToggleActive = async (section) => {
     const originalStatus = section.isActive;
+    console.log("[Section] handleToggleActive", { sectionId: section._id, title: section.title, from: originalStatus, to: !originalStatus });
     setSections(prev => prev.map(s => 
       s._id === section._id ? { ...s, isActive: !s.isActive } : s
     ));
 
     try {
       await toggleSectionActiveStatus(section._id);
+      console.log("[Section] toggleSectionActiveStatus success", section._id);
     } catch (error) {
-      console.error("Toggle failed:", error);
+      console.error("[Section] toggleSectionActiveStatus failed:", error);
       setSections(prev => prev.map(s => 
         s._id === section._id ? { ...s, isActive: originalStatus } : s
       ));
@@ -85,7 +89,25 @@ const Section = () => {
     }
   };
 
+  const handleDelete = async (section) => {
+    if (!window.confirm(`Delete section "${section.title || section._id}"? This cannot be undone.`)) {
+      console.log("[Section] delete cancelled by user");
+      return;
+    }
+    console.log("[Section] handleDelete", { sectionId: section._id, title: section.title });
+    try {
+      await deleteSection(section._id);
+      console.log("[Section] deleteSection API success", section._id);
+      setSections((prev) => prev.filter((s) => s._id !== section._id));
+      if (selectedSection?._id === section._id) setSelectedSection(null);
+    } catch (error) {
+      console.error("[Section] deleteSection failed:", error);
+      alert(error?.response?.data?.message || "Failed to delete section");
+    }
+  };
+
   const openDetailModal = (section) => {
+    console.log("[Section] openDetailModal", section?.title, section?._id);
     setSelectedSection(section);
   };
 
@@ -146,6 +168,14 @@ const Section = () => {
           >
             Category
           </button>
+          <button
+            onClick={() => setSectionType("FLASH")}
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+              sectionType === "FLASH" ? "bg-black text-white" : "bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Flash
+          </button>
         </div>
 
         {loading ? (
@@ -194,6 +224,12 @@ const Section = () => {
                     <th className="hidden 2xl:table-cell min-w-[140px] px-3 py-3 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">
                       Navigate
                     </th>
+                    <th className="hidden xl:table-cell min-w-[80px] px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Web
+                    </th>
+                    <th className="hidden xl:table-cell min-w-[70px] px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      Order
+                    </th>
                     <th className="min-w-[110px] px-3 py-3 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
                       Status
                     </th>
@@ -237,6 +273,16 @@ const Section = () => {
                       <td className="hidden 2xl:table-cell px-3 py-3 text-sm text-gray-600 truncate max-w-[140px]">
                         {section.navigation?.navigate || "—"}
                       </td>
+                      <td className="hidden xl:table-cell px-3 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          section.webinfo?.isWeb !== false ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-600"
+                        }`}>
+                          {section.webinfo?.isWeb !== false ? "Yes" : "No"}
+                        </span>
+                      </td>
+                      <td className="hidden xl:table-cell px-3 py-3 text-center text-sm font-medium text-gray-700">
+                        {section.webinfo?.webOrder ?? "—"}
+                      </td>
                       <td className="px-3 py-3 text-center">
                         <button
                           onClick={(e) => {
@@ -276,6 +322,17 @@ const Section = () => {
                             <Edit size={14} />
                             <span className="hidden sm:inline">Edit</span>
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(section);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-700 hover:text-white hover:bg-red-600 rounded-lg transition-all border border-red-300 hover:border-red-500"
+                            title="Delete section"
+                          >
+                            <Trash2 size={14} />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -303,6 +360,16 @@ const Section = () => {
                         {section.products?.length > 0 && (
                           <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
                             {section.products.length} products
+                          </span>
+                        )}
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                          section.webinfo?.isWeb !== false ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-600"
+                        }`}>
+                          Web: {section.webinfo?.isWeb !== false ? "Yes" : "No"}
+                        </span>
+                        {(section.webinfo?.webOrder ?? 0) > 0 && (
+                          <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                            Order: {section.webinfo.webOrder}
                           </span>
                         )}
                       </div>
@@ -351,6 +418,13 @@ const Section = () => {
                     >
                       <Edit size={16} />
                       Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(section)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-700 hover:text-white hover:bg-red-600 rounded-lg border border-red-300"
+                    >
+                      <Trash2 size={16} />
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -454,6 +528,19 @@ const Section = () => {
                     <p className="text-gray-700 break-all">{selectedSection.navigation.navigate}</p>
                   </div>
                 )}
+
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 mb-1">Show on Web (isWeb)</h3>
+                  <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                    selectedSection.webinfo?.isWeb !== false ? "bg-emerald-100 text-emerald-800" : "bg-gray-200 text-gray-600"
+                  }`}>
+                    {selectedSection.webinfo?.isWeb !== false ? "Yes" : "No"}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 mb-1">Web Order</h3>
+                  <p className="font-medium">{selectedSection.webinfo?.webOrder ?? "—"}</p>
+                </div>
               </div>
             </div>
 
@@ -465,9 +552,18 @@ const Section = () => {
                 Close
               </button>
               <button
+                onClick={() => selectedSection && handleDelete(selectedSection)}
+                className="px-5 py-2.5 border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-50 flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+              <button
                 onClick={() => {
-                  setSelectedSection(null);
-                  navigate(`/admin/sections/edit/${selectedSection._id}`);
+                  if (selectedSection) {
+                    setSelectedSection(null);
+                    navigate(`/admin/sections/edit/${selectedSection._id}`);
+                  }
                 }}
                 className="px-5 py-2.5 bg-black text-white rounded-lg font-medium hover:bg-gray-900 flex items-center gap-2"
               >

@@ -65,6 +65,13 @@ const CategoryForm = () => {
 
             setOriginalSortOrder(loadedSort);
           }
+        } else {
+          // Create: auto-generate sort order as (max existing + 1) or 1
+          const maxSort = catArray.length
+            ? Math.max(0, ...catArray.map((c) => Number(c.sortOrder) || 0))
+            : 0;
+          const nextSort = maxSort + 1;
+          setForm((prev) => ({ ...prev, sortOrder: nextSort }));
         }
       } catch (err) {
         console.error("Error loading categories:", err);
@@ -263,7 +270,7 @@ const CategoryForm = () => {
             {/* Sort Order */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Sort Order
+                Sort Order {!isEdit && <span className="text-gray-500 font-normal">(auto-generated, you can change)</span>}
               </label>
               <input
                 type="number"
@@ -300,6 +307,18 @@ const CategoryForm = () => {
               
               {form.imagePreview && (
                 <div className="mb-3 relative inline-block">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setForm((prev) => ({ ...prev, image: null, imagePreview: null }));
+                    }}
+                    className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                    title="Remove image"
+                    aria-label="Remove image"
+                  >
+                    <X size={16} strokeWidth={2.5} />
+                  </button>
                   <div 
                     className="relative group cursor-pointer"
                     onClick={() => setZoomedImage({ url: form.imagePreview, name: form.name || "Category Image" })}
@@ -313,7 +332,7 @@ const CategoryForm = () => {
                       <ZoomIn className="h-6 w-6 lg:h-8 lg:w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">Click image to zoom</p>
+                  <p className="text-xs text-gray-500 mt-2">Click image to zoom · Cross to remove</p>
                 </div>
               )}
 

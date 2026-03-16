@@ -15,13 +15,20 @@ export const createDelivery = (data) => {
 };
 
 // 🔹 Get All Deliveries
-export const getDeliveries = (page = 1, limit = 10) => {
+// Pass omitPagination: true or call with no page/limit to get full list (backend returns [] when page/limit sent)
+export const getDeliveries = (page, limit, search = "", omitPagination = false) => {
+  const params = {};
+  if (!omitPagination && page != null && limit != null) {
+    params.page = page;
+    params.limit = limit;
+  }
+  if (search && String(search).trim()) params.search = String(search).trim();
   return apiConnector(
     "GET",
     deliveryEndpoints.GET_DELIVERIES,
     null,
     null,
-    { page, limit }
+    Object.keys(params).length ? params : undefined
   );
 };
 

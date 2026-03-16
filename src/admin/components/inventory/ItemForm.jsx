@@ -831,7 +831,7 @@ const ItemForm = () => {
       }
 
       console.log("[ItemForm] handleSave: navigation to items list");
-      navigate(`/admin/inventory/items/${categoryId}/${subcategoryId}`);
+      navigate(`/admin/items`);
     } catch (err) {
       console.error("[ItemForm] handleSave error:", err);
       // Support both axios-style errors (err.response.data) and plain backend objects thrown from api layer
@@ -938,32 +938,33 @@ const ItemForm = () => {
                       return;
                     }
 
-                    const basicErrors = validateBasicTab();
-                    if (Object.keys(basicErrors).length > 0) {
-                      setFieldErrors(basicErrors);
-                      setActiveTab(1);
-                      window.alert(
-                        "Please complete the Basic tab before moving to the next step."
-                      );
-                      return;
-                    }
+                    // Skip tab validation in edit flow
+                    if (!isEdit) {
+                      const basicErrors = validateBasicTab();
+                      if (Object.keys(basicErrors).length > 0) {
+                        setFieldErrors(basicErrors);
+                        setActiveTab(1);
+                        window.alert(
+                          "Please complete the Basic tab before moving to the next step."
+                        );
+                        return;
+                      }
 
-                    // Block Sizes (tab 3) and anything beyond if Variants not valid
-                    if (targetTab >= 3 && !validateVariantsTab()) {
-                      setActiveTab(2);
-                      window.alert(
-                        "Please complete the Variants tab (add at least one color) before moving to Sizes."
-                      );
-                      return;
-                    }
+                      if (targetTab >= 3 && !validateVariantsTab()) {
+                        setActiveTab(2);
+                        window.alert(
+                          "Please complete the Variants tab (add at least one color) before moving to Sizes."
+                        );
+                        return;
+                      }
 
-                    // Block Filters (tab 7) if Sizes not valid
-                    if (targetTab === 7 && !validateSizesTab()) {
-                      setActiveTab(3);
-                      window.alert(
-                        "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
-                      );
-                      return;
+                      if (targetTab === 7 && !validateSizesTab()) {
+                        setActiveTab(3);
+                        window.alert(
+                          "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
+                        );
+                        return;
+                      }
                     }
 
                     setFieldErrors({});
@@ -973,12 +974,12 @@ const ItemForm = () => {
                     activeTab === i + 1
                       ? "border-black text-black"
                       : `border-transparent ${
-                          i + 1 > 1 && !isBasicTabValid()
+                          !isEdit && i + 1 > 1 && !isBasicTabValid()
                             ? "text-gray-300 cursor-not-allowed"
                             : "text-gray-500 hover:text-gray-700"
                         }`
                   }`}
-                  disabled={i + 1 > 1 && !isBasicTabValid()}
+                  disabled={!isEdit && i + 1 > 1 && !isBasicTabValid()}
                 >
                   {label}
                 </button>
@@ -1305,7 +1306,7 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!validateVariantsTab()) {
+                      if (!isEdit && !validateVariantsTab()) {
                         window.alert(
                           "Please complete the Variants tab (add at least one color) before moving to Sizes."
                         );
@@ -1365,7 +1366,7 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!validateSizesTab()) {
+                      if (!isEdit && !validateSizesTab()) {
                         window.alert(
                           "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
                         );

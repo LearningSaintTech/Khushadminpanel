@@ -183,7 +183,7 @@ export default function Items() {
                 onClick={goBackToSubcategory}
                 className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/10 text-xs sm:text-sm font-medium hover:bg-black hover:text-white transition-colors"
               >
-                ← Back
+                ← Bachhhk
               </button>
 
               <div className="flex-1 relative">
