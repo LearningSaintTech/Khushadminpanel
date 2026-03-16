@@ -19,31 +19,41 @@ const CartChargesConfigForm = () => {
   });
 
   // ✅ Prefill Data (Edit Mode)
-  useEffect(() => {
-    if (id) {
-      const loadConfig = async () => {
-        try {
-          setLoading(true);
-          const response = await getSingleCartCharge(id);
-          const data = response?.data?.data || response?.data;
+ useEffect(() => {
+  if (id) {
+    const loadConfig = async () => {
+      try {
+        setLoading(true);
+        const response = await getSingleCartCharge(id);
+        const data = response?.data?.data || response?.data;
 
-          if (data) {
-            setFormData({
-              isActive: data.isActive !== false,
-              cartCharge: JSON.parse(JSON.stringify(data.cartCharge || [])),
-            });
-          }
-        } catch (err) {
-          console.error(err);
-          setError("Failed to load cart charges configuration");
-        } finally {
-          setLoading(false);
+        if (data) {
+          setFormData({
+            isActive: data.isActive !== false,
+            cartCharge: (data.cartCharge || []).map((charge) => ({
+              key: charge.key,
+              rules: [
+                {
+                  min: charge.rules?.min ?? "",
+                  max: charge.rules?.max ?? "",
+                  value: charge.rules?.value ?? "",
+                  percent: charge.rules?.percent ?? "",
+                },
+              ],
+            })),
+          });
         }
-      };
-      loadConfig();
-    }
-  }, [id]);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load cart charges configuration");
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    loadConfig();
+  }
+}, [id]);
   // ✅ Back Button
   const handleBack = () => {
     navigate("/admin/cart-charges");
@@ -56,10 +66,66 @@ const CartChargesConfigForm = () => {
   const addNewCharge = () => {
     setFormData((prev) => ({
       ...prev,
-      cartCharge: [...prev.cartCharge, { key: "", rules: {} }],
+      cartCharge: [...prev.cartCharge, { key: "", rules: [] }],
     }));
   };
 
+ const addRuleField = (chargeIndex) => {
+  const updated = [...formData.cartCharge];
+
+  if (!Array.isArray(updated[chargeIndex].rules)) {
+    updated[chargeIndex].rules = [];
+  }
+
+  updated[chargeIndex].rules.push({
+    min: "",
+    max: "",
+    value: "",
+    percent: "",
+  });
+
+  setFormData({ ...formData, cartCharge: updated });
+};
+
+  // const updateRuleKey = (chargeIndex, oldKey, newKey) => {
+  //   const updated = [...formData.cartCharge];
+
+  //   if (!newKey.trim()) return;
+
+  //   const rules = { ...updated[chargeIndex].rules };
+
+  //   if (oldKey !== newKey) {
+  //     const value = rules[oldKey];
+  //     delete rules[oldKey];
+  //     rules[newKey] = value;
+  //   }
+
+  //   updated[chargeIndex].rules = rules;
+  //   setFormData({ ...formData, cartCharge: updated });
+  // };
+ const updateRuleValue = (chargeIndex, ruleIndex, field, value) => {
+  const updated = [...formData.cartCharge];
+
+  updated[chargeIndex].rules[ruleIndex][field] =
+    value === "" ? "" : Number(value);
+
+  setFormData({ ...formData, cartCharge: updated });
+};
+
+  // const removeRuleField = (chargeIndex, ruleKey) => {
+  //   const updated = [...formData.cartCharge];
+
+  //   delete updated[chargeIndex].rules[ruleKey];
+
+  //   setFormData({ ...formData, cartCharge: updated });
+  // };
+  const removeRuleField = (chargeIndex, ruleIndex) => {
+    const updated = [...formData.cartCharge];
+
+    updated[chargeIndex].rules.splice(ruleIndex, 1);
+
+    setFormData({ ...formData, cartCharge: updated });
+  };
   const removeCharge = (index) => {
     const updated = [...formData.cartCharge];
     updated.splice(index, 1);
@@ -69,83 +135,68 @@ const CartChargesConfigForm = () => {
   const updateChargeKey = (index, value) => {
     const updated = [...formData.cartCharge];
     updated[index].key = value;
-    
-    // Reset rules when key changes to match the new key type
-    const keyType = value.toLowerCase();
-    if (keyType === "delivery" || keyType === "packing") {
-      updated[index].rules = { min: 0, max: 0, value: 0 };
-    } else if (keyType === "platformfee" || keyType === "convienece") {
-      updated[index].rules = { base: 0, percent: 0 };
-    } else if (keyType === "surge") {
-      updated[index].rules = { threshold: 0, multiplier: 1 };
-    } else if (keyType === "nightcharge") {
-      updated[index].rules = { startTime: "22:00", endTime: "06:00", value: 0 };
-    } else {
-      // For unknown keys, keep existing rules or set empty
-      updated[index].rules = updated[index].rules || {};
-    }
-    
+
     setFormData({ ...formData, cartCharge: updated });
   };
 
-  const updateRule = (chargeIndex, ruleKey, value) => {
-    const updated = [...formData.cartCharge];
-    const rules = { ...updated[chargeIndex].rules };
-    
-    // Convert numeric values
-    if (ruleKey === "min" || ruleKey === "max" || ruleKey === "value" || 
-        ruleKey === "base" || ruleKey === "percent" || ruleKey === "threshold" || 
-        ruleKey === "multiplier") {
-      rules[ruleKey] = value === "" ? 0 : Number(value);
-    } else {
-      rules[ruleKey] = value;
-    }
+  // const updateRule = (chargeIndex, ruleKey, value) => {
+  //   const updated = [...formData.cartCharge];
+  //   const rules = { ...updated[chargeIndex].rules };
 
-    updated[chargeIndex].rules = rules;
-    setFormData({ ...formData, cartCharge: updated });
-  };
+  //   // Convert numeric values
+  //   if (ruleKey === "min" || ruleKey === "max" || ruleKey === "value" ||
+  //       ruleKey === "base" || ruleKey === "percent" || ruleKey === "threshold" ||
+  //       ruleKey === "multiplier") {
+  //     rules[ruleKey] = value === "" ? 0 : Number(value);
+  //   } else {
+  //     rules[ruleKey] = value;
+  //   }
+
+  //   updated[chargeIndex].rules = rules;
+  //   setFormData({ ...formData, cartCharge: updated });
+  // };
 
   // Get rule fields based on charge key type
-  const getRuleFields = (charge) => {
-    const keyType = charge?.key?.toLowerCase() || "";
-    
-    if (keyType === "delivery" || keyType === "packing") {
-      return [
-        { label: "Min", key: "min", type: "number" },
-        { label: "Max", key: "max", type: "number" },
-        { label: "Value", key: "value", type: "number" },
-      ];
-    } else if (keyType === "platformfee" || keyType === "convienece") {
-      return [
-        { label: "Base", key: "base", type: "number" },
-        { label: "Percent", key: "percent", type: "number" },
-      ];
-    } else if (keyType === "surge") {
-      return [
-        { label: "Threshold", key: "threshold", type: "number" },
-        { label: "Multiplier", key: "multiplier", type: "number", step: "0.1" },
-      ];
-    } else if (keyType === "nightcharge") {
-      return [
-        { label: "Start Time", key: "startTime", type: "time" },
-        { label: "End Time", key: "endTime", type: "time" },
-        { label: "Value", key: "value", type: "number" },
-      ];
-    }
-    
-    // For unknown keys, show dynamic rule editor based on existing rules
-    const rules = charge?.rules || {};
-    if (Object.keys(rules).length > 0) {
-      return Object.keys(rules).map(ruleKey => ({
-        label: ruleKey,
-        key: ruleKey,
-        type: typeof rules[ruleKey] === "number" ? "number" : "text",
-      }));
-    }
-    
-    // Default empty state
-    return [];
-  };
+  // const getRuleFields = (charge) => {
+  //   const keyType = charge?.key?.toLowerCase() || "";
+
+  //   if (keyType === "delivery" || keyType === "packing") {
+  //     return [
+  //       { label: "Min", key: "min", type: "number" },
+  //       { label: "Max", key: "max", type: "number" },
+  //       { label: "Value", key: "value", type: "number" },
+  //     ];
+  //   } else if (keyType === "platformfee" || keyType === "convienece") {
+  //     return [
+  //       { label: "Base", key: "base", type: "number" },
+  //       { label: "Percent", key: "percent", type: "number" },
+  //     ];
+  //   } else if (keyType === "surge") {
+  //     return [
+  //       { label: "Threshold", key: "threshold", type: "number" },
+  //       { label: "Multiplier", key: "multiplier", type: "number", step: "0.1" },
+  //     ];
+  //   } else if (keyType === "nightcharge") {
+  //     return [
+  //       { label: "Start Time", key: "startTime", type: "time" },
+  //       { label: "End Time", key: "endTime", type: "time" },
+  //       { label: "Value", key: "value", type: "number" },
+  //     ];
+  //   }
+
+  //   // For unknown keys, show dynamic rule editor based on existing rules
+  //   const rules = charge?.rules || {};
+  //   if (Object.keys(rules).length > 0) {
+  //     return Object.keys(rules).map(ruleKey => ({
+  //       label: ruleKey,
+  //       key: ruleKey,
+  //       type: typeof rules[ruleKey] === "number" ? "number" : "text",
+  //     }));
+  //   }
+
+  //   // Default empty state
+  //   return [];
+  // };
 
   // ============================
   // Submit
@@ -160,7 +211,7 @@ const CartChargesConfigForm = () => {
 
       // Validate that all charges have keys
       const invalidCharges = formData.cartCharge.filter(
-        (charge) => !charge.key || charge.key.trim() === ""
+        (charge) => !charge.key || charge.key.trim() === "",
       );
 
       if (invalidCharges.length > 0) {
@@ -169,14 +220,24 @@ const CartChargesConfigForm = () => {
         return;
       }
 
-      const payload = {
-        isActive: formData.isActive,
-        cartCharge: formData.cartCharge.map((charge) => ({
-          key: charge.key.trim(),
-          rules: charge.rules,
-        })),
-      };
+    const payload = {
+  isActive: formData.isActive,
+  cartCharge: formData.cartCharge.map((charge) => {
+    const rule = charge.rules[0] || {};
 
+    const cleanedRule = {};
+
+    if (rule.min !== "") cleanedRule.min = rule.min;
+    if (rule.max !== "") cleanedRule.max = rule.max;
+    if (rule.value !== "") cleanedRule.value = rule.value;
+    if (rule.percent !== "") cleanedRule.percent = rule.percent;
+
+    return {
+      key: charge.key.trim(),
+      rules: cleanedRule,
+    };
+  }),
+};
       if (id) {
         await updateCartCharges(id, payload);
         alert("✅ Cart charges updated successfully!");
@@ -188,7 +249,10 @@ const CartChargesConfigForm = () => {
       navigate("/admin/cart-charges");
     } catch (err) {
       console.error(err);
-      setError(err?.response?.data?.message || "Failed to save cart charges configuration");
+      setError(
+        err?.response?.data?.message ||
+          "Failed to save cart charges configuration",
+      );
     } finally {
       setLoading(false);
     }
@@ -206,8 +270,18 @@ const CartChargesConfigForm = () => {
           onClick={handleBack}
           className="mb-4 text-sm text-gray-600 hover:text-black flex items-center gap-2 transition"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
           Back to Cart Charges
         </button>
@@ -241,17 +315,23 @@ const CartChargesConfigForm = () => {
               }
               className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
             />
-            <label htmlFor="isActive" className="font-semibold text-gray-900 cursor-pointer">
+            <label
+              htmlFor="isActive"
+              className="font-semibold text-gray-900 cursor-pointer"
+            >
               Enable Cart Charges
             </label>
           </div>
 
           {/* Charges */}
           {formData.cartCharge.map((charge, index) => {
-            const ruleFields = getRuleFields(charge);
-            
+            // const ruleFields = getRuleFields(charge);
+
             return (
-              <div key={index} className="border-2 border-gray-200 rounded-xl p-5 bg-gray-50 space-y-4">
+              <div
+                key={index}
+                className="border-2 border-gray-200 rounded-xl p-5 bg-gray-50 space-y-4"
+              >
                 <div className="flex justify-between items-center gap-4">
                   <div className="flex-1">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -265,7 +345,8 @@ const CartChargesConfigForm = () => {
                       className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      Common keys: delivery, packing, platformfee, surge, nightcharge, convienece
+                      Common keys: delivery, packing, platformfee, surge,
+                      nightcharge, convienece
                     </p>
                   </div>
 
@@ -280,24 +361,72 @@ const CartChargesConfigForm = () => {
 
                 {charge.key && (
                   <div className="space-y-3 pt-3 border-t border-gray-300">
-                    <h4 className="text-sm font-semibold text-gray-700">Rules</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {ruleFields.map((field) => (
-                        <div key={field.key}>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">
-                            {field.label}
-                          </label>
-                          <input
-                            type={field.type}
-                            step={field.step || (field.type === "number" ? "1" : undefined)}
-                            value={charge.rules[field.key] || ""}
-                            onChange={(e) => updateRule(index, field.key, e.target.value)}
-                            className="w-full border-2 border-gray-300 px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-sm"
-                            placeholder={field.label}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Rules
+                    </h4>
+
+                  {charge.rules.map((rule, ruleIndex) => (
+  <div key={ruleIndex} className="flex gap-3 items-center flex-wrap">
+
+    <input
+      type="number"
+      placeholder="Min"
+      value={rule.min ?? ""}
+      onChange={(e) =>
+        updateRuleValue(index, ruleIndex, "min", e.target.value)
+      }
+      className="w-24 border px-3 py-2 rounded"
+    />
+
+    <input
+      type="number"
+      placeholder="Max"
+      value={rule.max ?? ""}
+      onChange={(e) =>
+        updateRuleValue(index, ruleIndex, "max", e.target.value)
+      }
+      className="w-24 border px-3 py-2 rounded"
+    />
+
+    <input
+      type="number"
+      placeholder="Value"
+      value={rule.value ?? ""}
+      onChange={(e) =>
+        updateRuleValue(index, ruleIndex, "value", e.target.value)
+      }
+      className="w-24 border px-3 py-2 rounded"
+    />
+
+    <input
+      type="number"
+      placeholder="%"
+      value={rule.percent ?? ""}
+      onChange={(e) =>
+        updateRuleValue(index, ruleIndex, "percent", e.target.value)
+      }
+      className="w-24 border px-3 py-2 rounded"
+    />
+
+    <button
+      type="button"
+      onClick={() => removeRuleField(index, ruleIndex)}
+      className="text-red-500"
+    >
+      Remove
+    </button>
+
+  </div>
+))}
+
+                    {/* Add Rule Button */}
+                    <button
+                      type="button"
+                      onClick={() => addRuleField(index)}
+                      className="text-sm text-blue-600"
+                    >
+                      + Add Rule
+                    </button>
                   </div>
                 )}
               </div>
@@ -325,7 +454,11 @@ const CartChargesConfigForm = () => {
               disabled={loading}
               className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Saving..." : id ? "Update Configuration" : "Create Configuration"}
+              {loading
+                ? "Saving..."
+                : id
+                  ? "Update Configuration"
+                  : "Create Configuration"}
             </button>
           </div>
         </form>
