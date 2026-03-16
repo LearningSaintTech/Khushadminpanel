@@ -4,13 +4,15 @@ import { getAllBanners, deleteBanner } from "../../apis/homebannerapi";
 import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, ZoomIn, X } from "lucide-react";
 
+const isVideoUrl = (url) => url && /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
+
 const Banner = () => {
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
-  const [zoomedImage, setZoomedImage] = useState(null);
+  const [zoomedMedia, setZoomedMedia] = useState(null); // { url, name, isVideo }
   const navigate = useNavigate();
 
   const fetchBanners = async (pageNum = 1) => {
@@ -118,6 +120,8 @@ const Banner = () => {
                     {banners.map((banner, idx) => {
                       const desktopUrl = banner.desktopBanner?.url || null;
                       const mobileUrl = banner.mobileBanner?.url || null;
+                      const desktopVideo = isVideoUrl(desktopUrl);
+                      const mobileVideo = isVideoUrl(mobileUrl);
                       return (
                         <tr
                           key={banner._id}
@@ -132,15 +136,19 @@ const Banner = () => {
                                 className="relative group cursor-pointer h-10 w-14 sm:h-12 sm:w-16 rounded overflow-hidden bg-gray-100 border border-gray-200 shadow-sm hover:ring-1 hover:ring-indigo-500 transition-all duration-200"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setZoomedImage({ url: desktopUrl, name: `${banner.title} - Desktop` });
+                                  setZoomedMedia({ url: desktopUrl, name: `${banner.title} - Desktop`, isVideo: desktopVideo });
                                 }}
                               >
-                                <img
-                                  src={desktopUrl}
-                                  alt={`${banner.title} - Desktop`}
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => (e.target.src = "https://via.placeholder.com/56?text=D")}
-                                />
+                                {desktopVideo ? (
+                                  <video src={desktopUrl} muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
+                                ) : (
+                                  <img
+                                    src={desktopUrl}
+                                    alt={`${banner.title} - Desktop`}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => (e.target.src = "https://via.placeholder.com/56?text=D")}
+                                  />
+                                )}
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded transition-all duration-200 opacity-0 group-hover:opacity-100">
                                   <ZoomIn className="h-2.5 w-2.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
@@ -157,15 +165,19 @@ const Banner = () => {
                                 className="relative group cursor-pointer h-10 w-14 sm:h-12 sm:w-16 rounded overflow-hidden bg-gray-100 border border-gray-200 shadow-sm hover:ring-1 hover:ring-indigo-500 transition-all duration-200"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setZoomedImage({ url: mobileUrl, name: `${banner.title} - Mobile` });
+                                  setZoomedMedia({ url: mobileUrl, name: `${banner.title} - Mobile`, isVideo: mobileVideo });
                                 }}
                               >
-                                <img
-                                  src={mobileUrl}
-                                  alt={`${banner.title} - Mobile`}
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => (e.target.src = "https://via.placeholder.com/56?text=M")}
-                                />
+                                {mobileVideo ? (
+                                  <video src={mobileUrl} muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
+                                ) : (
+                                  <img
+                                    src={mobileUrl}
+                                    alt={`${banner.title} - Mobile`}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => (e.target.src = "https://via.placeholder.com/56?text=M")}
+                                  />
+                                )}
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded transition-all duration-200 opacity-0 group-hover:opacity-100">
                                   <ZoomIn className="h-2.5 w-2.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
@@ -180,22 +192,26 @@ const Banner = () => {
                             <div className="text-xs sm:text-sm font-semibold text-gray-900 truncate max-w-[150px] sm:max-w-none" title={banner.title || ""}>
                               {banner.title || "—"}
                             </div>
-                            {/* Show mobile image on small screens */}
+                            {/* Show mobile media on small screens */}
                             <div className="md:hidden mt-1.5">
                               {mobileUrl ? (
                                 <div
                                   className="relative group cursor-pointer h-8 w-12 rounded overflow-hidden bg-gray-100 border border-gray-200 shadow-sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setZoomedImage({ url: mobileUrl, name: `${banner.title} - Mobile` });
+                                    setZoomedMedia({ url: mobileUrl, name: `${banner.title} - Mobile`, isVideo: mobileVideo });
                                   }}
                                 >
-                                  <img
-                                    src={mobileUrl}
-                                    alt={`${banner.title} - Mobile`}
-                                    className="h-full w-full object-cover"
-                                    onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=M")}
-                                  />
+                                  {mobileVideo ? (
+                                    <video src={mobileUrl} muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <img
+                                      src={mobileUrl}
+                                      alt={`${banner.title} - Mobile`}
+                                      className="h-full w-full object-cover"
+                                      onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=M")}
+                                    />
+                                  )}
                                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 opacity-0 group-hover:opacity-100">
                                     <ZoomIn className="h-2 w-2 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                   </div>
@@ -313,35 +329,41 @@ const Banner = () => {
         )}
       </main>
 
-      {/* Image Zoom Modal */}
-      {zoomedImage && (
+      {/* Image / Video Zoom Modal */}
+      {zoomedMedia && (
         <div
           className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
-          onClick={() => setZoomedImage(null)}
+          onClick={() => setZoomedMedia(null)}
         >
-          {/* Close Button */}
           <button
-            onClick={() => setZoomedImage(null)}
+            onClick={() => setZoomedMedia(null)}
             className="absolute top-4 right-4 z-10 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all duration-200 backdrop-blur-sm"
-            aria-label="Close zoom"
+            aria-label="Close"
           >
             <X size={28} />
           </button>
 
-          {/* Zoomed Image Container */}
-          <div className="relative w-full h-full flex items-center justify-center">
-            <img
-              src={zoomedImage.url}
-              alt={zoomedImage.name}
-              className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '95vw', maxHeight: '90vh' }}
-            />
+          <div className="relative w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            {zoomedMedia.isVideo ? (
+              <video
+                src={zoomedMedia.url}
+                controls
+                autoPlay
+                className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+                style={{ maxWidth: "95vw", maxHeight: "90vh" }}
+              />
+            ) : (
+              <img
+                src={zoomedMedia.url}
+                alt={zoomedMedia.name}
+                className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+                style={{ maxWidth: "95vw", maxHeight: "90vh" }}
+              />
+            )}
           </div>
 
-          {/* Image Name */}
           <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-lg backdrop-blur-sm">
-            <p className="text-base font-medium">{zoomedImage.name}</p>
+            <p className="text-base font-medium">{zoomedMedia.name}</p>
           </div>
         </div>
       )}

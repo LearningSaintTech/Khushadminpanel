@@ -17,7 +17,11 @@ const BannerForm = () => {
   const [mobileBanner, setMobileBanner] = useState(null);
   const [desktopPreview, setDesktopPreview] = useState(null);
   const [mobilePreview, setMobilePreview] = useState(null);
+  const [desktopPreviewType, setDesktopPreviewType] = useState("image"); // "image" | "video"
+  const [mobilePreviewType, setMobilePreviewType] = useState("image");
   const [loading, setLoading] = useState(false);
+
+  const isVideoUrl = (url) => url && /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url);
 
   // Fetch existing banner data when editing
   useEffect(() => {
@@ -35,8 +39,12 @@ const BannerForm = () => {
         setDiscountType(banner.discountType || "PERCENT");
         setDiscount(banner.discount || 0);
         setNavigation(banner.navigation?.navigate || "");
-        setDesktopPreview(banner.desktopBanner?.url || null);
-        setMobilePreview(banner.mobileBanner?.url || null);
+        const deskUrl = banner.desktopBanner?.url || null;
+        const mobUrl = banner.mobileBanner?.url || null;
+        setDesktopPreview(deskUrl);
+        setMobilePreview(mobUrl);
+        setDesktopPreviewType(isVideoUrl(deskUrl) ? "video" : "image");
+        setMobilePreviewType(isVideoUrl(mobUrl) ? "video" : "image");
       } catch (error) {
         console.error("Failed to fetch banner:", error);
         alert(error.message || "Could not load banner data");
@@ -85,11 +93,12 @@ const BannerForm = () => {
     }
   };
 
-  const handleFileChange = (e, setFile, setPreview) => {
+  const handleFileChange = (e, setFile, setPreview, setPreviewType) => {
     const file = e.target.files[0];
     if (file) {
       setFile(file);
       setPreview(URL.createObjectURL(file));
+      setPreviewType(file.type.startsWith("video/") ? "video" : "image");
     }
   };
 
@@ -210,26 +219,36 @@ const BannerForm = () => {
               </div>
             </div>
 
-            {/* Image Uploads */}
+            {/* Image & Video Uploads (backend supports both) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Desktop Banner */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Desktop Banner (recommended: 1920×600 or similar)
+                  Desktop Banner (image or video)
                 </label>
                 <input
                   type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e, setDesktopBanner, setDesktopPreview)}
+                  accept="image/*,video/*"
+                  onChange={(e) => handleFileChange(e, setDesktopBanner, setDesktopPreview, setDesktopPreviewType)}
                   className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-black file:text-white hover:file:bg-gray-800 cursor-pointer"
                 />
+                <p className="mt-1 text-xs text-gray-500">Image: 1920×600 or similar. Video: MP4, WebM, etc.</p>
                 {desktopPreview && (
                   <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                    <img
-                      src={desktopPreview}
-                      alt="Desktop preview"
-                      className="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
-                    />
+                    {desktopPreviewType === "video" ? (
+                      <video
+                        src={desktopPreview}
+                        controls
+                        className="w-full h-48 object-cover"
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={desktopPreview}
+                        alt="Desktop preview"
+                        className="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -237,21 +256,31 @@ const BannerForm = () => {
               {/* Mobile Banner */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Mobile Banner (recommended: 800×600 or similar)
+                  Mobile Banner (image or video)
                 </label>
                 <input
                   type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e, setMobileBanner, setMobilePreview)}
+                  accept="image/*,video/*"
+                  onChange={(e) => handleFileChange(e, setMobileBanner, setMobilePreview, setMobilePreviewType)}
                   className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-black file:text-white hover:file:bg-gray-800 cursor-pointer"
                 />
+                <p className="mt-1 text-xs text-gray-500">Image: 800×600 or similar. Video: MP4, WebM, etc.</p>
                 {mobilePreview && (
                   <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                    <img
-                      src={mobilePreview}
-                      alt="Mobile preview"
-                      className="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
-                    />
+                    {mobilePreviewType === "video" ? (
+                      <video
+                        src={mobilePreview}
+                        controls
+                        className="w-full h-48 object-cover"
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={mobilePreview}
+                        alt="Mobile preview"
+                        className="w-full h-48 object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                    )}
                   </div>
                 )}
               </div>
