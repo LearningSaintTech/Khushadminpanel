@@ -56,6 +56,7 @@ import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
 import Profile from "../admin/components/Profile/Profile";
 import Central from "../admin/components/inventory/centralstock";
+
 const AdminRoutes = () => {
   return (
     <Routes>
