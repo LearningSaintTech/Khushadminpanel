@@ -1,14 +1,12 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-const tokenFromStorage = localStorage.getItem("token");
-const roleFromStorage = localStorage.getItem("role");
-
 const initialState = {
   loading: false,
   error: null,
-  token: tokenFromStorage || null,
-  role: roleFromStorage || null,
-  user: null, // optional (decoded user info)
+  token: null,
+  refreshToken: null,
+  role: null,
+  user: null,
 };
 
 const globalSlice = createSlice({
@@ -28,15 +26,27 @@ const globalSlice = createSlice({
     },
 
     setToken: (state, action) => {
-      state.token = action.payload;
-      localStorage.setItem("token", action.payload);
-      console.log("[Redux] Token stored");
+      const payload = action.payload;
+      const accessToken =
+        typeof payload === "string" ? payload : payload?.accessToken ?? null;
+      const refreshToken =
+        typeof payload === "object" && payload?.refreshToken
+          ? payload.refreshToken
+          : null;
+      state.token = accessToken;
+      state.refreshToken = refreshToken || state.refreshToken;
+      if (accessToken) {
+        localStorage.setItem("token", accessToken);
+        if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      }
     },
 
     setRole: (state, action) => {
       state.role = action.payload;
-      localStorage.setItem("role", action.payload);
-      console.log("[Redux] Role stored:", action.payload);
+      if (action.payload) {
+        localStorage.setItem("role", action.payload);
+        localStorage.setItem("userRole", action.payload);
+      }
     },
 
     setUser: (state, action) => {
@@ -45,11 +55,17 @@ const globalSlice = createSlice({
 
     logout: (state) => {
       state.token = null;
+      state.refreshToken = null;
       state.role = null;
       state.user = null;
       localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
       localStorage.removeItem("role");
-      console.log("[Redux] Logged out");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("admin_userId");
+      localStorage.removeItem("admin_phone");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("influencer");
     },
   },
 });

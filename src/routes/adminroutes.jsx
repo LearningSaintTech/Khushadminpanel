@@ -56,6 +56,12 @@ import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
 import Profile from "../admin/components/Profile/Profile";
 import Central from "../admin/components/inventory/centralstock";
+import AdminNotificationsPage from "../admin/components/notifications/AdminNotificationsPage";
+import AdminNotificationHistoryPage from "../admin/components/notifications/AdminNotificationHistoryPage";
+import AdminNotificationTemplatesPage from "../admin/components/notifications/AdminNotificationTemplatesPage";
+import AdminEmailTemplatesPage from "../admin/components/notifications/AdminEmailTemplatesPage";
+import AdminBroadcastPage from "../admin/components/notifications/AdminBroadcastPage";
+import AdminNotificationTestPage from "../admin/components/notifications/AdminNotificationTestPage";
 const AdminRoutes = () => {
   return (
     <Routes>
@@ -181,6 +187,14 @@ const AdminRoutes = () => {
         />
         <Route path="reviews" element={<Reviews />} />
         <Route path="profile" element={<Profile />} />
+        {/* Notification routes */}
+        <Route path="notifications" element={<AdminNotificationsPage />} />
+        <Route path="notifications/sent" element={<AdminNotificationHistoryPage />} />
+        <Route path="notifications/history" element={<AdminNotificationHistoryPage />} />
+        <Route path="notifications/templates" element={<AdminNotificationTemplatesPage />} />
+        <Route path="notifications/email-templates" element={<AdminEmailTemplatesPage />} />
+        <Route path="notifications/broadcast" element={<AdminBroadcastPage />} />
+        <Route path="notifications/test" element={<AdminNotificationTestPage />} />
       </Route>
 
       <Route path="*" element={<h1>404 - Page Not Found</h1>} />

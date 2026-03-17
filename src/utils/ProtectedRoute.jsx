@@ -1,10 +1,15 @@
 // src/components/routing/ProtectedRoute.jsx
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import {jwtDecode} from 'jwt-decode'; // npm install jwt-decode
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
+import { jwtDecode } from "jwt-decode";
+import { selectToken } from "../redux/GlobalSelector";
+import { logout } from "../redux/GlobalSlice";
 
 const ProtectedRoute = ({ allowedRoles = [], redirectTo = null, children }) => {
   const location = useLocation();
-  const token = localStorage.getItem('token');
+  const dispatch = useDispatch();
+  const reduxToken = useSelector(selectToken);
+  const token = reduxToken ?? (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
   if (!token) {
     const defaultRedirect = redirectTo || getDefaultLoginPath(allowedRoles);
@@ -15,7 +20,7 @@ const ProtectedRoute = ({ allowedRoles = [], redirectTo = null, children }) => {
   try {
     decoded = jwtDecode(token);
   } catch (err) {
-    localStorage.clear();
+    dispatch(logout());
     return <Navigate to={getDefaultLoginPath(allowedRoles)} replace />;
   }
 

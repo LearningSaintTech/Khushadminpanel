@@ -1,14 +1,17 @@
 import { useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { useNotificationSocket } from "./NotificationContext.jsx";
+import { selectToken } from "../redux/GlobalSelector";
 
 /**
- * Connects Socket.IO when user is authenticated (token in localStorage).
- * useLocation() ensures we re-render on route change (e.g. after login) so token is re-read.
+ * Connects Socket.IO when user is authenticated (token from Redux or localStorage).
  */
 export function NotificationSocketConnector() {
-  useLocation(); // subscribe to route changes so we re-render after login redirect
+  useLocation();
+  const reduxToken = useSelector(selectToken);
   const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    reduxToken ??
+    (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
   useNotificationSocket(token);
 

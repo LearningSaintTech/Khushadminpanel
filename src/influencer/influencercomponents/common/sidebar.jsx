@@ -1,6 +1,9 @@
 // src/influencer/influencercomponents/common/sidebar.jsx
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { logout } from "../../../redux/GlobalSlice";
+import { selectToken } from "../../../redux/GlobalSelector";
 import {
   LayoutDashboard,
   Ticket,
@@ -17,16 +20,14 @@ import {
 export default function InfluencerLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCouponsOpen, setIsCouponsOpen] = useState(false);
-
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const token = useSelector(selectToken) ?? (typeof window !== "undefined" ? localStorage.getItem("token") : null);
 
   const toggleCoupons = () => setIsCouponsOpen((prev) => !prev);
 
-  // LOGOUT FUNCTION
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem("token");
-
       await fetch(`${import.meta.env.VITE_BASE_URL}/api/influencer/logout`, {
         method: "POST",
         headers: {
@@ -34,16 +35,10 @@ export default function InfluencerLayout() {
           Authorization: `Bearer ${token}`,
         },
       });
-
-      // Clear token and influencer data
-      localStorage.removeItem("token");
-      localStorage.removeItem("influencer");
-
-      navigate("/influencer/login");
     } catch (error) {
       console.error("Logout error:", error);
-
-      localStorage.clear();
+    } finally {
+      dispatch(logout());
       navigate("/influencer/login");
     }
   };
@@ -61,7 +56,7 @@ export default function InfluencerLayout() {
         { to: "/influencer/analytics", label: "Coupon Analytics", icon: BarChart3 },
       ],
     },
-    { to: "/influencer/orders", label: "Orders", icon: ShoppingBag },
+    // { to: "/influencer/orders", label: "Orders", icon: ShoppingBag },
     { to: "/influencer/earnings", label: "Earnings", icon: IndianRupee },
     { to: "/influencer/profile", label: "Profile", icon: UserCircle },
   ];

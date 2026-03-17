@@ -19,6 +19,7 @@ import {
   createSection,
   updateSection,
   getSingleSection,
+  getSections,
 } from "../../apis/Sectionapi";
 import { getAllCategories } from "../../apis/categoryapi";
 import { searchItems } from "../../apis/itemapi";
@@ -46,7 +47,7 @@ const SectionForm = () => {
 
   // Web info (schema: webinfo.isWeb, webinfo.webOrder, webinfo.isActive)
   const [isWeb, setIsWeb] = useState(true);
-  const [webOrder, setWebOrder] = useState(0);
+  const [webOrder, setWebOrder] = useState();
   const [webinfoActive, setWebinfoActive] = useState(true);
 
   // FLASH section dates
@@ -78,11 +79,11 @@ const SectionForm = () => {
   const [loading, setLoading] = useState(false);
   const [isCategoryAccordionOpen, setIsCategoryAccordionOpen] = useState(false);
   const [isSubcategoryAccordionOpen, setIsSubcategoryAccordionOpen] = useState(false);
-  const [isProductAccordionOpen, setIsProductAccordionOpen] = useState(true);
+  const [isProductAccordionOpen, setIsProductAccordionOpen] = useState(false);
   const [isDiscountAccordionOpen, setIsDiscountAccordionOpen] = useState(false);
   const [isNavigationAccordionOpen, setIsNavigationAccordionOpen] = useState(false);
   const [isBannerAccordionOpen, setIsBannerAccordionOpen] = useState(false);
-  const [isWebInfoAccordionOpen, setIsWebInfoAccordionOpen] = useState(true);
+  const [isWebInfoAccordionOpen, setIsWebInfoAccordionOpen] = useState(false);
 
   // ─── Debounce ────────────────────────────────────────────────
   useEffect(() => {
@@ -236,6 +237,22 @@ const SectionForm = () => {
     fetchProducts(productCurrentPage);
   }, [productCurrentPage, debouncedProductSearchTerm]);
 
+  // ─── Pre-fill webOrder with max+1 on create ────────────────────
+  useEffect(() => {
+    if (id) return;
+    const setNextWebOrder = async () => {
+      try {
+        const res = await getSections({ page: 1, limit: 500 });
+        const list = res?.data?.data?.sections ?? res?.data?.sections ?? [];
+        const orders = (Array.isArray(list) ? list : []).map((s) => s.webinfo?.webOrder ?? 0);
+        setWebOrder(orders.length ? Math.max(0, ...orders) + 1 : 0);
+      } catch (_) {
+        setWebOrder(0);
+      }
+    };
+    setNextWebOrder();
+  }, [id]);
+
   // ─── Load Existing Section (Edit) ────────────────────────────
   useEffect(() => {
     if (!id) return;
@@ -346,15 +363,9 @@ const SectionForm = () => {
         return false;
       }
     }
-    if (type === "FLASH") {
-      if (!startDate || !endDate) {
-        alert("Start date and end date are required for FLASH section.");
-        return false;
-      }
-      if (new Date(endDate) <= new Date(startDate)) {
-        alert("End date must be after start date.");
-        return false;
-      }
+    if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
+      alert("End date must be after start date.");
+      return false;
     }
     return true;
   };
@@ -387,15 +398,17 @@ const SectionForm = () => {
       formData.append("navigation[externalLink]", externalLink || "");
       formData.append("navigation[navigate]", navigatePath || "");
 
-      // Web info (backend parseIfString expects JSON or object)
       formData.append("webinfo", JSON.stringify({
         isWeb: !!isWeb,
         webOrder: Number(webOrder) || 0,
         isActive: !!webinfoActive,
       }));
 
-      if (type === "FLASH" && startDate && endDate) {
+      // Optional start/end date (any section type)
+      if (startDate) {
         formData.append("startDate", new Date(startDate).toISOString());
+      }
+      if (endDate) {
         formData.append("endDate", new Date(endDate).toISOString());
       }
 
@@ -513,37 +526,31 @@ const SectionForm = () => {
                     />
                   </div>
 
-                  {type === "FLASH" && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2 border-t border-gray-200">
-                      <div>
-                        <label className="block text-sm font-semibold mb-2">
-                          Start Date <span className="text-red-600">*</span>
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-2">
-                          End Date <span className="text-red-600">*</span>
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
-                        />
-                      </div>
-                      {(!startDate || !endDate) && (
-                        <p className="sm:col-span-2 text-red-600 text-sm bg-red-50 p-3 rounded">
-                          Start date and end date are required for FLASH sections.
-                        </p>
-                      )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2 border-t border-gray-200">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Start Date (optional)</label>
+                      <input
+                        type="datetime-local"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+                      />
                     </div>
-                  )}
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">End Date (optional)</label>
+                      <input
+                        type="datetime-local"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
+                      />
+                    </div>
+                    {startDate && endDate && new Date(endDate) <= new Date(startDate) && (
+                      <p className="sm:col-span-2 text-red-600 text-sm bg-red-50 p-3 rounded">
+                        End date must be after start date.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1019,7 +1026,9 @@ const SectionForm = () => {
                         className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-black"
                         placeholder="0"
                       />
-                      <p className="text-xs text-gray-500 mt-1">Lower number appears first on web.</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {id ? "Lower number appears first on web." : "Pre-filled with next order (max+1). You can change it."}
+                      </p>
                     </div>
                     <label className="flex items-center gap-3 cursor-pointer sm:col-span-2">
                       <input
