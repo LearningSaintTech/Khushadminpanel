@@ -180,7 +180,7 @@ const FilterForm = () => {
               {/* Label */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Label <span className="text-red-500">*</span>
+                  Label  shown in ui<span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"

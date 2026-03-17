@@ -2,14 +2,12 @@
 import React, { useState, useEffect } from "react";
 import {
   getDeliveryAgents,
-  getDeliveryAgentById,
   toggleDeliveryAgentStatus,
 } from "../../apis/Driverapi"; // adjust path
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify"; // assuming you use react-toastify
 import {
   PencilIcon,
-  TrashIcon,
   PlusIcon,
   PowerIcon,
 } from "@heroicons/react/24/outline";
@@ -21,7 +19,7 @@ const DeliveryAgents = () => {
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("true");
 
   const navigate = useNavigate();
 
@@ -32,23 +30,19 @@ const DeliveryAgents = () => {
         page,
         limit,
         search,
-        activeFilter,
+        activeFilter === "true",
       );
 
-      // ─────────────── Debug prints ───────────────
-      console.log("Full response:", response);
-      console.log("response.data:", response?.data);
-      console.log(
-        "response.data.deliveryAgents:",
-        response?.data?.deliveryAgents,
-      );
-      console.log(
-        "Number of agents:",
-        response?.data?.deliveryAgents?.length ?? 0,
-      );
-
-      setAgents(response?.data?.deliveryAgents || []);
-      setTotalPages(response?.data?.pagination?.totalPages || 1);
+      // API returns { success, message, data: { deliveryAgents, pagination } }; interceptor returns response.data
+      const data = response?.data ?? response;
+      const list =
+        data?.deliveryAgents ??
+        data?.data?.deliveryAgents ??
+        (Array.isArray(data?.data) ? data.data : []) ??
+        [];
+      setAgents(Array.isArray(list) ? list : []);
+      const pagination = data?.pagination ?? data?.data?.pagination;
+      setTotalPages(pagination?.totalPages ?? 1);
     } catch (error) {
       console.error("Fetch error:", error);
       toast.error("Failed to load delivery agents");
@@ -88,21 +82,9 @@ const DeliveryAgents = () => {
     }
   };
 
-  const handleEdit = async (id) => {
-  try {
-    const res = await getDeliveryAgentById(id);
-
-    const agentData = res?.data?.data;
-
-    // send data to edit page
-    navigate(`/admin/driver/edit/${id}`, {
-      state: { agent: agentData },
-    });
-
-  } catch {
-    toast.error("Failed to fetch agent details");
-  }
-};
+  const handleEdit = (agentId) => {
+    navigate(`/admin/driver/edit/${agentId}`);
+  };
 
   return (
   <div className="h-screen flex flex-col p-6 max-w-7xl mx-auto overflow-hidden">
@@ -138,13 +120,13 @@ const DeliveryAgents = () => {
         <select
           value={activeFilter}
           onChange={(e) => {
-            setActiveFilter(e.target.value === "true");
+            setActiveFilter(e.target.value);
             setPage(1);
           }}
           className="px-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-indigo-500 focus:border-indigo-500"
         >
+          <option value="false"> ( Inactive)</option>
           <option value="true">Active Only</option>
-          <option value="false">All (Active + Inactive)</option>
         </select>
       </div>
     </div>
@@ -204,10 +186,7 @@ const DeliveryAgents = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() =>
-                          handleEdit(agent._id)
-                          // navigate(`/admin/driver/edit/${agent._id}`)
-                        }
+                        onClick={() => handleEdit(agent._id)}
                         className="text-indigo-600 hover:text-indigo-900 mr-4"
                       >
                         <PencilIcon className="h-5 w-5 inline" />

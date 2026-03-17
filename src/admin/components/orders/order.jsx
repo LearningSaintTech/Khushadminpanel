@@ -1288,7 +1288,7 @@ const Orders = () => {
           </div>
         );
         })()}
-        )}
+        
 
         {/* Assignment Modal */}
         {assignmentModalOpen && (

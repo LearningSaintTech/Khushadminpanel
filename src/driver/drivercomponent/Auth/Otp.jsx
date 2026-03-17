@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { driverVerifyOtp, driverResendOtp } from "../../apis/driverApi";
+import { setToken, setRole } from "../../../redux/GlobalSlice";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SEC = 45;
@@ -8,6 +10,7 @@ const RESEND_COOLDOWN_SEC = 45;
 export default function Otp() {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const stateUserId = location.state?.userId;
   const statePhone = location.state?.phone || "";
   const storedUserId = sessionStorage.getItem("driverUserId");
@@ -80,7 +83,8 @@ export default function Otp() {
       const payload = data?.data ?? data;
       const token = payload?.accessToken ?? data?.accessToken;
       if (token) {
-        localStorage.setItem("token", token);
+        dispatch(setToken(token));
+        dispatch(setRole("DRIVER"));
         navigate("/driver/dashboard", { replace: true });
       } else {
         setError("Verification failed. Try again.");

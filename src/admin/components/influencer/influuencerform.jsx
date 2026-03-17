@@ -5,7 +5,31 @@ import {
   updateInfluencer,
   getInfluencerById,
 } from "../../apis/Influencer";
+import { toast } from "react-toastify";
 import { ArrowLeft, Plus, X, Loader2, User, Mail, Phone, MapPin, Globe, Users, CheckCircle } from "lucide-react";
+
+const DIGITAL_SOURCE_OPTIONS = ["instagram", "youtube", "facebook", "twitter", "tiktok", "other"];
+
+/** Extract backend error message from response or string reject. */
+function getBackendErrorMessage(err, fallback = "Something went wrong") {
+  if (err == null) return fallback;
+  if (typeof err === "string" && err.trim()) return err.trim();
+  const data = err?.response?.data;
+  if (typeof data?.message === "string") return data.message;
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const first = data.errors[0];
+    return typeof first === "string" ? first : first?.msg || first?.message || fallback;
+  }
+  if (typeof data?.error === "string") return data.error;
+  if (typeof err?.message === "string" && err.message) return err.message;
+  return fallback;
+}
+
+/** Log backend error to console. */
+function logBackendError(context, err) {
+  const msg = getBackendErrorMessage(err, "Unknown error");
+  console.error(`[InfluencerForm] ${context}:`, msg, err?.response?.data ?? err);
+}
 
 const InfluencerForm = () => {
   const navigate = useNavigate();
@@ -31,27 +55,45 @@ const InfluencerForm = () => {
     if (id) fetchInfluencer();
   }, [id]);
 
+  const normalizePlatform = (value) =>
+    DIGITAL_SOURCE_OPTIONS.includes(value) ? value : "other";
+
   const fetchInfluencer = async () => {
     setFetching(true);
+    setError("");
     try {
       const res = await getInfluencerById(id);
-      if (res?.success) {
+      const data = res?.data ?? res;
+      const payload = data?.data ?? data;
+      if (payload && typeof payload === "object") {
+        const sources = Array.isArray(payload.digitalSources) ? payload.digitalSources : [];
         setFormData({
-          name: res.data.name || "",
-          countryCode: res.data.countryCode || "+91",
-          phoneNumber: res.data.phoneNumber || "",
-          email: res.data.email || "",
-          address: res.data.address || "",
-          city: res.data.city || "",
-          pinCode: res.data.pinCode || "",
-          digitalSources: res.data.digitalSources || [],
+          name: payload.name || "",
+          countryCode: payload.countryCode || "+91",
+          phoneNumber: payload.phoneNumber || "",
+          email: payload.email || "",
+          address: payload.address || "",
+          city: payload.city || "",
+          pinCode: payload.pinCode !== undefined && payload.pinCode !== "" ? String(payload.pinCode) : "",
+          digitalSources: sources.map((s) => ({
+            platform: normalizePlatform((s.platform || "").toLowerCase()),
+            handle: s.handle || "",
+            followers: s.followers !== undefined ? String(s.followers) : "",
+            verified: !!s.verified,
+            link: s.link || "",
+          })),
         });
       } else {
-        setError(res.message || "Failed to fetch influencer data");
+        const msg = res?.message || data?.message || "Failed to fetch influencer data";
+        setError(msg);
+        logBackendError("Fetch influencer failed", msg);
+        toast.error(msg);
       }
     } catch (err) {
-      console.error("Fetch By ID Error:", err);
-      setError("Failed to load influencer data");
+      logBackendError("Fetch influencer failed", err);
+      const msg = getBackendErrorMessage(err, "Failed to load influencer data");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setFetching(false);
     }
@@ -74,7 +116,7 @@ const InfluencerForm = () => {
       digitalSources: [
         ...formData.digitalSources,
         {
-          platform: "",
+          platform: DIGITAL_SOURCE_OPTIONS[0],
           handle: "",
           followers: "",
           verified: false,
@@ -98,13 +140,18 @@ const InfluencerForm = () => {
     try {
       if (id) {
         await updateInfluencer(id, formData);
+        toast.success("Influencer updated successfully.");
+        setTimeout(() => navigate("/admin/influencer"), 400);
       } else {
         await createInfluencer(formData);
+        toast.success("Influencer created successfully.");
+        setTimeout(() => navigate("/admin/influencer"), 400);
       }
-      navigate("/admin/influencer");
     } catch (err) {
-      console.error("Submit Error:", err);
-      setError(err?.response?.data?.message || "Failed to save influencer");
+      logBackendError(id ? "Update influencer failed" : "Create influencer failed", err);
+      const msg = getBackendErrorMessage(err, "Failed to save influencer");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -312,18 +359,19 @@ const InfluencerForm = () => {
                             <label className="block text-xs font-medium text-gray-600 mb-1.5">
                               Platform *
                             </label>
-                            <input
-                              placeholder="e.g., Instagram, YouTube"
-                              value={src.platform}
+                            <select
+                              value={DIGITAL_SOURCE_OPTIONS.includes(src.platform) ? src.platform : "other"}
                               onChange={(e) =>
-                                handleDigitalChange(
-                                  index,
-                                  "platform",
-                                  e.target.value
-                                )
+                                handleDigitalChange(index, "platform", e.target.value)
                               }
-                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
-                            />
+                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm bg-white"
+                            >
+                              {DIGITAL_SOURCE_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           <div>

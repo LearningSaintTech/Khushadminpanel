@@ -19,32 +19,42 @@ const CartChargesConfigForm = () => {
   });
 
   // ✅ Prefill Data (Edit Mode)
- useEffect(() => {
-  if (id) {
-    const loadConfig = async () => {
-      try {
-        setLoading(true);
-        const response = await getSingleCartCharge(id);
-        const data = response?.data?.data || response?.data;
+  useEffect(() => {
+    if (id) {
+      const loadConfig = async () => {
+        try {
+          setLoading(true);
+          console.log("[CartForm] Load single config", { id });
+          const response = await getSingleCartCharge(id);
+          const data = response?.data?.data || response?.data;
+          console.log("[CartForm] Load response", { id, hasData: !!data, raw: response?.data });
 
-        if (data) {
+          if (data) {
+          const mapRule = (r) => {
+            const hasPercent = r?.percent !== undefined && r?.percent !== null && r?.percent !== "";
+            return {
+              min: r?.min ?? "",
+              max: r?.max === null || r?.max === undefined ? "" : r.max,
+              type: hasPercent ? "PERCENT" : "FLAT",
+              amount: hasPercent ? (r.percent ?? "") : (r.value ?? ""),
+            };
+          };
+          const list = data.cartCharge || [];
+          const byKey = {};
+          list.forEach((item) => {
+            const key = item.key || "";
+            const rule = item.rules && !Array.isArray(item.rules) ? item.rules : (item.rules && item.rules[0]) || {};
+            if (!byKey[key]) byKey[key] = { key, rules: [] };
+            byKey[key].rules.push(mapRule(rule));
+          });
           setFormData({
             isActive: data.isActive !== false,
-            cartCharge: (data.cartCharge || []).map((charge) => ({
-              key: charge.key,
-              rules: [
-                {
-                  min: charge.rules?.min ?? "",
-                  max: charge.rules?.max ?? "",
-                  value: charge.rules?.value ?? "",
-                  percent: charge.rules?.percent ?? "",
-                },
-              ],
-            })),
+            cartCharge: Object.values(byKey),
           });
+          console.log("[CartForm] Load set formData", { cartChargeCount: Object.values(byKey).length, byKey });
         }
       } catch (err) {
-        console.error(err);
+        console.error("[CartForm] Load failed", err);
         setError("Failed to load cart charges configuration");
       } finally {
         setLoading(false);
@@ -80,8 +90,8 @@ const CartChargesConfigForm = () => {
   updated[chargeIndex].rules.push({
     min: "",
     max: "",
-    value: "",
-    percent: "",
+    type: "FLAT",
+    amount: "",
   });
 
   setFormData({ ...formData, cartCharge: updated });
@@ -103,14 +113,23 @@ const CartChargesConfigForm = () => {
   //   updated[chargeIndex].rules = rules;
   //   setFormData({ ...formData, cartCharge: updated });
   // };
- const updateRuleValue = (chargeIndex, ruleIndex, field, value) => {
-  const updated = [...formData.cartCharge];
-
-  updated[chargeIndex].rules[ruleIndex][field] =
-    value === "" ? "" : Number(value);
-
-  setFormData({ ...formData, cartCharge: updated });
-};
+  const updateRuleValue = (chargeIndex, ruleIndex, field, value) => {
+    const updated = formData.cartCharge.map((charge, ci) =>
+      ci !== chargeIndex
+        ? charge
+        : {
+            ...charge,
+            rules: charge.rules.map((r, ri) => {
+              if (ri !== ruleIndex) return r;
+              if (field === "type") return { ...r, type: value };
+              if (field === "amount") return { ...r, amount: value === "" ? "" : (isNaN(Number(value)) ? value : Number(value)) };
+              if (field === "min" || field === "max") return { ...r, [field]: value === "" ? "" : Number(value) };
+              return r;
+            }),
+          }
+    );
+    setFormData({ ...formData, cartCharge: updated });
+  };
 
   // const removeRuleField = (chargeIndex, ruleKey) => {
   //   const updated = [...formData.cartCharge];
@@ -220,35 +239,41 @@ const CartChargesConfigForm = () => {
         return;
       }
 
-    const payload = {
-  isActive: formData.isActive,
-  cartCharge: formData.cartCharge.map((charge) => {
-    const rule = charge.rules[0] || {};
-
-    const cleanedRule = {};
-
-    if (rule.min !== "") cleanedRule.min = rule.min;
-    if (rule.max !== "") cleanedRule.max = rule.max;
-    if (rule.value !== "") cleanedRule.value = rule.value;
-    if (rule.percent !== "") cleanedRule.percent = rule.percent;
-
-    return {
-      key: charge.key.trim(),
-      rules: cleanedRule,
+    const buildRule = (rule) => {
+      const cleaned = {};
+      if (rule.min !== "" && rule.min !== undefined) cleaned.min = Number(rule.min);
+      cleaned.max = rule.max === "" || rule.max === undefined ? null : Number(rule.max);
+      if (rule.type === "PERCENT") {
+        if (rule.amount !== "" && rule.amount !== undefined) cleaned.percent = Number(rule.amount);
+      } else {
+        if (rule.amount !== "" && rule.amount !== undefined) cleaned.value = Number(rule.amount);
+      }
+      return cleaned;
     };
-  }),
-};
+
+    const payload = {
+      isActive: formData.isActive,
+      cartCharge: formData.cartCharge.flatMap((charge) =>
+        (charge.rules || []).map((rule) => ({
+          key: charge.key.trim(),
+          rules: buildRule(rule),
+        }))
+      ),
+    };
+      console.log("[CartForm] Submit payload", { id, payload, cartChargeLength: payload.cartCharge?.length });
       if (id) {
         await updateCartCharges(id, payload);
+        console.log("[CartForm] Update success", id);
         alert("✅ Cart charges updated successfully!");
       } else {
         await createCartCharges(payload);
+        console.log("[CartForm] Create success");
         alert("✅ Cart charges created successfully!");
       }
 
       navigate("/admin/cart-charges");
     } catch (err) {
-      console.error(err);
+      console.error("[CartForm] Submit failed", err?.response?.data ?? err);
       setError(
         err?.response?.data?.message ||
           "Failed to save cart charges configuration",
@@ -366,58 +391,72 @@ const CartChargesConfigForm = () => {
                     </h4>
 
                   {charge.rules.map((rule, ruleIndex) => (
-  <div key={ruleIndex} className="flex gap-3 items-center flex-wrap">
-
-    <input
-      type="number"
-      placeholder="Min"
-      value={rule.min ?? ""}
-      onChange={(e) =>
-        updateRuleValue(index, ruleIndex, "min", e.target.value)
-      }
-      className="w-24 border px-3 py-2 rounded"
-    />
-
-    <input
-      type="number"
-      placeholder="Max"
-      value={rule.max ?? ""}
-      onChange={(e) =>
-        updateRuleValue(index, ruleIndex, "max", e.target.value)
-      }
-      className="w-24 border px-3 py-2 rounded"
-    />
-
-    <input
-      type="number"
-      placeholder="Value"
-      value={rule.value ?? ""}
-      onChange={(e) =>
-        updateRuleValue(index, ruleIndex, "value", e.target.value)
-      }
-      className="w-24 border px-3 py-2 rounded"
-    />
-
-    <input
-      type="number"
-      placeholder="%"
-      value={rule.percent ?? ""}
-      onChange={(e) =>
-        updateRuleValue(index, ruleIndex, "percent", e.target.value)
-      }
-      className="w-24 border px-3 py-2 rounded"
-    />
-
-    <button
-      type="button"
-      onClick={() => removeRuleField(index, ruleIndex)}
-      className="text-red-500"
-    >
-      Remove
-    </button>
-
-  </div>
-))}
+                    <div
+                      key={ruleIndex}
+                      className="flex gap-3 items-center flex-wrap p-3 bg-white border border-gray-200 rounded-lg"
+                    >
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Min</label>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={rule.min ?? ""}
+                          onChange={(e) =>
+                            updateRuleValue(index, ruleIndex, "min", e.target.value)
+                          }
+                          className="w-24 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Max (empty = no max)</label>
+                        <input
+                          type="number"
+                          placeholder="null"
+                          value={rule.max ?? ""}
+                          onChange={(e) =>
+                            updateRuleValue(index, ruleIndex, "max", e.target.value)
+                          }
+                          className="w-24 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Type</label>
+                        <select
+                          value={rule.type ?? "FLAT"}
+                          onChange={(e) =>
+                            updateRuleValue(index, ruleIndex, "type", e.target.value)
+                          }
+                          className="w-28 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                        >
+                          <option value="FLAT">FLAT</option>
+                          <option value="PERCENT">PERCENT</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">
+                          {rule.type === "PERCENT" ? "Percent (e.g. 20)" : "Value (e.g. 100)"}
+                        </label>
+                        <input
+                          type="number"
+                          placeholder={rule.type === "PERCENT" ? "20" : "100"}
+                          min={0}
+                          step={rule.type === "PERCENT" ? 1 : 0.01}
+                          value={rule.amount ?? ""}
+                          onChange={(e) =>
+                            updateRuleValue(index, ruleIndex, "amount", e.target.value)
+                          }
+                          className="w-28 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeRuleField(index, ruleIndex)}
+                        className="mt-5 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded text-sm font-medium"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
 
                     {/* Add Rule Button */}
                     <button

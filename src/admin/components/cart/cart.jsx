@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   getCartCharges,
   deleteCartCharges,
@@ -10,6 +10,7 @@ import { Plus, Trash2, Edit, Power } from 'lucide-react';
 
 const CartChargesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [charges, setCharges] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -17,53 +18,68 @@ const CartChargesPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(10);
 
-  useEffect(() => {
-    fetchCharges(currentPage);
-  }, [currentPage]);
-
-  const fetchCharges = async (page = 1) => {
+  const fetchCharges = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       setError(null);
-
+      console.log('[CartList] fetchCharges', { page, limit });
       const response = await getCartCharges(page, limit);
+      const responseData = response?.data || response || {};
+      console.log('[CartList] fetchCharges response', { responseData, keys: Object.keys(responseData || {}) });
 
-      // Extract data from response
-      // apiConnector returns response.data from axios, so response structure is:
-      // { success: true, message: "...", data: { data: [...], total: 3, ... } }
-      // So response.data = { data: [...], total: 3, ... }
-      const responseData = response?.data || {};
-      const chargesArray = responseData.data || [];
-      const total = responseData.total || chargesArray.length;
+      const chargesArray =
+        responseData?.data ||
+        responseData?.cartCharges ||
+        (Array.isArray(responseData) ? responseData : []);
+      const total = responseData?.total ?? responseData?.pagination?.total ?? chargesArray?.length ?? 0;
 
       if (Array.isArray(chargesArray)) {
         setCharges(chargesArray);
-        const calculatedPages = Math.ceil(total / limit);
+        const calculatedPages = Math.ceil((total || chargesArray.length) / limit);
         setTotalPages(calculatedPages > 0 ? calculatedPages : 1);
+        console.log('[CartList] set charges', { count: chargesArray.length, total, totalPages: calculatedPages });
       } else {
         setCharges([]);
         setTotalPages(1);
-        console.warn('No array found in response:', { response, responseData });
+        console.warn('[CartList] No array in response', { responseData });
       }
     } catch (err) {
-      console.error('Fetch cart charges error:', err);
-      setError(err.response?.data?.message || 'Failed to load cart charges');
+      console.error('[CartList] fetchCharges failed', err?.response?.data ?? err);
+      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to load cart charges'));
       setCharges([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
+
+  useEffect(() => {
+    fetchCharges(currentPage);
+  }, [currentPage, fetchCharges]);
+
+  // Refetch when user navigates back to list from edit/create (so UI updates after save)
+  const prevPathRef = React.useRef(location.pathname);
+  useEffect(() => {
+    const isListPage = location.pathname === '/admin/cart-charges' || location.pathname === '/admin/cart-charges/';
+    const cameFromEdit = prevPathRef.current.includes('/edit/') || prevPathRef.current.includes('/create');
+    prevPathRef.current = location.pathname;
+    if (isListPage && cameFromEdit) {
+      console.log('[CartList] returned to list, refetching');
+      fetchCharges(currentPage);
+    }
+  }, [location.pathname, currentPage, fetchCharges]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this cart charge configuration?')) return;
 
     try {
       setLoading(true);
+      console.log('[CartList] delete', id);
       await deleteCartCharges(id);
+      console.log('[CartList] delete success, refetching');
       await fetchCharges(currentPage);
     } catch (err) {
-      console.error('Delete error:', err);
-      setError(err.response?.data?.message || 'Failed to delete cart charge');
+      console.error('[CartList] delete failed', err?.response?.data ?? err);
+      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to delete cart charge'));
     } finally {
       setLoading(false);
     }
@@ -72,32 +88,35 @@ const CartChargesPage = () => {
   const handleToggleStatus = async (id) => {
     try {
       setLoading(true);
+      console.log('[CartList] toggle status', id);
       await toggleCartChargeStatus(id);
+      console.log('[CartList] toggle success, refetching');
       await fetchCharges(currentPage);
     } catch (err) {
-      console.error('Toggle status error:', err);
-      setError(err.response?.data?.message || 'Failed to update status');
+      console.error('[CartList] toggle failed', err?.response?.data ?? err);
+      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to update status'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to show short summary of charges
+  // Helper to show short summary of charges (cartCharge = array of { key, rules } or single object)
   const getChargeSummary = (cartCharge) => {
-    if (!Array.isArray(cartCharge) || cartCharge.length === 0) return '—';
-    return cartCharge.map(c => c.key).join(', ');
+    const list = Array.isArray(cartCharge) ? cartCharge : (cartCharge ? [cartCharge] : []);
+    if (list.length === 0) return '—';
+    return list.map((c) => c.key || '—').join(', ');
   };
 
-  // Helper to format rules for display
+  // Helper to format rules for display (cartCharge can be array of { key, rules } or single object)
   const formatRules = (charge) => {
-    if (!Array.isArray(charge.cartCharge) || charge.cartCharge.length === 0) return '—';
-    
-    return charge.cartCharge.map(c => {
-      const rules = Object.entries(c.rules || {})
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(', ');
-      return `${c.key} (${rules})`;
-    }).join(' | ');
+    const list = Array.isArray(charge.cartCharge) ? charge.cartCharge : (charge.cartCharge ? [charge.cartCharge] : []);
+    if (list.length === 0) return '—';
+    return list
+      .map((c) => {
+        const rules = Object.entries(c.rules || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+        return `${c.key || '—'} (${rules})`;
+      })
+      .join(' | ');
   };
 
   return (

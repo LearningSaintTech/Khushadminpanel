@@ -9,6 +9,7 @@ import {
   setError,
   clearError,
   setToken,
+  setRole,
 } from "../../../redux/GlobalSlice";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
 
@@ -120,19 +121,16 @@ export default function OTP() {
 
       if (res.success) {
         const accessToken = res.data.accessToken;
-        const refreshToken = res.data.refreshToken; // note: typo fix → referesh → refresh
+        const refreshToken = res.data.refreshToken;
 
         dispatch(setToken({ accessToken, refreshToken }));
-
-        localStorage.setItem("token", accessToken);
-        localStorage.setItem("refreshToken", refreshToken);
 
         const decoded = jwtDecode(accessToken);
         const role = decoded?.role?.toUpperCase();
 
         if (!role) throw new Error("Role not found in token");
 
-        localStorage.setItem("userRole", role);
+        dispatch(setRole(role));
 
         // Role-based navigation
         switch (role) {

@@ -26,9 +26,12 @@ import {
   Building2,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
+import { useDispatch } from "react-redux";
 import { logoutUser } from "../../apis/Authapi";
+import { logout } from "../../../redux/GlobalSlice";
 
 const Sidebar = () => {
+  const dispatch = useDispatch();
   const [isInventoryOpen, setIsInventoryOpen] = useState(true);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -78,20 +81,10 @@ const Sidebar = () => {
       setIsLoggingOut(true);
       console.log("📡 Calling logout API...");
 
-      const response = await logoutUser();
-      console.log("✅ Logout API response:", response);
-
-      // Clear local storage
-      console.log("🧹 Clearing local storage...");
-      localStorage.removeItem("token");
-      localStorage.removeItem("admin_userId");
-      localStorage.removeItem("admin_phone");
-
-      console.log("🎉 Logout successful! Redirecting to login...");
-
-      // Redirect to login page
+      await logoutUser();
+      dispatch(logout());
       navigate("/admin");
-      window.location.href = "/"; // Force reload to clear any cached state
+      window.location.href = "/";
     } catch (error) {
       console.error("❌ Logout error:", error);
       console.error("❌ Error details:", {
@@ -100,12 +93,7 @@ const Sidebar = () => {
         data: error?.response?.data,
       });
 
-      // Even if API fails, clear local storage and redirect
-      console.log("⚠️ API call failed, but clearing local storage anyway...");
-      localStorage.removeItem("token");
-      localStorage.removeItem("admin_userId");
-      localStorage.removeItem("admin_phone");
-
+      dispatch(logout());
       navigate("/admin");
       window.location.href = "/";
     } finally {
