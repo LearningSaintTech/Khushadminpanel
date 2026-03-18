@@ -735,84 +735,109 @@ const Orders = () => {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <span className="text-sm text-gray-600">Item status:</span>
-                <select
-                  value={itemStatusFilter}
-                  onChange={(e) => {
-                    setItemStatusFilter(e.target.value);
-                    setItemPagination((p) => ({ ...p, page: 1 }));
-                  }}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500"
-                >
-                  <option value="">All</option>
-                  {statusOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+              {/* Item-based filters */}
+              <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-700">Filter by status</span>
+                  <select
+                    value={itemStatusFilter}
+                    onChange={(e) => {
+                      setItemStatusFilter(e.target.value);
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-colors min-w-[200px]"
+                  >
+                    <option value="">All statuses</option>
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {itemStatusFilter && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemStatusFilter("");
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    Clear filter
+                  </button>
+                )}
               </div>
               {itemLoading ? (
-                <div className="py-16 text-center text-gray-500 rounded-xl border border-gray-200 bg-white">
-                  Loading order items…
+                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
+                  <RefreshCw className="h-10 w-10 animate-spin text-indigo-500 mb-3" />
+                  <p className="text-sm font-medium text-gray-600">Loading order items…</p>
                 </div>
               ) : orderItems.length === 0 ? (
-                <div className="py-16 text-center text-gray-500 rounded-xl border border-gray-200 bg-white">
-                  No order items found
+                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-white">
+                  <Package className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-sm font-medium text-gray-600">No order items found</p>
+                  <p className="text-xs text-gray-500 mt-1">Try changing the status filter or search</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {orderItems.map((row) => (
                     <div
                       key={`${row.orderId}-${row.itemId}`}
-                      className="rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow p-5 flex flex-wrap items-center gap-4 sm:gap-6"
+                      className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-indigo-200 hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-indigo-600">#{row.orderId}</span>
-                          <span className="text-gray-400">·</span>
-                          <span className="text-sm text-gray-600">
-                            {row.user?.name || row.address?.name || "—"}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {row.user?.countryCode || ""}{row.user?.phoneNumber || "—"}
-                          </span>
+                      <div className="p-5 flex flex-wrap items-center gap-4 sm:gap-6">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                              Order #{row.orderId}
+                            </span>
+                            <span className="text-sm font-medium text-gray-700">
+                              {row.user?.name || row.address?.name || "—"}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {row.user?.countryCode || ""}{row.user?.phoneNumber || "—"}
+                            </span>
+                          </div>
+                          <div className="text-base font-semibold text-gray-900">
+                            {row.item?.name || row.item?.sku || "—"}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                            <span>SKU: {row.item?.sku ?? row.itemId ?? "—"}</span>
+                            {row.item?.variant?.color && <span>{row.item.variant.color}</span>}
+                            {row.item?.variant?.size && <span>Size: {row.item.variant.size}</span>}
+                            <span>
+                              {row.orderCreatedAt
+                                ? new Date(row.orderCreatedAt).toLocaleDateString("en-IN", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "—"}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {row.item?.name || row.item?.sku || "—"}
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right">
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</p>
+                            <p className="text-sm font-semibold text-gray-900">{row.item?.quantity ?? "—"}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(row.itemStatus)}
+                            <button
+                              onClick={() => {
+                                if (!row.orderId) return;
+                                setSelectedItemIdFromListView(String(row.itemId ?? row.productItemId ?? ""));
+                                setItemPage(1);
+                                fetchSingleOrder(row.orderId);
+                              }}
+                              className="rounded-lg p-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 transition-colors"
+                              title="View & update item status"
+                            >
+                              <Eye size={20} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500">
-                          SKU: {row.item?.sku ?? row.itemId ?? "—"}
-                          {row.item?.variant?.color && ` · ${row.item.variant.color}`}
-                          {row.item?.variant?.size && ` · ${row.item.variant.size}`}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {row.orderCreatedAt
-                            ? new Date(row.orderCreatedAt).toLocaleDateString("en-IN", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-sm text-gray-700">Qty: {row.item?.quantity ?? "—"}</span>
-                        {/* Item-based status only (no order status) */}
-                        {getStatusBadge(row.itemStatus)}
-                        <button
-                          onClick={() => {
-                            if (!row.orderId) return;
-                            setSelectedItemIdFromListView(String(row.itemId ?? row.productItemId ?? ""));
-                            setItemPage(1);
-                            fetchSingleOrder(row.orderId);
-                          }}
-                          className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
-                          title="View item details"
-                        >
-                          <Eye size={18} />
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -947,79 +972,102 @@ const Orders = () => {
             {fromItemList && focusedItem ? (
               /* Item-based flow: only this item's status and details */
               <div className="p-6">
-                <div className="max-w-2xl rounded-xl border border-gray-200 bg-gray-50/50 p-6 space-y-6">
-                  <div className="flex flex-wrap items-start gap-4">
-                    {focusedItem.variant?.imageUrl && (
-                      <img
-                        src={focusedItem.variant.imageUrl}
-                        alt={focusedItem.sku}
-                        className="h-24 w-24 rounded-lg object-cover border border-gray-200"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-indigo-600">Order #{selectedOrder?.orderId}</div>
-                      <div className="text-lg font-semibold text-gray-900 mt-0.5">
-                        {focusedItem.sku || focusedItem.variant?.sku || "—"}
+                <div className="max-w-2xl space-y-6">
+                  {/* Product card */}
+                  <div className="rounded-xl border-2 border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="flex flex-wrap items-start gap-6">
+                      {focusedItem.variant?.imageUrl && (
+                        <img
+                          src={focusedItem.variant.imageUrl}
+                          alt={focusedItem.sku}
+                          className="h-28 w-28 rounded-xl object-cover border-2 border-gray-100 shadow-inner"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Order #{selectedOrder?.orderId}</p>
+                        <h3 className="text-xl font-bold text-gray-900 mt-1">
+                          {focusedItem.sku || focusedItem.variant?.sku || "—"}
+                        </h3>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600">
+                          {focusedItem.variant?.color && <span>Color: {focusedItem.variant.color}</span>}
+                          {focusedItem.variant?.size && <span>Size: {focusedItem.variant.size}</span>}
+                        </div>
+                        <div className="mt-3 flex items-baseline gap-4 text-sm">
+                          <span className="font-semibold text-gray-800">Qty: {focusedItem.quantity}</span>
+                          <span className="text-gray-600">₹{(focusedItem.unitPrice || 0).toLocaleString("en-IN")} each</span>
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        {focusedItem.variant?.color && `Color: ${focusedItem.variant.color}`}
-                        {focusedItem.variant?.size && ` · Size: ${focusedItem.variant.size}`}
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Current status</p>
+                        {getStatusBadge(focusedItem.status)}
                       </div>
-                      <div className="mt-2 text-sm text-gray-700">
-                        Qty: {focusedItem.quantity} · ₹{(focusedItem.unitPrice || 0).toLocaleString("en-IN")} each
-                      </div>
-                    </div>
-                    <div className="shrink-0">
-                      <span className="text-sm text-gray-600 block mb-1">Item status</span>
-                      {getStatusBadge(focusedItem.status)}
                     </div>
                   </div>
                   {(() => {
                     const driver = getDriverPartnerDisplay(focusedItem);
                     return driver ? (
-                      <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-3">
-                        <UserCircle size={18} className="text-indigo-600 shrink-0" />
+                      <div className="flex items-center gap-4 rounded-xl border-2 border-indigo-100 bg-indigo-50/80 px-5 py-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
+                          <UserCircle size={24} className="text-indigo-600" />
+                        </div>
                         <div>
-                          <span className="text-xs font-medium text-indigo-800 uppercase tracking-wider">Driver partner</span>
-                          <p className="text-sm font-medium text-gray-900 mt-0.5">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Driver partner</p>
+                          <p className="text-base font-semibold text-gray-900 mt-0.5">
                             {driver.name}
-                            {driver.phone && <span className="text-gray-600 font-normal ml-1">· {driver.phone}</span>}
+                            {driver.phone && <span className="font-normal text-gray-600 ml-1">· {driver.phone}</span>}
                           </p>
                         </div>
                       </div>
                     ) : null;
                   })()}
-                  <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-200">
-                    <span className="text-sm font-medium text-gray-700">Change item status:</span>
-                    <select
-                      value={focusedItem.status || "CREATED"}
-                      onChange={(e) => {
-                        const newVal = e.target.value;
-                        handleUpdateItemStatus(selectedOrder.orderId, focusedItem.itemId, newVal);
-                      }}
-                      disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
-                      className="rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-60"
-                    >
-                      {statusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    {updatingItemId === String(focusedItem.itemId || focusedItem._id) && (
-                      <RefreshCw size={16} className="animate-spin text-indigo-600" />
-                    )}
+                  {/* Change status card */}
+                  <div className="rounded-xl border-2 border-gray-200 bg-gray-50/50 p-6">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <RefreshCw size={16} className="text-indigo-600" />
+                      Update item status
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <select
+                        value={focusedItem.status || "CREATED"}
+                        onChange={(e) => {
+                          const newVal = e.target.value;
+                          handleUpdateItemStatus(selectedOrder.orderId, focusedItem.itemId, newVal);
+                        }}
+                        disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
+                        className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
+                      >
+                        {statusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      {updatingItemId === String(focusedItem.itemId || focusedItem._id) && (
+                        <span className="flex items-center gap-2 text-sm text-indigo-600">
+                          <RefreshCw size={18} className="animate-spin" />
+                          Updating…
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">Select a new status to update this line item.</p>
                   </div>
+                  {/* Status history */}
                   {focusedItem.statusHistory && focusedItem.statusHistory.length > 0 && (
-                    <div className="pt-4 border-t border-gray-200">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Status history</h4>
-                      <ul className="space-y-1.5 text-sm">
+                    <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+                      <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        <Clock size={16} className="text-gray-500" />
+                        Status history
+                      </h4>
+                      <ul className="space-y-0">
                         {focusedItem.statusHistory.map((h, i) => (
-                          <li key={i} className="flex flex-wrap items-center gap-2 text-gray-600">
-                            <span className="font-medium text-gray-800">{h.status}</span>
-                            {h.previousStatus && <span className="text-gray-400">← {h.previousStatus}</span>}
-                            {h.notes && <span className="text-gray-500">· {h.notes}</span>}
+                          <li
+                            key={i}
+                            className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-sm border-b border-gray-100 last:border-0 last:pb-0 first:pt-0"
+                          >
+                            <span className="font-semibold text-gray-900 min-w-[140px]">{h.status}</span>
+                            {h.previousStatus && <span className="text-blue-700">← {h.previousStatus}</span>}
+                            {h.notes && <span className="text-gray-500 italic">"{h.notes}"</span>}
                             {h.createdAt && (
-                              <span className="text-gray-400 text-xs">
-                                {new Date(h.createdAt).toLocaleString("en-IN")}
+                              <span className="ml-auto text-xs text-gray-500 tabular-nums">
+                                {new Date(h.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
                               </span>
                             )}
                           </li>
