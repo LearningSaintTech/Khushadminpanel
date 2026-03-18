@@ -27,6 +27,7 @@ const CouponForm = () => {
     startDate: "",
     expiryDate: "",
     applicableOn: "ALL",
+    isInfluencer: false,
   });
 
   // Load coupon data if editing
@@ -58,6 +59,7 @@ const CouponForm = () => {
               ? coupon.expiryDate.split("T")[0]
               : "",
             applicableOn: coupon.applicableOn || "ALL",
+            isInfluencer: !!coupon.isInfluencer,
           });
         } else {
           setError("Coupon not found");
@@ -120,6 +122,7 @@ const CouponForm = () => {
       startDate: formData.startDate,
       expiryDate: formData.expiryDate,
       applicableOn: formData.applicableOn,
+      isInfluencer: !!formData.isInfluencer,
     };
 
     try {
@@ -293,6 +296,24 @@ const CouponForm = () => {
                 rows={2}
                 className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all resize-none placeholder:text-gray-400"
               />
+            </div>
+
+            {/* Influencer coupon flag */}
+            <div className="mb-6">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  name="isInfluencer"
+                  checked={!!formData.isInfluencer}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+                />
+                <span>Is influencer coupon</span>
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                If checked, this coupon is treated as an influencer coupon and will also
+                appear in influencer coupon management.
+              </p>
             </div>
 
             {/* Usage Limits & Dates */}

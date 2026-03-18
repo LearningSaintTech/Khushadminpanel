@@ -2,8 +2,8 @@ import { apiConnector } from "../services/Apiconnector";
 
 // ✅ Orders Endpoints
 const orderEndpoints = {
-  // Get All Orders (with pagination + search + status)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "") => {
+  // Get All Orders (with pagination + search + status + date range + sort)
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc") => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -12,6 +12,22 @@ const orderEndpoints = {
 
     if (status) {
       url += `&orderStatus=${status}`;
+    }
+
+    if (startDate) {
+      url += `&startDate=${encodeURIComponent(startDate)}`;
+    }
+
+    if (endDate) {
+      url += `&endDate=${encodeURIComponent(endDate)}`;
+    }
+
+    if (sortBy) {
+      url += `&sortBy=${encodeURIComponent(sortBy)}`;
+    }
+
+    if (sortOrder) {
+      url += `&sortOrder=${encodeURIComponent(sortOrder)}`;
     }
 
     return url;
@@ -51,10 +67,10 @@ const orderEndpoints = {
 };
 
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status) => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder)
   );
 };
 

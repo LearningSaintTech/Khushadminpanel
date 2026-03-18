@@ -9,6 +9,7 @@ import {
   getAssignmentView,
   assignItems,
   assignWholeOrder,
+  unassignOrder,
   listDeliveryAgents,
 } from "../../apis/Orderapi";
 import {
@@ -29,6 +30,8 @@ import {
   DollarSign,
   ShoppingBag,
   UserCircle,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
@@ -45,6 +48,10 @@ const Orders = () => {
   });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState("desc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Item-based view state
@@ -88,6 +95,12 @@ const Orders = () => {
   const [assignmentAssignOnly, setAssignmentAssignOnly] = useState(false);
   // When set, we opened from "By item" view: show only this item's details (item-based flow), not full order
   const [selectedItemIdFromListView, setSelectedItemIdFromListView] = useState(null);
+  // Assignment view for current order (for Reassign / Remove driver)
+  const [orderAssignments, setOrderAssignments] = useState(null);
+  const [unassignLoading, setUnassignLoading] = useState(false);
+  const [unassignError, setUnassignError] = useState(null);
+  // When Reassign is used: unassign this assignment first, then assign new driver
+  const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -97,7 +110,11 @@ const Orders = () => {
         pagination.page,
         pagination.limit,
         search,
-        statusFilter
+        statusFilter,
+        dateFrom || undefined,
+        dateTo || undefined,
+        sortBy,
+        sortOrder
       );
       const data = res?.data || {};
       setOrders(data.orders || data.data || []);
@@ -112,7 +129,7 @@ const Orders = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter]);
+  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchOrders();
@@ -153,9 +170,20 @@ const Orders = () => {
     try {
       setOrderLoading(true);
       setOrderError(null);
+      setUnassignError(null);
+      setOrderAssignments(null);
       // Fetch with page 1 and high limit so all items in the order are returned
       const res = await getSingleOrder(orderId, 1, itemLimit);
       setSelectedOrder(res?.data || null);
+      // Fetch assignment view for Reassign / Remove driver
+      try {
+        const assignRes = await getAssignmentView(orderId);
+        const assignData = assignRes?.data ?? assignRes;
+        setOrderAssignments(assignData || null);
+      } catch (e) {
+        console.warn("Assignment view failed:", e);
+        setOrderAssignments(null);
+      }
     } catch (err) {
       console.error("Failed to load order:", err);
       setOrderError(err?.response?.data?.message || "Could not load order details.");
@@ -180,10 +208,35 @@ const Orders = () => {
     );
   };
 
-  const openAssignmentModal = (orderId, itemIdsOrWhole, newStatus, assignOnly = false) => {
+  const handleRemoveDriver = async (orderId, assignmentId) => {
+    if (!orderId || !assignmentId || !window.confirm("Remove this driver from the assignment? The items will be unassigned and you can assign another driver later.")) return;
+    setUnassignLoading(true);
+    setUnassignError(null);
+    try {
+      await unassignOrder(orderId, { assignmentId });
+      await fetchSingleOrder(orderId);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to remove driver.";
+      setUnassignError(msg);
+    } finally {
+      setUnassignLoading(false);
+    }
+  };
+
+  const handleReassignDriver = (orderId, assignment) => {
+    if (!orderId || !assignment) return;
+    const itemIdsOrWhole = assignment.assignmentType === "ORDER"
+      ? WHOLE_ORDER_SENTINEL
+      : (assignment.itemIds || []).map((id) => (id?._id ?? id).toString());
+    if (assignment.assignmentType !== "ORDER" && itemIdsOrWhole.length === 0) return;
+    openAssignmentModal(orderId, itemIdsOrWhole, null, true, assignment._id);
+  };
+
+  const openAssignmentModal = (orderId, itemIdsOrWhole, newStatus, assignOnly = false, replaceAssignmentId = null) => {
     setAssignmentOrderId(orderId);
     setPendingNewStatus(newStatus);
     setAssignmentAssignOnly(assignOnly);
+    setReassignAssignmentId(replaceAssignmentId || null);
     setSelectedDeliveryAgentId("");
     setAssignError(null);
     if (itemIdsOrWhole === WHOLE_ORDER_SENTINEL) {
@@ -225,6 +278,9 @@ const Orders = () => {
     setAssignLoading(true);
     setAssignError(null);
     try {
+      if (reassignAssignmentId) {
+        await unassignOrder(assignmentOrderId, { assignmentId: reassignAssignmentId });
+      }
       if (assignmentMode === "whole") {
         await assignWholeOrder(assignmentOrderId, selectedDeliveryAgentId);
         if (!assignmentAssignOnly) {
@@ -240,6 +296,7 @@ const Orders = () => {
       }
       setAssignmentModalOpen(false);
       setAssignmentAssignOnly(false);
+      setReassignAssignmentId(null);
       setWholeOrderNewStatus("");
       setSelectedItemIds([]);
       setBulkStatus("");
@@ -629,6 +686,89 @@ const Orders = () => {
 
         {!selectedOrder ? (
           viewMode === VIEW_ORDER ? (
+            <>
+              {/* Filters: date range, status, sort (By order view) */}
+              <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+                <span className="text-sm font-semibold text-gray-700">Filters</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">From date</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">To date</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Status</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => {
+                        setStatusFilter(e.target.value);
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[160px]"
+                    >
+                      <option value="">All statuses</option>
+                      {statusOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Sort</label>
+                    <select
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const [by, order] = v.split("-");
+                        setSortBy(by || "createdAt");
+                        setSortOrder(order || "desc");
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[140px]"
+                    >
+                      <option value="createdAt-desc">Latest first</option>
+                      <option value="createdAt-asc">Oldest first</option>
+                    </select>
+                  </div>
+                </div>
+                {(dateFrom || dateTo || statusFilter || sortOrder !== "desc") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                      setStatusFilter("");
+                      setSortBy("createdAt");
+                      setSortOrder("desc");
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+
             <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="min-w-full table-auto divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -733,6 +873,7 @@ const Orders = () => {
                 </div>
               </div>
             </div>
+            </>
           ) : (
             <>
               {/* Item-based filters */}
@@ -892,6 +1033,7 @@ const Orders = () => {
                 onClick={() => {
                   setSelectedOrder(null);
                   setOrderError(null);
+                  setOrderAssignments(null);
                   setSelectedItemIds([]);
                   setBulkStatus("");
                   setSelectedItemIdFromListView(null);
@@ -1152,6 +1294,100 @@ const Orders = () => {
                 </div>
               </div>
 
+              {/* Delivery assignments: Reassign / Remove driver */}
+              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Truck size={18} className="text-indigo-600" />
+                  <h4 className="text-sm font-semibold text-gray-700">Delivery assignments</h4>
+                </div>
+                {unassignError && (
+                  <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    {unassignError}
+                  </div>
+                )}
+                {orderAssignments == null ? (
+                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                    <RefreshCw size={14} className="animate-spin" />
+                    Loading assignments…
+                  </p>
+                ) : !orderAssignments.assignments?.length ? (
+                  <p className="text-sm text-gray-500">No delivery assignments yet. Select items in the table below and click "Assign driver to selected", or assign when updating status to Shipped / Out for delivery.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {orderAssignments.assignments
+                      .filter((a) => !["CANCELLED", "REJECTED", "DELIVERED"].includes(a.status))
+                      .map((a) => {
+                        const driver = a.deliveryAgentId;
+                        const name = typeof driver === "object" ? driver?.name : null;
+                        const phone = typeof driver === "object" ? driver?.phoneNumber : null;
+                        const assignmentItemIds = Array.isArray(a.itemIds) ? a.itemIds : [];
+                        const idSet = new Set(assignmentItemIds.map((id) => (id?._id ?? id).toString()));
+                        const assignedItems = (selectedOrder?.items ?? []).filter((it) =>
+                          idSet.has(String(it.itemId ?? it._id))
+                        );
+                        const itemSkus = assignedItems.map((it) => it.sku || it.variant?.sku || it.itemId || it._id || "—");
+                        return (
+                          <div
+                            key={a._id}
+                            className="flex flex-wrap items-start gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3"
+                          >
+                            <div className="flex items-start gap-2 min-w-0 flex-1">
+                              <UserCircle size={20} className="text-indigo-600 shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {name || "Driver"}
+                                  {phone && <span className="text-gray-500 font-normal ml-1">· {phone}</span>}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {a.assignmentType === "ORDER" ? "Whole order" : `${assignmentItemIds.length} item(s)`} · {a.status}
+                                </p>
+                                {itemSkus.length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {itemSkus.map((sku, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
+                                      >
+                                        {String(sku)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleReassignDriver(selectedOrder.orderId, a)}
+                                disabled={unassignLoading}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-600 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                                title="Assign to a different driver"
+                              >
+                                <UserPlus size={14} />
+                                Reassign
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDriver(selectedOrder.orderId, a._id)}
+                                disabled={unassignLoading}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                title="Remove driver (unassign)"
+                              >
+                                <UserMinus size={14} />
+                                Remove driver
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {orderAssignments.assignments.filter((a) => !["CANCELLED", "REJECTED", "DELIVERED"].includes(a.status)).length === 0 && (
+                      <p className="text-sm text-gray-500">No active assignments. Select items below and click "Assign driver to selected", or assign when updating status to Shipped / Out for delivery.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {selectedOrder?.shipments?.length > 0 && (
                 <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                   <div className="flex items-center gap-2 mb-4">
@@ -1209,6 +1445,16 @@ const Orders = () => {
                         ) : (
                           "Apply bulk"
                         )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAssignmentModal(selectedOrder.orderId, [...selectedItemIds], null, true)}
+                        disabled={selectedItemIds.length === 0 || assignLoading}
+                        className="rounded-lg border-2 border-indigo-600 px-4 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-60 flex items-center gap-2"
+                        title="Assign a driver to the selected items (e.g. after removing a driver)"
+                      >
+                        <UserPlus size={14} />
+                        Assign driver to selected
                       </button>
                     </div>
                   )}
@@ -1347,10 +1593,12 @@ const Orders = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {assignmentAssignOnly ? "Assign driver for exchange" : "Assign delivery driver"}
+                {reassignAssignmentId ? "Reassign driver" : assignmentAssignOnly ? "Assign driver" : "Assign delivery driver"}
               </h3>
               <p className="text-sm text-gray-600 mb-4">
-                {assignmentAssignOnly
+                {reassignAssignmentId
+                  ? "The current driver will be removed and the selected driver will be assigned to these items."
+                  : assignmentAssignOnly
                   ? (assignmentItemIds.length === 1
                       ? `Assign a driver to this item (${statusOptions.find((o) => o.value === pendingNewStatus)?.label || pendingNewStatus}).`
                       : `Assign a driver to these ${assignmentItemIds.length} items (${statusOptions.find((o) => o.value === pendingNewStatus)?.label || pendingNewStatus}).`)
@@ -1383,7 +1631,12 @@ const Orders = () => {
               <div className="flex gap-3 justify-end">
                 <button
                   type="button"
-                  onClick={() => !assignLoading && setAssignmentModalOpen(false)}
+                  onClick={() => {
+                    if (!assignLoading) {
+                      setAssignmentModalOpen(false);
+                      setReassignAssignmentId(null);
+                    }
+                  }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                 >
                   Cancel
@@ -1397,8 +1650,10 @@ const Orders = () => {
                   {assignLoading ? (
                     <>
                       <RefreshCw size={14} className="animate-spin" />
-                      Assigning…
+                      {reassignAssignmentId ? "Reassigning…" : "Assigning…"}
                     </>
+                  ) : reassignAssignmentId ? (
+                    "Reassign driver"
                   ) : assignmentAssignOnly ? (
                     "Assign driver"
                   ) : (

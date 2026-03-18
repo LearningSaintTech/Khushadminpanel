@@ -45,6 +45,7 @@ import ShowItems from "../admin/components/inventory/ShowItems";
 import InfluencerCoupons from "../admin/components/influencer/influencercoupon";
 import InfluencerCouponsForm from "../admin/components/influencer/influencercouponform";
 import CouponAnalytics from "../admin/components/coupon/CouponAnayltics";
+import CouponAnalyticsDetail from "../admin/components/coupon/CouponAnalyticsDetail";
 import InfluencerCouponManage from "../admin/components/influencer/influencercouponmanagement";
 import ExchangeForm from "../admin/components/Policy/exchnagePolicyform";
 import Exchanges from "../admin/components/Policy/exchangePolicy";
@@ -139,6 +140,7 @@ const AdminRoutes = () => {
         <Route path="coupons/create" element={<CouponForm />} />
         <Route path="coupons/edit/:id" element={<CouponForm />} />
         <Route path="coupon-analytics" element={<CouponAnalytics />} />
+        <Route path="coupon-analytics/:id" element={<CouponAnalyticsDetail />} />
         <Route path="cart-charges" element={<CartChargesPage />} />
         <Route path="cart-charges/create" element={<CartChargeForm />} />
         <Route path="cart-charges/edit/:id" element={<CartChargeForm />} />

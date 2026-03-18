@@ -1,4 +1,6 @@
-// src/pages/admin/influencers/InfluencerCouponManage.jsx
+// Influencer Coupon Management: attach/detach coupons for one influencer.
+// Flow: Attach list comes from getCoupons() with isInfluencer=true so only influencer coupons are attachable.
+// Backend will also reject attach if coupon.isInfluencer !== true. See INFLUENCER-COUPON-FLOW.md in coupon folder.
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -30,6 +32,8 @@ const InfluencerCouponManage = () => {
   const [attachedTotal, setAttachedTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
+  const attachListPageSize = 8;
+  const [attachListPage, setAttachListPage] = useState(1);
 
   useEffect(() => {
     const loadData = async () => {
@@ -40,7 +44,8 @@ const InfluencerCouponManage = () => {
           getInfluencerCoupons(id, attachedPage, pageSize),
           getInfluencerCouponHistory(id, historyPage, pageSize),
           getInfluencerAnalytics(id),
-          getCoupons(1, 300, ''), // adjust limit as needed
+          // Only fetch influencer coupons for attaching
+          getCoupons(1, 300, '', 'true'), // adjust limit as needed
         ]);
 
         setAttachedCoupons(attachedRes?.data?.coupons || []);
@@ -92,11 +97,62 @@ const InfluencerCouponManage = () => {
 
   const availableCoupons = allCoupons.filter(
     (c) =>
+      // must be marked as influencer coupon
+      c.isInfluencer === true &&
+      // not already attached in current list
       !attachedCoupons.some((ac) => (ac._id || ac.couponId) === c._id) &&
+      // either free or already attached to this influencer
       (!c.influencerId || c.influencerId === id) &&
+      // matches search
       (c.code?.toLowerCase().includes(couponSearch.toLowerCase()) ||
         c.description?.toLowerCase().includes(couponSearch.toLowerCase()))
   );
+
+  const attachListTotal = availableCoupons.length;
+  const attachListTotalPages = Math.ceil(attachListTotal / attachListPageSize) || 1;
+  const paginatedAvailableCoupons = availableCoupons.slice(
+    (attachListPage - 1) * attachListPageSize,
+    attachListPage * attachListPageSize
+  );
+
+  const AttachListPagination = () => {
+    if (attachListTotalPages <= 1) return null;
+    return (
+      <div className="flex items-center justify-between px-6 py-3 border-t bg-gray-50 text-xs sm:text-sm">
+        <div className="text-gray-600">
+          Showing{" "}
+          <span className="font-medium">
+            {attachListTotal === 0 ? 0 : (attachListPage - 1) * attachListPageSize + 1}
+          </span>
+          {" – "}
+          <span className="font-medium">
+            {Math.min(attachListPage * attachListPageSize, attachListTotal)}
+          </span>
+          {" of "}
+          <span className="font-medium">{attachListTotal}</span> coupons
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setAttachListPage((p) => Math.max(1, p - 1))}
+            disabled={attachListPage === 1}
+            className="rounded-lg border border-gray-300 px-2 py-1 disabled:opacity-40 hover:bg-gray-100 transition"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="px-2 text-gray-700">
+            {attachListPage} / {attachListTotalPages}
+          </span>
+          <button
+            onClick={() => setAttachListPage((p) => Math.min(attachListTotalPages, p + 1))}
+            disabled={attachListPage === attachListTotalPages}
+            className="rounded-lg border border-gray-300 px-2 py-1 disabled:opacity-40 hover:bg-gray-100 transition"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
     const totalPages = Math.ceil(totalItems / pageSize);
@@ -172,7 +228,7 @@ const InfluencerCouponManage = () => {
           </div>
         )}
 
-        {/* Attached Coupons */}
+        {/* Attached Coupons (table) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-12">
           <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
             <h2 className="text-xl font-semibold text-gray-900">Attached Coupons</h2>
@@ -192,39 +248,92 @@ const InfluencerCouponManage = () => {
           {attachedCoupons.length === 0 ? (
             <div className="py-20 text-center text-gray-500">No coupons attached yet</div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              {attachedCoupons.map((c) => (
-                <div
-                  key={c._id || c.couponId}
-                  className="px-6 py-5 flex items-center justify-between hover:bg-gray-50/60 transition-colors group"
-                >
-                  <div>
-                    <div className="font-medium text-gray-900">{c.code || c.coupon?.code}</div>
-                    <div className="text-sm text-gray-600 mt-0.5">
-                      {c.description || c.coupon?.description}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1 font-medium">
-                      {c.discountType === 'PERCENT'
-                        ? `${c.discountValue}% off`
-                        : `Flat ₹${c.discountValue}`}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDetach(c._id || c.couponId)}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition"
-                  >
-                    <Unlink size={15} /> Detach
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50/80">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Code
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Discount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {attachedCoupons.map((c) => {
+                      const code = c.code || c.coupon?.code;
+                      const description = c.description || c.coupon?.description;
+                      const discountType = c.discountType || c.coupon?.discountType;
+                      const discountValue = c.discountValue || c.coupon?.discountValue;
+                      const active = c.isActive ?? c.coupon?.isActive ?? true;
+                      const idForNav = c._id || c.couponId;
 
-          <PaginationControls
-            currentPage={attachedPage}
-            totalItems={attachedTotal}
-            onPageChange={setAttachedPage}
-          />
+                      return (
+                        <tr
+                          key={c._id || c.couponId}
+                          className="hover:bg-gray-50/60 transition-colors"
+                        >
+                          <td
+                            className="px-6 py-3 text-sm font-medium text-indigo-700 cursor-pointer whitespace-nowrap"
+                            onClick={() => idForNav && navigate(`/admin/coupon-analytics/${idForNav}`)}
+                          >
+                            {code}
+                          </td>
+                          <td
+                            className="px-6 py-3 text-sm text-gray-700 cursor-pointer"
+                            onClick={() => idForNav && navigate(`/admin/coupon-analytics/${idForNav}`)}
+                          >
+                            {description || 'No description'}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-700 whitespace-nowrap">
+                            {discountType === 'PERCENT'
+                              ? `${discountValue}% off`
+                              : `Flat ₹${discountValue}`}
+                          </td>
+                          <td className="px-6 py-3 text-sm">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                active
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : 'bg-red-50 text-red-700'
+                              }`}
+                            >
+                              {active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-right text-sm">
+                            <button
+                              onClick={() => handleDetach(c._id || c.couponId)}
+                              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition"
+                            >
+                              <Unlink size={14} /> Detach
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={attachedPage}
+                totalItems={attachedTotal}
+                onPageChange={setAttachedPage}
+              />
+            </>
+          )}
         </div>
 
         {/* Attach Coupon Panel */}
@@ -248,13 +357,25 @@ const InfluencerCouponManage = () => {
               {availableCoupons.length === 0 ? (
                 <div className="py-20 text-center text-gray-500">No matching coupons found</div>
               ) : (
-                availableCoupons.map((c) => (
+                paginatedAvailableCoupons.map((c) => (
                   <div
                     key={c._id}
                     className="px-6 py-5 flex items-center justify-between hover:bg-gray-50/60 transition-colors group"
                   >
-                    <div>
-                      <div className="font-medium text-gray-900">{c.code}</div>
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/admin/coupons/edit/${c._id}`)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-gray-900">{c.code}</div>
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            c.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                          }`}
+                        >
+                          {c.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
                       <div className="text-sm text-gray-600 mt-0.5">{c.description}</div>
                       <div className="text-xs text-gray-500 mt-1 font-medium">
                         {c.discountType === 'PERCENT'
@@ -272,6 +393,7 @@ const InfluencerCouponManage = () => {
                 ))
               )}
             </div>
+            <AttachListPagination />
           </div>
         )}
 

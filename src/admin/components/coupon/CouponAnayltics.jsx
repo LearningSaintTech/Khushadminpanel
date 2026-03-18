@@ -108,7 +108,7 @@ const CouponAnalytics = () => {
           <KpiCard
             icon={<Ticket className="h-7 w-7 text-indigo-600" />}
             title="Total Coupons"
-            value={summary.totalCoupons.toLocaleString()}
+            value={`${summary.totalCoupons.toLocaleString()} (Inf: ${summary.influencerCoupons?.toLocaleString?.() || 0})`}
             accent="indigo"
           />
           <KpiCard
@@ -156,6 +156,17 @@ const CouponAnalytics = () => {
                         <div className="font-semibold text-gray-900">{c.couponCode}</div>
                         <div className="mt-0.5 text-sm text-gray-600">
                           {c.discountType} • ₹{c.discountValue}
+                        </div>
+                        <div className="mt-1">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              c.isInfluencer
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {c.isInfluencer ? 'Influencer coupon' : 'Normal coupon'}
+                          </span>
                         </div>
                       </div>
                       <div className="text-right">

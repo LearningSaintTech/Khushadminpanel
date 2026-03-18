@@ -16,11 +16,18 @@ export const createCoupon = (data) => {
   return apiConnector("POST", COUPON_API.CREATE, data);
 };
 
-// ✅ Get All Coupons (with search support)
-export const getCoupons = (page = 1, limit = 10, search = "") => {
+// ✅ Get All Coupons (with search + influencer filter support)
+// isInfluencer can be:
+// - "true"  → only influencer coupons
+// - "false" → only non-influencer coupons
+// - undefined/null → backend default (currently non-influencer)
+export const getCoupons = (page = 1, limit = 10, search = "", isInfluencer) => {
   let url = `${COUPON_API.GET_ALL}?page=${page}&limit=${limit}`;
   if (search && search.trim()) {
     url += `&search=${encodeURIComponent(search.trim())}`;
+  }
+  if (typeof isInfluencer === "string" && isInfluencer.length) {
+    url += `&isInfluencer=${encodeURIComponent(isInfluencer)}`;
   }
   return apiConnector("GET", url);
 };
@@ -40,9 +47,13 @@ export const toggleCouponStatus = (id) => {
   return apiConnector("PATCH", `${COUPON_API.TOGGLE_STATUS}/${id}`);
 };
 
-// ✅ Get Coupon Analytics
-export const getCouponAnalytics = () => {
-  return apiConnector("GET", COUPON_API.ANALYTICS);
+// ✅ Get Coupon Analytics (global or single coupon if couponId passed)
+export const getCouponAnalytics = (couponId) => {
+  let url = COUPON_API.ANALYTICS;
+  if (couponId) {
+    url += `?couponId=${encodeURIComponent(couponId)}`;
+  }
+  return apiConnector("GET", url);
 };
 // ✅ Delete Coupon (if API exists)
 // export const deleteCoupon = (id) => {

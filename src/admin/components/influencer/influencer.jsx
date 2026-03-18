@@ -17,6 +17,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  Ticket,
 } from "lucide-react";
 
 const Influencer = () => {
@@ -242,6 +243,15 @@ const handleToggle = async (id) => {
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <button
                               onClick={() =>
+                                navigate(`/admin/influencer/${item._id}/coupons`)
+                              }
+                              className="text-indigo-600 hover:text-indigo-800 mr-5 transition-colors"
+                              title="Manage coupons"
+                            >
+                              <Ticket className="w-5 h-5 inline" />
+                            </button>
+                            <button
+                              onClick={() =>
                                 navigate(`/admin/influencer/edit/${item._id}`)
                               }
                               className="text-indigo-600 hover:text-indigo-800 mr-5 transition-colors"
@@ -321,6 +331,15 @@ const handleToggle = async (id) => {
                       </div>
 
                       <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                        <button
+                          onClick={() =>
+                            navigate(`/admin/influencer/${item._id}/coupons`)
+                          }
+                          className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                        >
+                          <Ticket className="w-4 h-4" />
+                          Coupons
+                        </button>
                         <button
                           onClick={() =>
                             navigate(`/admin/influencer/edit/${item._id}`)

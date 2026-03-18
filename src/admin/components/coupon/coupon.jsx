@@ -14,6 +14,7 @@ const CouponPage = () => {
   const [limit] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [influencerFilter, setInfluencerFilter] = useState("all"); // all | influencer | normal
 
   // Modal states
   const [selectedCoupon, setSelectedCoupon] = useState(null);
@@ -34,14 +35,28 @@ const CouponPage = () => {
 
   useEffect(() => {
     fetchCoupons();
-  }, [currentPage, debouncedSearchTerm]);
+  }, [currentPage, debouncedSearchTerm, influencerFilter]);
 
   const fetchCoupons = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await getCoupons(currentPage, limit, debouncedSearchTerm);
+      let isInfluencerParam;
+      if (influencerFilter === "influencer") {
+        isInfluencerParam = "true";
+      } else if (influencerFilter === "normal") {
+        isInfluencerParam = "false";
+      } else {
+        isInfluencerParam = undefined; // all
+      }
+
+      const response = await getCoupons(
+        currentPage,
+        limit,
+        debouncedSearchTerm,
+        isInfluencerParam
+      );
       const data = response?.data?.data || response?.data || {};
       const couponsList = Array.isArray(data) ? data : data.coupons || data.data || [];
 
@@ -93,14 +108,26 @@ const CouponPage = () => {
           <div className="flex flex-col gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Coupons</h1>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="flex-1">
+              <div className="flex-1 flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   placeholder="Search coupons..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
+                  className="w-full sm:flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
                 />
+                <select
+                  value={influencerFilter}
+                  onChange={(e) => {
+                    setCurrentPage(1);
+                    setInfluencerFilter(e.target.value);
+                  }}
+                  className="w-full sm:w-56 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 bg-white shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
+                >
+                  <option value="all">All coupons</option>
+                  <option value="normal">Normal coupons only</option>
+                  <option value="influencer">Influencer coupons only</option>
+                </select>
               </div>
               <button
                 onClick={() => navigate("/admin/coupons/create")}
@@ -150,12 +177,27 @@ const CouponPage = () => {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Code</th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Discount</th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Min Cart</th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Code
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Discount
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Min Cart
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Influencer
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -176,6 +218,17 @@ const CouponPage = () => {
                         </td>
                         <td className="px-4 lg:px-6 py-3 sm:py-4 text-sm text-gray-600">
                           ₹{coupon.minCartValue || "-"}
+                        </td>
+                        <td className="px-4 lg:px-6 py-3 sm:py-4">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                              coupon.isInfluencer
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {coupon.isInfluencer ? "Influencer" : "Normal"}
+                          </span>
                         </td>
                         <td className="px-4 lg:px-6 py-3 sm:py-4">
                           <button
@@ -254,7 +307,7 @@ const CouponPage = () => {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
+                    <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
                     <div>
                       <span className="text-gray-500">Discount:</span>
                       <span className="ml-1 font-medium text-gray-900">
@@ -268,6 +321,13 @@ const CouponPage = () => {
                       <span className="ml-1 font-medium text-gray-900">
                         ₹{coupon.minCartValue || "-"}
                       </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Type:</span>
+                        <span className="ml-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium
+                          bg-gray-100 text-gray-700">
+                          {coupon.isInfluencer ? "Influencer coupon" : "Normal coupon"}
+                        </span>
                     </div>
                   </div>
 
@@ -386,6 +446,21 @@ const CouponPage = () => {
                   </div>
 
                   <div>
+                    <dt className="text-gray-500 font-medium">Influencer Coupon</dt>
+                    <dd className="mt-1">
+                      <span
+                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                          selectedCoupon.isInfluencer
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {selectedCoupon.isInfluencer ? "Yes (influencer)" : "No (normal)"}
+                      </span>
+                    </dd>
+                  </div>
+
+                  <div>
                     <dt className="text-gray-500 font-medium">Min Cart Value</dt>
                     <dd className="mt-1">₹{selectedCoupon.minCartValue || "—"}</dd>
                   </div>
@@ -442,9 +517,17 @@ const CouponPage = () => {
 
                   {selectedCoupon.influencerId && (
                     <div>
-                      <dt className="text-gray-500 font-medium">Influencer ID</dt>
-                      <dd className="mt-1 font-mono text-xs break-all">
-                        {selectedCoupon.influencerId}
+                      <dt className="text-gray-500 font-medium">Influencer Attached</dt>
+                      <dd className="mt-1 space-y-1">
+                        <div className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-800">
+                          Attached to influencer
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          ID:{" "}
+                          <span className="font-mono break-all">
+                            {selectedCoupon.influencerId}
+                          </span>
+                        </div>
                       </dd>
                     </div>
                   )}
