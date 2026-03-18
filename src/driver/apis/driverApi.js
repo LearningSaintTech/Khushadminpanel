@@ -13,10 +13,12 @@ export const driverEndpoints = {
   LOGOUT: `${BASE}/logout`,
   NEW_ACCESS_TOKEN: `${BASE}/newAccessToken`,
   GET_PROFILE: `${BASE}/getProfile`,
+  UPDATE_PROFILE: `${BASE}/update-profile`,
   TOGGLE_ONLINE: `${BASE}/toggle-online`,
   DELIVERIES: `${BASE}/deliveries`,
   DELIVERIES_HISTORY: `${BASE}/deliveries/history`,
   DELIVERIES_HISTORY_EXCHANGE: `${BASE}/deliveries/history/exchange`,
+  DELIVERIES_HISTORY_REJECTED: `${BASE}/deliveries/history/rejected`,
   ACCEPT: (id) => `${BASE}/deliveries/${id}/accept`,
   REJECT: (id) => `${BASE}/deliveries/${id}/reject`,
   PICKUP: (id) => `${BASE}/deliveries/${id}/pickup`,
@@ -41,6 +43,10 @@ export const driverLogout = () => apiConnector("POST", driverEndpoints.LOGOUT);
 /** GET – profile (requires auth). */
 export const driverGetProfile = () => apiConnector("GET", driverEndpoints.GET_PROFILE);
 
+/** PUT – update profile (requires auth). Body: FormData with name, email, address, city, pinCode, licenseNumber, licenseExpiry, bikeNumber, bikeModel, bikeBrand; optional files: profileImage, licenseImage. */
+export const driverUpdateProfile = (formData) =>
+  apiConnector("PUT", driverEndpoints.UPDATE_PROFILE, formData);
+
 /** PATCH – toggle accepting pickups. Body: { isOnline: boolean }. */
 export const driverToggleOnline = (isOnline) =>
   apiConnector("PATCH", driverEndpoints.TOGGLE_ONLINE, { isOnline });
@@ -58,7 +64,12 @@ export const getOrderHistory = (page = 1, limit = 20) => {
 /** GET – exchange order history. Query: page, limit. Returns { list, pagination }. */
 export const getExchangeHistory = (page = 1, limit = 20) => {
   const url = `${driverEndpoints.DELIVERIES_HISTORY_EXCHANGE}?page=${page}&limit=${limit}`;
-  console.log("[Driver API] getExchangeHistory", { page, limit, url });
+  return apiConnector("GET", url);
+};
+
+/** GET – rejected assignments history. Query: page, limit. Returns { list, pagination }. */
+export const getRejectedHistory = (page = 1, limit = 20) => {
+  const url = `${driverEndpoints.DELIVERIES_HISTORY_REJECTED}?page=${page}&limit=${limit}`;
   return apiConnector("GET", url);
 };
 

@@ -71,17 +71,13 @@ const CancellationPolicies = () => {
   }, [fetchPolicies]);
 
   const handleToggleActive = async (id, currentActive) => {
-    if (!window.confirm(`Turn ${currentActive ? "OFF" : "ON"} this policy?`))
+    if (!window.confirm(`Turn ${currentActive ? "OFF" : "ON"} this policy?${!currentActive ? " Any other active policy will be deactivated." : ""}`))
       return;
 
     try {
       await toggleCancellationActive(id);
-
-      setPolicies((prev) =>
-        prev.map((p) =>
-          p._id === id ? { ...p, isActive: !currentActive } : p
-        )
-      );
+      // Refetch so list reflects "only one active" (backend deactivates others)
+      fetchPolicies();
     } catch (err) {
       alert(err?.response?.data?.message || "Failed to toggle status");
     }
@@ -113,10 +109,13 @@ const CancellationPolicies = () => {
 
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
-            <PackageCheck className="h-8 w-8 text-indigo-600" />
-            Cancellation Policies
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
+              <PackageCheck className="h-8 w-8 text-indigo-600" />
+              Cancellation Policies
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">Only one policy can be active at a time.</p>
+          </div>
 
           <Link
             to="/admin/cancellation/create"

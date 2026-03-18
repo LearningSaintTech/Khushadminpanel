@@ -8,9 +8,12 @@ import Exchangeorder from "../driver/drivercomponent/dashboard/Exchangeorder.jsx
 import DriverAppLayout from "../driver/drivercomponent/common/DriverAppLayout";
 import BottomNavLayout from "../driver/drivercomponent/common/bottomlayout";
 import AssignmentDetails from "../driver/drivercomponent/Home/AssignmentDetails.jsx";
+import DeliverySuccessPage from "../driver/drivercomponent/Home/DeliverySuccessPage.jsx";
 import OrderHistory from "../driver/drivercomponent/order/orderHistory.jsx";
 import ExchangeOrderHistory from "../driver/drivercomponent/order/exchangeorderhistory.jsx";
+import OrderDetailPage from "../driver/drivercomponent/order/OrderDetailPage.jsx";
 import Profile from "../driver/drivercomponent/Profile/Profile.jsx";
+import EditProfile from "../driver/drivercomponent/Profile/editprofile.jsx";
 import DriverNotificationsPage from "../driver/drivercomponent/notifications/DriverNotificationsPage.jsx";
 
 const DriverRoutes = () => {
@@ -26,11 +29,14 @@ const DriverRoutes = () => {
           <Route element={<BottomNavLayout />}>
             <Route path="dashboard" element={<DriverDashboard />} />
             <Route path="assignment/:assignmentId" element={<AssignmentDetails />} />
+            <Route path="delivery-success" element={<DeliverySuccessPage />} />
             <Route path="exchange-orders" element={<Exchangeorder />} />
             <Route path="order-history" element={<OrderHistory />} />
+            <Route path="order-detail" element={<OrderDetailPage />} />
             <Route path="exchange-order-history" element={<ExchangeOrderHistory />} />
             <Route path="notifications" element={<DriverNotificationsPage />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="edit-profile" element={<EditProfile />} />
           </Route>
         </Route>
       </Route>

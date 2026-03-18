@@ -6,7 +6,7 @@ import {
   deleteExchange,
   toggleExchangeActive,
 } from "../../apis/Exchangeapi";
-import { Plus, Edit, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Plus, Edit, Trash2, Power, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 const Exchange = () => {
   const navigate = useNavigate();
@@ -56,6 +56,9 @@ const Exchange = () => {
   };
 
   const handleToggleActive = async (id) => {
+    const policy = exchanges.find((p) => p._id === id);
+    const willActivate = policy && !policy.isActive;
+    if (willActivate && !window.confirm("Activate this policy? Any other active policy will be deactivated.")) return;
     try {
       await toggleExchangeActive(id);
       fetchExchanges();
@@ -99,10 +102,13 @@ const Exchange = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Exchange Policies
-            {totalPolicies > 0 && <span className="text-gray-500 text-xl ml-3">({totalPolicies})</span>}
-          </h1>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Exchange Policies
+              {totalPolicies > 0 && <span className="text-gray-500 text-xl ml-3">({totalPolicies})</span>}
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">Only one policy can be active at a time.</p>
+          </div>
 
           <button
             onClick={() => navigate("/admin/exchange/create")}
@@ -170,33 +176,45 @@ const Exchange = () => {
                           ? policy.exchangeReasons.join(" • ")
                           : "—"}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleToggleActive(policy._id)}
-                          className={`inline-flex items-center px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      <td className="px-6 py-4 text-center">
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
                             policy.isActive
-                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                              : "bg-rose-100 text-rose-800 hover:bg-rose-200"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
                           }`}
                         >
                           {policy.isActive ? "Active" : "Inactive"}
-                        </button>
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
-                        <button
-                          onClick={() => navigate(`/admin/exchange/edit/${policy._id}`)}
-                          className="text-gray-600 hover:text-gray-900 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="h-4.5 w-4.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(policy._id)}
-                          className="text-gray-600 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4.5 w-4.5" />
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => navigate(`/admin/exchange/edit/${policy._id}`)}
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                            title="Edit"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleToggleActive(policy._id)}
+                            className={`p-2 rounded-lg transition ${
+                              policy.isActive
+                                ? "text-amber-600 hover:bg-amber-50"
+                                : "text-green-600 hover:bg-green-50"
+                            }`}
+                            title={policy.isActive ? "Deactivate" : "Activate"}
+                          >
+                            <Power size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(policy._id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

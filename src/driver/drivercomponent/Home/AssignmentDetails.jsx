@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { MapPin, Send, X } from "lucide-react";
+import { MapPin, Send, X, Package, IndianRupee, Phone } from "lucide-react";
 import { MdArrowBackIos } from "react-icons/md";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -104,6 +104,8 @@ export default function AssignmentDetails() {
   const [qrImageUrl, setQrImageUrl] = useState(null);
   const [qrImageBase64, setQrImageBase64] = useState(null);
   const [showQr, setShowQr] = useState(false);
+  // Confirm before accept/reject: 'accept' | 'reject' | null
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,9 +132,13 @@ export default function AssignmentDetails() {
     return () => { cancelled = true; };
   }, [assignmentId]);
 
-  const runAction = async (fn, body) => {
+  const runAction = async (fn, body, options = {}) => {
     if (!assignmentId) return;
     const actionName = body?.paymentCollectedMethod ? `markDelivered(${body.paymentCollectedMethod})` : fn?.name || "action";
+    const isMarkDelivered = body?.paymentCollectedMethod !== undefined;
+    const isExchangeReceived = options?.successType === "exchangeReceived";
+    const isReject = options?.successType === "reject";
+    const currentAssignment = assignment; // capture before refetch (delivered/rejected assignments are excluded from getMyDeliveries)
     console.log("[AssignmentDetails] Run action", { assignmentId, actionName, body });
     setActionLoading(true);
     setError("");
@@ -142,10 +148,43 @@ export default function AssignmentDetails() {
       const res = await getMyDeliveries();
       const list = res?.data ?? res ?? [];
       const updated = Array.isArray(list) ? list.find((a) => String(a._id) === String(assignmentId)) : null;
+      const notInList = updated == null; // list.find returns undefined when not found; delivered/rejected are excluded
       setAssignment(updated || null);
-      console.log("[AssignmentDetails] Action success", { actionName, newStatus: updated?.status });
-      if (updated?.status === "DELIVERED") {
-        navigate("/driver/dashboard");
+      console.log("[AssignmentDetails] Action success", { actionName, newStatus: updated?.status, notInList });
+      // Rejected assignments are excluded from list; go back to dashboard
+      if (isReject && notInList) {
+        navigate("/driver/dashboard", { replace: true });
+        return;
+      }
+      // "Exchange Received" also sets assignment to DELIVERED, so it disappears from list; show success
+      if (isExchangeReceived) {
+        const source = updated || currentAssignment;
+        navigate("/driver/delivery-success", {
+          state: {
+            orderId: source?.order?.orderId ?? source?.orderId ?? "",
+            amount: source?.amountToCollect ?? 0,
+            isExchange: true,
+            isExchangeReceived: true,
+          },
+          replace: true,
+        });
+        return;
+      }
+      // Delivered assignments (regular + exchange) are excluded from getMyDeliveries(), so updated is null/undefined after delivery
+      const justDelivered =
+        updated?.status === "DELIVERED" ||
+        isMarkDelivered ||
+        (notInList && currentAssignment?.status === "OUT_FOR_DELIVERY");
+      if (justDelivered) {
+        const source = updated || currentAssignment;
+        const orderId = source?.order?.orderId ?? source?.orderId ?? "";
+        const amount = source?.amountToCollect ?? 0;
+        const isExchange = isExchangeAssignment(source);
+        navigate("/driver/delivery-success", {
+          state: { orderId, amount, isExchange },
+          replace: true,
+        });
+        return;
       }
     } catch (err) {
       setError(typeof err === "string" ? err : "Action failed");
@@ -226,169 +265,280 @@ export default function AssignmentDetails() {
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddressString)}`
     : "https://www.google.com/maps";
 
-  return (
-    <div className="min-h-screen bg-white flex justify-center">
-      <div className="w-full max-w-[375px] bg-white flex flex-col">
-        <div className="relative h-[64px] px-6 flex items-center border-b border-gray-300 bg-gray-100">
-          <MdArrowBackIos size={22} className="cursor-pointer" onClick={() => navigate(-1)} />
-          <h1 className="absolute left-1/2 -translate-x-1/2 text-[15px] font-bold tracking-[2.5px] uppercase text-center">
-            {isExchange ? (isPickup ? "Exchange pickup" : "Exchange delivery") : "Assignment"}
-          </h1>
-          {/* <button
-            onClick={() => navigate("/driver/dashboard")}
-            className="absolute right-4 text-sm font-medium text-gray-700"
-          >
-            Dashboard
-          </button> */}
-        </div>
+  const orderId = order?.orderId ?? assignment?._id?.slice(-8) ?? "—";
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-gray-600">{statusLabel}</p>
-            {isExchange ? (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800">
-                Exchange
-              </span>
-            ) : (
-              <span
-                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                  paymentMode === "COD"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-green-100 text-green-800"
-                }`}
-              >
-                {paymentMode === "COD" ? "COD" : "Prepaid"}
-              </span>
-            )}
+  return (
+    <div className="min-h-screen bg-[#f2f2f2] flex justify-center">
+      <div className="w-full max-w-[420px] flex flex-col bg-[#f2f2f2]">
+        {/* Header */}
+        <header className="sticky top-0 z-10 flex items-center h-14 px-4 bg-white border-b border-gray-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Go back"
+          >
+            <MdArrowBackIos size={22} className="text-gray-800" />
+          </button>
+          <div className="flex-1 text-center">
+            <h1 className="text-[15px] font-bold tracking-wide text-gray-900">
+              {isExchange ? (isPickup ? "Exchange pickup" : "Exchange delivery") : "Order details"}
+            </h1>
+            <p className="text-xs text-gray-500 mt-0.5">#{orderId}</p>
+          </div>
+          <div className="w-10" />
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-6">
+          {/* Status & type card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-gray-800">{statusLabel}</span>
+                <div className="flex items-center gap-2">
+                  {isExchange ? (
+                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">
+                      Exchange
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                        paymentMode === "COD"
+                          ? "bg-amber-50 text-amber-800 border-amber-200"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      }`}
+                    >
+                      {paymentMode === "COD" ? "COD" : "Prepaid"}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {isExchange && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Exchange progress
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {DRIVER_EXCHANGE_STATUSES.map((driverStatus) => {
+                      const itemStatuses = [...new Set(items.map((it) => (it?.status || "").toUpperCase()).filter(Boolean))];
+                      const statusesConsideredDone = {
+                        EXCHANGE_PICKED: ["EXCHANGE_PICKED", "EXCHANGE_RECEIVED", "EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
+                        EXCHANGE_RECEIVED: ["EXCHANGE_RECEIVED", "EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
+                        EXCHANGE_SHIPPED: ["EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
+                        EXCHANGE_DELIVERED: ["EXCHANGE_DELIVERED"],
+                      };
+                      const done = itemStatuses.some((st) => (statusesConsideredDone[driverStatus] || []).includes(st));
+                      const current = itemStatuses.some((st) => st === driverStatus) ||
+                        (driverStatus === "EXCHANGE_SHIPPED" && itemStatuses.includes("OUT_FOR_DELIVERY"));
+                      return (
+                        <span
+                          key={driverStatus}
+                          className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-medium ${
+                            done
+                              ? "bg-violet-100 text-violet-700"
+                              : current
+                                ? "bg-violet-200 text-violet-900 font-semibold"
+                                : "bg-gray-100 text-gray-400"
+                          }`}
+                        >
+                          {DRIVER_EXCHANGE_LABELS[driverStatus]}
+                          {done && " ✓"}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {isExchange && (
-            <div className="space-y-2">
-              <p className="text-[12px] font-semibold text-gray-700 uppercase tracking-wide">Exchange status (driver updates)</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-                {DRIVER_EXCHANGE_STATUSES.map((driverStatus) => {
-                  const itemStatuses = [...new Set(items.map((it) => (it?.status || "").toUpperCase()).filter(Boolean))];
-                  const statusesConsideredDone = {
-                    EXCHANGE_PICKED: ["EXCHANGE_PICKED", "EXCHANGE_RECEIVED", "EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
-                    EXCHANGE_RECEIVED: ["EXCHANGE_RECEIVED", "EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
-                    EXCHANGE_SHIPPED: ["EXCHANGE_SHIPPED", "OUT_FOR_DELIVERY", "EXCHANGE_DELIVERED"],
-                    EXCHANGE_DELIVERED: ["EXCHANGE_DELIVERED"],
-                  };
-                  const done = itemStatuses.some((st) => (statusesConsideredDone[driverStatus] || []).includes(st));
-                  const current = itemStatuses.some((st) => st === driverStatus) ||
-                    (driverStatus === "EXCHANGE_SHIPPED" && itemStatuses.includes("OUT_FOR_DELIVERY"));
-                  return (
-                    <span
-                      key={driverStatus}
-                      className={done ? "text-violet-700 font-medium" : current ? "text-violet-600 font-semibold" : "text-gray-400"}
+          {/* Items card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <Package size={18} className="text-gray-600" />
+              <h2 className="text-sm font-semibold text-gray-800">Items ({items.length})</h2>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {items.map((item, idx) => {
+                const imageUrl = item?.variant?.imageUrl || "https://picsum.photos/100/87";
+                const itemKey = item?.sku ? `${item.sku}-${idx}` : `item-${idx}`;
+                const lineTotal = ((item?.unitPrice ?? 0) * (item?.quantity ?? 1));
+                const productName = item?.variant?.name ?? item?.productName ?? null;
+                return (
+                  <div key={itemKey} className="flex gap-4 p-4">
+                    <button
+                      type="button"
+                      onClick={() => setImagePreviewUrl(imageUrl)}
+                      className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-gray-100 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
                     >
-                      {DRIVER_EXCHANGE_LABELS[driverStatus]}
-                      {done && " ✓"}
-                    </span>
-                  );
-                })}
-              </div>
+                      <img
+                        src={imageUrl}
+                        alt={productName || item?.sku || "Product"}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      {productName && (
+                        <p className="text-sm font-medium text-gray-900 line-clamp-2">{productName}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-0.5">SKU: {item?.sku ?? "—"}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs text-gray-500">Qty: {item?.quantity ?? 1}</span>
+                        <span className="text-sm font-semibold text-gray-900">₹{lineTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
-          {items.map((item, idx) => {
-            const imageUrl = item?.variant?.imageUrl || "https://picsum.photos/100/87";
-            const itemKey = item?.sku ? `${item.sku}-${idx}` : `item-${idx}`;
-            return (
-              <div key={itemKey} className="flex gap-4">
-                <button
-                  type="button"
-                  onClick={() => setImagePreviewUrl(imageUrl)}
-                  className="w-[100px] h-[87px] shrink-0 rounded overflow-hidden focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
-                >
-                  <img
-                    src={imageUrl}
-                    alt={item?.sku ? `Product ${item.sku}` : "Product"}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-                <div>
-                <p className="text-[12px] text-gray-600">
-                  SKU: {item?.sku}
-                </p>
-                <p className="text-[12px] mt-1">Qty: {item?.quantity ?? 1}</p>
-                <p className="text-sm font-medium mt-1">₹{((item?.unitPrice ?? 0) * (item?.quantity ?? 1)).toFixed(2)}</p>
-              </div>
+          {/* Address card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <MapPin size={18} className="text-gray-600" />
+              <h2 className="text-sm font-semibold text-gray-800">
+                {isExchange ? (isPickup ? "Pickup from" : "Deliver to") : "Deliver to"}
+              </h2>
             </div>
-            );
-          })}
-
-          <div className="border-b border-gray-300" />
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-[12px] font-semibold">
-              <MapPin size={14} />
-              {isExchange ? (isPickup ? "PICKUP FROM" : "DELIVER TO") : "DELIVER TO"}
-            </div>
-            <div className="text-[12px] text-gray-700 space-y-1">
-              <p className="font-semibold">{address?.name || "—"}</p>
+            <div className="p-4 space-y-2">
+              <p className="font-semibold text-gray-900">{address?.name || "—"}</p>
               {deliveryAddressString ? (
-                <p className="whitespace-pre-line wrap-break-word">{deliveryAddressString.replace(/, /g, ",\n")}</p>
+                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line wrap-break-word">
+                  {deliveryAddressString.replace(/, /g, ",\n")}
+                </p>
               ) : (
-                <p>—</p>
+                <p className="text-sm text-gray-500">—</p>
               )}
-              {address?.phone && <p className="mt-1">Phone: {address.phone}</p>}
+              {address?.phone && (
+                <a
+                  href={`tel:${address.phone}`}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+                >
+                  <Phone size={14} />
+                  {address.phone}
+                </a>
+              )}
             </div>
             {import.meta.env.VITE_GOOGLE_MAPS_EMBED_KEY && deliveryAddressString && (
-              <div className="w-full aspect-video rounded-xl overflow-hidden border border-gray-200 mt-2">
-                <iframe
-                  title={isExchange && isPickup ? "Pickup location" : "Delivery location"}
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_EMBED_KEY}&q=${encodeURIComponent(deliveryAddressString)}`}
-                />
+              <div className="px-4 pb-4">
+                <div className="w-full aspect-video rounded-xl overflow-hidden border border-gray-200">
+                  <iframe
+                    title={isExchange && isPickup ? "Pickup location" : "Delivery location"}
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_EMBED_KEY}&q=${encodeURIComponent(deliveryAddressString)}`}
+                  />
+                </div>
               </div>
             )}
-            <a
-              href={mapsDirectionUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full h-[48px] bg-black text-white rounded-xl flex items-center justify-center gap-2 text-[12px] font-semibold mt-4"
-            >
-              {isExchange && isPickup ? "GET DIRECTION (Pickup)" : "GET DIRECTION"}
-              <Send size={14} />
-            </a>
+            <div className="px-4 pb-4">
+              <a
+                href={mapsDirectionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full h-12 bg-black text-white rounded-xl flex items-center justify-center gap-2 text-sm font-semibold hover:bg-gray-800 transition-colors"
+              >
+                {isExchange && isPickup ? "Get direction (pickup)" : "Get direction"}
+                <Send size={16} />
+              </a>
+            </div>
           </div>
 
-          <div className="border-b border-gray-300" />
-
-          <div className="flex justify-between text-[16px] font-medium">
-            {isExchange ? (
-              <>
-                <span>Exchange {isPickup ? "pickup" : "delivery"}</span>
-                <span>{amountToCollect > 0 ? `₹${amountToCollect.toFixed(2)}` : "No payment"}</span>
-              </>
-            ) : (
-              <>
-                <span>{paymentMode === "COD" ? "Cash to collect" : "Prepaid"}</span>
-                <span>₹{amountToCollect.toFixed(2)}</span>
-              </>
-            )}
+          {/* Payment summary card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <IndianRupee size={18} className="text-gray-600" />
+              <h2 className="text-sm font-semibold text-gray-800">Payment summary</h2>
+            </div>
+            <div className="p-4 flex items-center justify-between">
+              <span className="text-sm text-gray-600">
+                {isExchange
+                  ? `Exchange ${isPickup ? "pickup" : "delivery"}`
+                  : paymentMode === "COD"
+                    ? "Cash to collect"
+                    : "Prepaid"}
+              </span>
+              <span className="text-lg font-bold text-gray-900">
+                {amountToCollect > 0 ? `₹${amountToCollect.toFixed(2)}` : "No payment"}
+              </span>
+            </div>
           </div>
         </div>
 
-        {error && <p className="px-6 text-sm text-red-600">{error}</p>}
+        {error && (
+          <div className="px-4 pb-2">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-sm font-medium text-red-700">{error}</p>
+            </div>
+          </div>
+        )}
 
-        <div className="bg-white px-6 py-4 space-y-3 border-t">
+        {/* Confirm Accept / Reject modal */}
+        {confirmAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmAction(null)}>
+            <div
+              className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-center text-[15px] font-medium text-gray-900">
+                {confirmAction === "accept"
+                  ? isExchange
+                    ? "Accept this exchange assignment?"
+                    : "Accept this order?"
+                  : isExchange
+                    ? "Reject this exchange assignment?"
+                    : "Reject this order?"}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction(null)}
+                  className="flex-1 h-[48px] border border-gray-300 rounded-xl text-[14px] font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirmAction === "accept") {
+                      setConfirmAction(null);
+                      runAction(acceptDelivery);
+                    } else {
+                      setConfirmAction(null);
+                      runAction(rejectDelivery, undefined, { successType: "reject" });
+                    }
+                  }}
+                  disabled={actionLoading}
+                  className={`flex-1 h-[48px] rounded-xl text-[14px] font-semibold disabled:opacity-70 ${
+                    confirmAction === "accept"
+                      ? "bg-black text-white"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  }`}
+                >
+                  {actionLoading ? "…" : "Yes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="sticky bottom-0 bg-white px-4 py-4 space-y-3 border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-pb">
           {status === "ASSIGNED" && (
             <>
               <button
-                onClick={() => runAction(acceptDelivery)}
+                onClick={() => setConfirmAction("accept")}
                 disabled={actionLoading}
                 className="w-full h-[52px] bg-black text-white rounded-xl text-[14px] font-semibold disabled:opacity-70"
               >
                 {actionLoading ? "…" : isExchange ? "Accept exchange" : "Accept"}
               </button>
               <button
-                onClick={() => runAction(rejectDelivery)}
+                onClick={() => setConfirmAction("reject")}
                 disabled={actionLoading}
                 className="w-full h-[52px] border border-gray-400 rounded-xl text-[14px] font-semibold disabled:opacity-70"
               >
@@ -413,7 +563,7 @@ export default function AssignmentDetails() {
           )}
           {status === "PICKED_UP" && isExchange && isPickup && (
             <button
-              onClick={() => runAction(markExchangeReceived)}
+              onClick={() => runAction(markExchangeReceived, undefined, { successType: "exchangeReceived" })}
               disabled={actionLoading}
               className="w-full h-[52px] bg-black text-white rounded-xl text-[14px] font-semibold disabled:opacity-70"
             >
