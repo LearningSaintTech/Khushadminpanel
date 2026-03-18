@@ -39,3 +39,12 @@ export const toggleCartChargeStatus = (id) => {
 export const deleteCartCharges = (id) => {
   return apiConnector("DELETE", `${CART_CHARGE_API.DELETE}/${id}`);
 };
+
+// ✅ Delete Single Rule from Cart Charges
+export const deleteCartChargeRule = (id, key) => {
+  return apiConnector(
+    "DELETE",
+    `/cart-charges/${id}/rule`,
+    { key } // ✅ send key in body
+  );
+};

@@ -4,8 +4,9 @@ import {
   getCartCharges,
   deleteCartCharges,
   toggleCartChargeStatus,
+  deleteCartChargeRule,
 } from '../../apis/Cartapi';
-
+import toast from "react-hot-toast";
 import { Plus, Trash2, Edit, Power } from 'lucide-react';
 
 const CartChargesPage = () => {
@@ -107,6 +108,53 @@ const CartChargesPage = () => {
     return list.map((c) => c.key || '—').join(', ');
   };
 
+const handleDeleteRule = async (id, key) => {
+  if (!window.confirm(`Delete rule "${key}"?`)) return;
+
+  try {
+    setLoading(true);
+    console.log('[CartList] delete rule', { id, key });
+
+    const res = await deleteCartChargeRule(id, key);
+    console.log("DELETE RULE RESPONSE:", res);
+
+    if (res?.data?.success) {
+      toast.success(res.data.message || "Rule deleted successfully");
+
+      // ✅ 1. INSTANT UI UPDATE (MAIN FIX)
+      setCharges((prev) =>
+        prev.map((item) => {
+          if (item._id === id) {
+            const updatedRules = (Array.isArray(item.cartCharge)
+              ? item.cartCharge
+              : item.cartCharge
+              ? [item.cartCharge]
+              : []
+            ).filter((rule) => rule.key !== key);
+
+            return {
+              ...item,
+              cartCharge: updatedRules,
+            };
+          }
+          return item;
+        })
+      );
+
+      // ✅ 2. OPTIONAL: Sync with backend (silent)
+      fetchCharges(currentPage); // no await (non-blocking)
+
+    } else {
+      toast.error(res?.data?.message || "Failed to delete rule");
+    }
+  } catch (err) {
+    console.error('[CartList] delete rule failed', err);
+    toast.error(err?.response?.data?.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+};
+
   // Helper to format rules for display (cartCharge can be array of { key, rules } or single object)
   const formatRules = (charge) => {
     const list = Array.isArray(charge.cartCharge) ? charge.cartCharge : (charge.cartCharge ? [charge.cartCharge] : []);
@@ -196,9 +244,34 @@ const CartChargesPage = () => {
                           </div>
                         </td>
                         <td className="px-2 sm:px-3 md:px-4 py-3 text-gray-600 text-xs hidden xl:table-cell">
-                          <div className="max-w-xs truncate" title={formatRules(charge)}>
-                            {formatRules(charge)}
-                          </div>
+                          <div className="flex flex-wrap gap-2">
+  {(Array.isArray(charge.cartCharge)
+    ? charge.cartCharge
+    : charge.cartCharge
+    ? [charge.cartCharge]
+    : []
+  ).map((rule, idx) => (
+    <div
+      key={idx}
+      className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-md text-xs"
+    >
+      <span>
+        {rule.key} (
+        {Object.entries(rule.rules || {})
+          .map(([k, v]) => `${k}:${v}`)
+          .join(', ')})
+      </span>
+
+      <button
+        onClick={() => handleDeleteRule(charge._id, rule.key)}
+        className="text-red-500 hover:text-red-700"
+        title="Delete rule"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  ))}
+</div>
                         </td>
                         <td className="px-2 sm:px-3 md:px-4 py-3 whitespace-nowrap">
                           <span
