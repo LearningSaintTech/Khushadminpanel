@@ -4,6 +4,7 @@ import {
   getInfluencers,
   toggleInfluencerStatus,
 } from "../../apis/Influencer";
+import toast from "react-hot-toast";
 import {
   Plus,
   Search,
@@ -45,33 +46,48 @@ const Influencer = () => {
     setPage(1);
   }, [debouncedSearch, isActive]);
 
-  const fetchInfluencers = async () => {
-    setLoading(true);
-    try {
-      const res = await getInfluencers(page, limit, debouncedSearch, isActive);
-      if (res?.success) {
-        setInfluencers(res.data.influencers || []);
-        setPagination(res.data.pagination || {});
-      }
-    } catch (err) {
-      console.error("Fetch Influencers Error:", err);
-    } finally {
-      setLoading(false);
+const fetchInfluencers = async () => {
+  setLoading(true);
+  try {
+    const res = await getInfluencers(page, limit, debouncedSearch, isActive);
+
+    if (res?.success) {
+      setInfluencers(res.data.influencers || []);
+      setPagination(res.data.pagination || {});
+    } else {
+      toast.error(res?.message || "Failed to fetch influencers");
     }
-  };
+  } catch (err) {
+    console.error("Fetch Influencers Error:", err);
+    toast.error(
+      err?.response?.data?.message || "Something went wrong while fetching"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchInfluencers();
   }, [page, debouncedSearch, isActive]);
 
-  const handleToggle = async (id) => {
-    try {
-      await toggleInfluencerStatus(id);
+const handleToggle = async (id) => {
+  try {
+    const res = await toggleInfluencerStatus(id);
+
+    if (res?.success) {
+      toast.success(res?.message || "Status updated successfully");
       fetchInfluencers();
-    } catch (err) {
-      console.error("Toggle Error:", err);
+    } else {
+      toast.error(res?.message || "Failed to update status");
     }
-  };
+  } catch (err) {
+    console.error("Toggle Error:", err);
+    toast.error(
+      err?.response?.data?.message || "Something went wrong"
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 pb-12">

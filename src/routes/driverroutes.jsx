@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "../utils/ProtectedRoute";
-
 import DriverLogin from "../driver/drivercomponent/Auth/Login";
 import DriverOTP from "../driver/drivercomponent/Auth/Otp";
 import DriverDashboard from "../driver/drivercomponent/dashboard/home.jsx";
