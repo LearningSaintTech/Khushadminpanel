@@ -32,10 +32,175 @@ import {
   UserCircle,
   UserMinus,
   UserPlus,
+  ExternalLink,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
+
+/** Matches delivery rules + backend `items[].delivery.type` filter (NORMAL, ONE_DAY, 90_MIN) */
+const DELIVERY_TYPE_TABS = [
+  { value: "", label: "All" },
+  { value: "NORMAL", label: "Normal" },
+  { value: "ONE_DAY", label: "One day" },
+  { value: "90_MIN", label: "90 min" },
+];
+
+/** apiConnector rejects with a string message; success body is { success, message, data } */
+const apiErrMessage = (err, fallback) =>
+  typeof err === "string" ? err : err?.response?.data?.message || err?.message || fallback;
+
+/** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
+const ORDERS_DEBUG =
+  import.meta.env.DEV || String(import.meta.env.VITE_DEBUG_ORDERS ?? "") === "true";
+
+const dbgOrders = (label, ...rest) => {
+  if (!ORDERS_DEBUG) return;
+  if (rest.length === 0) console.log(`[Orders] ${label}`);
+  else console.log(`[Orders] ${label}`, ...rest);
+};
+
+const dbgOrdersVerbose = (label, ...rest) => {
+  if (!ORDERS_DEBUG) return;
+  console.debug(`[Orders] ${label}`, ...rest);
+};
+
+const isNormalDeliveryLine = (item) =>
+  String(item?.delivery?.type || "").toUpperCase() === "NORMAL";
+
+/** Shiprocket / tracking for a line item (NORMAL courier shipments). */
+const getNormalDeliveryShiprocket = (item) => {
+  if (!item || !isNormalDeliveryLine(item)) return null;
+  const sr = item.shiprocket || {};
+  const awb = sr.awbCode || item.trackingId || null;
+  const hasAny =
+    awb ||
+    sr.orderId != null ||
+    sr.shipmentId != null ||
+    (sr.status && String(sr.status).trim()) ||
+    (item.courier && String(item.courier).trim());
+  if (!hasAny) return null;
+  return {
+    awb,
+    trackingUrl:
+      sr.trackingUrl ||
+      (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
+    status: sr.status || null,
+    shiprocketOrderId: sr.orderId ?? null,
+    shipmentId: sr.shipmentId ?? null,
+    courier: item.courier || null,
+    labelUrl: sr.labelUrl || null,
+    invoiceUrl: sr.invoiceUrl || null,
+  };
+};
+
+const getOrderNormalShiprocketPreview = (order) => {
+  const items = order?.items || [];
+  const rows = items.map((it) => getNormalDeliveryShiprocket(it)).filter(Boolean);
+  if (rows.length === 0) return null;
+  return { primary: rows[0], count: rows.length };
+};
+
+/** Merge admin item-row shape (deliveryType + nested item) into a line for shiprocket helpers */
+const shiprocketFromItemRow = (row) => {
+  if (!row) return null;
+  const line = {
+    ...(row.item && typeof row.item === "object" ? row.item : {}),
+    delivery: { type: row.deliveryType || row.item?.delivery?.type },
+  };
+  return getNormalDeliveryShiprocket(line);
+};
+
+function ShiprocketDetails({ sr, compact }) {
+  if (!sr) return <span className="text-gray-400">—</span>;
+  if (compact) {
+    return (
+      <div className="max-w-56 space-y-0.5">
+        {sr.trackingUrl ? (
+          <a
+            href={sr.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 hover:underline wrap-break-word"
+          >
+            <ExternalLink size={12} className="shrink-0" />
+            {sr.awb || "Track"}
+          </a>
+        ) : (
+          <span className="font-mono text-xs text-gray-800">{sr.awb || "—"}</span>
+        )}
+        {sr.status && (
+          <p className="truncate text-[11px] text-gray-500" title={sr.status}>
+            {sr.status}
+          </p>
+        )}
+        {sr.courier && (
+          <p className="truncate text-[11px] text-gray-400" title={sr.courier}>
+            {sr.courier}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5 text-sm text-gray-800">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-xs font-semibold uppercase text-sky-700">Shiprocket</span>
+        {sr.status && (
+          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">{sr.status}</span>
+        )}
+      </div>
+      {sr.awb && (
+        <p className="font-mono text-xs">
+          AWB:{" "}
+          {sr.trackingUrl ? (
+            <a
+              href={sr.trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+            >
+              {sr.awb}
+              <ExternalLink size={12} />
+            </a>
+          ) : (
+            sr.awb
+          )}
+        </p>
+      )}
+      {sr.courier && <p className="text-xs text-gray-600">Courier: {sr.courier}</p>}
+      {(sr.shiprocketOrderId != null || sr.shipmentId != null) && (
+        <p className="text-xs text-gray-500">
+          {sr.shiprocketOrderId != null && <>SR order: {sr.shiprocketOrderId}</>}
+          {sr.shiprocketOrderId != null && sr.shipmentId != null && " · "}
+          {sr.shipmentId != null && <>Shipment: {sr.shipmentId}</>}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1">
+        {sr.labelUrl && (
+          <a
+            href={sr.labelUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Label
+          </a>
+        )}
+        {sr.invoiceUrl && (
+          <a
+            href={sr.invoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Invoice
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const Orders = () => {
   const [viewMode, setViewMode] = useState(VIEW_ORDER); // "order" | "item"
@@ -52,6 +217,8 @@ const Orders = () => {
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
+  /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Item-based view state
@@ -114,22 +281,38 @@ const Orders = () => {
         dateFrom || undefined,
         dateTo || undefined,
         sortBy,
-        sortOrder
+        sortOrder,
+        deliveryTypeFilter || undefined
       );
-      const data = res?.data || {};
-      setOrders(data.orders || data.data || []);
-      setPagination((prev) => ({
-        ...prev,
-        total: data.total || 0,
-        totalPages: data.totalPages || Math.ceil((data.count || data.orders?.length || 0) / prev.limit),
-      }));
+      // Backend: successResponse → { success, message, data: { orders, pagination } }
+      dbgOrders("getOrders:response", res);
+      const payload = res?.data ?? {};
+      const list = payload.orders ?? payload.data ?? [];
+      dbgOrdersVerbose("getOrders:payload", payload);
+      dbgOrders("getOrders:summary", {
+        rowCount: Array.isArray(list) ? list.length : 0,
+        pagination: payload.pagination,
+      });
+      setOrders(Array.isArray(list) ? list : []);
+      setPagination((prev) => {
+        const total = payload.pagination?.total ?? payload.total ?? 0;
+        const limit = prev.limit || 10;
+        const totalPages =
+          payload.pagination?.totalPages ??
+          (total > 0 ? Math.max(1, Math.ceil(total / limit)) : 1);
+        return {
+          ...prev,
+          total,
+          totalPages: Math.max(1, totalPages),
+        };
+      });
     } catch (err) {
       console.error("Failed to fetch orders:", err);
-      setError(err?.response?.data?.message || "Failed to load orders. Please try again.");
+      setError(apiErrMessage(err, "Failed to load orders. Please try again."));
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder]);
+  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter]);
 
   useEffect(() => {
     fetchOrders();
@@ -144,22 +327,31 @@ const Orders = () => {
         itemPagination.limit,
         itemSearch,
         "",
-        itemStatusFilter
+        itemStatusFilter,
+        "",
+        "",
+        deliveryTypeFilter || undefined
       );
-      const data = res?.data || {};
-      setOrderItems(data.items || []);
+      dbgOrders("getOrderItems:response", res);
+      const payload = res?.data ?? {};
+      dbgOrdersVerbose("getOrderItems:payload", payload);
+      dbgOrders("getOrderItems:summary", {
+        rowCount: Array.isArray(payload.items) ? payload.items.length : 0,
+        pagination: payload.pagination,
+      });
+      setOrderItems(Array.isArray(payload.items) ? payload.items : []);
       setItemPagination((prev) => ({
         ...prev,
-        total: data.pagination?.total ?? 0,
-        totalPages: data.pagination?.totalPages ?? 1,
+        total: payload.pagination?.total ?? 0,
+        totalPages: Math.max(1, payload.pagination?.totalPages ?? 1),
       }));
     } catch (err) {
       console.error("Failed to fetch order items:", err);
-      setItemError(err?.response?.data?.message || "Failed to load order items.");
+      setItemError(apiErrMessage(err, "Failed to load order items."));
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -174,19 +366,24 @@ const Orders = () => {
       setOrderAssignments(null);
       // Fetch with page 1 and high limit so all items in the order are returned
       const res = await getSingleOrder(orderId, 1, itemLimit);
-      setSelectedOrder(res?.data || null);
+      dbgOrders("getSingleOrder:response", { orderId, res });
+      const singlePayload = res?.data ?? res;
+      dbgOrdersVerbose("getSingleOrder:order", singlePayload);
+      setSelectedOrder(singlePayload || null);
       // Fetch assignment view for Reassign / Remove driver
       try {
         const assignRes = await getAssignmentView(orderId);
+        dbgOrders("getAssignmentView:response", { orderId, assignRes });
         const assignData = assignRes?.data ?? assignRes;
+        dbgOrdersVerbose("getAssignmentView:data", assignData);
         setOrderAssignments(assignData || null);
       } catch (e) {
-        console.warn("Assignment view failed:", e);
+        if (ORDERS_DEBUG) console.warn("[Orders] getAssignmentView failed:", e);
         setOrderAssignments(null);
       }
     } catch (err) {
       console.error("Failed to load order:", err);
-      setOrderError(err?.response?.data?.message || "Could not load order details.");
+      setOrderError(apiErrMessage(err, "Could not load order details."));
     } finally {
       setOrderLoading(false);
     }
@@ -255,11 +452,16 @@ const Orders = () => {
     setAssignmentModalOpen(true);
     listDeliveryAgents(1, 100)
       .then((res) => {
-        const data = res?.data || res;
+        dbgOrders("listDeliveryAgents:response", res);
+        const data = res?.data ?? res;
         const list = data?.deliveryAgents ?? data?.data ?? [];
+        dbgOrders("listDeliveryAgents:summary", { count: Array.isArray(list) ? list.length : 0 });
         setDeliveryAgentsList(Array.isArray(list) ? list : []);
       })
-      .catch(() => setDeliveryAgentsList([]));
+      .catch((e) => {
+        if (ORDERS_DEBUG) console.warn("[Orders] listDeliveryAgents failed:", e);
+        setDeliveryAgentsList([]);
+      });
   };
 
   const handleAssignmentSubmit = async () => {
@@ -671,6 +873,31 @@ const Orders = () => {
           </button>
         </div>
 
+        {/* Delivery type — filters both list APIs on the backend */}
+        <div className="mb-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery type</p>
+          <div className="flex flex-wrap gap-2">
+            {DELIVERY_TYPE_TABS.map((tab) => (
+              <button
+                key={tab.value || "all"}
+                type="button"
+                onClick={() => {
+                  setDeliveryTypeFilter(tab.value);
+                  setPagination((p) => ({ ...p, page: 1 }));
+                  setItemPagination((p) => ({ ...p, page: 1 }));
+                }}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                  deliveryTypeFilter === tab.value
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error && viewMode === VIEW_ORDER && (
           <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
             <AlertCircle size={20} />
@@ -779,6 +1006,10 @@ const Orders = () => {
                     <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Items</th>
                     <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Total</th>
                     <th className="px-4 py-4 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+                    <th className="px-4 py-4 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                      Shiprocket
+                      <span className="block font-normal normal-case text-gray-400">(normal)</span>
+                    </th>
                     <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Date</th>
                     <th className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">View</th>
                   </tr>
@@ -786,20 +1017,20 @@ const Orders = () => {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center text-gray-500">
+                      <td colSpan={9} className="py-16 text-center text-gray-500">
                         Loading orders…
                       </td>
                     </tr>
                   ) : orders.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center text-gray-500">
+                      <td colSpan={9} className="py-16 text-center text-gray-500">
                         No orders found
                       </td>
                     </tr>
                   ) : (
                     orders.map((order) => (
                       <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
-                        <td className="break-words px-4 py-4 font-medium text-indigo-600">
+                        <td className="wrap-break-word px-4 py-4 font-medium text-indigo-600">
                           #{order.orderId || order._id?.slice(-8).toUpperCase()}
                         </td>
                         <td className="px-4 py-4">
@@ -819,6 +1050,22 @@ const Orders = () => {
                         </td>
                         <td className="px-4 py-4 min-w-[160px]">
                           {getStatusBadge(order.status || order.orderStatus)}
+                        </td>
+                        <td className="px-4 py-4 align-top text-sm">
+                          {(() => {
+                            const prev = getOrderNormalShiprocketPreview(order);
+                            if (!prev) {
+                              return <span className="text-gray-400">—</span>;
+                            }
+                            return (
+                              <div>
+                                <ShiprocketDetails sr={prev.primary} compact />
+                                {prev.count > 1 && (
+                                  <p className="mt-1 text-[11px] text-gray-400">{prev.count} lines</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-500">
                           {new Date(order.createdAt).toLocaleDateString("en-IN", {
@@ -933,6 +1180,12 @@ const Orders = () => {
                             <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                               Order #{row.orderId}
                             </span>
+                            {row.deliveryType ? (
+                              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                {DELIVERY_TYPE_TABS.find((t) => t.value === row.deliveryType)?.label ??
+                                  String(row.deliveryType).replace(/_/g, " ")}
+                              </span>
+                            ) : null}
                             <span className="text-sm font-medium text-gray-700">
                               {row.user?.name || row.address?.name || "—"}
                             </span>
@@ -957,6 +1210,23 @@ const Orders = () => {
                                 : "—"}
                             </span>
                           </div>
+                          {String(row.deliveryType || "").toUpperCase() === "NORMAL" && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 mt-1">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900 mb-1.5">
+                                Shiprocket
+                              </p>
+                              {(() => {
+                                const sr = shiprocketFromItemRow(row);
+                                return sr ? (
+                                  <ShiprocketDetails sr={sr} />
+                                ) : (
+                                  <p className="text-xs text-amber-800">
+                                    No AWB / tracking yet (normal delivery — create shipment when ready).
+                                  </p>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 shrink-0">
                           <div className="text-right">
@@ -1162,6 +1432,25 @@ const Orders = () => {
                       </div>
                     ) : null;
                   })()}
+                  {isNormalDeliveryLine(focusedItem) && (
+                    <div className="rounded-xl border-2 border-sky-200 bg-sky-50/90 p-5 shadow-sm">
+                      <h4 className="text-sm font-semibold text-sky-900 mb-3 flex items-center gap-2">
+                        <Truck size={16} className="text-sky-700" />
+                        Shiprocket (normal delivery)
+                      </h4>
+                      {(() => {
+                        const sr = getNormalDeliveryShiprocket(focusedItem);
+                        return sr ? (
+                          <ShiprocketDetails sr={sr} />
+                        ) : (
+                          <p className="text-sm text-amber-800">
+                            No Shiprocket shipment linked yet. After you create the shipment, AWB and tracking will
+                            appear here.
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
                   {/* Change status card */}
                   <div className="rounded-xl border-2 border-gray-200 bg-gray-50/50 p-6">
                     <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -1486,6 +1775,10 @@ const Orders = () => {
                           <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Qty</th>
                           <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Price</th>
                           <th className="px-5 py-3.5 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+                          <th className="px-5 py-3.5 min-w-[200px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                            Shiprocket
+                            <span className="block font-normal normal-case text-gray-400">(normal only)</span>
+                          </th>
                           <th className="px-5 py-3.5 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Driver partner</th>
                           <th className="px-5 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Change Status</th>
                         </tr>
@@ -1532,6 +1825,22 @@ const Orders = () => {
                               </td>
                               <td className="px-5 py-4 min-w-[160px]">
                                 {getStatusBadge(item.status)}
+                              </td>
+                              <td className="px-5 py-4 min-w-[200px] align-top text-sm">
+                                {isNormalDeliveryLine(item) ? (
+                                  (() => {
+                                    const sr = getNormalDeliveryShiprocket(item);
+                                    return sr ? (
+                                      <ShiprocketDetails sr={sr} />
+                                    ) : (
+                                      <span className="text-xs text-amber-800">
+                                        Normal delivery — no AWB / tracking yet
+                                      </span>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
                               </td>
                               <td className="px-5 py-4 min-w-[140px] text-sm text-gray-700">
                                 {driverDisplay ? (

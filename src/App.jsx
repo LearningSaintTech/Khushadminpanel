@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
@@ -10,6 +11,13 @@ function App() {
   return (
     <NotificationProvider>
       <NotificationSocketConnector />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 4000,
+          style: { fontSize: "14px" },
+        }}
+      />
       <Routes>
       {/* Admin Routes */}
       <Route path="/admin/*" element={<AdminRoutes />} />

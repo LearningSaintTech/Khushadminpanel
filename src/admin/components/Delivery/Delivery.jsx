@@ -19,6 +19,8 @@ export default function Delivery() {
   const [totalPages, setTotalPages] = useState(1);
   const [deliverySearch, setDeliverySearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  /** all = no filter; active / inactive = matches Status column */
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const [showForm, setShowForm] = useState(false);
@@ -28,20 +30,31 @@ export default function Delivery() {
   const [checkResult, setCheckResult] = useState(null);
   const [checkingPin, setCheckingPin] = useState(false);
 
-  const applyPagination = (page, searchTerm) => {
-    const filtered =
-      searchTerm?.trim()
-        ? allDeliveries.filter((d) =>
-            String(d.deliveryType || "").toLowerCase().includes(searchTerm.trim().toLowerCase())
-          )
-        : allDeliveries;
+  const filterDeliveries = (fullList, searchTerm, status) => {
+    let list = Array.isArray(fullList) ? fullList : [];
+    if (searchTerm?.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      list = list.filter((d) => String(d.deliveryType || "").toLowerCase().includes(q));
+    }
+    if (status === "active") list = list.filter((d) => d.isActive === true);
+    else if (status === "inactive") list = list.filter((d) => d.isActive === false);
+    return list;
+  };
+
+  const setPageFromFullList = (fullList, page, searchTerm, status) => {
+    const filtered = filterDeliveries(fullList, searchTerm, status);
     const total = filtered.length;
     const totalPagesCount = total > 0 ? Math.max(1, Math.ceil(total / LIMIT)) : 1;
-    const start = (page - 1) * LIMIT;
+    const safePage = Math.min(Math.max(1, page), totalPagesCount);
+    const start = (safePage - 1) * LIMIT;
     setDeliveries(filtered.slice(start, start + LIMIT));
-    setCurrentPage(page);
+    setCurrentPage(safePage);
     setTotalPages(totalPagesCount);
     setSelectedIds(new Set());
+  };
+
+  const applyPagination = (page, searchTerm) => {
+    setPageFromFullList(allDeliveries, page, searchTerm, statusFilter);
   };
 
   const fetchDeliveries = async (page = 1, searchTerm = "") => {
@@ -52,19 +65,7 @@ export default function Delivery() {
       const items = Array.isArray(res) ? res : Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
       const fullList = Array.isArray(items) ? items : [];
       setAllDeliveries(fullList);
-      const filtered =
-        searchTerm?.trim()
-          ? fullList.filter((d) =>
-              String(d.deliveryType || "").toLowerCase().includes(searchTerm.trim().toLowerCase())
-            )
-          : fullList;
-      const total = filtered.length;
-      const totalPagesCount = total > 0 ? Math.max(1, Math.ceil(total / LIMIT)) : 1;
-      setTotalPages(totalPagesCount);
-      const start = (page - 1) * LIMIT;
-      setDeliveries(filtered.slice(start, start + LIMIT));
-      setCurrentPage(page);
-      setSelectedIds(new Set());
+      setPageFromFullList(fullList, page, searchTerm, statusFilter);
     } catch {
       toast.error("Could not load delivery options");
       setDeliveries([]);
@@ -225,6 +226,32 @@ export default function Delivery() {
                   Search
                 </button>
               </form>
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Status</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ].map((tab) => (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(tab.value);
+                      setPageFromFullList(allDeliveries, 1, deliverySearch, tab.value);
+                    }}
+                    className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                      statusFilter === tab.value
+                        ? "bg-slate-800 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
