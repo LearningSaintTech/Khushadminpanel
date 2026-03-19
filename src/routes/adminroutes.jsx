@@ -63,6 +63,7 @@ import AdminNotificationTemplatesPage from "../admin/components/notifications/Ad
 import AdminEmailTemplatesPage from "../admin/components/notifications/AdminEmailTemplatesPage";
 import AdminBroadcastPage from "../admin/components/notifications/AdminBroadcastPage";
 import AdminNotificationTestPage from "../admin/components/notifications/AdminNotificationTestPage";
+import ContactUs from "../admin/components/ContactUs/ContactUs";
 const AdminRoutes = () => {
   return (
     <Routes>
@@ -189,6 +190,7 @@ const AdminRoutes = () => {
         />
         <Route path="reviews" element={<Reviews />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="contact-us" element={<ContactUs />} />
         {/* Notification routes */}
         <Route path="notifications" element={<AdminNotificationsPage />} />
         <Route path="notifications/sent" element={<AdminNotificationHistoryPage />} />
