@@ -32,7 +32,7 @@ import { logout } from "../../../redux/GlobalSlice";
 
 const Sidebar = () => {
   const dispatch = useDispatch();
-  const [isInventoryOpen, setIsInventoryOpen] = useState(true);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
@@ -373,7 +373,7 @@ const Sidebar = () => {
                     SubCategories
                   </Link> */}
 
-                  <Link
+                  {/* <Link
                     to="/admin/inventory/central"
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
                       location.pathname.includes("/admin/items")
@@ -382,7 +382,7 @@ const Sidebar = () => {
                     }`}
                   >
                   Central  Stock management
-                  </Link>
+                  </Link> */}
                   <Link
                     to="/admin/stocks"
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
@@ -627,7 +627,7 @@ const Sidebar = () => {
                 size={20}
                 className="text-gray-400 group-hover:text-black"
               />
-              <span>Cart</span>
+              <span>Cart Charges</span>
             </Link>
 
             <Link

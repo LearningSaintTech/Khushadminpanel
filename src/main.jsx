@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Provider } from "react-redux";
 import { PersistGate } from "redux-persist/integration/react";
 
+import { Toaster } from "react-hot-toast";
 import App from "./App";
 import "./index.css";
 import appStore, { persistor } from "./redux/Appstore";
@@ -19,6 +20,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           }}
         >
           <App />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: { maxWidth: 440 },
+            }}
+          />
         </BrowserRouter>
       </PersistGate>
     </Provider>

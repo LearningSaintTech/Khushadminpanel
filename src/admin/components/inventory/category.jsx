@@ -55,6 +55,7 @@ export default function Categories() {
         image: cat.imageUrl || "https://via.placeholder.com/150",
         isActive: cat.isActive ?? true,
         isNavbar: cat.isNavbar ?? false,
+        isFooter: cat.isFooter ?? false,
       }));
       setCategories(formatted);
       // Extract pagination info from API response
@@ -203,6 +204,9 @@ export default function Categories() {
                     <th className="hidden xl:table-cell w-28 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Navbar
                     </th>
+                    <th className="hidden xl:table-cell w-28 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+  Footer
+</th>
                     <th className="w-24 px-3 py-3 lg:py-4 text-right text-xs lg:text-sm font-semibold text-gray-600">
                       Actions
                     </th>
@@ -329,6 +333,17 @@ export default function Categories() {
                             }`}
                           >
                             {cat.isNavbar ? "Shown" : "Hidden"}
+                          </button>
+                        </td>
+                        <td className="hidden xl:table-cell px-3 py-3">
+                          <button
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              cat.isFooter
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {cat.isFooter ? "Footer" : "Hidden"}
                           </button>
                         </td>
                         <td className="px-3 py-3 lg:py-4 text-right text-xs lg:text-sm">

@@ -32,6 +32,8 @@ const orderEndpoints = {
 
     return url;
   },
+  GET_INVOICE: (orderId, itemId) =>
+  `/api/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
   GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "") => {
@@ -64,7 +66,12 @@ const orderEndpoints = {
   // Delivery agents list (for driver dropdown)
   DELIVERY_AGENTS_LIST: (page = 1, limit = 100) =>
     `/admin/panels/delivery-agent/list?page=${page}&limit=${limit}`,
+
+  EXCHANGE_DETAILS: (exchangeId) =>
+    `/api/exchangeUser/${exchangeId}`,
 };
+
+ 
 
 // ✅ Get All Orders
 export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder) => {
@@ -132,4 +139,38 @@ export const unassignOrder = (orderId, body) => {
 
 export const listDeliveryAgents = (page = 1, limit = 100) => {
   return apiConnector("GET", orderEndpoints.DELIVERY_AGENTS_LIST(page, limit));
+};
+
+
+// ===============================
+// ADD THIS IN orderEndpoints
+// ===============================
+
+
+
+// ===============================
+// ADD THIS FUNCTION
+// ===============================
+export const getInvoice = (orderId, itemId) => {
+  return apiConnector(
+    "GET",
+    orderEndpoints.GET_INVOICE(orderId, itemId)
+  );
+};
+
+
+// ===============================
+// ADD THIS IN orderEndpoints
+// ===============================
+
+
+
+// ===============================
+// ADD THIS FUNCTION
+// ===============================
+export const getExchangeDetails = (exchangeId) => {
+  return apiConnector(
+    "GET",
+    orderEndpoints.EXCHANGE_DETAILS(exchangeId)
+  );
 };

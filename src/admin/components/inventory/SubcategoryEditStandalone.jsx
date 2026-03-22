@@ -1,7 +1,7 @@
 // Edit subcategory from "Show all subcategories" page (subcategoriess).
 // Route: /admin/inventory/subcategories/edit/:id
 // Back / success → /admin/subcategoriess
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import {
@@ -9,8 +9,18 @@ import {
   getSubcategoriesByCategory,
   getAllSubcategories,
 } from "../../apis/subcategoryapis";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
 
 const BACK_URL = "/admin/subcategoriess";
+
+function getCategoryIdFromSubcategory(sub) {
+  if (!sub) return null;
+  const c = sub.categoryId ?? sub.parentCategory ?? sub.category;
+  if (c == null) return null;
+  if (typeof c === "string") return c;
+  const id = c._id ?? c.id;
+  return id != null ? String(id) : null;
+}
 
 export default function SubcategoryEditStandalone() {
   const { id } = useParams();
@@ -22,6 +32,11 @@ export default function SubcategoryEditStandalone() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [backendErrors, setBackendErrors] = useState([]);
+  const [clientErrors, setClientErrors] = useState({ name: "" });
+  const [editSortOrder, setEditSortOrder] = useState(false);
+  const [originalSortOrder, setOriginalSortOrder] = useState("");
+  const [categoryIdForSort, setCategoryIdForSort] = useState(null);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -40,11 +55,34 @@ export default function SubcategoryEditStandalone() {
     return Array.isArray(subs) ? subs : [];
   }
 
+  const suggestNextSortOrder = useCallback(async () => {
+    if (!categoryIdForSort) return null;
+    try {
+      const res = await getSubcategoriesByCategory(categoryIdForSort, 1, 500);
+      const list = normalizeSubList(res);
+      const max = list.reduce((m, s) => {
+        const n = Number(s?.sortOrder);
+        return Number.isFinite(n) && n > m ? n : m;
+      }, 0);
+      const next = String(max + 1);
+      setForm((prev) => ({ ...prev, sortOrder: next }));
+      return next;
+    } catch (e) {
+      console.error("Failed to suggest sort order:", e);
+      return null;
+    }
+  }, [categoryIdForSort]);
+
   function applySubcategoryToForm(subcategory) {
+    const catId = getCategoryIdFromSubcategory(subcategory);
+    setCategoryIdForSort(catId);
+    const so = String(subcategory.sortOrder ?? 1);
+    setOriginalSortOrder(so);
+    setEditSortOrder(false);
     setForm({
       name: subcategory.name || "",
       description: subcategory.description || "",
-      sortOrder: String(subcategory.sortOrder ?? 1),
+      sortOrder: so,
       image: null,
       imagePreview: subcategory.imageUrl || null,
       isActive: subcategory.isActive !== false,
@@ -98,6 +136,7 @@ export default function SubcategoryEditStandalone() {
   }, [id, categoryIdFromState, subcategoryFromState]);
 
   const handleChange = (e) => {
+    setBackendErrors([]);
     const { name, value, type, checked, files } = e.target;
     if (name === "image") {
       const file = files?.[0] || null;
@@ -107,6 +146,16 @@ export default function SubcategoryEditStandalone() {
         imagePreview: file ? URL.createObjectURL(file) : prev.imagePreview,
       }));
     } else if (type === "checkbox") {
+      if (name === "editSortOrder") {
+        setEditSortOrder(checked);
+        if (!checked) {
+          setForm((prev) => ({
+            ...prev,
+            sortOrder: originalSortOrder || prev.sortOrder,
+          }));
+        }
+        return;
+      }
       setForm((prev) => ({ ...prev, [name]: checked }));
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
@@ -115,10 +164,12 @@ export default function SubcategoryEditStandalone() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setBackendErrors([]);
     if (!form.name?.trim()) {
-      alert("Subcategory name is required");
+      setClientErrors({ name: "Subcategory name is required" });
       return;
     }
+    setClientErrors({ name: "" });
     try {
       setSaving(true);
       const formData = new FormData();
@@ -127,11 +178,25 @@ export default function SubcategoryEditStandalone() {
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.showInNavbar);
       if (form.image) formData.append("image", form.image);
+      if (editSortOrder) {
+        formData.append(
+          "sortOrder",
+          form.sortOrder?.trim() || originalSortOrder || "1"
+        );
+      }
       await updateSubcategory(id, formData);
       navigate(BACK_URL);
     } catch (err) {
       console.error("Error saving", err);
-      alert(err?.response?.data?.message || "Failed to save subcategory");
+      const msgs = extractBackendMessages(err);
+      setBackendErrors(msgs);
+      const blob = msgs.join(" ").toLowerCase();
+      if (
+        editSortOrder &&
+        /sort|order|already|exist|duplicate|unique|taken/.test(blob)
+      ) {
+        await suggestNextSortOrder();
+      }
     } finally {
       setSaving(false);
     }
@@ -179,6 +244,16 @@ export default function SubcategoryEditStandalone() {
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {backendErrors.length > 0 && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+                <div className="font-semibold mb-2">Please review:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  {backendErrors.map((msg, idx) => (
+                    <li key={idx}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Subcategory Name <span className="text-red-500">*</span>
@@ -189,9 +264,13 @@ export default function SubcategoryEditStandalone() {
                 value={form.name}
                 onChange={handleChange}
                 placeholder="Enter subcategory name"
-                required
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                className={`w-full px-3.5 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent ${
+                  clientErrors.name ? "border-red-400" : "border-gray-300"
+                }`}
               />
+              {clientErrors.name && (
+                <p className="mt-1 text-sm text-red-600">{clientErrors.name}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
@@ -204,6 +283,63 @@ export default function SubcategoryEditStandalone() {
                 className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
               />
             </div>
+
+            <div className="space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer group max-w-xl">
+                <input
+                  type="checkbox"
+                  name="editSortOrder"
+                  checked={editSortOrder}
+                  onChange={handleChange}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-800 group-hover:text-gray-900">
+                    Edit sort order
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5 font-normal">
+                    Current order:{" "}
+                    <span className="font-medium text-gray-700">
+                      {originalSortOrder || form.sortOrder || "—"}
+                    </span>
+                    . Enable only if you want to change it on save.
+                    {!categoryIdForSort && (
+                      <span className="block mt-1 text-amber-700">
+                        Category id not available — you can still type a sort order, but &quot;Use next
+                        available&quot; is disabled.
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </label>
+              {editSortOrder && (
+                <div className="pl-7 space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    New sort order
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
+                    <input
+                      type="number"
+                      name="sortOrder"
+                      value={form.sortOrder}
+                      onChange={handleChange}
+                      placeholder="Sort order"
+                      min="0"
+                      className="flex-1 min-w-0 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                    />
+                    <button
+                      type="button"
+                      disabled={!categoryIdForSort}
+                      onClick={() => suggestNextSortOrder()}
+                      className="shrink-0 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Use next available
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                 Image <span className="text-gray-400 font-normal">(optional)</span>

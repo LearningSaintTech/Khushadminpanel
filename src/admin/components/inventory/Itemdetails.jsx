@@ -10,6 +10,7 @@ export default function ItemDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("general");
+  const [zoomVariantUrl, setZoomVariantUrl] = useState(null);
 
   const fetchItem = async () => {
     console.log("[ItemDetails] fetchItem called with itemId:", itemId);
@@ -301,14 +302,27 @@ export default function ItemDetails() {
 
                       {variant.images?.length > 0 && (
                         <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin">
-                          {variant.images.map((img) => (
-                            <img
-                              key={img._id}
-                              src={img.url}
-                              className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 rounded-lg object-cover flex-shrink-0 snap-center border border-gray-200 shadow-sm"
-                              alt="Variant"
-                            />
-                          ))}
+                          {variant.images.map((img, imgIdx) => {
+                            const src =
+                              img?.url ||
+                              (typeof img === "string" ? img : "") ||
+                              "";
+                            return (
+                              <button
+                                key={img?._id || src || imgIdx}
+                                type="button"
+                                onClick={() => src && setZoomVariantUrl(src)}
+                                className="relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 flex-shrink-0 snap-center rounded-lg border border-gray-200 shadow-sm overflow-hidden focus:outline-none focus:ring-2 focus:ring-black/30 cursor-zoom-in"
+                                title="Click to zoom"
+                              >
+                                <img
+                                  src={src || "https://via.placeholder.com/112?text=No+image"}
+                                  className="h-full w-full object-cover"
+                                  alt="Variant"
+                                />
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -649,6 +663,31 @@ export default function ItemDetails() {
           </div>
         </div>
       </div>
+
+      {zoomVariantUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Zoomed variant image"
+          onClick={() => setZoomVariantUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setZoomVariantUrl(null)}
+            className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          <img
+            src={zoomVariantUrl}
+            alt="Variant zoom"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

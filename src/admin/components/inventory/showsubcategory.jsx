@@ -10,6 +10,7 @@ import {
   toggleSubcategoryNavbarStatus,
 } from "../../apis/subcategoryapis";
 import { ChevronDown, Edit, Plus, Search, ZoomIn, X } from "lucide-react";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
 
 const Showsubcategory = () => {
   const navigate = useNavigate();
@@ -21,7 +22,8 @@ const Showsubcategory = () => {
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
-  const [error, setError] = useState(null);
+  /** All backend / API messages for this page (fetch, toggles, etc.) */
+  const [listErrors, setListErrors] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -124,7 +126,7 @@ const Showsubcategory = () => {
       }
     } catch (err) {
       console.error("Failed to load categories", err);
-      setError("Failed to load categories");
+      setListErrors(extractBackendMessages(err));
     } finally {
       setLoadingCategories(false);
     }
@@ -161,7 +163,7 @@ const Showsubcategory = () => {
 
   const fetchSubcategories = async (page = 1) => {
     setLoading(true);
-    setError(null);
+    setListErrors([]);
 
     try {
       let res;
@@ -171,7 +173,7 @@ const Showsubcategory = () => {
         res = await getAllSubcategories(page, limit, debouncedSearchTerm);
       }
 
-      const data = res.data?.data || res.data || {};
+      const data = res?.data?.data || res?.data || res || {};
       const subs = data.subcategories || data.subCategories || data || [];
       const pag = data.pagination || null;
 
@@ -197,7 +199,7 @@ const Showsubcategory = () => {
       }
     } catch (err) {
       console.error("Fetch subcategories error:", err);
-      setError(err.response?.data?.message || "Failed to load subcategories.");
+      setListErrors(extractBackendMessages(err));
       setSubcategories([]);
       setPagination(null);
     } finally {
@@ -245,7 +247,7 @@ const Showsubcategory = () => {
       );
     } catch (err) {
       console.error("Toggle active error:", err);
-      setError("Failed to toggle active status");
+      setListErrors(extractBackendMessages(err));
       fetchSubcategories(currentPage);
     }
   };
@@ -258,7 +260,7 @@ const Showsubcategory = () => {
       );
     } catch (err) {
       console.error("Toggle navbar error:", err);
-      setError("Failed to toggle navbar visibility");
+      setListErrors(extractBackendMessages(err));
       fetchSubcategories(currentPage);
     }
   };
@@ -464,9 +466,14 @@ const Showsubcategory = () => {
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 sm:px-6 py-6">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
+          {listErrors.length > 0 && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+              <div className="font-semibold mb-2">Please review:</div>
+              <ul className="list-disc list-inside space-y-1">
+                {listErrors.map((msg, idx) => (
+                  <li key={idx}>{msg}</li>
+                ))}
+              </ul>
             </div>
           )}
 

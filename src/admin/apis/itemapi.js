@@ -36,10 +36,13 @@ export const getAllItems = async (page = 1, limit = 10, search = "", categoryId 
  * Search / List items with filters and pagination
  * Endpoint: GET /api/items/search
  *
+ * Response shape (typical): { success, message, data: { items: [], pagination? } }
+ *
  * @param {Object} query - Query parameters
  * @param {number} [query.page=1]
  * @param {number} [query.limit=10]
- * @param {string} [query.search]           - search by name / productId
+ * @param {string} [query.keywords]       - text search (preferred; sent to API)
+ * @param {string} [query.search]         - alias for keywords (normalized before request)
  * @param {string} [query.categoryId]
  * @param {string} [query.subcategoryId]
  * @param {string} [query.color]
@@ -49,18 +52,27 @@ export const getAllItems = async (page = 1, limit = 10, search = "", categoryId 
  * @returns {Promise<Object>} { success, message, data: { items, pagination } }
  */
 export const searchItems = async (query = {}) => {
+  const params = { ...query };
+  const kw = (params.keywords ?? params.search ?? "").toString().trim();
+  delete params.search;
+  delete params.keywords;
+  if (kw) params.keywords = kw;
+
   try {
     const response = await apiConnector(
       'GET',
       '/items/search',
       null,
       {},
-      query // passed as query params
+      params
     );
     return response;
   } catch (error) {
     console.error('Error searching items:', error);
-    throw error?.response?.data || { success: false, message: 'Failed to search items' };
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      throw error;
+    }
+    throw { success: false, message: String(error || 'Failed to search items') };
   }
 };
 
@@ -86,7 +98,10 @@ export const getItemsBySubcategory = async (subcategoryId, page = 1, limit = 10,
     return response;
   } catch (error) {
     console.error('Error fetching subcategory items:', error);
-    throw error?.response?.data || { success: false, message: 'Failed to fetch subcategory items' };
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      throw error;
+    }
+    throw { success: false, message: String(error || 'Failed to fetch subcategory items') };
   }
 };
 
@@ -105,7 +120,10 @@ export const getSingleItem = async (itemId) => {
     return response;
   } catch (error) {
     console.error('Error fetching single item:', error);
-    throw error?.response?.data || { success: false, message: 'Failed to fetch item details' };
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      throw error;
+    }
+    throw { success: false, message: String(error || 'Failed to fetch item details') };
   }
 };
 
@@ -127,7 +145,11 @@ export const createItem = async (formData) => {
     return response;
   } catch (error) {
     console.error('Error creating item:', error);
-    throw error?.response?.data || { success: false, message: 'Failed to create item' };
+    // apiConnector rejects with response body object (no err.response)
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      throw error;
+    }
+    throw { success: false, message: String(error || 'Failed to create item') };
   }
 };
 
@@ -152,7 +174,10 @@ export const updateItem = async (productId, formData) => {
     return response;
   } catch (error) {
     console.error('Error updating item:', error);
-    throw error?.response?.data || { success: false, message: 'Failed to update item' };
+    if (error && typeof error === 'object' && !Array.isArray(error)) {
+      throw error;
+    }
+    throw { success: false, message: String(error || 'Failed to update item') };
   }
 };
 
@@ -161,7 +186,8 @@ export const updateItem = async (productId, formData) => {
  * (limited results, good for autocomplete / multi-select)
  */
 export const getItemsForSelect = async (limit = 50, search = '') => {
-  return searchItems({ limit, search });
+  const q = (search || '').trim();
+  return searchItems(q ? { limit, keywords: q } : { limit });
 };
 
 

@@ -1,11 +1,112 @@
 // ItemForm.jsx - Complete form component for Create/Edit Item
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import toast from "react-hot-toast";
+import { X } from "lucide-react";
 import {
   createItem,
   updateItem,
   getSingleItem,
 } from "../../apis/itemapi";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
+
+/** Friendly toast listing every backend validation / error message */
+function showItemSaveErrorToasts(messages, isCreate) {
+  const headline = isCreate
+    ? "We couldn't create this product"
+    : "We couldn't update this product";
+
+  if (!messages?.length) {
+    toast.error(`${headline}. Please try again.`, { duration: 5000 });
+    return;
+  }
+
+  toast.custom(
+    (t) => (
+      <div className="max-w-[420px] rounded-xl border border-red-200 bg-white shadow-lg p-4 text-left">
+        <div className="flex justify-between items-start gap-2">
+          <p className="font-semibold text-red-900 text-sm">{headline}</p>
+          <button
+            type="button"
+            onClick={() => toast.dismiss(t.id)}
+            className="text-gray-500 hover:text-gray-800 text-lg leading-none shrink-0"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+        <p className="text-xs text-red-700 mt-1 mb-2">
+          Please fix the following and try again:
+        </p>
+        <ul className="text-sm text-red-800 space-y-1.5 list-disc pl-4 max-h-52 overflow-y-auto">
+          {messages.map((msg, idx) => (
+            <li key={idx}>{msg}</li>
+          ))}
+        </ul>
+      </div>
+    ),
+    { duration: 12000, id: "item-form-save-errors" }
+  );
+}
+
+/** Normalize variant image from API → string URL or { url, key } so updates keep existing assets */
+function normalizeVariantImageFromApi(img) {
+  if (img == null) return null;
+  if (typeof img === "string") {
+    const t = img.trim();
+    return t || null;
+  }
+  if (typeof img === "object") {
+    const url =
+      img.url ||
+      img.secure_url ||
+      img.imageUrl ||
+      img.href ||
+      (typeof img.src === "string" ? img.src : "") ||
+      "";
+    const key = img.key || img.public_id || img.asset_id || "";
+    if (url && key) return { url, key };
+    if (url) return url;
+    if (key) return { url: "", key };
+  }
+  return null;
+}
+
+function getVariantImageDisplaySrc(img) {
+  if (img instanceof File) return null; // caller uses createObjectURL
+  if (typeof img === "string") return img;
+  if (img && typeof img === "object") {
+    return (
+      img.url ||
+      img.secure_url ||
+      img.imageUrl ||
+      img.href ||
+      ""
+    );
+  }
+  return "";
+}
+
+function variantImageToPayloadEntry(img, idx) {
+  const base = { order: idx + 1, slotIndex: idx };
+  if (img instanceof File) {
+    return { ...base, isNewUpload: true };
+  }
+  if (typeof img === "string" && img.trim()) {
+    return { ...base, url: img.trim() };
+  }
+  if (img && typeof img === "object") {
+    const url =
+      img.url || img.secure_url || img.imageUrl || img.href || "";
+    const key = img.key || img.public_id || img.asset_id;
+    return {
+      ...base,
+      ...(url ? { url } : {}),
+      ...(key ? { key } : {}),
+    };
+  }
+  return base;
+}
 
 const ItemForm = () => {
   const { categoryId, subcategoryId, id } = useParams();
@@ -16,7 +117,31 @@ const ItemForm = () => {
   const [backendErrors, setBackendErrors] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [activeTab, setActiveTab] = useState(1);
+  /** { src, revoke? } for variant image lightbox */
+  const [zoomVariantImage, setZoomVariantImage] = useState(null);
   const fileInputRefs = useRef({}); // Track file inputs to prevent double-firing
+
+  const closeVariantZoom = () => {
+    if (zoomVariantImage?.revoke) zoomVariantImage.revoke();
+    setZoomVariantImage(null);
+  };
+
+  const openVariantImageZoom = (img) => {
+    setZoomVariantImage((prev) => {
+      if (prev?.revoke) prev.revoke();
+      if (img instanceof File) {
+        const src = URL.createObjectURL(img);
+        return { src, revoke: () => URL.revokeObjectURL(src) };
+      }
+      if (typeof img === "string" && img) return { src: img };
+      if (img && typeof img === "object") {
+        const src =
+          img.url || img.secure_url || img.imageUrl || img.href || "";
+        if (src) return { src };
+      }
+      return null;
+    });
+  };
   const [form, setForm] = useState({
     name: "",
     shortDescription: "",
@@ -188,7 +313,8 @@ const ItemForm = () => {
               console.log(`[loadItem] Processing variant #${vIdx + 1}:`, variant.color?.name);
 
               const sizeMap = {};
-              const defaultSizes = ["S", "M", "L", "XL"];
+              // Keep a consistent size list in UI for both create/edit.
+              const defaultSizes = ["XS", "S", "M", "L", "XL", "XXL"];
               if (variant.sizes) {
                 variant.sizes.forEach((size) => {
                   sizeMap[size.size] = {
@@ -204,7 +330,10 @@ const ItemForm = () => {
                   name: variant.color?.name || "",
                   hex: variant.color?.hex || "#000000",
                 },
-                images: variant.images?.map((img) => img.url || img) || [],
+                images:
+                  (variant.images || [])
+                    .map((img) => normalizeVariantImageFromApi(img))
+                    .filter(Boolean) || [],
                 sizes: defaultSizes.map((size) => sizeMap[size] || { sku: "", size, stock: "" }),
               };
             }) || [
@@ -296,7 +425,7 @@ const ItemForm = () => {
         }
       } catch (err) {
         console.error("[loadItem] Error loading item:", err);
-        alert("Failed to load item details: " + (err.response?.data?.message || "Unknown error"));
+        setBackendErrors(extractBackendMessages(err));
       } finally {
         console.log("[loadItem] Loading finished");
         setLoading(false);
@@ -319,10 +448,12 @@ const ItemForm = () => {
             color: { name: "", hex: "#000000" },
             images: [],
             sizes: [
+              { sku: "", size: "XS", stock: "" },
               { sku: "", size: "S", stock: "" },
               { sku: "", size: "M", stock: "" },
               { sku: "", size: "L", stock: "" },
               { sku: "", size: "XL", stock: "" },
+              { sku: "", size: "XXL", stock: "" },
             ],
           },
         ],
@@ -616,6 +747,19 @@ const ItemForm = () => {
     });
   };
 
+  /** Remove chosen policy icon (file + URL/key) — Policies tab */
+  const clearPolicyIcon = (policyKey) => {
+    setForm((prev) => ({
+      ...prev,
+      [policyKey]: {
+        ...prev[policyKey],
+        iconFile: null,
+        iconUrl: "",
+        iconKey: "",
+      },
+    }));
+  };
+
   // Save handler
   const handleSave = async () => {
     console.log("[ItemForm] handleSave: starting with mode:", isEdit ? "edit" : "create");
@@ -625,6 +769,13 @@ const ItemForm = () => {
     if (Object.keys(basicErrors).length > 0) {
       setFieldErrors(basicErrors);
       setActiveTab(1);
+      const first = Object.values(basicErrors)[0];
+      toast.error(
+        first
+          ? `Basic info: ${first}`
+          : "Please fix the Basic tab before saving.",
+        { duration: 4500 }
+      );
       return;
     }
 
@@ -665,17 +816,9 @@ const ItemForm = () => {
               isMultipleImages: variantImages.length > 1,
               totalImages: variantImages.length,
             },
-            images: variantImages.map((img, idx) => {
-              // For existing URLs, include the URL; for new files, just order
-              if (img instanceof File) {
-                return { order: idx + 1 };
-              } else if (typeof img === 'string' && img.length > 0) {
-                return { order: idx + 1, url: img };
-              } else if (img && typeof img === 'object' && img.url) {
-                return { order: idx + 1, url: img.url };
-              }
-              return { order: idx + 1 };
-            }),
+            images: variantImages.map((img, idx) =>
+              variantImageToPayloadEntry(img, idx)
+            ),
             sizes: variantSizes
               .filter((s) => s && s.size && s.stock !== "" && s.stock !== null)
               .map((s) => ({
@@ -694,13 +837,27 @@ const ItemForm = () => {
       formData.append("variants", JSON.stringify(variantsData));
 
       // Variant images - multiple files per color variant (only File objects, not URLs)
-      form.variants.forEach((variant) => {
+      //
+      // Backend updateItem (ItemService) only processes files where:
+      //   fieldname.startsWith("variants[") && fieldname.includes(`variants[${colorName}]`)
+      // So names like variants[0] are IGNORED — use variants[ColorName] (create) or
+      // variants[ColorName][slotIndex] (edit) so uploads are received and slotted correctly.
+      form.variants.forEach((variant, variantIndex) => {
         const colorName = variant.color.name?.trim();
         if (!colorName) return;
 
-        variant.images.forEach((file, index) => {
-          if (file instanceof File) {
-            formData.append(`variants[${colorName}]`, file);
+        variant.images.forEach((img, index) => {
+          if (!(img instanceof File)) return;
+
+          if (isEdit && id) {
+            // Slot index matches the image position in the merged array (append = last index).
+            // Backend must read this index (see loop note in ItemService.updateItem).
+            formData.append(`variants[${colorName}][${index}]`, img);
+          } else {
+            formData.append(`variants[${colorName}]`, img);
+            formData.append(`variants[${variantIndex}]`, img);
+            formData.append(`variantImages[${colorName}]`, img);
+            formData.append(`variantImages[${variantIndex}]`, img);
           }
         });
       });
@@ -823,69 +980,20 @@ const ItemForm = () => {
       if (isEdit && id) {
         console.log("[ItemForm] handleSave: sending updateItem with id:", id);
         await updateItem(id, formData);
-        alert("Product updated successfully!");
+        toast.success("Product updated successfully!", { duration: 2800 });
       } else {
         console.log("[ItemForm] handleSave: sending createItem");
         await createItem(formData);
-        alert("Product created successfully!");
+        toast.success("Product created successfully!", { duration: 2800 });
       }
 
       console.log("[ItemForm] handleSave: navigation to items list");
       navigate(`/admin/items`);
     } catch (err) {
-      console.error("[ItemForm] handleSave error:", err);
-      // Support both axios-style errors (err.response.data) and plain backend objects thrown from api layer
-      const rawData = err?.response?.data ?? err ?? {};
-      const responseData =
-        typeof rawData === "string" ? { message: rawData } : rawData;
-
-      const collectedBackendErrors = [];
-
-      if (responseData?.errors && typeof responseData.errors === "object") {
-        Object.values(responseData.errors).forEach((val) => {
-          if (Array.isArray(val)) {
-            val.forEach((msg) => {
-              if (msg) collectedBackendErrors.push(String(msg));
-            });
-          } else if (val) {
-            collectedBackendErrors.push(String(val));
-          }
-        });
-      }
-
-      if (typeof responseData?.error === "string") {
-        collectedBackendErrors.push(responseData.error);
-      }
-
-      if (Array.isArray(responseData?.details)) {
-        responseData.details.forEach((d) => {
-          if (typeof d === "string") {
-            collectedBackendErrors.push(d);
-          } else if (d?.message) {
-            collectedBackendErrors.push(String(d.message));
-          }
-        });
-      }
-
-      if (responseData?.message && !collectedBackendErrors.length) {
-        collectedBackendErrors.push(String(responseData.message));
-      }
-
-      if (!collectedBackendErrors.length && err?.message) {
-        collectedBackendErrors.push(String(err.message));
-      }
-
-      if (!collectedBackendErrors.length) {
-        collectedBackendErrors.push(
-          `Failed to ${isEdit ? "update" : "create"} item`
-        );
-      }
-
-      setBackendErrors(collectedBackendErrors);
-
-      alert(
-        `Failed to ${isEdit ? "update" : "create"} product. Please review the errors shown on the form.`
-      );
+      const messages = extractBackendMessages(err);
+      setBackendErrors(messages);
+      showItemSaveErrorToasts(messages, !isEdit);
+      setActiveTab(1);
     } finally {
       setLoading(false);
     }
@@ -918,8 +1026,14 @@ const ItemForm = () => {
           <div className="p-6 sm:p-8 lg:p-10">
             {backendErrors.length > 0 && (
               <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                <div className="font-semibold mb-1">Please fix the following problems:</div>
-                <ul className="list-disc list-inside space-y-1">
+                <div className="font-semibold mb-1">
+                  We couldn&apos;t save this product. Please check the following:
+                </div>
+                <p className="text-red-700/90 mb-2 text-xs">
+                  Fix the issues below, then try again. If something is unclear, share this list with your
+                  backend team.
+                </p>
+                <ul className="list-disc list-inside space-y-1.5">
                   {backendErrors.map((msg, idx) => (
                     <li key={idx}>{msg}</li>
                   ))}
@@ -958,10 +1072,10 @@ const ItemForm = () => {
                         return;
                       }
 
-                      if (targetTab === 7 && !validateSizesTab()) {
+                      if (targetTab >= 4 && !validateSizesTab()) {
                         setActiveTab(3);
                         window.alert(
-                          "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
+                          "Please complete the Sizes tab (add stock for at least one size) before continuing."
                         );
                         return;
                       }
@@ -1024,7 +1138,7 @@ const ItemForm = () => {
                   <textarea
                     value={form.shortDescription}
                     onChange={(e) => setForm({ ...form, shortDescription: e.target.value })}
-                    placeholder="Short description (max 160 chars)"
+                    placeholder="Short description (max 70 chars)"
                     rows={3}
                     maxLength={70}
                     className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-none"
@@ -1214,10 +1328,18 @@ const ItemForm = () => {
                               key={preset.hex}
                               type="button"
                               onClick={() => {
-                                updateVariantColor(vIdx, "hex", preset.hex);
-                                if (!variant.color.name) {
-                                  updateVariantColor(vIdx, "name", preset.name);
-                                }
+                                setForm((prev) => {
+                                  const next = [...prev.variants];
+                                  next[vIdx] = {
+                                    ...next[vIdx],
+                                    color: {
+                                      ...next[vIdx].color,
+                                      hex: preset.hex,
+                                      name: preset.name,
+                                    },
+                                  };
+                                  return { ...prev, variants: next };
+                                });
                               }}
                               className="w-10 h-10 rounded-lg border-2 border-gray-300 hover:border-gray-500 transition-all shadow-sm"
                               style={{ backgroundColor: preset.hex }}
@@ -1232,14 +1354,26 @@ const ItemForm = () => {
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
                       {variant.images.map((file, imgIdx) => (
                         <div key={imgIdx} className="relative group">
-                          <img
-                            src={file instanceof File ? URL.createObjectURL(file) : file}
-                            alt=""
-                            className="aspect-square object-cover rounded-xl border-2 border-gray-200 shadow-md"
-                          />
                           <button
+                            type="button"
+                            onClick={() => openVariantImageZoom(file)}
+                            className="block w-full aspect-square rounded-xl overflow-hidden border-2 border-gray-200 shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            title="Click to zoom"
+                          >
+                            <img
+                              src={
+                                file instanceof File
+                                  ? URL.createObjectURL(file)
+                                  : getVariantImageDisplaySrc(file) || ""
+                              }
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => removeImageFromVariant(vIdx, imgIdx)}
-                            className="absolute top-2 right-2 bg-red-500 text-white text-xs w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg"
+                            className="absolute top-2 right-2 bg-red-500 text-white text-xs w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg z-10"
                           >
                             ×
                           </button>
@@ -1368,15 +1502,15 @@ const ItemForm = () => {
                     onClick={() => {
                       if (!isEdit && !validateSizesTab()) {
                         window.alert(
-                          "Please complete the Sizes tab (add stock for at least one size) before moving to Filters."
+                          "Please complete the Sizes tab (add stock for at least one size) before moving to Care."
                         );
                         return;
                       }
-                      setActiveTab(7);
+                      setActiveTab(4);
                     }}
                     className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
                   >
-                    Next: Filters
+                    Next: Care
                   </button>
                 </div>
               </div>
@@ -1496,6 +1630,22 @@ const ItemForm = () => {
                       ))}
                     </div>
                   )}
+                </div>
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(3)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Sizes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(5)}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Size Chart
+                  </button>
                 </div>
               </div>
             )}
@@ -1681,6 +1831,22 @@ const ItemForm = () => {
                     </label>
                   </div>
                 </div>
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(4)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Care
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(6)}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Policies
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1777,18 +1943,27 @@ const ItemForm = () => {
                       />
                       {(form.shipping.iconFile || form.shipping.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            Preview:
-                          </span>
-                          <img
-                            src={
-                              form.shipping.iconFile
-                                ? URL.createObjectURL(form.shipping.iconFile)
-                                : form.shipping.iconUrl
-                            }
-                            alt="Shipping icon preview"
-                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
-                          />
+                          <span className="text-xs text-gray-500">Preview:</span>
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={() => clearPolicyIcon("shipping")}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                              title="Remove icon"
+                              aria-label="Remove shipping icon"
+                            >
+                              <X size={14} strokeWidth={2.5} />
+                            </button>
+                            <img
+                              src={
+                                form.shipping.iconFile
+                                  ? URL.createObjectURL(form.shipping.iconFile)
+                                  : form.shipping.iconUrl
+                              }
+                              alt="Shipping icon preview"
+                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
@@ -1855,18 +2030,27 @@ const ItemForm = () => {
                       />
                       {(form.codPolicy.iconFile || form.codPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            Preview:
-                          </span>
-                          <img
-                            src={
-                              form.codPolicy.iconFile
-                                ? URL.createObjectURL(form.codPolicy.iconFile)
-                                : form.codPolicy.iconUrl
-                            }
-                            alt="COD icon preview"
-                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
-                          />
+                          <span className="text-xs text-gray-500">Preview:</span>
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={() => clearPolicyIcon("codPolicy")}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                              title="Remove icon"
+                              aria-label="Remove COD icon"
+                            >
+                              <X size={14} strokeWidth={2.5} />
+                            </button>
+                            <img
+                              src={
+                                form.codPolicy.iconFile
+                                  ? URL.createObjectURL(form.codPolicy.iconFile)
+                                  : form.codPolicy.iconUrl
+                              }
+                              alt="COD icon preview"
+                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
@@ -1933,18 +2117,27 @@ const ItemForm = () => {
                       />
                       {(form.returnPolicy.iconFile || form.returnPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            Preview:
-                          </span>
-                          <img
-                            src={
-                              form.returnPolicy.iconFile
-                                ? URL.createObjectURL(form.returnPolicy.iconFile)
-                                : form.returnPolicy.iconUrl
-                            }
-                            alt="Return policy icon preview"
-                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
-                          />
+                          <span className="text-xs text-gray-500">Preview:</span>
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={() => clearPolicyIcon("returnPolicy")}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                              title="Remove icon"
+                              aria-label="Remove return policy icon"
+                            >
+                              <X size={14} strokeWidth={2.5} />
+                            </button>
+                            <img
+                              src={
+                                form.returnPolicy.iconFile
+                                  ? URL.createObjectURL(form.returnPolicy.iconFile)
+                                  : form.returnPolicy.iconUrl
+                              }
+                              alt="Return policy icon preview"
+                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
@@ -2011,18 +2204,27 @@ const ItemForm = () => {
                       />
                       {(form.exchangePolicy.iconFile || form.exchangePolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            Preview:
-                          </span>
-                          <img
-                            src={
-                              form.exchangePolicy.iconFile
-                                ? URL.createObjectURL(form.exchangePolicy.iconFile)
-                                : form.exchangePolicy.iconUrl
-                            }
-                            alt="Exchange policy icon preview"
-                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
-                          />
+                          <span className="text-xs text-gray-500">Preview:</span>
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={() => clearPolicyIcon("exchangePolicy")}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                              title="Remove icon"
+                              aria-label="Remove exchange policy icon"
+                            >
+                              <X size={14} strokeWidth={2.5} />
+                            </button>
+                            <img
+                              src={
+                                form.exchangePolicy.iconFile
+                                  ? URL.createObjectURL(form.exchangePolicy.iconFile)
+                                  : form.exchangePolicy.iconUrl
+                              }
+                              alt="Exchange policy icon preview"
+                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
@@ -2089,22 +2291,47 @@ const ItemForm = () => {
                       />
                       {(form.cancellationPolicy.iconFile || form.cancellationPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">
-                            Preview:
-                          </span>
-                          <img
-                            src={
-                              form.cancellationPolicy.iconFile
-                                ? URL.createObjectURL(form.cancellationPolicy.iconFile)
-                                : form.cancellationPolicy.iconUrl
-                            }
-                            alt="Cancellation policy icon preview"
-                            className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
-                          />
+                          <span className="text-xs text-gray-500">Preview:</span>
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={() => clearPolicyIcon("cancellationPolicy")}
+                              className="absolute -top-1.5 -right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md hover:bg-red-600"
+                              title="Remove icon"
+                              aria-label="Remove cancellation policy icon"
+                            >
+                              <X size={14} strokeWidth={2.5} />
+                            </button>
+                            <img
+                              src={
+                                form.cancellationPolicy.iconFile
+                                  ? URL.createObjectURL(form.cancellationPolicy.iconFile)
+                                  : form.cancellationPolicy.iconUrl
+                              }
+                              alt="Cancellation policy icon preview"
+                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                            />
+                          </div>
                         </div>
                       )}
                     </label>
                   </div>
+                </div>
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(5)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Size Chart
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(7)}
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                  >
+                    Next: Filters
+                  </button>
                 </div>
               </div>
             )}
@@ -2156,6 +2383,18 @@ const ItemForm = () => {
                     </div>
                   )}
                 </div>
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(6)}
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                  >
+                    Back: Policies
+                  </button>
+                  <span className="text-sm text-gray-500 self-center hidden sm:inline">
+                    Use Save below to create or update the product
+                  </span>
+                </div>
               </div>
             )}
 
@@ -2188,6 +2427,31 @@ const ItemForm = () => {
           </div>
         </div>
       </div>
+
+      {zoomVariantImage?.src && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Zoomed product image"
+          onClick={closeVariantZoom}
+        >
+          <button
+            type="button"
+            onClick={closeVariantZoom}
+            className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          <img
+            src={zoomVariantImage.src}
+            alt="Product variant"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };

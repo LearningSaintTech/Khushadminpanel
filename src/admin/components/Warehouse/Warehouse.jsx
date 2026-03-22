@@ -11,6 +11,7 @@ import {
   getWarehouseStock,
   updateWarehouseStock,
 } from "../../apis/Warehouseapi";
+import { getPincodes } from "../../apis/Pincodeapi";
 
 export default function Warehouse() {
   const navigate = useNavigate();
@@ -27,12 +28,22 @@ export default function Warehouse() {
   // Pincode Modal State
   const [showPincodeModal, setShowPincodeModal] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
+  // All serviceable pincodes (from Pincodeapi) to render in UI
   const [pincodes, setPincodes] = useState([]);
+  // Set of serviceable pincode ids that are already mapped to selectedWarehouse
+  const [assignedPincodeIds, setAssignedPincodeIds] = useState(new Set());
+  // Fallback when backend returns relation objects without stable pincode ids
+  const [assignedPinCodes, setAssignedPinCodes] = useState(new Set());
   const [pincodeLoading, setPincodeLoading] = useState(false);
-  const [newPincode, setNewPincode] = useState("");
   const [pincodeSearch, setPincodeSearch] = useState("");
   const [pincodePage, setPincodePage] = useState(1);
   const PINCODE_LIMIT = 10;
+  const [newPincode, setNewPincode] = useState("");
+  const [pincodeActionLoading, setPincodeActionLoading] = useState(false);
+  const [pincodeModalMessage, setPincodeModalMessage] = useState({
+    type: "success", // 'success' | 'error'
+    text: "",
+  });
 
   // Stock Modal State
   const [showStockModal, setShowStockModal] = useState(false);
@@ -181,11 +192,53 @@ export default function Warehouse() {
     setPincodeLoading(true);
     setPincodeSearch("");
     setPincodePage(1);
+    setAssignedPincodeIds(new Set());
+    setAssignedPinCodes(new Set());
+    setNewPincode("");
+    setPincodeModalMessage({ type: "success", text: "" });
 
     try {
+      // 1) Load all serviceable pincodes for UI
+      const allRes = await getPincodes(1, 1000, "");
+      const allData = allRes?.data?.data || allRes?.data || allRes || [];
+      setPincodes(Array.isArray(allData) ? allData : []);
+
+      // 2) Load warehouse-assigned pincodes to enable/disable actions
       const response = await getWarehousePincodes(warehouse.id);
-      const pincodeList = response?.data || (Array.isArray(response) ? response : []);
-      setPincodes(pincodeList);
+      const assignedList =
+        response?.data?.data ??
+        response?.data?.pincodes ??
+        response?.data ??
+        (Array.isArray(response) ? response : []);
+
+      const extractPincodeId = (pin) =>
+        pin?.pincodeId?._id ??
+        pin?.pincodeId?.id ??
+        pin?._id ??
+        pin?.id ??
+        null;
+
+      const extractPinCodeValue = (pin) =>
+        pin?.pincodeId?.pinCode ??
+        pin?.pinCode ??
+        pin?.pincode ??
+        pin?.value ??
+        null;
+
+      const assignedSet = new Set(
+        (Array.isArray(assignedList) ? assignedList : [])
+          .map(extractPincodeId)
+          .filter(Boolean)
+      );
+      setAssignedPincodeIds(assignedSet);
+
+      const assignedCodeSet = new Set(
+        (Array.isArray(assignedList) ? assignedList : [])
+          .map(extractPinCodeValue)
+          .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
+          .map((v) => String(v))
+      );
+      setAssignedPinCodes(assignedCodeSet);
     } catch (err) {
       console.error("Error loading pincodes:", err);
       setError("Failed to load pincodes");
@@ -194,27 +247,120 @@ export default function Warehouse() {
     }
   };
 
-  const handleAddPincode = async () => {
-    if (!newPincode.trim()) {
-      alert("Please enter a pincode");
+  const refreshAssignedPincodeIds = async (warehouseId) => {
+    const response = await getWarehousePincodes(warehouseId);
+    const assignedList =
+      response?.data?.data ??
+      response?.data?.pincodes ??
+      response?.data ??
+      (Array.isArray(response) ? response : []);
+
+    const extractPincodeId = (pin) =>
+      pin?.pincodeId?._id ??
+      pin?.pincodeId?.id ??
+      pin?._id ??
+      pin?.id ??
+      null;
+
+    const extractPinCodeValue = (pin) =>
+      pin?.pincodeId?.pinCode ??
+      pin?.pinCode ??
+      pin?.pincode ??
+      pin?.value ??
+      null;
+
+    const assignedSet = new Set(
+      (Array.isArray(assignedList) ? assignedList : [])
+        .map(extractPincodeId)
+        .filter(Boolean)
+    );
+    setAssignedPincodeIds(assignedSet);
+
+    const assignedCodeSet = new Set(
+      (Array.isArray(assignedList) ? assignedList : [])
+        .map(extractPinCodeValue)
+        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
+        .map((v) => String(v))
+    );
+    setAssignedPinCodes(assignedCodeSet);
+  };
+
+  const getApiErrorMessage = (err) => {
+    if (typeof err === "string") return err;
+    return (
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      "Request failed"
+    );
+  };
+
+  const handleAddPincode = async (pincode) => {
+    if (!selectedWarehouse?.id) return;
+    try {
+      setPincodeActionLoading(true);
+      setPincodeModalMessage({ type: "success", text: "" });
+      // Backend may accept either pinCode or pincodeId; send both.
+      const pinCodeValue =
+        pincode?.pinCode ||
+        pincode?.pincode ||
+        pincode?.value ||
+        (typeof pincode === "string" ? pincode : "");
+      const pinCodeTrim = pinCodeValue?.toString().trim();
+      const payload = {
+        pinCode: pinCodeTrim,
+        pincodeId: pincode?._id || pincode?.id,
+      };
+      const res = await addWarehousePincodes(selectedWarehouse.id, payload);
+      await refreshAssignedPincodeIds(selectedWarehouse.id);
+      const msg =
+        res?.message || res?.data?.message || "Pincode added successfully";
+      setPincodeModalMessage({ type: "success", text: msg });
+    } catch (err) {
+      const msg = getApiErrorMessage(err);
+      setPincodeModalMessage({ type: "error", text: msg });
+      await refreshAssignedPincodeIds(selectedWarehouse.id);
+    } finally {
+      setPincodeActionLoading(false);
+    }
+  };
+
+  const handleAddTypedPincode = async () => {
+    if (!selectedWarehouse?.id) return;
+    const pin = newPincode.trim();
+    if (!/^\d{6}$/.test(pin)) {
+      setPincodeModalMessage({
+        type: "error",
+        text: "Enter a valid 6-digit pincode.",
+      });
       return;
     }
 
+    // Try to locate existing pincode in DB list (optional)
+    const existing = pincodes.find((p) => {
+      const code = p?.pinCode ?? p?.pincode ?? p?.value;
+      return code?.toString() === pin;
+    });
+
+    setPincodeActionLoading(true);
+    setPincodeModalMessage({ type: "success", text: "" });
     try {
-      const payload = { pinCode: newPincode.trim() };
-      await addWarehousePincodes(selectedWarehouse.id, payload);
+      const payload = {
+        pinCode: pin,
+        pincodeId: existing?._id || existing?.id,
+      };
+      const res = await addWarehousePincodes(selectedWarehouse.id, payload);
+      await refreshAssignedPincodeIds(selectedWarehouse.id);
+      const msg =
+        res?.message || res?.data?.message || "Pincode added successfully";
+      setPincodeModalMessage({ type: "success", text: msg });
       setNewPincode("");
-
-      const response = await getWarehousePincodes(selectedWarehouse.id);
-      setPincodes(response?.data || (Array.isArray(response) ? response : []));
     } catch (err) {
-      const msg = err.response?.data?.message || "Failed to add pincode";
-      alert(msg);
-
-      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("duplicate")) {
-        const response = await getWarehousePincodes(selectedWarehouse.id);
-        setPincodes(response?.data || []);
-      }
+      const msg = getApiErrorMessage(err);
+      setPincodeModalMessage({ type: "error", text: msg });
+      await refreshAssignedPincodeIds(selectedWarehouse.id);
+    } finally {
+      setPincodeActionLoading(false);
     }
   };
 
@@ -222,22 +368,27 @@ export default function Warehouse() {
     if (!window.confirm("Remove this pincode?")) return;
 
     try {
+      setPincodeActionLoading(true);
+      setPincodeModalMessage({ type: "success", text: "" });
       await deleteWarehousePincode(selectedWarehouse.id, pincodeId);
-      const response = await getWarehousePincodes(selectedWarehouse.id);
-      setPincodes(response?.data || []);
+      await refreshAssignedPincodeIds(selectedWarehouse.id);
+      setPincodeModalMessage({
+        type: "success",
+        text: "Pincode removed successfully.",
+      });
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete pincode");
+      setPincodeModalMessage({
+        type: "error",
+        text: getApiErrorMessage(err),
+      });
+    } finally {
+      setPincodeActionLoading(false);
     }
   };
 
-  const filteredPincodes = pincodes.filter((pin) => {
-    const val =
-      pin?.pincodeId?.pinCode ||
-      pin?.pinCode ||
-      pin?.pincode ||
-      (typeof pin === "string" ? pin : "");
-    return val.toString().includes(pincodeSearch.trim());
-  });
+  const filteredPincodes = pincodes.filter((pin) =>
+    (pin?.pinCode ?? "").toString().includes(pincodeSearch.trim())
+  );
 
   const paginatedPincodes = filteredPincodes.slice(
     (pincodePage - 1) * PINCODE_LIMIT,
@@ -477,8 +628,11 @@ export default function Warehouse() {
                   setShowPincodeModal(false);
                   setSelectedWarehouse(null);
                   setPincodes([]);
+                  setAssignedPincodeIds(new Set());
+                  setAssignedPinCodes(new Set());
                   setNewPincode("");
                   setPincodeSearch("");
+                  setPincodeModalMessage({ type: "success", text: "" });
                   setPincodePage(1);
                 }}
                 className="p-2 hover:bg-gray-100 rounded-full"
@@ -488,24 +642,42 @@ export default function Warehouse() {
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={newPincode}
-                  onChange={(e) => setNewPincode(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddPincode())}
-                  placeholder="Enter 6-digit pincode (e.g. 560001)"
-                  className="flex-1 px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                />
-                <button
-                  onClick={handleAddPincode}
-                  className="px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-900 flex items-center gap-2 whitespace-nowrap"
+              {(pincodeModalMessage?.text || "").trim() && (
+                <div
+                  className={`rounded-lg border p-3 text-sm ${
+                    pincodeModalMessage.type === "error"
+                      ? "bg-red-50 border-red-200 text-red-700"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  }`}
                 >
-                  <Plus size={16} /> Add
-                </button>
-              </div>
+                  {pincodeModalMessage.text}
+                </div>
+              )}
 
               <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    value={newPincode}
+                    onChange={(e) => setNewPincode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddTypedPincode();
+                      }
+                    }}
+                    placeholder="Add by pincode (6 digits)"
+                    className="flex-1 px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleAddTypedPincode}
+                    disabled={pincodeActionLoading}
+                    className="px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-900 flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {pincodeActionLoading ? "Adding..." : "Add"}
+                  </button>
+                </div>
+
                 <input
                   type="text"
                   placeholder="Filter pincodes..."
@@ -540,22 +712,30 @@ export default function Warehouse() {
                           </thead>
                           <tbody className="divide-y">
                             {paginatedPincodes.map((pin, i) => {
-                              const value =
-                                pin?.pincodeId?.pinCode ||
-                                pin?.pinCode ||
-                                pin?.pincode ||
-                                (typeof pin === "string" ? pin : "—");
-                              const id = pin._id || pin.id;
+                              const value = pin?.pinCode ?? "—";
+                              const pincodeId = pin?._id || pin?.id;
+                              const isAssigned =
+                                (pincodeId && assignedPincodeIds.has(pincodeId)) ||
+                                assignedPinCodes.has(String(value));
                               return (
-                                <tr key={id || i} className="hover:bg-gray-50">
+                                <tr key={pincodeId || i} className="hover:bg-gray-50">
                                   <td className="px-5 py-3.5 font-medium">{value}</td>
                                   <td className="px-5 py-3.5 text-right">
-                                    <button
-                                      onClick={() => handleDeletePincode(id)}
-                                      className="text-red-600 hover:text-red-800 font-medium"
-                                    >
-                                      Remove
-                                    </button>
+                                    {isAssigned ? (
+                                      <button
+                                        onClick={() => handleDeletePincode(pincodeId)}
+                                        className="text-red-600 hover:text-red-800 font-medium"
+                                      >
+                                        Remove
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleAddPincode(pin)}
+                                        className="text-green-600 hover:text-green-800 font-medium"
+                                      >
+                                        Add
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               );

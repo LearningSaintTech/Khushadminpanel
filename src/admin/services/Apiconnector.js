@@ -31,12 +31,21 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message =
-      error?.response?.data?.message ||
-      error.message ||
-      "Something went wrong";
-
-    return Promise.reject(message);
+    const payload = error?.response?.data;
+    const base =
+      typeof payload === "object" && payload !== null && !Array.isArray(payload)
+        ? { ...payload }
+        : {};
+    if (typeof payload === "string" && payload.trim()) {
+      base.message = payload;
+    }
+    if (!base.message) {
+      base.message =
+        (typeof payload === "object" && payload?.message) ||
+        error?.message ||
+        "Something went wrong";
+    }
+    return Promise.reject(base);
   }
 );
 

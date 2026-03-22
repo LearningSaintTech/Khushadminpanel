@@ -7,6 +7,7 @@ import {
   updateCategory,
   getAllCategories,
 } from "../../apis/categoryapi";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
 
 const CategoryForm = () => {
   const { id } = useParams();
@@ -14,7 +15,7 @@ const CategoryForm = () => {
   const isEdit = !!id;
 
   const [loading, setLoading] = useState(false);
-
+  const [successMessage, setSuccessMessage] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -23,6 +24,7 @@ const CategoryForm = () => {
     imagePreview: null,
     isActive: true,
     isNavbar: false,
+    isFooter: false,
   });
 
   const [categories, setCategories] = useState([]);
@@ -31,6 +33,7 @@ const CategoryForm = () => {
   const [sortError, setSortError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [zoomedImage, setZoomedImage] = useState(null);
+  const [imageError, setImageError] = useState("");
 
   // ================= LOAD DATA =================
   useEffect(() => {
@@ -61,6 +64,7 @@ const CategoryForm = () => {
               imagePreview: category.imageUrl || null,
               isActive: category.isActive ?? true,
               isNavbar: category.isNavbar ?? false,
+              isFooter: category.isFooter ?? false,
             });
 
             setOriginalSortOrder(loadedSort);
@@ -138,6 +142,13 @@ const CategoryForm = () => {
       return false;
     }
 
+    // Create: category image is required (clear message instead of generic API failure)
+    if (!isEdit && !form.image) {
+      setSubmitError("Image not uploaded.");
+      setImageError("Please upload a category image to continue.");
+      return false;
+    }
+
     const sortValue = Number(form.sortOrder);
 
     if (isNaN(sortValue) || sortValue < 1) {
@@ -151,7 +162,7 @@ const CategoryForm = () => {
       return false;
     }
 
-    // Frontend duplicate check (extra safety)
+    // Frontend duplicate check
     const duplicate = categories.find((cat) => {
       if (isEdit && cat._id === id) return false;
       return Number(cat.sortOrder) === sortValue;
@@ -181,10 +192,9 @@ const CategoryForm = () => {
       formData.append("description", form.description.trim());
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.isNavbar);
+      formData.append("isFooter", form.isFooter);
 
-      // Only include sortOrder when:
-      // - Creating new category
-      // - OR editing and user explicitly enabled sort order editing
+      // Only include sortOrder when creating or when explicitly allowed during edit
       if (!isEdit || allowEditSortOrder) {
         formData.append("sortOrder", Number(form.sortOrder));
       }
@@ -195,17 +205,39 @@ const CategoryForm = () => {
 
       if (isEdit) {
         await updateCategory(id, formData);
+        setSuccessMessage("Category updated successfully!");
       } else {
         await createCategory(formData);
+        setSuccessMessage("Category created successfully!");
       }
 
-      navigate("/admin/inventory/categories");
+      setTimeout(() => {
+        navigate("/admin/inventory/categories");
+      }, 1200);
     } catch (err) {
       console.error("Error saving category:", err);
-      const errorMsg =
-        err?.response?.data?.message ||
-        "Failed to save category.";
-      setSubmitError(errorMsg);
+
+      const messages = extractBackendMessages(err);
+      const blob = messages.join(" ").toLowerCase();
+
+      if (
+        blob.includes("image") ||
+        blob.includes("file") ||
+        blob.includes("upload") ||
+        blob.includes("photo")
+      ) {
+        setImageError(
+          messages.find((m) =>
+            /image|file|upload|photo|required/i.test(m)
+          ) || "Image could not be saved. Please upload a valid image."
+        );
+        setSubmitError("Image not uploaded or invalid.");
+      } else {
+        setImageError("");
+        setSubmitError(
+          messages.length ? messages.join(" ") : "Failed to save category."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -213,233 +245,293 @@ const CategoryForm = () => {
 
   // ================= UI =================
   return (
-    <div className="w-full min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Header with Back Button and Title on Right */}
-        <div className="flex items-center justify-between mb-8">
-          <button
-            onClick={() => navigate("/admin/inventory/categories")}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
-          >
-            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-            <span>Back</span>
-          </button>
-          <div className="text-right">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {isEdit ? "Edit Category" : "Create Category"}
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {isEdit ? "Update category information" : "Add a new category"}
-            </p>
-          </div>
-        </div>
-
-        {/* Form Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Category Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="Enter category name"
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
-              />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Enter category description"
-                rows={3}
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
-              />
-            </div>
-
-            {/* Sort Order */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Sort Order {!isEdit && <span className="text-gray-500 font-normal">(auto-generated, you can change)</span>}
-              </label>
-              <input
-                type="number"
-                name="sortOrder"
-                value={form.sortOrder}
-                onChange={handleChange}
-                disabled={isEdit && !allowEditSortOrder}
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500"
-                min="1"
-                step="1"
-              />
-
-              {isEdit && (
-                <label className="flex items-center gap-2 mt-2 text-sm text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="allowEditSortOrder"
-                    checked={allowEditSortOrder}
-                    onChange={handleChange}
-                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
-                  />
-                  Allow editing sort order
-                </label>
-              )}
-
-              {sortError && <p className="text-red-500 text-xs mt-1.5">{sortError}</p>}
-            </div>
-
-            {/* Image Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Category Image {isEdit && <span className="text-gray-400 font-normal">(optional)</span>}
-              </label>
-              
-              {form.imagePreview && (
-                <div className="mb-3 relative inline-block">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setForm((prev) => ({ ...prev, image: null, imagePreview: null }));
-                    }}
-                    className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
-                    title="Remove image"
-                    aria-label="Remove image"
-                  >
-                    <X size={16} strokeWidth={2.5} />
-                  </button>
-                  <div 
-                    className="relative group cursor-pointer"
-                    onClick={() => setZoomedImage({ url: form.imagePreview, name: form.name || "Category Image" })}
-                  >
-                    <img
-                      src={form.imagePreview}
-                      alt="Preview"
-                      className="h-32 w-32 lg:h-40 lg:w-40 object-cover rounded-lg border-2 border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100">
-                      <ZoomIn className="h-6 w-6 lg:h-8 lg:w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Click image to zoom · Cross to remove</p>
-                </div>
-              )}
-
-              <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
-                <div className="flex flex-col items-center justify-center">
-                  <ImageIcon size={24} className="text-gray-400 group-hover:text-gray-600 mb-2" />
-                  <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
-                    {form.imagePreview ? "Change Image" : "Choose Image"}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 10MB</span>
-                </div>
-                <input
-                  type="file"
-                  name="image"
-                  onChange={handleChange}
-                  accept="image/*"
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* Toggles */}
-            <div className="flex flex-wrap gap-6 pt-2">
-              <label className="flex items-center gap-2.5 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={form.isActive}
-                  onChange={handleChange}
-                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
-                />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Active</span>
-              </label>
-
-              <label className="flex items-center gap-2.5 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  name="isNavbar"
-                  checked={form.isNavbar}
-                  onChange={handleChange}
-                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
-                />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Show in Navbar</span>
-              </label>
-            </div>
-
-            {/* Error */}
-            {submitError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {submitError}
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => navigate("/admin/inventory/categories")}
-                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Saving..." : isEdit ? "Update Category" : "Create Category"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      {/* Image Zoom Modal */}
-      {zoomedImage && (
-        <div
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
-          onClick={() => setZoomedImage(null)}
-        >
-          {/* Close Button */}
-          <button
-            onClick={() => setZoomedImage(null)}
-            className="absolute top-4 right-4 z-10 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all duration-200 backdrop-blur-sm"
-            aria-label="Close zoom"
-          >
-            <X size={28} />
-          </button>
-
-          {/* Zoomed Image Container */}
-          <div className="relative w-full h-full flex items-center justify-center">
-            <img
-              src={zoomedImage.url}
-              alt={zoomedImage.name}
-              className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '95vw', maxHeight: '90vh' }}
-            />
-          </div>
-
-          {/* Image Name */}
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-lg backdrop-blur-sm">
-            <p className="text-base font-medium">{zoomedImage.name}</p>
+    <>
+      {successMessage && (
+        <div className="max-w-4xl mx-auto mt-4">
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+            {successMessage}
           </div>
         </div>
       )}
-    </div>
+
+      <div className="w-full min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <button
+              onClick={() => navigate("/admin/inventory/categories")}
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+            >
+              <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+              <span>Back</span>
+            </button>
+            <div className="text-right">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                {isEdit ? "Edit Category" : "Create Category"}
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                {isEdit ? "Update category information" : "Add a new category"}
+              </p>
+            </div>
+          </div>
+
+          {/* Form Card */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Category Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  placeholder="Enter category name"
+                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  placeholder="Enter category description"
+                  rows={3}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
+                />
+              </div>
+
+              {/* Sort Order */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Sort Order{" "}
+                  {!isEdit && (
+                    <span className="text-gray-500 font-normal">
+                      (auto-generated, you can change)
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  name="sortOrder"
+                  value={form.sortOrder}
+                  onChange={handleChange}
+                  disabled={isEdit && !allowEditSortOrder}
+                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500"
+                  min="1"
+                  step="1"
+                />
+
+                {isEdit && (
+                  <label className="flex items-center gap-2 mt-2 text-sm text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="allowEditSortOrder"
+                      checked={allowEditSortOrder}
+                      onChange={handleChange}
+                      className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                    />
+                    Allow editing sort order
+                  </label>
+                )}
+
+                {sortError && (
+                  <p className="text-red-500 text-xs mt-1.5">{sortError}</p>
+                )}
+              </div>
+
+              {/* Image Upload */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Category Image{" "}
+                  {isEdit ? (
+                    <span className="text-gray-400 font-normal">(optional)</span>
+                  ) : (
+                    <span className="text-red-500">*</span>
+                  )}
+                </label>
+
+                {imageError && (
+                  <p className="text-red-500 text-xs mt-2">{imageError}</p>
+                )}
+
+                {form.imagePreview && (
+                  <div className="mb-3 relative inline-block">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setForm((prev) => ({
+                          ...prev,
+                          image: null,
+                          imagePreview: null,
+                        }));
+                      }}
+                      className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                      title="Remove image"
+                      aria-label="Remove image"
+                    >
+                      <X size={16} strokeWidth={2.5} />
+                    </button>
+                    <div
+                      className="relative group cursor-pointer"
+                      onClick={() =>
+                        setZoomedImage({
+                          url: form.imagePreview,
+                          name: form.name || "Category Image",
+                        })
+                      }
+                    >
+                      <img
+                        src={form.imagePreview}
+                        alt="Preview"
+                        className="h-32 w-32 lg:h-40 lg:w-40 object-cover rounded-lg border-2 border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100">
+                        <ZoomIn className="h-6 w-6 lg:h-8 lg:w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Click image to zoom · Cross to remove
+                    </p>
+                  </div>
+                )}
+
+                <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
+                  <div className="flex flex-col items-center justify-center">
+                    <ImageIcon
+                      size={24}
+                      className="text-gray-400 group-hover:text-gray-600 mb-2"
+                    />
+                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                      {form.imagePreview ? "Change Image" : "Choose Image"}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PNG, JPG, GIF up to 10MB
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    name="image"
+                    onChange={handleChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Toggles */}
+              <div className="flex flex-wrap gap-6 pt-2">
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="isActive"
+                    checked={form.isActive}
+                    onChange={handleChange}
+                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    Active
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="isNavbar"
+                    checked={form.isNavbar}
+                    onChange={handleChange}
+                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    Show in Navbar
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="isFooter"
+                    checked={form.isFooter}
+                    onChange={handleChange}
+                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    Show in Footer
+                  </span>
+                </label>
+              </div>
+
+              {/* Error */}
+              {submitError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {submitError}
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin/inventory/categories")}
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading
+                    ? "Saving..."
+                    : isEdit
+                    ? "Update Category"
+                    : "Create Category"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {/* Image Zoom Modal */}
+        {zoomedImage && (
+          <div
+            className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
+            onClick={() => setZoomedImage(null)}
+          >
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute top-4 right-4 z-10 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all duration-200 backdrop-blur-sm"
+              aria-label="Close zoom"
+            >
+              <X size={28} />
+            </button>
+
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={zoomedImage.url}
+                alt={zoomedImage.name}
+                className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+                style={{ maxWidth: "95vw", maxHeight: "90vh" }}
+              />
+            </div>
+
+            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-lg backdrop-blur-sm">
+              <p className="text-base font-medium">{zoomedImage.name}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
