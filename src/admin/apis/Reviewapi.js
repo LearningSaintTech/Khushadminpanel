@@ -1,28 +1,21 @@
 import { apiConnector } from "../services/Apiconnector";
 
-// ===============================
-// 🔹 API ENDPOINTS
-// ===============================
 const REVIEW_API = {
   GET_ALL_REVIEWS: (itemId) => `/reviews/getAll/${itemId}`,
-  GET_SINGLE_REVIEW: (reviewId) => `/reviews/getSingle/${reviewId}`,
-  DELETE_REVIEW: (reviewId) => `/reviews/delete/${reviewId}`,
-  UPDATE_REVIEW: (reviewId) => `/reviews/update/${reviewId}`,
+  ADMIN_STATS: (itemId) => `/reviews/admin/stats/${itemId}`,
+  UPDATE: (reviewId) => `/reviews/update/${reviewId}`,
+  DELETE: (reviewId) => `/reviews/delete/${reviewId}`,
 };
 
 const ITEMS_API = {
   GET_ITEMS_WITH_SKUS: "/items/skus",
 };
 
-// ===============================
-// 🔹 GET REVIEWS
-// ===============================
-export const getReviews = (itemId, page = 1, limit = 4) => {
-  if (!itemId) {
-    throw new Error("itemId is required");
-  }
-
-  const url = `${REVIEW_API.GET_ALL_REVIEWS(itemId)}?page=${page}&limit=${limit}`;
+/** List reviews for a product (paginated). */
+export const getReviews = (itemId, page = 1, limit = 50) => {
+  if (!itemId) throw new Error("itemId is required");
+  const id = typeof itemId === "object" ? itemId.toString() : String(itemId);
+  const url = `${REVIEW_API.GET_ALL_REVIEWS(id)}?page=${page}&limit=${limit}`;
   return apiConnector("GET", url);
 };
 
@@ -37,37 +30,52 @@ export const getSingleReview = (reviewId) => {
   return apiConnector("GET", REVIEW_API.GET_SINGLE_REVIEW(reviewId));
 };
 
-// ===============================
-// 🔹 DELETE REVIEW
-// ===============================
+/** List reviews for a product (paginated). */
+export const getReviews = (itemId, page = 1, limit = 50) => {
+  if (!itemId) throw new Error("itemId is required");
+  const id = typeof itemId === "object" ? itemId.toString() : String(itemId);
+  const url = `${REVIEW_API.GET_ALL_REVIEWS(id)}?page=${page}&limit=${limit}`;
+  return apiConnector("GET", url);
+};
+
+/** Admin: aggregate stats for an item (avg, count, star distribution). */
+export const getReviewStats = (itemId) => {
+  if (!itemId) throw new Error("itemId is required");
+  const id = typeof itemId === "object" ? itemId.toString() : String(itemId);
+  return apiConnector("GET", REVIEW_API.ADMIN_STATS(id));
+};
+
+/** Update review (multipart). Admin can edit any review. */
+export const updateReview = (reviewId, { rating, description, files = [] }) => {
+  if (!reviewId) throw new Error("reviewId is required");
+  const formData = new FormData();
+  if (rating != null && rating !== "") formData.append("rating", String(rating));
+  if (description != null) formData.append("description", String(description));
+  (Array.isArray(files) ? files : []).forEach((f) => {
+    if (f) formData.append("images", f);
+  });
+  return apiConnector("PATCH", REVIEW_API.UPDATE(reviewId), formData);
+};
+
 export const deleteReview = (reviewId) => {
-  if (!reviewId) {
-    throw new Error("reviewId is required");
-  }
-
-  return apiConnector("DELETE", REVIEW_API.DELETE_REVIEW(reviewId));
+  if (!reviewId) throw new Error("reviewId is required");
+  return apiConnector("DELETE", REVIEW_API.DELETE(reviewId));
 };
 
-// ===============================
-// 🔹 UPDATE REVIEW
-// ===============================
-export const updateReview = (reviewId, data) => {
-  if (!reviewId) {
-    throw new Error("reviewId is required");
-  }
-
-  return apiConnector("PUT", REVIEW_API.UPDATE_REVIEW(reviewId), data);
-};
-
-// ===============================
-// 🔹 GET ITEMS WITH SKUS
-// ===============================
+/**
+ * Items list for admin (name, productId, itemId, SKUs).
+ * Optional search matches name, productId, description, SKU.
+ */
 export const getItemsWithSkus = (
   page = 1,
-  limit = 10,
+  limit = 12,
+  search = "",
   skuPage = 1,
   skuLimit = 15
 ) => {
-  const url = `${ITEMS_API.GET_ITEMS_WITH_SKUS}?page=${page}&limit=${limit}&skuPage=${skuPage}&skuLimit=${skuLimit}`;
+  let url = `${ITEMS_API.GET_ITEMS_WITH_SKUS}?page=${page}&limit=${limit}&skuPage=${skuPage}&skuLimit=${skuLimit}`;
+  if (search && String(search).trim()) {
+    url += `&search=${encodeURIComponent(String(search).trim())}`;
+  }
   return apiConnector("GET", url);
 };

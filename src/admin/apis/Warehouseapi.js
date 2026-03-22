@@ -75,12 +75,20 @@ export const getWarehouses = (page = 1, limit = 10, search = "") => {
   });
 
   const endpoint = `${warehouseEndpoints.GET_WAREHOUSE_LIST}?${queryParams.toString()}`;
-  console.log("🔍 Warehouse API endpoint:", endpoint);
-  
-  return apiConnector(
-    "GET",
-    endpoint
-  );
+  console.log("[Warehouseapi] getWarehouses →", { page, limit, search, endpoint });
+
+  // apiConnector returns response body: { success, message, data: { data, pagination } }
+  return apiConnector("GET", endpoint).then((res) => {
+    const payload = res?.data ?? {};
+    const list = payload.data ?? payload.warehouses ?? [];
+    const pg = payload.pagination;
+    console.log("[Warehouseapi] getWarehouses ←", {
+      success: res?.success,
+      count: Array.isArray(list) ? list.length : "?",
+      pagination: pg,
+    });
+    return res;
+  });
 };
 
 
@@ -121,29 +129,58 @@ export const deleteWarehousePincode = (warehouseId, pincodeId) => {
 // 📦 Warehouse Stock APIs
 // ================================
 
-// ✅ Get Warehouse Stock (with pagination)
+// ✅ Get Warehouse Stock (pagination + server-side filters)
+// opts: { itemSearch?: string, skuSearch?: string } — filters by catalog product name and/or SKU
 export const getWarehouseStock = (
   warehouseId,
   page = 1,
-  limit = 50
+  limit = 50,
+  opts = {}
 ) => {
   const queryParams = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  const itemSearch = (opts.itemSearch || "").trim();
+  const skuSearch = (opts.skuSearch || "").trim();
+  if (itemSearch) queryParams.set("itemSearch", itemSearch);
+  if (skuSearch) queryParams.set("skuSearch", skuSearch);
+
+  const url = `${warehouseEndpoints.GET_WAREHOUSE_STOCK}/${warehouseId}/stock?${queryParams.toString()}`;
+  console.log("[Warehouseapi] getWarehouseStock →", {
+    warehouseId,
     page,
     limit,
+    itemSearch: itemSearch || undefined,
+    skuSearch: skuSearch || undefined,
+    url,
   });
 
-  return apiConnector(
-    "GET",
-    `${warehouseEndpoints.GET_WAREHOUSE_STOCK}/${warehouseId}/stock?${queryParams.toString()}`
-  );
+  return apiConnector("GET", url).then((res) => {
+    const payload = res?.data ?? {};
+    const rows = payload.data ?? payload.stock ?? [];
+    console.log("[Warehouseapi] getWarehouseStock ←", {
+      warehouseId,
+      success: res?.success,
+      rowCount: Array.isArray(rows) ? rows.length : 0,
+      pagination: payload.pagination,
+    });
+    return res;
+  });
 };
 
 // ✅ Add / Update Stock
 // body: { sku: "SKU-0-S", quantity: 3 }
 export const updateWarehouseStock = (warehouseId, data) => {
-  return apiConnector(
-    "POST",
-    `${warehouseEndpoints.UPDATE_WAREHOUSE_STOCK}/${warehouseId}/stock`,
-    data
-  );
+  const path = `${warehouseEndpoints.UPDATE_WAREHOUSE_STOCK}/${warehouseId}/stock`;
+  console.log("[Warehouseapi] updateWarehouseStock →", { warehouseId, body: data, path });
+  return apiConnector("POST", path, data).then((res) => {
+    console.log("[Warehouseapi] updateWarehouseStock ←", {
+      warehouseId,
+      success: res?.success,
+      message: res?.message,
+      data: res?.data,
+    });
+    return res;
+  });
 };

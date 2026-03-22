@@ -11,6 +11,13 @@ import { Search, Loader2, Trash2, X } from "lucide-react";
 
 const PINCODE_PAGE_SIZE = 10;
 
+/** Only these delivery types are supported in this form (matches backend expectations). */
+const DELIVERY_TYPE_OPTIONS = [
+  { value: "NORMAL", label: "NORMAL" },
+  { value: "ONE_DAY", label: "ONE_DAY" },
+  { value: "90_MIN", label: "90_MIN" },
+];
+
 const defaultFormData = {
   deliveryType: "",
   min: "",
@@ -109,7 +116,10 @@ const formRef = useRef(null);
 
   const validate = () => {
     const errors = {};
-    if (!formData.deliveryType?.trim()) errors.deliveryType = "Delivery type is required";
+    const dt = formData.deliveryType?.trim() || "";
+    if (!dt) errors.deliveryType = "Delivery type is required";
+    else if (!DELIVERY_TYPE_OPTIONS.some((o) => o.value === dt))
+      errors.deliveryType = "Select NORMAL, ONE_DAY, or 90_MIN";
     if (!formData.min || Number(formData.min) <= 0) errors.min = "Min duration must be > 0";
     if (!formData.max || Number(formData.max) <= 0) errors.max = "Max duration must be > 0";
     if (Number(formData.min) > Number(formData.max)) errors.max = "Max must be ≥ Min";
@@ -259,9 +269,11 @@ const formRef = useRef(null);
               }`}
             >
               <option value="">Select type</option>
-              <option value="NORMAL">NORMAL</option>
-              <option value="ONE_DAY">ONE_DAY</option>
-              <option value="90_MIN">90_MIN</option>
+              {DELIVERY_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
             {formErrors.deliveryType && (
               <p className="mt-1 text-xs text-red-600">{formErrors.deliveryType}</p>

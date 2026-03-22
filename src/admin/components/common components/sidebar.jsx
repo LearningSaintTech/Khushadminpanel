@@ -644,6 +644,19 @@ const Sidebar = () => {
             </Link>
 
             <Link
+              to="/admin/contact-us"
+              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                isActive("/admin/contact-us") ? "bg-white/10 text-white" : ""
+              }`}
+            >
+              <Mail
+                size={20}
+                className="text-gray-400 group-hover:text-black"
+              />
+              <span>Contact Requests</span>
+            </Link>
+
+            <Link
               to="/admin/delivery"
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
                 isActive("/admin/delivery") ? "bg-white/10 text-white" : ""

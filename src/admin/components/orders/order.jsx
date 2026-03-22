@@ -32,10 +32,175 @@ import {
   UserCircle,
   UserMinus,
   UserPlus,
+  ExternalLink,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
+
+/** Matches delivery rules + backend `items[].delivery.type` filter (NORMAL, ONE_DAY, 90_MIN) */
+const DELIVERY_TYPE_TABS = [
+  { value: "", label: "All" },
+  { value: "NORMAL", label: "Normal" },
+  { value: "ONE_DAY", label: "One day" },
+  { value: "90_MIN", label: "90 min" },
+];
+
+/** apiConnector rejects with a string message; success body is { success, message, data } */
+const apiErrMessage = (err, fallback) =>
+  typeof err === "string" ? err : err?.response?.data?.message || err?.message || fallback;
+
+/** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
+const ORDERS_DEBUG =
+  import.meta.env.DEV || String(import.meta.env.VITE_DEBUG_ORDERS ?? "") === "true";
+
+const dbgOrders = (label, ...rest) => {
+  if (!ORDERS_DEBUG) return;
+  if (rest.length === 0) console.log(`[Orders] ${label}`);
+  else console.log(`[Orders] ${label}`, ...rest);
+};
+
+const dbgOrdersVerbose = (label, ...rest) => {
+  if (!ORDERS_DEBUG) return;
+  console.debug(`[Orders] ${label}`, ...rest);
+};
+
+const isNormalDeliveryLine = (item) =>
+  String(item?.delivery?.type || "").toUpperCase() === "NORMAL";
+
+/** Shiprocket / tracking for a line item (NORMAL courier shipments). */
+const getNormalDeliveryShiprocket = (item) => {
+  if (!item || !isNormalDeliveryLine(item)) return null;
+  const sr = item.shiprocket || {};
+  const awb = sr.awbCode || item.trackingId || null;
+  const hasAny =
+    awb ||
+    sr.orderId != null ||
+    sr.shipmentId != null ||
+    (sr.status && String(sr.status).trim()) ||
+    (item.courier && String(item.courier).trim());
+  if (!hasAny) return null;
+  return {
+    awb,
+    trackingUrl:
+      sr.trackingUrl ||
+      (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
+    status: sr.status || null,
+    shiprocketOrderId: sr.orderId ?? null,
+    shipmentId: sr.shipmentId ?? null,
+    courier: item.courier || null,
+    labelUrl: sr.labelUrl || null,
+    invoiceUrl: sr.invoiceUrl || null,
+  };
+};
+
+const getOrderNormalShiprocketPreview = (order) => {
+  const items = order?.items || [];
+  const rows = items.map((it) => getNormalDeliveryShiprocket(it)).filter(Boolean);
+  if (rows.length === 0) return null;
+  return { primary: rows[0], count: rows.length };
+};
+
+/** Merge admin item-row shape (deliveryType + nested item) into a line for shiprocket helpers */
+const shiprocketFromItemRow = (row) => {
+  if (!row) return null;
+  const line = {
+    ...(row.item && typeof row.item === "object" ? row.item : {}),
+    delivery: { type: row.deliveryType || row.item?.delivery?.type },
+  };
+  return getNormalDeliveryShiprocket(line);
+};
+
+function ShiprocketDetails({ sr, compact }) {
+  if (!sr) return <span className="text-gray-400">—</span>;
+  if (compact) {
+    return (
+      <div className="max-w-56 space-y-0.5">
+        {sr.trackingUrl ? (
+          <a
+            href={sr.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 hover:underline wrap-break-word"
+          >
+            <ExternalLink size={12} className="shrink-0" />
+            {sr.awb || "Track"}
+          </a>
+        ) : (
+          <span className="font-mono text-xs text-gray-800">{sr.awb || "—"}</span>
+        )}
+        {sr.status && (
+          <p className="truncate text-[11px] text-gray-500" title={sr.status}>
+            {sr.status}
+          </p>
+        )}
+        {sr.courier && (
+          <p className="truncate text-[11px] text-gray-400" title={sr.courier}>
+            {sr.courier}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5 text-sm text-gray-800">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-xs font-semibold uppercase text-sky-700">Shiprocket</span>
+        {sr.status && (
+          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">{sr.status}</span>
+        )}
+      </div>
+      {sr.awb && (
+        <p className="font-mono text-xs">
+          AWB:{" "}
+          {sr.trackingUrl ? (
+            <a
+              href={sr.trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+            >
+              {sr.awb}
+              <ExternalLink size={12} />
+            </a>
+          ) : (
+            sr.awb
+          )}
+        </p>
+      )}
+      {sr.courier && <p className="text-xs text-gray-600">Courier: {sr.courier}</p>}
+      {(sr.shiprocketOrderId != null || sr.shipmentId != null) && (
+        <p className="text-xs text-gray-500">
+          {sr.shiprocketOrderId != null && <>SR order: {sr.shiprocketOrderId}</>}
+          {sr.shiprocketOrderId != null && sr.shipmentId != null && " · "}
+          {sr.shipmentId != null && <>Shipment: {sr.shipmentId}</>}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1">
+        {sr.labelUrl && (
+          <a
+            href={sr.labelUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Label
+          </a>
+        )}
+        {sr.invoiceUrl && (
+          <a
+            href={sr.invoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-indigo-600 hover:underline"
+          >
+            Invoice
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const Orders = () => {
   const [viewMode, setViewMode] = useState(VIEW_ORDER); // "order" | "item"
@@ -52,6 +217,8 @@ const Orders = () => {
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
+  /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
+  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Item-based view state
@@ -121,35 +288,37 @@ const Orders = () => {
         dateTo || undefined,
         sortBy,
         sortOrder,
+        deliveryTypeFilter || undefined
       );
-      const data = res?.data || {};
-      setOrders(data.orders || data.data || []);
-      setPagination((prev) => ({
-        ...prev,
-        total: data.total || 0,
-        totalPages:
-          data.totalPages ||
-          Math.ceil((data.count || data.orders?.length || 0) / prev.limit),
-      }));
+      // Backend: successResponse → { success, message, data: { orders, pagination } }
+      dbgOrders("getOrders:response", res);
+      const payload = res?.data ?? {};
+      const list = payload.orders ?? payload.data ?? [];
+      dbgOrdersVerbose("getOrders:payload", payload);
+      dbgOrders("getOrders:summary", {
+        rowCount: Array.isArray(list) ? list.length : 0,
+        pagination: payload.pagination,
+      });
+      setOrders(Array.isArray(list) ? list : []);
+      setPagination((prev) => {
+        const total = payload.pagination?.total ?? payload.total ?? 0;
+        const limit = prev.limit || 10;
+        const totalPages =
+          payload.pagination?.totalPages ??
+          (total > 0 ? Math.max(1, Math.ceil(total / limit)) : 1);
+        return {
+          ...prev,
+          total,
+          totalPages: Math.max(1, totalPages),
+        };
+      });
     } catch (err) {
       console.error("Failed to fetch orders:", err);
-      setError(
-        err?.response?.data?.message ||
-          "Failed to load orders. Please try again.",
-      );
+      setError(apiErrMessage(err, "Failed to load orders. Please try again."));
     } finally {
       setLoading(false);
     }
-  }, [
-    pagination.page,
-    pagination.limit,
-    search,
-    statusFilter,
-    dateFrom,
-    dateTo,
-    sortBy,
-    sortOrder,
-  ]);
+  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter]);
 
   useEffect(() => {
     fetchOrders();
@@ -165,23 +334,30 @@ const Orders = () => {
         itemSearch,
         "",
         itemStatusFilter,
+        "",
+        "",
+        deliveryTypeFilter || undefined
       );
-      const data = res?.data || {};
-      setOrderItems(data.items || []);
+      dbgOrders("getOrderItems:response", res);
+      const payload = res?.data ?? {};
+      dbgOrdersVerbose("getOrderItems:payload", payload);
+      dbgOrders("getOrderItems:summary", {
+        rowCount: Array.isArray(payload.items) ? payload.items.length : 0,
+        pagination: payload.pagination,
+      });
+      setOrderItems(Array.isArray(payload.items) ? payload.items : []);
       setItemPagination((prev) => ({
         ...prev,
-        total: data.pagination?.total ?? 0,
-        totalPages: data.pagination?.totalPages ?? 1,
+        total: payload.pagination?.total ?? 0,
+        totalPages: Math.max(1, payload.pagination?.totalPages ?? 1),
       }));
     } catch (err) {
       console.error("Failed to fetch order items:", err);
-      setItemError(
-        err?.response?.data?.message || "Failed to load order items.",
-      );
+      setItemError(apiErrMessage(err, "Failed to load order items."));
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -196,21 +372,24 @@ const Orders = () => {
       setOrderAssignments(null);
       // Fetch with page 1 and high limit so all items in the order are returned
       const res = await getSingleOrder(orderId, 1, itemLimit);
-      setSelectedOrder(res?.data || null);
+      dbgOrders("getSingleOrder:response", { orderId, res });
+      const singlePayload = res?.data ?? res;
+      dbgOrdersVerbose("getSingleOrder:order", singlePayload);
+      setSelectedOrder(singlePayload || null);
       // Fetch assignment view for Reassign / Remove driver
       try {
         const assignRes = await getAssignmentView(orderId);
+        dbgOrders("getAssignmentView:response", { orderId, assignRes });
         const assignData = assignRes?.data ?? assignRes;
+        dbgOrdersVerbose("getAssignmentView:data", assignData);
         setOrderAssignments(assignData || null);
       } catch (e) {
-        console.warn("Assignment view failed:", e);
+        if (ORDERS_DEBUG) console.warn("[Orders] getAssignmentView failed:", e);
         setOrderAssignments(null);
       }
     } catch (err) {
       console.error("Failed to load order:", err);
-      setOrderError(
-        err?.response?.data?.message || "Could not load order details.",
-      );
+      setOrderError(apiErrMessage(err, "Could not load order details."));
     } finally {
       setOrderLoading(false);
     }
@@ -300,11 +479,16 @@ const Orders = () => {
     setAssignmentModalOpen(true);
     listDeliveryAgents(1, 100)
       .then((res) => {
-        const data = res?.data || res;
+        dbgOrders("listDeliveryAgents:response", res);
+        const data = res?.data ?? res;
         const list = data?.deliveryAgents ?? data?.data ?? [];
+        dbgOrders("listDeliveryAgents:summary", { count: Array.isArray(list) ? list.length : 0 });
         setDeliveryAgentsList(Array.isArray(list) ? list : []);
       })
-      .catch(() => setDeliveryAgentsList([]));
+      .catch((e) => {
+        if (ORDERS_DEBUG) console.warn("[Orders] listDeliveryAgents failed:", e);
+        setDeliveryAgentsList([]);
+      });
   };
 
   const handleAssignmentSubmit = async () => {
@@ -868,6 +1052,31 @@ const Orders = () => {
           </button>
         </div>
 
+        {/* Delivery type — filters both list APIs on the backend */}
+        <div className="mb-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery type</p>
+          <div className="flex flex-wrap gap-2">
+            {DELIVERY_TYPE_TABS.map((tab) => (
+              <button
+                key={tab.value || "all"}
+                type="button"
+                onClick={() => {
+                  setDeliveryTypeFilter(tab.value);
+                  setPagination((p) => ({ ...p, page: 1 }));
+                  setItemPagination((p) => ({ ...p, page: 1 }));
+                }}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                  deliveryTypeFilter === tab.value
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error && viewMode === VIEW_ORDER && (
           <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
             <AlertCircle size={20} />
@@ -979,162 +1188,130 @@ const Orders = () => {
                 )}
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-                <table className="min-w-full table-auto divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+              <table className="min-w-full table-auto divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Order</th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Customer</th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Phone</th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Items</th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Total</th>
+                    <th className="px-4 py-4 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+                    <th className="px-4 py-4 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                      Shiprocket
+                      <span className="block font-normal normal-case text-gray-400">(normal)</span>
+                    </th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Date</th>
+                    <th className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">View</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {loading ? (
                     <tr>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Order
-                      </th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Customer
-                      </th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Phone
-                      </th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Items
-                      </th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Total
-                      </th>
-                      <th className="px-4 py-4 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Status
-                      </th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Date
-                      </th>
-                      <th className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        View
-                      </th>
+                      <td colSpan={9} className="py-16 text-center text-gray-500">
+                        Loading orders…
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 bg-white">
-                    {loading ? (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="py-16 text-center text-gray-500"
-                        >
-                          Loading orders…
+                  ) : orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-16 text-center text-gray-500">
+                        No orders found
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.map((order) => (
+                      <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="wrap-break-word px-4 py-4 font-medium text-indigo-600">
+                          #{order.orderId || order._id?.slice(-8).toUpperCase()}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {order.user?.name || order.address?.name || "—"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-700">
+                          {order.user?.countryCode || ""}
+                          {order.user?.phoneNumber || order.address?.phone || "—"}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-600">
+                          {order.totalItems || order.totalQuantity || order.items?.length || "?"}
+                        </td>
+                        <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                          ₹{(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-4 py-4 min-w-[160px]">
+                          {getStatusBadge(order.status || order.orderStatus)}
+                        </td>
+                        <td className="px-4 py-4 align-top text-sm">
+                          {(() => {
+                            const prev = getOrderNormalShiprocketPreview(order);
+                            if (!prev) {
+                              return <span className="text-gray-400">—</span>;
+                            }
+                            return (
+                              <div>
+                                <ShiprocketDetails sr={prev.primary} compact />
+                                {prev.count > 1 && (
+                                  <p className="mt-1 text-[11px] text-gray-400">{prev.count} lines</p>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-500">
+                          {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <button
+                          onClick={() => {
+                            const customOrderId = order.orderId;
+                            if (!customOrderId) {
+                              setError("Order is missing valid orderId");
+                              return;
+                            }
+                            setSelectedItemIdFromListView(null);
+                            setItemPage(1);
+                            fetchSingleOrder(customOrderId);
+                          }}
+                            className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
+                            title="View order details"
+                          >
+                            <Eye size={18} />
+                          </button>
                         </td>
                       </tr>
-                    ) : orders.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="py-16 text-center text-gray-500"
-                        >
-                          No orders found
-                        </td>
-                      </tr>
-                    ) : (
-                      orders.map((order) => (
-                        <tr
-                          key={order._id}
-                          className="hover:bg-gray-50/70 transition-colors"
-                        >
-                          <td className="break-words px-4 py-4 font-medium text-indigo-600">
-                            #
-                            {order.orderId ||
-                              order._id?.slice(-8).toUpperCase()}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {order.user?.name || order.address?.name || "—"}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-700">
-                            {order.user?.countryCode || ""}
-                            {order.user?.phoneNumber ||
-                              order.address?.phone ||
-                              "—"}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-600">
-                            {order.totalItems ||
-                              order.totalQuantity ||
-                              order.items?.length ||
-                              "?"}
-                          </td>
-                          <td className="px-4 py-4 text-sm font-medium text-gray-900">
-                            ₹
-                            {(
-                              order.totalAmount ||
-                              order.pricing?.finalPayable ||
-                              0
-                            ).toLocaleString("en-IN")}
-                          </td>
-                          <td className="px-4 py-4 min-w-[160px]">
-                            {getStatusBadge(order.status || order.orderStatus)}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-500">
-                            {new Date(order.createdAt).toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              },
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            <button
-                              onClick={() => {
-                                const customOrderId = order.orderId;
-                                if (!customOrderId) {
-                                  setError("Order is missing valid orderId");
-                                  return;
-                                }
-                                setSelectedItemIdFromListView(null);
-                                setItemPage(1);
-                                fetchSingleOrder(customOrderId);
-                              }}
-                              className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
-                              title="View order details"
-                            >
-                              <Eye size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-                <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
-                  <div className="text-sm text-gray-700">
-                    Page <span className="font-medium">{pagination.page}</span>{" "}
-                    of{" "}
-                    <span className="font-medium">
-                      {pagination.totalPages || 1}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={pagination.page <= 1 || loading}
-                      onClick={() =>
-                        setPagination((p) => ({
-                          ...p,
-                          page: Math.max(1, p.page - 1),
-                        }))
-                      }
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                    >
-                      <ChevronLeft size={16} /> Prev
-                    </button>
-                    <button
-                      disabled={
-                        pagination.page >= pagination.totalPages || loading
-                      }
-                      onClick={() =>
-                        setPagination((p) => ({ ...p, page: p.page + 1 }))
-                      }
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                    >
-                      Next <ChevronRight size={16} />
-                    </button>
-                  </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
+                <div className="text-sm text-gray-700">
+                  Page <span className="font-medium">{pagination.page}</span> of{" "}
+                  <span className="font-medium">{pagination.totalPages || 1}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={pagination.page <= 1 || loading}
+                    onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                  >
+                    <ChevronLeft size={16} /> Prev
+                  </button>
+                  <button
+                    disabled={pagination.page >= pagination.totalPages || loading}
+                    onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
                 </div>
               </div>
+            </div>
             </>
           ) : (
             <>
@@ -1203,6 +1380,12 @@ const Orders = () => {
                             <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                               Order #{row.orderId}
                             </span>
+                            {row.deliveryType ? (
+                              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                {DELIVERY_TYPE_TABS.find((t) => t.value === row.deliveryType)?.label ??
+                                  String(row.deliveryType).replace(/_/g, " ")}
+                              </span>
+                            ) : null}
                             <span className="text-sm font-medium text-gray-700">
                               {row.user?.name || row.address?.name || "—"}
                             </span>
@@ -1236,6 +1419,23 @@ const Orders = () => {
                                 : "—"}
                             </span>
                           </div>
+                          {String(row.deliveryType || "").toUpperCase() === "NORMAL" && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 mt-1">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900 mb-1.5">
+                                Shiprocket
+                              </p>
+                              {(() => {
+                                const sr = shiprocketFromItemRow(row);
+                                return sr ? (
+                                  <ShiprocketDetails sr={sr} />
+                                ) : (
+                                  <p className="text-xs text-amber-800">
+                                    No AWB / tracking yet (normal delivery — create shipment when ready).
+                                  </p>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 shrink-0">
                           <div className="text-right">
@@ -1434,205 +1634,152 @@ const Orders = () => {
                   </div>
                 )}
 
-                {fromItemList && focusedItem ? (
-                  /* Item-based flow: only this item's status and details */
-                  <div className="p-6">
-                    <div className="max-w-2xl space-y-6">
-                      {/* Product card */}
-                      <div className="rounded-xl border-2 border-gray-200 bg-white p-6 shadow-sm">
-                        <div className="flex flex-wrap items-start gap-6">
-                          {focusedItem.variant?.imageUrl && (
-                            <img
-                              src={focusedItem.variant.imageUrl}
-                              alt={focusedItem.sku}
-                              className="h-28 w-28 rounded-xl object-cover border-2 border-gray-100 shadow-inner"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
-                              Order #{selectedOrder?.orderId}
-                            </p>
-                            <h3 className="text-xl font-bold text-gray-900 mt-1">
-                              {focusedItem.sku ||
-                                focusedItem.variant?.sku ||
-                                "—"}
-                            </h3>
-                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600">
-                              {focusedItem.variant?.color && (
-                                <span>Color: {focusedItem.variant.color}</span>
-                              )}
-                              {focusedItem.variant?.size && (
-                                <span>Size: {focusedItem.variant.size}</span>
-                              )}
-                            </div>
-                            <div className="mt-3 flex items-baseline gap-4 text-sm">
-                              <span className="font-semibold text-gray-800">
-                                Qty: {focusedItem.quantity}
-                              </span>
-                              <span className="text-gray-600">
-                                ₹
-                                {(focusedItem.unitPrice || 0).toLocaleString(
-                                  "en-IN",
-                                )}{" "}
-                                each
-                              </span>
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">
-                              Current status
-                            </p>
-                            {getStatusBadge(focusedItem.status)}
-                          </div>
+            {fromItemList && focusedItem ? (
+              /* Item-based flow: only this item's status and details */
+              <div className="p-6">
+                <div className="max-w-2xl space-y-6">
+                  {/* Product card */}
+                  <div className="rounded-xl border-2 border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="flex flex-wrap items-start gap-6">
+                      {focusedItem.variant?.imageUrl && (
+                        <img
+                          src={focusedItem.variant.imageUrl}
+                          alt={focusedItem.sku}
+                          className="h-28 w-28 rounded-xl object-cover border-2 border-gray-100 shadow-inner"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Order #{selectedOrder?.orderId}</p>
+                        <h3 className="text-xl font-bold text-gray-900 mt-1">
+                          {focusedItem.sku || focusedItem.variant?.sku || "—"}
+                        </h3>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600">
+                          {focusedItem.variant?.color && <span>Color: {focusedItem.variant.color}</span>}
+                          {focusedItem.variant?.size && <span>Size: {focusedItem.variant.size}</span>}
+                        </div>
+                        <div className="mt-3 flex items-baseline gap-4 text-sm">
+                          <span className="font-semibold text-gray-800">Qty: {focusedItem.quantity}</span>
+                          <span className="text-gray-600">₹{(focusedItem.unitPrice || 0).toLocaleString("en-IN")} each</span>
                         </div>
                       </div>
-                      {(() => {
-                        const driver = getDriverPartnerDisplay(focusedItem);
-                        return driver ? (
-                          <div className="flex items-center gap-4 rounded-xl border-2 border-indigo-100 bg-indigo-50/80 px-5 py-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
-                              <UserCircle
-                                size={24}
-                                className="text-indigo-600"
-                              />
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
-                                Driver partner
-                              </p>
-                              <p className="text-base font-semibold text-gray-900 mt-0.5">
-                                {driver.name}
-                                {driver.phone && (
-                                  <span className="font-normal text-gray-600 ml-1">
-                                    · {driver.phone}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-                      {/* Change status card */}
-                      <div className="rounded-xl border-2 border-gray-200 bg-gray-50/50 p-6">
-                        <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                          <RefreshCw size={16} className="text-indigo-600" />
-                          Update item status
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <select
-                            value={focusedItem.status || "CREATED"}
-                            onChange={(e) => {
-                              const newVal = e.target.value;
-                              handleUpdateItemStatus(
-                                selectedOrder.orderId,
-                                focusedItem.itemId,
-                                newVal,
-                              );
-                            }}
-                            disabled={
-                              updatingItemId ===
-                              String(focusedItem.itemId || focusedItem._id)
-                            }
-                            className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
-                          >
-                            {statusOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                          {updatingItemId ===
-                            String(focusedItem.itemId || focusedItem._id) && (
-                            <span className="flex items-center gap-2 text-sm text-indigo-600">
-                              <RefreshCw size={18} className="animate-spin" />
-                              Updating…
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-2 text-xs text-gray-500">
-                          Select a new status to update this line item.
-                        </p>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Current status</p>
+                        {getStatusBadge(focusedItem.status)}
                       </div>
-                      {/* Status history */}
-                      {focusedItem.statusHistory &&
-                        focusedItem.statusHistory.length > 0 && (
-                          <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-                            <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                              <Clock size={16} className="text-gray-500" />
-                              Status history
-                            </h4>
-                            <ul className="space-y-0">
-                              {focusedItem.statusHistory.map((h, i) => (
-                                <li
-                                  key={i}
-                                  className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-sm border-b border-gray-100 last:border-0 last:pb-0 first:pt-0"
-                                >
-                                  <span className="font-semibold text-gray-900 min-w-[140px]">
-                                    {h.status}
-                                  </span>
-                                  {h.previousStatus && (
-                                    <span className="text-blue-700">
-                                      ← {h.previousStatus}
-                                    </span>
-                                  )}
-                                  {h.notes && (
-                                    <span className="text-gray-500 italic">
-                                      "{h.notes}"
-                                    </span>
-                                  )}
-                                  {h.createdAt && (
-                                    <span className="ml-auto text-xs text-gray-500 tabular-nums">
-                                      {new Date(h.createdAt).toLocaleString(
-                                        "en-IN",
-                                        {
-                                          dateStyle: "short",
-                                          timeStyle: "short",
-                                        },
-                                      )}
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
                     </div>
                   </div>
-                ) : fromItemList && orderLoading ? (
-                  <div className="p-12 text-center text-gray-500">
-                    Loading item details…
-                  </div>
-                ) : fromItemList && !focusedItem ? (
-                  <div className="p-6 text-center text-gray-500">
-                    Item not found in this order.
-                  </div>
-                ) : !fromItemList ? (
-                  <div className="p-6 space-y-8">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <User size={18} className="text-indigo-600" />
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Customer
-                          </h4>
+                  {(() => {
+                    const driver = getDriverPartnerDisplay(focusedItem);
+                    return driver ? (
+                      <div className="flex items-center gap-4 rounded-xl border-2 border-indigo-100 bg-indigo-50/80 px-5 py-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
+                          <UserCircle size={24} className="text-indigo-600" />
                         </div>
-                        <div className="space-y-2 text-sm">
-                          <p>
-                            <strong>Name:</strong>{" "}
-                            {selectedOrder?.userId?.name || "—"}
-                          </p>
-                          <p>
-                            <strong>Phone:</strong>{" "}
-                            {selectedOrder?.userId?.countryCode || ""}
-                            {selectedOrder?.userId?.phoneNumber || "—"}
-                          </p>
-                          <p>
-                            <strong>Email:</strong>{" "}
-                            {selectedOrder?.userId?.email || "—"}
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Driver partner</p>
+                          <p className="text-base font-semibold text-gray-900 mt-0.5">
+                            {driver.name}
+                            {driver.phone && <span className="font-normal text-gray-600 ml-1">· {driver.phone}</span>}
                           </p>
                         </div>
                       </div>
+                    ) : null;
+                  })()}
+                  {isNormalDeliveryLine(focusedItem) && (
+                    <div className="rounded-xl border-2 border-sky-200 bg-sky-50/90 p-5 shadow-sm">
+                      <h4 className="text-sm font-semibold text-sky-900 mb-3 flex items-center gap-2">
+                        <Truck size={16} className="text-sky-700" />
+                        Shiprocket (normal delivery)
+                      </h4>
+                      {(() => {
+                        const sr = getNormalDeliveryShiprocket(focusedItem);
+                        return sr ? (
+                          <ShiprocketDetails sr={sr} />
+                        ) : (
+                          <p className="text-sm text-amber-800">
+                            No Shiprocket shipment linked yet. After you create the shipment, AWB and tracking will
+                            appear here.
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {/* Change status card */}
+                  <div className="rounded-xl border-2 border-gray-200 bg-gray-50/50 p-6">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <RefreshCw size={16} className="text-indigo-600" />
+                      Update item status
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <select
+                        value={focusedItem.status || "CREATED"}
+                        onChange={(e) => {
+                          const newVal = e.target.value;
+                          handleUpdateItemStatus(selectedOrder.orderId, focusedItem.itemId, newVal);
+                        }}
+                        disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
+                        className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
+                      >
+                        {statusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      {updatingItemId === String(focusedItem.itemId || focusedItem._id) && (
+                        <span className="flex items-center gap-2 text-sm text-indigo-600">
+                          <RefreshCw size={18} className="animate-spin" />
+                          Updating…
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">Select a new status to update this line item.</p>
+                  </div>
+                  {/* Status history */}
+                  {focusedItem.statusHistory && focusedItem.statusHistory.length > 0 && (
+                    <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+                      <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        <Clock size={16} className="text-gray-500" />
+                        Status history
+                      </h4>
+                      <ul className="space-y-0">
+                        {focusedItem.statusHistory.map((h, i) => (
+                          <li
+                            key={i}
+                            className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-sm border-b border-gray-100 last:border-0 last:pb-0 first:pt-0"
+                          >
+                            <span className="font-semibold text-gray-900 min-w-[140px]">{h.status}</span>
+                            {h.previousStatus && <span className="text-blue-700">← {h.previousStatus}</span>}
+                            {h.notes && <span className="text-gray-500 italic">"{h.notes}"</span>}
+                            {h.createdAt && (
+                              <span className="ml-auto text-xs text-gray-500 tabular-nums">
+                                {new Date(h.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : fromItemList && orderLoading ? (
+              <div className="p-12 text-center text-gray-500">Loading item details…</div>
+            ) : fromItemList && !focusedItem ? (
+              <div className="p-6 text-center text-gray-500">Item not found in this order.</div>
+            ) : !fromItemList ? (
+            <div className="p-6 space-y-8">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <User size={18} className="text-indigo-600" />
+                    <h4 className="text-sm font-semibold text-gray-700">Customer</h4>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p><strong>Name:</strong> {selectedOrder?.userId?.name || "—"}</p>
+                    <p><strong>Phone:</strong> {selectedOrder?.userId?.countryCode || ""}{selectedOrder?.userId?.phoneNumber || "—"}</p>
+                    <p><strong>Email:</strong> {selectedOrder?.userId?.email || "—"}</p>
+                  </div>
+                </div>
 
                       <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                         <div className="flex items-center gap-2 mb-3">
@@ -2000,224 +2147,153 @@ const Orders = () => {
                         )}
                       </div>
 
-                      {orderLoading ? (
-                        <div className="py-12 text-center text-gray-500">
-                          Loading items…
-                        </div>
-                      ) : !selectedOrder?.items?.length ? (
-                        <div className="py-12 text-center text-gray-500">
-                          No items found
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto rounded-lg border border-gray-200">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-3.5 text-left">
-                                  <input
-                                    type="checkbox"
-                                    checked={
-                                      selectedOrder.items.length > 0 &&
-                                      selectedOrder.items.every((it) =>
-                                        selectedItemIds.includes(
-                                          String(it.itemId || it._id),
-                                        ),
-                                      )
-                                    }
-                                    onChange={selectAllOnPage}
-                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                </th>
-                                <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Product
-                                </th>
-                                <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Qty
-                                </th>
-                                <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Price
-                                </th>
-                                <th className="px-5 py-3.5 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Status
-                                </th>
-                                <th className="px-5 py-3.5 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Driver partner
-                                </th>
-                                <th className="px-5 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">
-                                  Change Status
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 bg-white">
-                              {selectedOrder.items.map((item) => {
-                                const itemId = String(item.itemId || item._id);
-                                const isUpdating = updatingItemId === itemId;
-                                const isSelected =
-                                  selectedItemIds.includes(itemId);
-                                const driverDisplay =
-                                  getDriverPartnerDisplay(item);
-                                return (
-                                  <tr
-                                    key={itemId}
-                                    className={`hover:bg-gray-50/60 ${isSelected ? "bg-indigo-50/50" : ""}`}
+                {orderLoading ? (
+                  <div className="py-12 text-center text-gray-500">Loading items…</div>
+                ) : !selectedOrder?.items?.length ? (
+                  <div className="py-12 text-center text-gray-500">No items found</div>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3.5 text-left">
+                            <input
+                              type="checkbox"
+                              checked={
+                                selectedOrder.items.length > 0 &&
+                                selectedOrder.items.every((it) =>
+                                  selectedItemIds.includes(String(it.itemId || it._id))
+                                )
+                              }
+                              onChange={selectAllOnPage}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </th>
+                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Product</th>
+                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Qty</th>
+                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Price</th>
+                          <th className="px-5 py-3.5 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
+                          <th className="px-5 py-3.5 min-w-[200px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                            Shiprocket
+                            <span className="block font-normal normal-case text-gray-400">(normal only)</span>
+                          </th>
+                          <th className="px-5 py-3.5 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Driver partner</th>
+                          <th className="px-5 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Change Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {selectedOrder.items.map((item) => {
+                          const itemId = String(item.itemId || item._id);
+                          const isUpdating = updatingItemId === itemId;
+                          const isSelected = selectedItemIds.includes(itemId);
+                          const driverDisplay = getDriverPartnerDisplay(item);
+                          return (
+                            <tr key={itemId} className={`hover:bg-gray-50/60 ${isSelected ? "bg-indigo-50/50" : ""}`}>
+                              <td className="px-4 py-4">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleItemSelection(itemId)}
+                                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center gap-3">
+                                  {item.variant?.imageUrl && (
+                                    <img
+                                      src={item.variant.imageUrl}
+                                      alt={item.sku}
+                                      className="h-12 w-12 rounded object-cover"
+                                    />
+                                  )}
+                                  <div>
+                                    <div className="font-medium text-gray-900">
+                                      {item.sku || item.variant?.sku || "—"}
+                                    </div>
+                                    <div className="mt-0.5 text-xs text-gray-500">
+                                      {item.variant?.color && `Color: ${item.variant.color}`}
+                                      {item.variant?.size && ` • Size: ${item.variant.size}`}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-5 py-4 text-gray-700">{item.quantity}</td>
+                              <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-900">
+                                ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
+                              </td>
+                              <td className="px-5 py-4 min-w-[160px]">
+                                {getStatusBadge(item.status)}
+                              </td>
+                              <td className="px-5 py-4 min-w-[200px] align-top text-sm">
+                                {isNormalDeliveryLine(item) ? (
+                                  (() => {
+                                    const sr = getNormalDeliveryShiprocket(item);
+                                    return sr ? (
+                                      <ShiprocketDetails sr={sr} />
+                                    ) : (
+                                      <span className="text-xs text-amber-800">
+                                        Normal delivery — no AWB / tracking yet
+                                      </span>
+                                    );
+                                  })()
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-4 min-w-[140px] text-sm text-gray-700">
+                                {driverDisplay ? (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <UserCircle size={14} className="text-indigo-600 shrink-0" />
+                                    {driverDisplay.name}
+                                    {driverDisplay.phone && (
+                                      <span className="text-gray-500 text-xs">· {driverDisplay.phone}</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="whitespace-nowrap px-5 py-4 text-center">
+                                <div className="relative inline-block">
+                                  <select
+                                    value={item.status || "CREATED"}
+                                    onChange={(e) => {
+                                      const newVal = e.target.value;
+                                      handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
+                                    }}
+                                    disabled={isUpdating}
+                                    className={`rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 ${
+                                      isUpdating ? "opacity-60 cursor-wait" : ""
+                                    }`}
                                   >
-                                    <td className="px-4 py-4">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() =>
-                                          toggleItemSelection(itemId)
-                                        }
-                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                      />
-                                    </td>
-                                    <td className="px-5 py-4">
-                                      <div className="flex items-center gap-3">
-                                        {item.variant?.imageUrl && (
-                                          <img
-                                            src={item.variant.imageUrl}
-                                            alt={item.sku}
-                                            className="h-12 w-12 rounded object-cover"
-                                          />
-                                        )}
-
-                                        <div>
-                                          <div className="font-medium text-gray-900">
-                                            {item.sku ||
-                                              item.variant?.sku ||
-                                              "—"}
-                                          </div>
-                                          <div className="mt-0.5 text-xs text-gray-500">
-                                            {item.variant?.color &&
-                                              `Color: ${item.variant.color}`}
-                                            {item.variant?.size &&
-                                              ` • Size: ${item.variant.size}`}
-                                          </div>
-
-                                          {/* 🔥 ADD THIS EXCHANGE SECTION */}
-                                          {item.exchanges?.length > 0 && (
-                                            <div className="mt-2">
-                                              <p className="text-xs font-semibold text-indigo-600 mb-1">
-                                                Exchange Images
-                                              </p>
-
-                                              {item.exchanges.map(
-                                                (exchange, exIndex) => (
-                                                  <div
-                                                    key={exIndex}
-                                                    className="mb-2"
-                                                  >
-                                                    {/* Optional reason */}
-                                                    {exchange.reason && (
-                                                      <p className="text-[11px] text-gray-500 mb-1">
-                                                        Reason:{" "}
-                                                        {exchange.reason}
-                                                      </p>
-                                                    )}
-
-                                                    <div className="flex gap-2 overflow-x-auto">
-                                                      {exchange.images?.map(
-                                                        (img, index) => (
-                                                          <img
-                                                            key={index}
-                                                            src={img}
-                                                            alt="exchange"
-                                                            className="w-14 h-14 object-cover rounded border"
-                                                          />
-                                                        ),
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                ),
-                                              )}
-                                            </div>
-                                          )}
-                                          {/* 🔥 END */}
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-5 py-4 text-gray-700">
-                                      {item.quantity}
-                                    </td>
-                                    <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-900">
-                                      ₹
-                                      {(item.unitPrice || 0).toLocaleString(
-                                        "en-IN",
-                                      )}
-                                    </td>
-                                    <td className="px-5 py-4 min-w-[160px]">
-                                      {getStatusBadge(item.status)}
-                                    </td>
-                                    <td className="px-5 py-4 min-w-[140px] text-sm text-gray-700">
-                                      {driverDisplay ? (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <UserCircle
-                                            size={14}
-                                            className="text-indigo-600 shrink-0"
-                                          />
-                                          {driverDisplay.name}
-                                          {driverDisplay.phone && (
-                                            <span className="text-gray-500 text-xs">
-                                              · {driverDisplay.phone}
-                                            </span>
-                                          )}
-                                        </span>
-                                      ) : (
-                                        <span className="text-gray-400">—</span>
-                                      )}
-                                    </td>
-                                    <td className="whitespace-nowrap px-5 py-4 text-center">
-                                      <div className="relative inline-block">
-                                        <select
-                                          value={item.status || "CREATED"}
-                                          onChange={(e) => {
-                                            const newVal = e.target.value;
-                                            handleUpdateItemStatus(
-                                              selectedOrder.orderId,
-                                              itemId,
-                                              newVal,
-                                            );
-                                          }}
-                                          disabled={isUpdating}
-                                          className={`rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 ${
-                                            isUpdating
-                                              ? "opacity-60 cursor-wait"
-                                              : ""
-                                          }`}
-                                        >
-                                          {statusOptions.map((opt) => (
-                                            <option
-                                              key={opt.value}
-                                              value={opt.value}
-                                            >
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                        {isUpdating && (
-                                          <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded">
-                                            <RefreshCw
-                                              size={16}
-                                              className="animate-spin text-indigo-600"
-                                            />
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
+                                    {statusOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {isUpdating && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded">
+                                      <RefreshCw size={16} className="animate-spin text-indigo-600" />
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                ) : null}
+                )}
+
               </div>
-            );
-          })()
-        )}
+            </div>
+            ) : null}
+          </div>
+        );
+        })()}
+        
 
         {/* Assignment Modal */}
         {assignmentModalOpen && (
