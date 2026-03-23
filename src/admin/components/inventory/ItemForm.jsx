@@ -26,12 +26,19 @@ const ItemForm = () => {
     price: "",
     discountedPrice: "",
     productId: "",
+    skuCodeInputs: {
+      styleNu: "",
+      gender: "",
+      productType: "",
+      fitType: "",
+    },
     defaultColor: "Black",
     isActive: true,
 
     variants: [
       {
         color: { name: "Black", hex: "#000000" },
+        skuCodeInputs: { colour: "" },
         images: [],
         sizes: [
                     { sku: "", size: "XS", stock: "", skuUidSeriesStart: "" },
@@ -131,6 +138,18 @@ const ItemForm = () => {
       errors.discountedPrice = "Discounted price cannot be greater than actual price.";
     }
 
+    // Required fields for SKU generation.
+    // `gender` is optional because `styleNu` may already contain the full style+gender code.
+    if (!form.skuCodeInputs?.styleNu?.trim()) {
+      errors.styleNu = "Style nu is required.";
+    }
+    if (!form.skuCodeInputs?.productType?.trim()) {
+      errors.productType = "Product type is required.";
+    }
+    if (!form.skuCodeInputs?.fitType?.trim()) {
+      errors.fitType = "Fit type is required.";
+    }
+
     return errors;
   };
 
@@ -183,6 +202,15 @@ const ItemForm = () => {
             price: itemData.price || "",
             discountedPrice: itemData.discountedPrice || "",
             productId: itemData.productId || "",
+            skuCodeInputs: {
+              styleNu:
+                itemData?.skuCodeInputs?.styleNu ||
+                itemData?.skuCodeInputs?.styleGender ||
+                "",
+              gender: itemData?.skuCodeInputs?.gender || "",
+              productType: itemData?.skuCodeInputs?.productType || "",
+              fitType: itemData?.skuCodeInputs?.fitType || "",
+            },
             defaultColor: itemData.defaultColor || "Black",
             isActive: itemData.isActive ?? true,
 
@@ -190,7 +218,7 @@ const ItemForm = () => {
               console.log(`[loadItem] Processing variant #${vIdx + 1}:`, variant.color?.name);
 
               const sizeMap = {};
-              const defaultSizes = ["S", "M", "L", "XL"];
+              const defaultSizes = ["XS", "S", "M", "L", "XL", "XXL"];
               if (variant.sizes) {
                 variant.sizes.forEach((size) => {
                   sizeMap[size.size] = {
@@ -210,6 +238,12 @@ const ItemForm = () => {
                   name: variant.color?.name || "",
                   hex: variant.color?.hex || "#000000",
                 },
+                skuCodeInputs: {
+                  colour:
+                    variant?.skuCodeInputs?.colour ||
+                    variant?.skuCodeInputs?.color ||
+                    "",
+                },
                 images: variant.images?.map((img) => img.url || img) || [],
                 sizes: defaultSizes.map(
                   (size) =>
@@ -219,6 +253,7 @@ const ItemForm = () => {
             }) || [
               {
                 color: { name: "Black", hex: "#000000" },
+                skuCodeInputs: { colour: "" },
                 images: [],
                 sizes: [
                   { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
@@ -326,6 +361,7 @@ const ItemForm = () => {
           ...prev.variants,
           {
             color: { name: "", hex: "#000000" },
+            skuCodeInputs: { colour: "" },
             images: [],
             sizes: [
               { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
@@ -649,6 +685,7 @@ const ItemForm = () => {
       formData.append("price", form.price);
       formData.append("discountedPrice", form.discountedPrice || "");
       formData.append("productId", form.productId || "");
+      formData.append("skuCodeInputs", JSON.stringify(form.skuCodeInputs || {}));
       formData.append("categoryId", categoryId);
       formData.append("subcategoryId", subcategoryId);
       formData.append("defaultColor", form.defaultColor);
@@ -673,6 +710,9 @@ const ItemForm = () => {
               hex: colorHex,
               isMultipleImages: variantImages.length > 1,
               totalImages: variantImages.length,
+            },
+            skuCodeInputs: {
+              colour: variant?.skuCodeInputs?.colour || "",
             },
             images: variantImages.map((img, idx) => {
               // For existing URLs, include the URL; for new files, just order
@@ -713,6 +753,35 @@ const ItemForm = () => {
         throw new Error("At least one variant with a color name is required");
       }
       console.log("[ItemForm] handleSave: variantsData:", variantsData);
+
+      // Build the new SKU generation requirement object per size line.
+      // Backend uses this to generate `variants[].sizes[].sku`.
+      const skuIdGenerationInputs = variantsData.flatMap((variant, variantIndex) => {
+        const color =
+          variant?.skuCodeInputs?.colour ||
+          variant?.skuCodeInputs?.color ||
+          variant?.color?.name ||
+          "";
+
+        return (Array.isArray(variant.sizes) ? variant.sizes : []).map((s, sizeIndex) => ({
+          variantIndex,
+          sizeIndex,
+          // SKU generation requirement object (one per variant-size line).
+          // `styleNu` is the "Style no." token; backend will append `gender` (if provided).
+          styleNu: form?.skuCodeInputs?.styleNu || "",
+          gender: form?.skuCodeInputs?.gender || "",
+          productType: form?.skuCodeInputs?.productType || "",
+          fitType: form?.skuCodeInputs?.fitType || "",
+          color,
+          size: s?.size || "",
+          uidStartSeries: s?.skuUidSeriesStart,
+        }));
+      });
+
+      formData.append(
+        "skuIdGenerationInputs",
+        JSON.stringify(skuIdGenerationInputs)
+      );
       formData.append("variants", JSON.stringify(variantsData));
 
       // Variant images - multiple files per color variant (only File objects, not URLs)
@@ -1039,6 +1108,88 @@ const ItemForm = () => {
                   />
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Style nu
+                    </label>
+                    <input
+                      value={form.skuCodeInputs?.styleNu || ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          skuCodeInputs: {
+                            ...(prev.skuCodeInputs || {}),
+                            styleNu: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="e.g. KHM009 (or KH009)"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+
+                    <label className="block text-sm font-semibold text-gray-700 mb-2 mt-4">
+                      Gender
+                    </label>
+                    <input
+                      value={form.skuCodeInputs?.gender || ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          skuCodeInputs: {
+                            ...(prev.skuCodeInputs || {}),
+                            gender: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="e.g. M / F / UNI"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+
+                    {fieldErrors.styleNu && (
+                      <p className="mt-1 text-xs text-red-600">{fieldErrors.styleNu}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Product Type
+                    </label>
+                    <input
+                      value={form.skuCodeInputs?.productType || ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          skuCodeInputs: {
+                            ...(prev.skuCodeInputs || {}),
+                            productType: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="e.g. SHRT or TW-TS"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Fit Type
+                    </label>
+                    <input
+                      value={form.skuCodeInputs?.fitType || ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          skuCodeInputs: {
+                            ...(prev.skuCodeInputs || {}),
+                            fitType: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="e.g. SL / RF / OV"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Short Description
@@ -1214,6 +1365,30 @@ const ItemForm = () => {
                           title="Pick Color"
                         />
                       </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                          Colour:
+                        </label>
+                        <input
+                          type="text"
+                          value={variant?.skuCodeInputs?.colour || ""}
+                          onChange={(e) =>
+                            setForm((prev) => {
+                              const newVariants = [...prev.variants];
+                              newVariants[vIdx] = {
+                                ...newVariants[vIdx],
+                                skuCodeInputs: {
+                                  ...(newVariants[vIdx].skuCodeInputs || {}),
+                                  colour: e.target.value,
+                                },
+                              };
+                              return { ...prev, variants: newVariants };
+                            })
+                          }
+                          placeholder="e.g. BLK / RED / BLU"
+                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        />
+                      </div>
                       {/* Color presets */}
                       <div className="space-y-2">
                         <span className="text-xs font-semibold text-gray-600">Quick colors:</span>
@@ -1349,7 +1524,7 @@ const ItemForm = () => {
               <div className="space-y-8">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
                   <p className="text-sm text-indigo-950">
-                    <span className="font-semibold">UID start (per size):</span> optional first{" "}
+                    <span className="font-semibold">UID start series (per size):</span> optional first{" "}
                     <code className="text-xs bg-white/80 px-1 rounded">sku_uid</code> code when this sellable SKU’s
                     sequence is created. After sequences exist, changing this field does not rewind counters.
                   </p>
@@ -1389,7 +1564,7 @@ const ItemForm = () => {
                             type="number"
                             min={0}
                             step={1}
-                            placeholder="UID series start (optional)"
+                            placeholder="UID start series (optional)"
                             value={size.skuUidSeriesStart ?? ""}
                             onChange={(e) => updateSize(vIdx, sIdx, "skuUidSeriesStart", e.target.value)}
                             className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
