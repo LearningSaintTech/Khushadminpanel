@@ -74,6 +74,8 @@ const orderEndpoints = {
 
   EXCHANGE_DETAILS: (exchangeId) =>
     `/api/exchangeUser/${exchangeId}`,
+  APPROVE_EXCHANGE: (exchangeId) =>
+  `/api/exchangeUser/approve/${exchangeId}`,
 };
 
  
@@ -177,5 +179,12 @@ export const getExchangeDetails = (exchangeId) => {
   return apiConnector(
     "GET",
     orderEndpoints.EXCHANGE_DETAILS(exchangeId)
+  );
+};
+
+export const approveExchange = (exchangeId) => {
+  return apiConnector(
+    "PATCH", // or PATCH depending on backend
+    orderEndpoints.APPROVE_EXCHANGE(exchangeId)
   );
 };

@@ -11,7 +11,9 @@ import {
   assignWholeOrder,
   unassignOrder,
   listDeliveryAgents,
+  approveExchange,
 } from "../../apis/Orderapi";
+import toast from "react-hot-toast";
 import {
   Search,
   ChevronLeft,
@@ -49,6 +51,71 @@ const DELIVERY_TYPE_TABS = [
 /** apiConnector rejects with a string message; success body is { success, message, data } */
 const apiErrMessage = (err, fallback) =>
   typeof err === "string" ? err : err?.response?.data?.message || err?.message || fallback;
+
+const getBackendErrorMessages = (err, fallback) => {
+  const data = err?.response?.data ?? {};
+  const messages = [];
+  const push = (value) => {
+    if (!value) return;
+    const str = String(value).trim();
+    if (!str) return;
+    if (!messages.includes(str)) messages.push(str);
+  };
+
+  if (typeof err === "string") push(err);
+  push(data?.message);
+  push(data?.error);
+  push(err?.message);
+
+  const errors = data?.errors;
+  if (Array.isArray(errors)) {
+    errors.forEach((entry) => {
+      if (typeof entry === "string") {
+        push(entry);
+        return;
+      }
+      push(entry?.msg || entry?.message || entry?.error);
+      if (entry?.path && (entry?.msg || entry?.message)) {
+        push(`${entry.path}: ${entry.msg || entry.message}`);
+      }
+    });
+  } else if (errors && typeof errors === "object") {
+    Object.entries(errors).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((v) => push(`${key}: ${v}`));
+      } else if (value && typeof value === "object") {
+        push(value?.message || value?.msg || `${key}: ${JSON.stringify(value)}`);
+      } else {
+        push(`${key}: ${value}`);
+      }
+    });
+  }
+
+  if (messages.length === 0 && fallback) push(fallback);
+  return messages;
+};
+
+const showBackendErrorsAsToasts = (err, fallback) => {
+  const msgs = getBackendErrorMessages(err, fallback);
+  msgs.slice(0, 6).forEach((m) => toast.error(m, { duration: 5500 }));
+  return msgs[0] || fallback;
+};
+
+const getItemExchangeIds = (item) =>
+  Array.isArray(item?.exchanges)
+    ? item.exchanges.map((ex) => ex?._id).filter(Boolean).map(String)
+    : [];
+
+const getLatestExchangeId = (item) => {
+  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
+  if (exchanges.length === 0) return null;
+  exchanges.sort((a, b) => {
+    const aTs = new Date(a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.createdAt || 0).getTime();
+    return bTs - aTs;
+  });
+  return exchanges[0]?._id ? String(exchanges[0]._id) : null;
+};
 
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
 const ORDERS_DEBUG =
@@ -427,6 +494,7 @@ const Orders = () => {
     setUnassignError(null);
     try {
       await unassignOrder(orderId, { assignmentId });
+      toast.success(`Driver removed from assignment ${assignmentId}`);
       await fetchSingleOrder(orderId);
     } catch (err) {
       const msg =
@@ -434,6 +502,10 @@ const Orders = () => {
         err?.message ||
         "Failed to remove driver.";
       setUnassignError(msg);
+      showBackendErrorsAsToasts(
+        err,
+        `Failed to remove driver for assignment ${assignmentId}.`,
+      );
     } finally {
       setUnassignLoading(false);
     }
@@ -533,6 +605,11 @@ const Orders = () => {
           }
         }
       }
+      toast.success(
+        assignmentAssignOnly
+          ? "Driver assigned successfully."
+          : `Driver assigned and status updated to ${pendingNewStatus}.`,
+      );
       setAssignmentModalOpen(false);
       setAssignmentAssignOnly(false);
       setReassignAssignmentId(null);
@@ -541,10 +618,10 @@ const Orders = () => {
       setBulkStatus("");
       fetchSingleOrder(assignmentOrderId);
     } catch (err) {
-      const msg =
-        typeof err === "string"
-          ? err
-          : err?.response?.data?.message || "Assign failed.";
+      const msg = showBackendErrorsAsToasts(
+        err,
+        "Assign failed.",
+      );
       setAssignError(msg);
     } finally {
       setAssignLoading(false);
@@ -580,9 +657,11 @@ const Orders = () => {
         }
       } catch (err) {
         console.error("Assignment view failed:", err);
-        setOrderError(
-          err?.response?.data?.message || "Could not check assignment.",
+        const msg = showBackendErrorsAsToasts(
+          err,
+          "Could not check assignment.",
         );
+        setOrderError(msg);
         return;
       }
     }
@@ -595,9 +674,18 @@ const Orders = () => {
     setUpdatingWholeOrder(true);
     setOrderError(null);
     try {
+      if (wholeOrderNewStatus === "EXCHANGE_APPROVED") {
+        const targetItems = selectedOrder?.items ?? [];
+        for (const item of targetItems) {
+          const exchangeId = getLatestExchangeId(item);
+          if (!exchangeId) continue;
+          await approveExchange(exchangeId);
+        }
+      }
       await updateWholeOrderStatus(selectedOrder.orderId, {
         status: wholeOrderNewStatus,
       });
+      toast.success(`Order items updated to ${wholeOrderNewStatus}.`);
       setWholeOrderNewStatus("");
       await fetchSingleOrder(selectedOrder.orderId);
     } catch (err) {
@@ -606,6 +694,10 @@ const Orders = () => {
         err?.message ||
         "Failed to update whole order status.";
       setOrderError(msg);
+      showBackendErrorsAsToasts(
+        err,
+        `Failed to set order status to ${wholeOrderNewStatus}.`,
+      );
     } finally {
       setUpdatingWholeOrder(false);
     }
@@ -669,9 +761,11 @@ const Orders = () => {
         }
       } catch (err) {
         console.error("Assignment view failed:", err);
-        setOrderError(
-          err?.response?.data?.message || "Could not check assignment.",
+        const msg = showBackendErrorsAsToasts(
+          err,
+          "Could not check assignment.",
         );
+        setOrderError(msg);
         return;
       }
     }
@@ -685,10 +779,25 @@ const Orders = () => {
     setOrderError(null);
     try {
       for (const itemId of selectedItemIds) {
+        const currentItem = selectedOrder?.items?.find(
+          (it) => String(it.itemId || it._id) === String(itemId),
+        );
+        if (bulkStatus === "EXCHANGE_APPROVED") {
+          const exchangeId = getLatestExchangeId(currentItem);
+          if (!exchangeId) {
+            throw new Error(
+              `No exchange found for item ${String(itemId)} to approve.`,
+            );
+          }
+          await approveExchange(exchangeId);
+        }
         await updateOrderItemStatus(selectedOrder.orderId, itemId, {
           status: bulkStatus,
         });
       }
+      toast.success(
+        `${selectedItemIds.length} item(s) updated to ${bulkStatus}.`,
+      );
       if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(bulkStatus)) {
         if (
           window.confirm(
@@ -712,6 +821,10 @@ const Orders = () => {
         err?.message ||
         "Failed to update selected items.";
       setOrderError(msg);
+      showBackendErrorsAsToasts(
+        err,
+        `Failed to set selected items to ${bulkStatus}.`,
+      );
     } finally {
       setUpdatingBulk(false);
     }
@@ -751,11 +864,10 @@ const Orders = () => {
         }
       } catch (err) {
         console.error("Assignment view failed:", err);
-        const msg =
-          typeof err === "string"
-            ? err
-            : err?.response?.data?.message || "Could not check assignment.";
-        alert(msg);
+        showBackendErrorsAsToasts(
+          err,
+          "Could not check assignment.",
+        );
         return;
       }
     } else {
@@ -781,7 +893,15 @@ const Orders = () => {
     });
     try {
       const payload = { status: newStatus };
+      if (newStatus === "EXCHANGE_APPROVED") {
+        const exchangeId = getLatestExchangeId(prevItem);
+        if (!exchangeId) {
+          throw new Error("No exchange request found for this item.");
+        }
+        await approveExchange(exchangeId);
+      }
       await updateOrderItemStatus(orderId, itemId, payload);
+      toast.success(`Item ${stringItemId} updated to ${newStatus}.`);
       // After setting exchange pickup/delivery status, open assignment modal to assign driver
       if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(newStatus)) {
         const label =
@@ -792,11 +912,10 @@ const Orders = () => {
       }
     } catch (err) {
       console.error("Status update failed:", err);
-      const msg =
-        typeof err === "string"
-          ? err
-          : err?.response?.data?.message || "Failed to update item status.";
-      alert(msg);
+      showBackendErrorsAsToasts(
+        err,
+        `Failed to update item ${stringItemId} to ${newStatus}.`,
+      );
       if (prevStatus) {
         setSelectedOrder((prev) => {
           if (!prev) return prev;
@@ -851,6 +970,10 @@ const Orders = () => {
         err?.message ||
         "Failed to reject exchange.";
       setRejectionError(msg);
+      showBackendErrorsAsToasts(
+        err,
+        "Failed to reject exchange.",
+      );
     } finally {
       setRejectionSubmitting(false);
     }
@@ -1650,6 +1773,18 @@ const Orders = () => {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Order #{selectedOrder?.orderId}</p>
+                        <p className="mt-1 text-xs text-gray-500 break-all">
+                          Item ID: {String(focusedItem.itemId || focusedItem._id || "—")}
+                        </p>
+                        {(() => {
+                          const exIds = getItemExchangeIds(focusedItem);
+                          if (exIds.length === 0) return null;
+                          return (
+                            <p className="mt-0.5 text-xs text-gray-500 break-all">
+                              Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
+                            </p>
+                          );
+                        })()}
                         <h3 className="text-xl font-bold text-gray-900 mt-1">
                           {focusedItem.sku || focusedItem.variant?.sku || "—"}
                         </h3>
@@ -2210,6 +2345,18 @@ const Orders = () => {
                                     <div className="font-medium text-gray-900">
                                       {item.sku || item.variant?.sku || "—"}
                                     </div>
+                                    <div className="mt-0.5 text-[11px] text-gray-500">
+                                      Item ID: {String(item.itemId || item._id || "—")}
+                                    </div>
+                                    {(() => {
+                                      const exIds = getItemExchangeIds(item);
+                                      if (exIds.length === 0) return null;
+                                      return (
+                                        <div className="mt-0.5 text-[11px] text-gray-500 break-all">
+                                          Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
+                                        </div>
+                                      );
+                                    })()}
                                     <div className="mt-0.5 text-xs text-gray-500">
                                       {item.variant?.color && `Color: ${item.variant.color}`}
                                       {item.variant?.size && ` • Size: ${item.variant.size}`}
@@ -2290,10 +2437,6 @@ const Orders = () => {
               </div>
             </div>
             ) : null}
-          </div>
-        );
-        })()}
-        
 
         {/* Assignment Modal */}
         {assignmentModalOpen && (
@@ -2439,6 +2582,10 @@ const Orders = () => {
               </div>
             </div>
           </div>
+        )}
+              </div>
+            );
+          })()
         )}
       </div>
     </div>
