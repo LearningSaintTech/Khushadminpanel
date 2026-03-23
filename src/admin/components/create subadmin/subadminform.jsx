@@ -29,6 +29,7 @@ const SubAdminForm = () => {
     address: "",
     city: "",
     pinCode: "",
+    role: "subadmin",
   });
 
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,7 @@ const SubAdminForm = () => {
             address: res.data.address || "",
             city: res.data.city || "",
             pinCode: res.data.pinCode || "",
+            role: res.data.role || "subadmin",
           });
         } else {
           setError(res.message || "Failed to fetch sub-admin data");
@@ -255,6 +257,21 @@ const SubAdminForm = () => {
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Role
+                    </label>
+                    <select
+                      name="role"
+                      value={formData.role}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+                    >
+                      <option value="subadmin">Subadmin</option>
+                      <option value="super_subadmin">Super Subadmin</option>
+                    </select>
                   </div>
 
                   <div className="sm:col-span-2">

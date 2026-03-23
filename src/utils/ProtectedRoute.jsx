@@ -24,7 +24,9 @@ const ProtectedRoute = ({ allowedRoles = [], redirectTo = null, children }) => {
     return <Navigate to={getDefaultLoginPath(allowedRoles)} replace />;
   }
 
-  const userRole = (decoded.role || decoded.userRole || 'UNKNOWN').toUpperCase();
+  const rawUserRole = (decoded.role || decoded.userRole || "UNKNOWN").toUpperCase();
+  // Treat SUPER_SUBADMIN same as SUBADMIN for frontend routing/permissions.
+  const userRole = rawUserRole === "SUPER_SUBADMIN" ? "SUBADMIN" : rawUserRole;
 
   if (allowedRoles.length > 0) {
     const hasAccess = allowedRoles.some(
@@ -53,8 +55,9 @@ const getDefaultLoginPath = (allowedRoles) => {
 const getDashboardPath = (userRole) => {
   switch (userRole) {
     case 'ADMIN':
-    case 'SUBADMIN':
       return '/admin/dashboard';
+    case 'SUBADMIN':
+      return '/subadmin/dashboard';
     case 'DRIVER':
       return '/driver/dashboard';
     case 'INFLUENCER':

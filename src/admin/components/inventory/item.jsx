@@ -370,15 +370,29 @@ export default function Items() {
                     </td>
 
                     <td className="px-4 py-3 align-middle text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(item);
-                        }}
-                        className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(
+                              `/admin/inventory/items/${item._id}?skuUids=1`,
+                            );
+                          }}
+                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-800 hover:bg-indigo-700 hover:text-white hover:border-indigo-700 transition-colors"
+                        >
+                          SKU UIDs
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

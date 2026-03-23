@@ -135,8 +135,11 @@ export default function OTP() {
         // Role-based navigation
         switch (role) {
           case "ADMIN":
-          case "SUBADMIN":
             navigate("/admin/dashboard", { replace: true });
+            break;
+          case "SUBADMIN":
+          case "SUPER_SUBADMIN":
+            navigate("/subadmin/dashboard", { replace: true });
             break;
           case "INFLUENCER":
             navigate("/influencer/dashboard", { replace: true });

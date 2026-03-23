@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getSingleItem } from "../../apis/itemapi";
+import SkuUidsModal from "./SkuUidsModal.jsx";
 
 export default function ItemDetails() {
   const { itemId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("general");
+  const [skuUidModalOpen, setSkuUidModalOpen] = useState(false);
 
   const fetchItem = async () => {
     console.log("[ItemDetails] fetchItem called with itemId:", itemId);
@@ -78,6 +81,12 @@ export default function ItemDetails() {
   }, [itemId]);
 
   useEffect(() => {
+    if (searchParams.get("skuUids") === "1") {
+      setSkuUidModalOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     console.log("[ItemDetails] activeTab changed:", activeTab);
     if (activeTab === "size" && item) {
       console.log(
@@ -99,51 +108,90 @@ export default function ItemDetails() {
     }
   }, [activeTab, item]);
 
+  const closeSkuUidModal = () => {
+    setSkuUidModalOpen(false);
+    if (searchParams.get("skuUids") === "1") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("skuUids");
+      setSearchParams(next, { replace: true });
+    }
+  };
+
   if (loading) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 p-4">
-        <div className="text-gray-500 text-base sm:text-lg animate-pulse">
-          Loading item details...
+      <>
+        <SkuUidsModal
+          itemId={itemId}
+          open={skuUidModalOpen}
+          onClose={closeSkuUidModal}
+          onAfterSave={fetchItem}
+        />
+        <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 p-4">
+          <div className="text-gray-500 text-base sm:text-lg animate-pulse">
+            Loading item details...
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (error) {
     return (
-      <div className="w-full min-h-screen flex flex-col items-center justify-center bg-gray-50/40 p-4 sm:p-6">
-        <div className="text-red-600 text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">
-          Error
+      <>
+        <SkuUidsModal
+          itemId={itemId}
+          open={skuUidModalOpen}
+          onClose={closeSkuUidModal}
+          onAfterSave={fetchItem}
+        />
+        <div className="w-full min-h-screen flex flex-col items-center justify-center bg-gray-50/40 p-4 sm:p-6">
+          <div className="text-red-600 text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">
+            Error
+          </div>
+          <p className="text-gray-700 mb-6 sm:mb-8 text-center max-w-lg text-sm sm:text-base">
+            {error}
+          </p>
+          <button
+            onClick={() => {
+              setError(null);
+              fetchItem();
+            }}
+            className="px-6 sm:px-8 py-2.5 sm:py-3 bg-neutral-800 text-white rounded-lg hover:bg-neutral-900 transition font-medium text-sm sm:text-base"
+          >
+            Try Again
+          </button>
         </div>
-        <p className="text-gray-700 mb-6 sm:mb-8 text-center max-w-lg text-sm sm:text-base">
-          {error}
-        </p>
-        <button
-          onClick={() => {
-            setError(null);
-            fetchItem();
-          }}
-          className="px-6 sm:px-8 py-2.5 sm:py-3 bg-neutral-800 text-white rounded-lg hover:bg-neutral-900 transition font-medium text-sm sm:text-base"
-        >
-          Try Again
-        </button>
-      </div>
+      </>
     );
   }
 
   if (!item) {
     return (
-      <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 text-gray-600 text-base sm:text-lg p-4">
-        Item not found
-      </div>
+      <>
+        <SkuUidsModal
+          itemId={itemId}
+          open={skuUidModalOpen}
+          onClose={closeSkuUidModal}
+          onAfterSave={fetchItem}
+        />
+        <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 text-gray-600 text-base sm:text-lg p-4">
+          Item not found
+        </div>
+      </>
     );
   }
 
   return (
     <div className="w-full min-h-screen bg-gray-50/40">
+      <SkuUidsModal
+        itemId={itemId}
+        open={skuUidModalOpen}
+        onClose={closeSkuUidModal}
+        onAfterSave={fetchItem}
+      />
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 xl:px-8 py-4 sm:py-6 lg:py-8">
         {/* Back button */}
-        <div className="mb-4 sm:mb-6 lg:mb-8">
+        <div className="mb-4 sm:mb-6 lg:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition-colors text-sm sm:text-base"
@@ -162,6 +210,13 @@ export default function ItemDetails() {
               />
             </svg>
             Back to list
+          </button>
+          <button
+            type="button"
+            onClick={() => setSkuUidModalOpen(true)}
+            className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-indigo-700 text-white text-sm font-semibold hover:bg-indigo-800"
+          >
+            See all SKU UIDs
           </button>
         </div>
 
@@ -353,6 +408,28 @@ export default function ItemDetails() {
                                   </p>
                                   <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1">
                                     {s.barcode || "Not set"}
+                                  </p>
+                                </div>
+
+                                <div className="mt-1">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                    SKU UID (code)
+                                  </p>
+                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1 font-mono">
+                                    {typeof s.skuUidId === "object" && s.skuUidId?.code != null
+                                      ? String(s.skuUidId.code)
+                                      : "—"}
+                                  </p>
+                                </div>
+
+                                <div className="mt-1">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                    UID series start
+                                  </p>
+                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1 font-mono">
+                                    {s.skuUidSeriesStart != null && s.skuUidSeriesStart !== ""
+                                      ? String(s.skuUidSeriesStart)
+                                      : "—"}
                                   </p>
                                 </div>
                               </div>

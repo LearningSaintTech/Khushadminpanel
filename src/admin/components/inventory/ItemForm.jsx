@@ -6,6 +6,7 @@ import {
   updateItem,
   getSingleItem,
 } from "../../apis/itemapi";
+import SkuUidsModal from "./SkuUidsModal.jsx";
 
 const ItemForm = () => {
   const { categoryId, subcategoryId, id } = useParams();
@@ -16,6 +17,7 @@ const ItemForm = () => {
   const [backendErrors, setBackendErrors] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [activeTab, setActiveTab] = useState(1);
+  const [skuUidModalOpen, setSkuUidModalOpen] = useState(false);
   const fileInputRefs = useRef({}); // Track file inputs to prevent double-firing
   const [form, setForm] = useState({
     name: "",
@@ -32,13 +34,13 @@ const ItemForm = () => {
         color: { name: "Black", hex: "#000000" },
         images: [],
         sizes: [
-                    { sku: "", size: "XS", stock: "" },
+                    { sku: "", size: "XS", stock: "", skuUidSeriesStart: "" },
 
-          { sku: "", size: "S", stock: "" },
-          { sku: "", size: "M", stock: "" },
-          { sku: "", size: "L", stock: "" },
-          { sku: "", size: "XL", stock: "" },
-                    { sku: "", size: "XXL", stock: "" },
+          { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
+          { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
+          { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
+          { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
+                    { sku: "", size: "XXL", stock: "", skuUidSeriesStart: "" },
 
         ],
       },
@@ -195,6 +197,10 @@ const ItemForm = () => {
                     sku: size.sku || "",
                     size: size.size || "",
                     stock: size.stock || "",
+                    skuUidSeriesStart:
+                      size.skuUidSeriesStart != null && size.skuUidSeriesStart !== ""
+                        ? String(size.skuUidSeriesStart)
+                        : "",
                   };
                 });
               }
@@ -205,17 +211,20 @@ const ItemForm = () => {
                   hex: variant.color?.hex || "#000000",
                 },
                 images: variant.images?.map((img) => img.url || img) || [],
-                sizes: defaultSizes.map((size) => sizeMap[size] || { sku: "", size, stock: "" }),
+                sizes: defaultSizes.map(
+                  (size) =>
+                    sizeMap[size] || { sku: "", size, stock: "", skuUidSeriesStart: "" }
+                ),
               };
             }) || [
               {
                 color: { name: "Black", hex: "#000000" },
                 images: [],
                 sizes: [
-                  { sku: "", size: "S", stock: "" },
-                  { sku: "", size: "M", stock: "" },
-                  { sku: "", size: "L", stock: "" },
-                  { sku: "", size: "XL", stock: "" },
+                  { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
+                  { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
+                  { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
+                  { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
                 ],
               },
             ],
@@ -319,10 +328,10 @@ const ItemForm = () => {
             color: { name: "", hex: "#000000" },
             images: [],
             sizes: [
-              { sku: "", size: "S", stock: "" },
-              { sku: "", size: "M", stock: "" },
-              { sku: "", size: "L", stock: "" },
-              { sku: "", size: "XL", stock: "" },
+              { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
+              { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
+              { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
+              { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
             ],
           },
         ],
@@ -678,11 +687,24 @@ const ItemForm = () => {
             }),
             sizes: variantSizes
               .filter((s) => s && s.size && s.stock !== "" && s.stock !== null)
-              .map((s) => ({
-                sku: (s.sku && s.sku.trim()) || "",
-                size: s.size.trim(),
-                stock: Number(s.stock) || 0,
-              })),
+              .map((s) => {
+                const row = {
+                  sku: (s.sku && s.sku.trim()) || "",
+                  size: s.size.trim(),
+                  stock: Number(s.stock) || 0,
+                };
+                const start = s.skuUidSeriesStart;
+                if (
+                  start !== "" &&
+                  start != null &&
+                  String(start).trim() !== "" &&
+                  !Number.isNaN(Number(start))
+                ) {
+                  const n = Number(start);
+                  if (Number.isInteger(n) && n >= 0) row.skuUidSeriesStart = n;
+                }
+                return row;
+              }),
           };
         });
 
@@ -1325,6 +1347,26 @@ const ItemForm = () => {
             {/* Tab 3 – Sizes */}
             {activeTab === 3 && (
               <div className="space-y-8">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+                  <p className="text-sm text-indigo-950">
+                    <span className="font-semibold">UID start (per size):</span> optional first{" "}
+                    <code className="text-xs bg-white/80 px-1 rounded">sku_uid</code> code when this sellable SKU’s
+                    sequence is created. After sequences exist, changing this field does not rewind counters.
+                  </p>
+                  {isEdit && id ? (
+                    <button
+                      type="button"
+                      onClick={() => setSkuUidModalOpen(true)}
+                      className="shrink-0 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-indigo-700 text-white text-sm font-semibold hover:bg-indigo-800"
+                    >
+                      See all SKU UIDs
+                    </button>
+                  ) : (
+                    <span className="text-xs text-indigo-800/80 shrink-0">
+                      Save the product first to view / edit UID records.
+                    </span>
+                  )}
+                </div>
                 {form.variants.map((variant, vIdx) => (
                   <div key={vIdx} className="border-2 border-gray-200 rounded-xl p-6 bg-white">
                     <div className="flex items-center gap-3 mb-5">
@@ -1342,6 +1384,15 @@ const ItemForm = () => {
                             value={size.sku}
                             onChange={(e) => updateSize(vIdx, sIdx, "sku", e.target.value)}
                             className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            placeholder="UID series start (optional)"
+                            value={size.skuUidSeriesStart ?? ""}
+                            onChange={(e) => updateSize(vIdx, sIdx, "skuUidSeriesStart", e.target.value)}
+                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                           />
                           <input
                             type="number"
@@ -2188,6 +2239,11 @@ const ItemForm = () => {
           </div>
         </div>
       </div>
+      <SkuUidsModal
+        itemId={id}
+        open={skuUidModalOpen}
+        onClose={() => setSkuUidModalOpen(false)}
+      />
     </div>
   );
 };

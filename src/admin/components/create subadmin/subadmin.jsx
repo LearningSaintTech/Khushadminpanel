@@ -1,7 +1,7 @@
 // src/components/SubAdmin.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSubAdmins, toggleSubAdminStatus } from "../../apis/subadminapi";
+import { getSubAdmins, toggleSubAdminStatus, updateSubAdmin } from "../../apis/subadminapi";
 import {
   Plus,
   Edit,
@@ -64,6 +64,7 @@ const SubAdmin = () => {
 
   const handleCreate = () => navigate("/admin/subadmin/create");
   const handleEdit = (id) => navigate(`/admin/subadmin/edit/${id}`);
+  const handleModuleAccess = (id) => navigate(`/admin/subadmin/${id}/module-access`);
 
   const handleToggle = async (id, currentStatus) => {
     if (!window.confirm(`Really ${currentStatus ? "deactivate" : "activate"} this sub-admin?`)) return;
@@ -73,6 +74,26 @@ const SubAdmin = () => {
       fetchSubAdmins();
     } catch (err) {
       alert("Failed to change status");
+    }
+  };
+
+  const handleRoleChange = async (id, currentRole) => {
+    const nextRole =
+      currentRole === "super_subadmin" ? "subadmin" : "super_subadmin";
+
+    if (
+      !window.confirm(
+        `Change role to ${nextRole === "super_subadmin" ? "Super Subadmin" : "Subadmin"}?`
+      )
+    )
+      return;
+
+    try {
+      await updateSubAdmin(id, { role: nextRole });
+      fetchSubAdmins();
+    } catch (err) {
+      console.error("Failed to change role:", err);
+      alert("Failed to change role");
     }
   };
 
@@ -154,6 +175,7 @@ const SubAdmin = () => {
                       <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Phone</th>
                       <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">City</th>
                       <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Role</th>
                       <th className="px-4 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -198,6 +220,17 @@ const SubAdmin = () => {
                             {admin.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right">
+                          <span
+                            className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
+                              admin.role === "super_subadmin"
+                                ? "bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200"
+                                : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200"
+                            }`}
+                          >
+                            {admin.role === "super_subadmin" ? "Super" : "Subadmin"}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                           <button
                             onClick={() => handleEdit(admin._id)}
@@ -205,6 +238,20 @@ const SubAdmin = () => {
                             title="Edit sub-admin"
                           >
                             <Edit className="w-5 h-5 inline" />
+                          </button>
+                          <button
+                            onClick={() => handleRoleChange(admin._id, admin.role)}
+                            className="text-indigo-600 hover:text-indigo-800 transition-colors"
+                            title={admin.role === "super_subadmin" ? "Make Subadmin" : "Make Super Subadmin"}
+                          >
+                            {admin.role === "super_subadmin" ? "Make Sub" : "Make Super"}
+                          </button>
+                          <button
+                            onClick={() => handleModuleAccess(admin._id)}
+                            className="text-indigo-600 hover:text-indigo-800 ml-4 transition-colors"
+                            title="Manage module access"
+                          >
+                            Access
                           </button>
                         </td>
                       </tr>
@@ -258,6 +305,18 @@ const SubAdmin = () => {
                       >
                         <Edit className="w-4 h-4" />
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleRoleChange(admin._id, admin.role)}
+                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                      >
+                        {admin.role === "super_subadmin" ? "Make Sub" : "Make Super"}
+                      </button>
+                      <button
+                        onClick={() => handleModuleAccess(admin._id)}
+                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                      >
+                        Access
                       </button>
                       <button
                         onClick={() => handleToggle(admin._id, admin.isActive)}

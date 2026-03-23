@@ -109,6 +109,18 @@ export const getSingleItem = async (itemId) => {
   }
 };
 
+/** Admin: all SkuUid documents for an item */
+export const getItemSkuUids = async (itemId) => {
+  if (!itemId) throw new Error("itemId is required");
+  return apiConnector("GET", `/items/sku-uids/${itemId}`);
+};
+
+/** Admin: update one SkuUid (code, batchRef, remarks) */
+export const updateItemSkuUid = async (itemId, skuUidId, body) => {
+  if (!itemId || !skuUidId) throw new Error("itemId and skuUidId are required");
+  return apiConnector("PATCH", `/items/sku-uids/${itemId}/${skuUidId}`, body);
+};
+
 /**
  * Create a new item (with images)
  * Endpoint: POST /items/create
@@ -226,6 +238,8 @@ export default {
   searchItems,
   getItemsBySubcategory,
   getSingleItem,
+  getItemSkuUids,
+  updateItemSkuUid,
   createItem,
   updateItem,
   getItemsForSelect,

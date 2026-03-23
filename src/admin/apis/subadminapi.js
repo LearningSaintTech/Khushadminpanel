@@ -5,6 +5,7 @@ export const subAdminEndpoints = {
   LIST_SUBADMIN: "/admin/panels/subadmin/list",
   UPDATE_SUBADMIN: "/admin/panels/subadmin",
   TOGGLE_STATUS: "/admin/panels/subadmin",
+  MODULE_ACCESS: "/admin/panels/subadmin",
 };
 
 // ================= CREATE =================
@@ -80,4 +81,14 @@ export const getSubAdminById = async (id) => {
     console.error("❌ Get SubAdmin By ID Error:", error);
     throw error;
   }
+};
+
+export const getSubAdminModuleAccess = (id) => {
+  return apiConnector("GET", `${subAdminEndpoints.MODULE_ACCESS}/${id}/module-access`);
+};
+
+export const setSubAdminModuleAccess = (id, allowedModules) => {
+  return apiConnector("PUT", `${subAdminEndpoints.MODULE_ACCESS}/${id}/module-access`, {
+    allowedModules,
+  });
 };
