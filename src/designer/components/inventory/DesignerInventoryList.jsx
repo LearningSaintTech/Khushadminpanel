@@ -216,6 +216,7 @@ const DesignerInventoryList = () => {
                 <tr key={r._id} className="border-t border-gray-100">
                   <td className="p-2.5">
                     <div className="font-medium text-gray-900">{r.StyleNumber}</div>
+                    <div className="text-xs text-gray-500">{r.styleName || "-"}</div>
                     <div className="text-xs text-gray-500">{r.employeeId}</div>
                   </td>
                   <td className="p-2.5 text-gray-700">
@@ -353,9 +354,9 @@ const DesignerInventoryList = () => {
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-3 sm:p-4">
+          <div className="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-xl sm:mt-8">
+            <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-t-2xl border-b border-gray-100 bg-white px-4 py-3">
               <h2 className="text-lg font-semibold text-gray-900">Item details</h2>
               <button
                 type="button"
@@ -365,9 +366,13 @@ const DesignerInventoryList = () => {
                 Close
               </button>
             </div>
+            <div className="max-h-[calc(100vh-8rem)] overflow-y-auto px-4 pb-4">
             <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
               <div>
                 <span className="font-medium text-gray-600">Style:</span> {selected.StyleNumber}
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">Style name:</span> {selected.styleName || "—"}
               </div>
               <div>
                 <span className="font-medium text-gray-600">Designer:</span> {selected.designerName}
@@ -486,6 +491,7 @@ const DesignerInventoryList = () => {
                 })
               )}
             </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -494,5 +500,6 @@ const DesignerInventoryList = () => {
 };
 
 export default DesignerInventoryList;
+
 
 

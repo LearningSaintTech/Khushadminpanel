@@ -90,6 +90,12 @@ const emptyCosts = () => ({
   finishingCost: 0,
 });
 
+const toNumberOrZero = (value) => {
+  if (value === "" || value == null) return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const DesignerInventoryForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -99,6 +105,7 @@ const DesignerInventoryForm = () => {
   const [loadItem, setLoadItem] = useState(isEdit);
   const [form, setForm] = useState({
     StyleNumber: "",
+    styleName: "",
     designerName: "",
     employeeId: "",
     description: "",
@@ -121,6 +128,7 @@ const DesignerInventoryForm = () => {
           const d = res.data;
           setForm({
             StyleNumber: d.StyleNumber || "",
+            styleName: d.styleName || "",
             designerName: d.designerName || "",
             employeeId: d.employeeId || "",
             description: d.description || "",
@@ -224,7 +232,11 @@ const DesignerInventoryForm = () => {
           totalImages: imgs.length,
           isMultipleImages: imgs.length > 1,
         },
-        sizes: variant.sizes,
+        sizes: (variant.sizes || []).map((s) => ({
+          ...s,
+          plannedQty: toNumberOrZero(s.plannedQty),
+          producedQty: toNumberOrZero(s.producedQty),
+        })),
         images: imgs.map((img, idx) => {
           if (isLocalPickedFile(img)) return { order: idx + 1 };
           if (typeof img === "string" && img) return { order: idx + 1, url: img };
@@ -243,6 +255,7 @@ const DesignerInventoryForm = () => {
     try {
       const formData = new FormData();
       formData.append("StyleNumber", form.StyleNumber);
+      formData.append("styleName", form.styleName || "");
       formData.append("designerName", form.designerName);
       formData.append("employeeId", form.employeeId);
       formData.append("description", form.description || "");
@@ -250,8 +263,21 @@ const DesignerInventoryForm = () => {
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
-      formData.append("fabric", JSON.stringify(form.fabric));
-      formData.append("costs", JSON.stringify(form.costs));
+      const normalizedFabric = {
+        ...form.fabric,
+        gsm: toNumberOrZero(form.fabric?.gsm),
+        meter: toNumberOrZero(form.fabric?.meter),
+        costPerMeter: toNumberOrZero(form.fabric?.costPerMeter),
+      };
+      const normalizedCosts = {
+        ...form.costs,
+        trimCost: toNumberOrZero(form.costs?.trimCost),
+        stitchingCost: toNumberOrZero(form.costs?.stitchingCost),
+        finishingCost: toNumberOrZero(form.costs?.finishingCost),
+      };
+
+      formData.append("fabric", JSON.stringify(normalizedFabric));
+      formData.append("costs", JSON.stringify(normalizedCosts));
       formData.append("variants", JSON.stringify(buildVariantsForPayload()));
 
       form.variants.forEach((variant) => {
@@ -307,6 +333,7 @@ const DesignerInventoryForm = () => {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[
             ["StyleNumber", "Style number", true],
+            ["styleName", "Style name", true],
             ["designerName", "Designer name", true],
             ["employeeId", "Employee ID", true],
             ["productType", "Product type", true],
@@ -363,7 +390,7 @@ const DesignerInventoryForm = () => {
                 type={type}
                 className={fieldClass}
                 value={form.fabric[k]}
-                onChange={(e) => setFabric(k, type === "number" ? Number(e.target.value) || 0 : e.target.value)}
+                onChange={(e) => setFabric(k, type === "number" ? e.target.value : e.target.value)}
               />
             </div>
           ))}
@@ -382,7 +409,7 @@ const DesignerInventoryForm = () => {
                 type="number"
                 className={fieldClass}
                 value={form.costs[k]}
-                onChange={(e) => setCosts(k, Number(e.target.value) || 0)}
+                onChange={(e) => setCosts(k, e.target.value)}
               />
             </div>
           ))}
@@ -558,7 +585,7 @@ const DesignerInventoryForm = () => {
                               onChange={(e) =>
                                 updateVariant(vIdx, (v) => {
                                   const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], plannedQty: Number(e.target.value) || 0 };
+                                  sizes[sIdx] = { ...sizes[sIdx], plannedQty: e.target.value };
                                   return { ...v, sizes };
                                 })
                               }
@@ -572,7 +599,7 @@ const DesignerInventoryForm = () => {
                               onChange={(e) =>
                                 updateVariant(vIdx, (v) => {
                                   const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], producedQty: Number(e.target.value) || 0 };
+                                  sizes[sIdx] = { ...sizes[sIdx], producedQty: e.target.value };
                                   return { ...v, sizes };
                                 })
                               }
@@ -613,3 +640,4 @@ const DesignerInventoryForm = () => {
 };
 
 export default DesignerInventoryForm;
+
