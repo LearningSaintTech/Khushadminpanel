@@ -5,7 +5,7 @@ import appStore from "../../redux/Appstore";
  * Create axios instance
  */
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "https://api.khushpehno.com/api",
   timeout: 60000,
 });
 
@@ -31,12 +31,21 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const message =
-      error?.response?.data?.message ||
-      error.message ||
-      "Something went wrong";
-
-    return Promise.reject(message);
+    const payload = error?.response?.data;
+    const base =
+      typeof payload === "object" && payload !== null && !Array.isArray(payload)
+        ? { ...payload }
+        : {};
+    if (typeof payload === "string" && payload.trim()) {
+      base.message = payload;
+    }
+    if (!base.message) {
+      base.message =
+        (typeof payload === "object" && payload?.message) ||
+        error?.message ||
+        "Something went wrong";
+    }
+    return Promise.reject(base);
   }
 );
 
@@ -49,12 +58,19 @@ axiosInstance.interceptors.response.use(
  * @param {object} headers
  * @param {object} params
  */
+function isFormDataPayload(bodyData) {
+  if (!bodyData || typeof bodyData !== "object") return false;
+  if (typeof FormData !== "undefined" && bodyData instanceof FormData) return true;
+  return Object.prototype.toString.call(bodyData) === "[object FormData]";
+}
+
 export const apiConnector = (
   method,
   url,
   bodyData = null,
   headers = {},
-  params = {}
+  params = {},
+  requestConfig = {}
 ) => {
   const finalHeaders = { ...headers };
 
@@ -62,12 +78,12 @@ export const apiConnector = (
   // For FormData, let axios/browser set Content-Type automatically with boundary
   if (
     bodyData &&
-    !(bodyData instanceof FormData) &&
-    !finalHeaders["Content-Type"]
+    !isFormDataPayload(bodyData) &&
+    !finalHeaders["Content-Type"] &&
+    !finalHeaders["content-type"]
   ) {
     finalHeaders["Content-Type"] = "application/json";
   }
-  // If bodyData is FormData, don't set Content-Type - browser will add it with boundary
 
   return axiosInstance({
     method,
@@ -75,5 +91,6 @@ export const apiConnector = (
     data: bodyData,
     headers: finalHeaders,
     params,
+    ...requestConfig,
   });
 };

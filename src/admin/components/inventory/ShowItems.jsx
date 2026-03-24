@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Edit, Plus, ZoomIn, X, Eye, ChevronDown } from "lucide-react";
-import { searchItems, getAllItems } from "../../apis/itemapi";
+import { searchItems, getItemsBySubcategory } from "../../apis/itemapi";
 import { getAllCategories } from "../../apis/categoryapi";
 import {
   getAllSubcategories,
@@ -88,11 +88,6 @@ const ShowItems = () => {
   useEffect(() => {
     fetchCategories(categoryCurrentPage);
   }, [categoryCurrentPage, debouncedCategorySearchTerm]);
-
-  // Fetch all items on mount
-  useEffect(() => {
-    fetchItems(1);
-  }, []);
 
   // Fetch subcategories when category changes
   useEffect(() => {
@@ -277,59 +272,109 @@ const ShowItems = () => {
     }
   };
 
-  // Fetch items with filters - using getAllItems API
+  /** Normalize item list + pagination from various backend shapes (apiConnector returns response body). */
+  const parseItemsResponse = (res) => {
+    if (res == null) return { items: [], pagination: null };
+
+    const tryPayload = (payload) => {
+      if (!payload || typeof payload !== "object") return null;
+      const items =
+        (Array.isArray(payload.items) && payload.items) ||
+        (Array.isArray(payload.results) && payload.results) ||
+        (Array.isArray(payload.products) && payload.products) ||
+        (Array.isArray(payload.data) ? payload.data : null) ||
+        (Array.isArray(payload) ? payload : null);
+      const pagination =
+        payload.pagination ||
+        payload.meta ||
+        payload.pageInfo ||
+        null;
+      if (items) return { items, pagination };
+      return null;
+    };
+
+    // Direct: { items, pagination }
+    let out = tryPayload(res);
+    if (out) return out;
+
+    // { data: { items, pagination } }
+    if (res.data && typeof res.data === "object") {
+      out = tryPayload(res.data);
+      if (out) return out;
+      // { data: { data: { items } } }
+      if (res.data.data && typeof res.data.data === "object") {
+        out = tryPayload(res.data.data);
+        if (out) return out;
+      }
+    }
+
+    return { items: [], pagination: null };
+  };
+
+  /** Turn axios/HTML error bodies into a short UI message */
+  const formatItemsLoadError = (err) => {
+    const raw =
+      (typeof err === "string" && err) ||
+      err?.message ||
+      err?.response?.data?.message ||
+      "";
+    const s = String(raw);
+    if (s.includes("<!DOCTYPE") || s.includes("Cannot GET")) {
+      return "Could not reach the products API (404 or wrong path). Check that the backend exposes GET /items/search (or /items/get/subcategory/:id) under your API base URL.";
+    }
+    return s.trim() || "Failed to load items";
+  };
+
+  /**
+   * List products: many backends do not implement GET /items/getAll (404).
+   * Prefer search (works with empty search for “all”) and subcategory route when filtered.
+   */
   const fetchItems = async (page = 1) => {
     setLoading(true);
     setError(null);
 
+    const q = (debouncedSearchTerm || "").trim();
+
+    const runSearchItems = () => {
+      const queryParams = { page, limit };
+      // Backend expects `keywords` for text search (searchItems also accepts legacy `search`)
+      if (q) queryParams.keywords = q;
+      if (selectedCategoryId) queryParams.categoryId = selectedCategoryId;
+      if (selectedSubcategoryId)
+        queryParams.subcategoryId = selectedSubcategoryId;
+      return searchItems(queryParams);
+    };
+
     try {
-      // Use getAllItems API (similar to getAllCategories pattern)
-      const res = await getAllItems(
-        page,
-        limit,
-        debouncedSearchTerm || "",
-        selectedCategoryId || "",
-        selectedSubcategoryId || "",
-      );
+      let res;
 
-      const data = res?.data?.data || res?.data || res || {};
-      const itemsList = data.items || data?.items || data || [];
-      const pag = data.pagination || null;
+      if (selectedSubcategoryId) {
+        try {
+          res = await getItemsBySubcategory(
+            selectedSubcategoryId,
+            page,
+            limit,
+            q
+          );
+        } catch (subErr) {
+          console.warn(
+            "[ShowItems] getItemsBySubcategory failed, falling back to searchItems:",
+            subErr
+          );
+          res = await runSearchItems();
+        }
+      } else {
+        res = await runSearchItems();
+      }
 
-      setItems(Array.isArray(itemsList) ? itemsList : []);
+      const { items: itemsList, pagination: pag } = parseItemsResponse(res);
+      setItems(itemsList);
       setPagination(pag);
     } catch (err) {
       console.error("Failed to load items", err);
-      // Fallback to searchItems API if getAllItems doesn't exist
-      try {
-        const queryParams = {
-          page,
-          limit,
-        };
-        if (selectedCategoryId) queryParams.categoryId = selectedCategoryId;
-        if (selectedSubcategoryId)
-          queryParams.subcategoryId = selectedSubcategoryId;
-        if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
-          queryParams.search = debouncedSearchTerm.trim();
-        }
-
-        const res = await searchItems(queryParams);
-        const data = res?.data?.data || res?.data || res || {};
-        const itemsList = data.items || data?.items || data || [];
-        const pag = data.pagination || null;
-
-        setItems(Array.isArray(itemsList) ? itemsList : []);
-        setPagination(pag);
-      } catch (fallbackErr) {
-        console.error("Fallback API also failed:", fallbackErr);
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Failed to load items",
-        );
-        setItems([]);
-        setPagination(null);
-      }
+      setError(formatItemsLoadError(err));
+      setItems([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }

@@ -13,6 +13,7 @@ export default function Items() {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [pagination, setPagination] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
@@ -24,35 +25,43 @@ export default function Items() {
   );
 
   // Fetch items
-  const fetchItems = async (page = 1, limit = 10) => {
+  const fetchItems = async (page = 1, limit = 10, search = "") => {
     console.log(
-      `[Items.jsx] fetchItems called — page: ${page}, limit: ${limit}, subcategoryId: ${subcategoryId}`,
+      `[Items.jsx] fetchItems called — page: ${page}, limit: ${limit}, subcategoryId: ${subcategoryId}, search: "${search}"`,
     );
 
     try {
       setLoading(true);
       console.log("[Items.jsx] → Calling API: getItemsBySubcategory");
 
-      const res = await getItemsBySubcategory(subcategoryId, page, limit);
-
-      console.log("[Items.jsx] ← API response received");
-      console.log("[Items.jsx]   Status:", res.status);
-      console.log("[Items.jsx]   Data keys:", Object.keys(res.data || {}));
-      console.log("[Items.jsx]   Items count:", res.data?.items?.length || 0);
-      console.log("[Items.jsx]   Pagination:", res.data?.pagination);
-
-      setItems(res.data?.items || []);
-      setPagination(res.data?.pagination || null);
-
-      console.log(
-        "[Items.jsx] State updated → items:",
-        res.data?.items?.length || 0,
+      const res = await getItemsBySubcategory(
+        subcategoryId,
+        page,
+        limit,
+        search || "",
       );
+
+      console.log("[Items.jsx] ← API response received", res);
+
+      const root = res?.data ?? res ?? {};
+      const payload =
+        root?.data && typeof root.data === "object" && !Array.isArray(root.data)
+          ? root.data
+          : root;
+      const list = Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+      const pag = payload?.pagination ?? root?.pagination ?? null;
+
+      setItems(list);
+      setPagination(pag);
+
+      console.log("[Items.jsx] State updated → items:", list.length);
     } catch (err) {
       console.error("[Items.jsx] Fetch items FAILED");
       console.error("[Items.jsx] Error:", err);
-      console.error("[Items.jsx] Error response:", err.response?.data);
-      console.error("[Items.jsx] Error status:", err.response?.status);
     } finally {
       setLoading(false);
       console.log("[Items.jsx] Loading finished");
@@ -60,23 +69,43 @@ export default function Items() {
   };
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchTerm(searchTerm), 400);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
     console.log("[Items.jsx] useEffect triggered — fetching items");
     if (subcategoryId) {
-      fetchItems(1); // always start from page 1 on subcategory change
+      fetchItems(1, 10, debouncedSearchTerm);
     } else {
       console.warn("[Items.jsx] No subcategoryId → skipping fetch");
     }
-  }, [subcategoryId]);
+  }, [subcategoryId, debouncedSearchTerm]);
 
-  const filteredItems = items.filter((item) =>
-    item.name?.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  if (searchTerm) {
-    console.log(
-      `[Items.jsx] Filtering active — search: "${searchTerm}" → ${filteredItems.length} results`,
-    );
-  }
+  const q = debouncedSearchTerm.toLowerCase().trim();
+  const filteredItems =
+    q.length === 0
+      ? items
+      : items.filter((item) => {
+          const hay = [
+            item.name,
+            item.productId,
+            item.shortDescription,
+            item.longDescription,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          const skuHay = (item.variants || [])
+            .flatMap((v) => (v.sizes || []).map((s) => s.sku))
+            .join(" ")
+            .toLowerCase();
+          return (
+            hay.includes(q) ||
+            skuHay.includes(q) ||
+            item.name?.toLowerCase().includes(q)
+          );
+        });
 
   // Navigation
   const openCreate = () => {
@@ -130,7 +159,7 @@ export default function Items() {
 
       alert(res?.data?.message || "Bulk upload completed");
 
-      fetchItems(1); // refresh list
+      fetchItems(1, 10, debouncedSearchTerm); // refresh list
     } catch (error) {
       console.error("Bulk upload failed:", error);
       alert(error?.message || "Bulk upload failed");
@@ -196,7 +225,7 @@ export default function Items() {
                     );
                     setSearchTerm(e.target.value);
                   }}
-                  placeholder="Search products by name..."
+                  placeholder="Search by name, product ID, description, or SKU..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-full border border-black/10 text-sm focus:outline-none focus:ring-2 focus:ring-black/80 focus:border-black/80 bg-white"
                 />
                 <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
@@ -411,7 +440,7 @@ export default function Items() {
                   "[Items.jsx] Previous page clicked → page:",
                   pagination.page - 1,
                 );
-                fetchItems(pagination.page - 1);
+                fetchItems(pagination.page - 1, 10, debouncedSearchTerm);
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
             >
@@ -429,7 +458,7 @@ export default function Items() {
                   "[Items.jsx] Next page clicked → page:",
                   pagination.page + 1,
                 );
-                fetchItems(pagination.page + 1);
+                fetchItems(pagination.page + 1, 10, debouncedSearchTerm);
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
             >

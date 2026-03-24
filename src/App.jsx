@@ -4,6 +4,7 @@ import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
 import SubAdminRoutes from "./routes/subadminroutes";
+import DesignerRoutes from "./routes/designerroutes";
 import { NotificationProvider } from "./context/NotificationContext";
 import { NotificationSocketConnector } from "./context/NotificationSocketConnector";
 import SubadminPreferredPathRedirect from "./components/SubadminPreferredPathRedirect";
@@ -32,6 +33,9 @@ function App() {
       
       {/* SubAdmin Routes */}
       <Route path="/subadmin/*" element={<SubAdminRoutes />} />
+
+      {/* Designer Routes */}
+      <Route path="/designer/*" element={<DesignerRoutes />} />
       
       {/* Root redirect - default to admin login */}
       <Route path="/" element={<Navigate to="/admin" replace />} />

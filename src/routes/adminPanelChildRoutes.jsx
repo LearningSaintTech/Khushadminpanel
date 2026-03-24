@@ -67,6 +67,9 @@ import InventoryCodesPage from "../admin/components/inventory/InventoryCodesPage
 import InventoryCodeForm from "../admin/components/inventory/InventoryCodeForm";
 import SkuFormulaListPage from "../admin/components/inventory/SkuFormulaListPage";
 import SkuFormulaFormPage from "../admin/components/inventory/SkuFormulaFormPage";
+import DesignerList from "../admin/components/designer/DesignerList";
+import DesignerForm from "../admin/components/designer/DesignerForm";
+import DesignerInventory from "../admin/components/designer/DesignerInventory";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -137,6 +140,10 @@ export const adminPanelChildRoutes = [
   <Route key="drv" path="driver" element={<Deliveryagent />} />,
   <Route key="drv-cr" path="driver/create" element={<DeliveryAgentForm />} />,
   <Route key="drv-ed" path="driver/edit/:id" element={<DeliveryAgentForm />} />,
+  <Route key="des" path="designer" element={<DesignerList />} />,
+  <Route key="des-cr" path="designer/create" element={<DesignerForm />} />,
+  <Route key="des-ed" path="designer/edit/:id" element={<DesignerForm />} />,
+  <Route key="des-inv" path="designer/inventory" element={<DesignerInventory />} />,
   <Route key="ex" path="exchange" element={<Exchanges />} />,
   <Route key="ex-cr" path="exchange/create" element={<ExchangeForm />} />,
   <Route key="ex-ed" path="exchange/edit/:id" element={<ExchangeForm />} />,

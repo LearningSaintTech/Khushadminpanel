@@ -223,8 +223,8 @@ const CouponForm = () => {
                   onChange={handleInputChange}
                   className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all cursor-pointer"
                 >
-                  <option value="PERCENT">Percentage (%)</option>
-                  <option value="FIXED">Fixed Amount (₹)</option>
+                  <option value="PERCENT">PERCENT (%)</option>
+                  <option value="FIXED">FLAT (₹)</option>
                 </select>
               </div>
 

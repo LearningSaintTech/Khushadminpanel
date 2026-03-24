@@ -1,13 +1,22 @@
 // SubcategoryForm.jsx - Reusable form component for Create/Edit Subcategory
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import {
   createSubcategory,
   updateSubcategory,
   getSubcategoriesByCategory,
-  
 } from "../../apis/subcategoryapis";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
+
+function normalizeSubcategoryList(res) {
+  const data = res?.data?.data || res?.data || res || {};
+  const subs =
+    data.subcategories ||
+    data.subCategories ||
+    (Array.isArray(data) ? data : []);
+  return Array.isArray(subs) ? subs : [];
+}
 
 // Used for: create (/:categoryId/create) and category-scoped edit (/:categoryId/edit/:id).
 // Back / success → /admin/inventory/subcategories/:categoryId
@@ -18,15 +27,57 @@ const SubcategoryForm = () => {
   const backUrl = categoryId ? `/admin/inventory/subcategories/${categoryId}` : "/admin/inventory/categories";
 
   const [loading, setLoading] = useState(false);
+  const [backendErrors, setBackendErrors] = useState([]);
+  const [clientErrors, setClientErrors] = useState({ name: "", image: "" });
+  /** Edit only: when true, user can change sort order and it is sent on update */
+  const [editSortOrder, setEditSortOrder] = useState(false);
+  const [originalSortOrder, setOriginalSortOrder] = useState("");
   const [form, setForm] = useState({
     name: "",
     description: "",
-    sortOrder: "1",
+    sortOrder: "",
     image: null,
     imagePreview: null,
     isActive: true,
     showInNavbar: false,
   });
+
+  const computeNextSortOrderValue = useCallback(async () => {
+    if (!categoryId || isEdit) return null;
+    try {
+      const res = await getSubcategoriesByCategory(categoryId, 1, 500);
+      const list = normalizeSubcategoryList(res);
+      const max = list.reduce((m, s) => {
+        const n = Number(s?.sortOrder);
+        return Number.isFinite(n) && n > m ? n : m;
+      }, 0);
+      return String(max + 1);
+    } catch (e) {
+      console.error("Failed to compute sort order:", e);
+      return null;
+    }
+  }, [categoryId]);
+
+  const suggestNextSortOrder = useCallback(async () => {
+    const next = await computeNextSortOrderValue();
+    if (next == null) return null;
+    setForm((prev) => ({ ...prev, sortOrder: next }));
+    return next;
+  }, [computeNextSortOrderValue]);
+
+  // Create: auto-fill next sort order from existing subcategories in this category
+  useEffect(() => {
+    if (isEdit || !categoryId) return;
+    let cancelled = false;
+    (async () => {
+      const next = await computeNextSortOrderValue();
+      if (cancelled || next == null) return;
+      setForm((prev) => ({ ...prev, sortOrder: next }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId, isEdit, computeNextSortOrderValue]);
 
   // Load subcategory data if editing
   useEffect(() => {
@@ -35,15 +86,17 @@ const SubcategoryForm = () => {
         try {
           setLoading(true);
           const res = await getSubcategoriesByCategory(categoryId, 1, 100);
-          const data = res.data?.data || res.data || {};
-          const subs = data.subcategories || data.subCategories || data || [];
+          const subs = normalizeSubcategoryList(res);
           const subcategory = subs.find((s) => s._id === id);
 
           if (subcategory) {
+            const so = String(subcategory.sortOrder ?? 1);
+            setOriginalSortOrder(so);
+            setEditSortOrder(false);
             setForm({
               name: subcategory.name || "",
               description: subcategory.description || "",
-              sortOrder: String(subcategory.sortOrder ?? 1),
+              sortOrder: so,
               image: null,
               imagePreview: subcategory.imageUrl || null,
               isActive: subcategory.isActive !== false,
@@ -73,6 +126,7 @@ const SubcategoryForm = () => {
   }, [id, categoryId, isEdit, navigate]);
 
   const handleChange = (e) => {
+    setBackendErrors([]);
     const { name, value, type, checked, files } = e.target;
     if (name === "image") {
       const file = files?.[0] || null;
@@ -81,23 +135,36 @@ const SubcategoryForm = () => {
         image: file,
         imagePreview: file ? URL.createObjectURL(file) : form.imagePreview,
       });
+      setClientErrors((prev) => ({ ...prev, image: "" }));
     } else if (type === "checkbox") {
+      if (name === "editSortOrder") {
+        setEditSortOrder(checked);
+        if (!checked) {
+          setForm((prev) => ({
+            ...prev,
+            sortOrder: originalSortOrder || prev.sortOrder,
+          }));
+        }
+        return;
+      }
       setForm({ ...form, [name]: checked });
     } else {
       setForm({ ...form, [name]: value });
+      if (name === "name") setClientErrors((prev) => ({ ...prev, name: "" }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) {
-      alert("Subcategory name is required");
+    setBackendErrors([]);
+    const nextClient = { name: "", image: "" };
+    if (!form.name.trim()) nextClient.name = "Subcategory name is required";
+    if (!isEdit && !form.image) nextClient.image = "Image is required when creating a subcategory";
+    if (nextClient.name || nextClient.image) {
+      setClientErrors(nextClient);
       return;
     }
-    if (!isEdit && !form.image) {
-      alert("Image is required when creating a subcategory");
-      return;
-    }
+    setClientErrors({ name: "", image: "" });
 
     try {
       setLoading(true);
@@ -107,7 +174,14 @@ const SubcategoryForm = () => {
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.showInNavbar);
       if (form.image) formData.append("image", form.image);
-      if (!isEdit) formData.append("sortOrder", form.sortOrder || "1");
+      if (!isEdit) {
+        formData.append("sortOrder", form.sortOrder?.trim() || "1");
+      } else if (editSortOrder) {
+        formData.append(
+          "sortOrder",
+          form.sortOrder?.trim() || originalSortOrder || "1"
+        );
+      }
 
       if (isEdit) {
         await updateSubcategory(id, formData);
@@ -117,7 +191,15 @@ const SubcategoryForm = () => {
       navigate(backUrl);
     } catch (err) {
       console.error("Error saving subcategory:", err);
-      alert(err?.response?.data?.message || "Failed to save subcategory");
+      const msgs = extractBackendMessages(err);
+      setBackendErrors(msgs);
+      const blob = msgs.join(" ").toLowerCase();
+      if (
+        /sort|order|already|exist|duplicate|unique|taken/.test(blob) &&
+        (!isEdit || editSortOrder)
+      ) {
+        await suggestNextSortOrder();
+      }
     } finally {
       setLoading(false);
     }
@@ -148,6 +230,17 @@ const SubcategoryForm = () => {
         {/* Form Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {backendErrors.length > 0 && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+                <div className="font-semibold mb-2">Please review:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  {backendErrors.map((msg, idx) => (
+                    <li key={idx}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Name */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -159,9 +252,13 @@ const SubcategoryForm = () => {
                 value={form.name}
                 onChange={handleChange}
                 placeholder="Enter subcategory name"
-                required
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                className={`w-full px-3.5 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all ${
+                  clientErrors.name ? "border-red-400" : "border-gray-300"
+                }`}
               />
+              {clientErrors.name && (
+                <p className="mt-1 text-sm text-red-600">{clientErrors.name}</p>
+              )}
             </div>
 
             {/* Description */}
@@ -179,21 +276,84 @@ const SubcategoryForm = () => {
               />
             </div>
 
-            {/* Sort Order */}
+            {/* Sort Order — create: always; edit: only when checkbox enabled */}
             {!isEdit && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                   Sort Order
                 </label>
-                <input
-                  type="number"
-                  name="sortOrder"
-                  value={form.sortOrder}
-                  onChange={handleChange}
-                  placeholder="1"
-                  min="0"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
-                />
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
+                  <input
+                    type="number"
+                    name="sortOrder"
+                    value={form.sortOrder}
+                    onChange={handleChange}
+                    placeholder="Auto"
+                    min="0"
+                    className="flex-1 min-w-0 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => suggestNextSortOrder()}
+                    className="shrink-0 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Use next available
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Filled automatically from the highest sort order in this category + 1. Use the button if the server says this order is already taken.
+                </p>
+              </div>
+            )}
+
+            {isEdit && categoryId && (
+              <div className="space-y-3">
+                <label className="flex items-start gap-2.5 cursor-pointer group max-w-xl">
+                  <input
+                    type="checkbox"
+                    name="editSortOrder"
+                    checked={editSortOrder}
+                    onChange={handleChange}
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-800 group-hover:text-gray-900">
+                      Edit sort order
+                    </span>
+                    <span className="block text-xs text-gray-500 mt-0.5 font-normal">
+                      Current order:{" "}
+                      <span className="font-medium text-gray-700">
+                        {originalSortOrder || form.sortOrder || "—"}
+                      </span>
+                      . Enable only if you want to change it on save.
+                    </span>
+                  </span>
+                </label>
+                {editSortOrder && (
+                  <div className="pl-7 space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      New sort order
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
+                      <input
+                        type="number"
+                        name="sortOrder"
+                        value={form.sortOrder}
+                        onChange={handleChange}
+                        placeholder="Sort order"
+                        min="0"
+                        className="flex-1 min-w-0 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => suggestNextSortOrder()}
+                        className="shrink-0 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Use next available
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -208,7 +368,11 @@ const SubcategoryForm = () => {
                 <div className="mb-3 relative inline-block">
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, image: null, imagePreview: null }))}
+                    onClick={() => {
+                      setBackendErrors([]);
+                      setClientErrors((prev) => ({ ...prev, image: "" }));
+                      setForm((prev) => ({ ...prev, image: null, imagePreview: null }));
+                    }}
                     className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
                     title="Remove image"
                     aria-label="Remove image"
@@ -236,10 +400,12 @@ const SubcategoryForm = () => {
                   name="image"
                   onChange={handleChange}
                   accept="image/*"
-                  required={!isEdit}
                   className="hidden"
                 />
               </label>
+              {clientErrors.image && (
+                <p className="mt-2 text-sm text-red-600">{clientErrors.image}</p>
+              )}
             </div>
 
             {/* Toggles */}

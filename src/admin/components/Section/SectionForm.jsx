@@ -204,7 +204,7 @@ const SectionForm = () => {
       setLoadingProducts(true);
       const queryParams = { page, limit: productLimit };
       if (debouncedProductSearchTerm?.trim()) {
-        queryParams.search = debouncedProductSearchTerm.trim();
+        queryParams.keywords = debouncedProductSearchTerm.trim();
       }
       const res = await searchItems(queryParams);
 

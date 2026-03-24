@@ -19,6 +19,25 @@ export const getReviews = (itemId, page = 1, limit = 50) => {
   return apiConnector("GET", url);
 };
 
+// ===============================
+// 🔹 GET SINGLE REVIEW
+// ===============================
+export const getSingleReview = (reviewId) => {
+  if (!reviewId) {
+    throw new Error("reviewId is required");
+  }
+
+  return apiConnector("GET", REVIEW_API.GET_SINGLE_REVIEW(reviewId));
+};
+
+/** List reviews for a product (paginated). */
+// export const getReviews = (itemId, page = 1, limit = 50) => {
+//   if (!itemId) throw new Error("itemId is required");
+//   const id = typeof itemId === "object" ? itemId.toString() : String(itemId);
+//   const url = `${REVIEW_API.GET_ALL_REVIEWS(id)}?page=${page}&limit=${limit}`;
+//   return apiConnector("GET", url);
+// };
+
 /** Admin: aggregate stats for an item (avg, count, star distribution). */
 export const getReviewStats = (itemId) => {
   if (!itemId) throw new Error("itemId is required");

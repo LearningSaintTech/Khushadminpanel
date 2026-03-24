@@ -48,6 +48,7 @@ const getDefaultLoginPath = (allowedRoles) => {
   if (allowedRoles.includes('ADMIN')) return '/admin/login';
   if (allowedRoles.includes('SUBADMIN')) return '/subadmin/login';
   if (allowedRoles.includes('DRIVER')) return '/driver/login';
+  if (allowedRoles.includes('DESIGNER')) return '/designer/login';
   if (allowedRoles.includes('INFLUENCER')) return '/influencer/login';
   return '/admin/login'; // fallback
 };
@@ -60,6 +61,8 @@ const getDashboardPath = (userRole) => {
       return '/subadmin/dashboard';
     case 'DRIVER':
       return '/driver/dashboard';
+    case 'DESIGNER':
+      return '/designer/dashboard';
     case 'INFLUENCER':
       return '/influencer/dashboard';
     default:

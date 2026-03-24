@@ -39,7 +39,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   };
 
   const dispatch = useDispatch();
-  const [isInventoryOpen, setIsInventoryOpen] = useState(true);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [isBellOpen, setIsBellOpen] = useState(false);
@@ -47,6 +47,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const [isCouponOpen, setIsCouponOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
+  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -87,6 +88,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
 
   const isActive = (path) => location.pathname === path || location.pathname.replace(/\/+/g, "/") === path;
   const isNotificationSectionActive = () => location.pathname.startsWith(ap("notifications"));
+  const isDesignerSectionActive = () => location.pathname.startsWith(ap("designer"));
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -104,6 +106,12 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
     if (isNotificationSectionActive() && (location.pathname.includes("templates") || location.pathname.includes("email-templates"))) {
       setIsNotificationOpen(true);
       setIsTemplatesOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (isDesignerSectionActive()) {
+      setIsDesignerOpen(true);
     }
   }, [location.pathname]);
 
@@ -435,15 +443,6 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                   >
                     Items
                   </Link>
-                  {/* <Link
-                    to={ap("inventory/subcategoriesss")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes('/admin/inventory/categories') ? 'bg-white/10 text-white' : ''
-                    }`}
-                  >
-                    SubCategories
-                  </Link> */}
-
                   <Link
                     to={ap("inventory/central")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
@@ -722,7 +721,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                 size={20}
                 className="text-gray-400 group-hover:text-black"
               />
-              <span>Cart</span>
+              <span>Cart Charges</span>
             </Link>
             )}
 
@@ -885,6 +884,60 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                 />
                 <span>Driver</span>
               </Link>
+
+              <div>
+                <button
+                  onClick={() => setIsDesignerOpen(!isDesignerOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isDesignerSectionActive() ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users
+                      size={20}
+                      className="text-gray-400 group-hover:text-black"
+                    />
+                    <span>Designer</span>
+                  </div>
+                  {isDesignerOpen ? (
+                    <ChevronDown size={18} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={18} className="text-gray-400" />
+                  )}
+                </button>
+
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${
+                    isDesignerOpen
+                      ? "max-h-40 opacity-100 mt-1"
+                      : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="pl-10 pr-4 py-2 space-y-1">
+                    <Link
+                      to={ap("designer")}
+                      className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
+                        isActive(ap("designer"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Management
+                    </Link>
+
+                    <Link
+                      to={ap("designer/inventory")}
+                      className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
+                        isActive(ap("designer/inventory"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Inventory
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
             )}
           </div>
