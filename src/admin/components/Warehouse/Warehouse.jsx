@@ -36,8 +36,11 @@ export default function Warehouse() {
   const [assignedPinCodes, setAssignedPinCodes] = useState(new Set());
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeSearch, setPincodeSearch] = useState("");
+  const [debouncedPincodeSearch, setDebouncedPincodeSearch] = useState("");
   const [pincodePage, setPincodePage] = useState(1);
   const PINCODE_LIMIT = 10;
+  const [pincodeTotal, setPincodeTotal] = useState(0);
+  const [pincodeTotalPages, setPincodeTotalPages] = useState(1);
   const [newPincode, setNewPincode] = useState("");
   const [pincodeActionLoading, setPincodeActionLoading] = useState(false);
   const [pincodeModalMessage, setPincodeModalMessage] = useState({
@@ -54,6 +57,29 @@ export default function Warehouse() {
   const [stockPage, setStockPage] = useState(1);
   const STOCK_LIMIT = 10;
 
+  const getPinCodeValue = (pin) =>
+    pin?.pinCode ??
+    pin?.pincode ??
+    pin?.value ??
+    pin?.code ??
+    "";
+
+  const getPinCodeId = (pin) =>
+    pin?._id ??
+    pin?.id ??
+    pin?.pincodeId?._id ??
+    pin?.pincodeId?.id ??
+    null;
+
+  const normalizePincodeRow = (pin) => {
+    const value = String(getPinCodeValue(pin) ?? "").trim();
+    return {
+      ...pin,
+      pinCode: value,
+      _id: getPinCodeId(pin),
+    };
+  };
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -62,6 +88,14 @@ export default function Warehouse() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // Debounce pincode search inside modal
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedPincodeSearch(pincodeSearch.trim());
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [pincodeSearch]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm]);
@@ -69,6 +103,11 @@ export default function Warehouse() {
   useEffect(() => {
     fetchWarehouses();
   }, [currentPage, debouncedSearchTerm]);
+
+  useEffect(() => {
+    if (!showPincodeModal || !selectedWarehouse?.id) return;
+    fetchPincodesForModal(pincodePage, debouncedPincodeSearch);
+  }, [showPincodeModal, selectedWarehouse?.id, pincodePage, debouncedPincodeSearch]);
 
   const fetchWarehouses = async () => {
     setLoading(true);
@@ -191,19 +230,17 @@ export default function Warehouse() {
     setShowPincodeModal(true);
     setPincodeLoading(true);
     setPincodeSearch("");
+    setDebouncedPincodeSearch("");
     setPincodePage(1);
+    setPincodeTotal(0);
+    setPincodeTotalPages(1);
     setAssignedPincodeIds(new Set());
     setAssignedPinCodes(new Set());
     setNewPincode("");
     setPincodeModalMessage({ type: "success", text: "" });
 
     try {
-      // 1) Load all serviceable pincodes for UI
-      const allRes = await getPincodes(1, 1000, "");
-      const allData = allRes?.data?.data || allRes?.data || allRes || [];
-      setPincodes(Array.isArray(allData) ? allData : []);
-
-      // 2) Load warehouse-assigned pincodes to enable/disable actions
+      // Load warehouse-assigned pincodes to enable/disable actions
       const response = await getWarehousePincodes(warehouse.id);
       const assignedList =
         response?.data?.data ??
@@ -229,6 +266,7 @@ export default function Warehouse() {
         (Array.isArray(assignedList) ? assignedList : [])
           .map(extractPincodeId)
           .filter(Boolean)
+          .map((id) => String(id))
       );
       setAssignedPincodeIds(assignedSet);
 
@@ -242,6 +280,38 @@ export default function Warehouse() {
     } catch (err) {
       console.error("Error loading pincodes:", err);
       setError("Failed to load pincodes");
+    } finally {
+      setPincodeLoading(false);
+    }
+  };
+
+  const fetchPincodesForModal = async (page = 1, search = "") => {
+    try {
+      setPincodeLoading(true);
+      const allRes = await getPincodes(page, PINCODE_LIMIT, search);
+      const allPayload = allRes?.data ?? allRes ?? {};
+      const allData =
+        allPayload?.data?.data ??
+        allPayload?.data ??
+        allPayload?.pincodes ??
+        allPayload?.items ??
+        (Array.isArray(allPayload) ? allPayload : []);
+      const pagination = allPayload?.pagination ?? {};
+      const normalized = (Array.isArray(allData) ? allData : [])
+        .map(normalizePincodeRow)
+        .filter((p) => /^\d{6}$/.test(String(p?.pinCode || "").trim()));
+      setPincodes(normalized);
+      setPincodeTotal(Number(pagination?.total ?? normalized.length ?? 0));
+      setPincodeTotalPages(Math.max(1, Number(pagination?.totalPages ?? 1)));
+    } catch (err) {
+      console.error("Error loading serviceable pincodes:", err);
+      setPincodes([]);
+      setPincodeTotal(0);
+      setPincodeTotalPages(1);
+      setPincodeModalMessage({
+        type: "error",
+        text: getApiErrorMessage(err),
+      });
     } finally {
       setPincodeLoading(false);
     }
@@ -273,6 +343,7 @@ export default function Warehouse() {
       (Array.isArray(assignedList) ? assignedList : [])
         .map(extractPincodeId)
         .filter(Boolean)
+        .map((id) => String(id))
     );
     setAssignedPincodeIds(assignedSet);
 
@@ -386,14 +457,7 @@ export default function Warehouse() {
     }
   };
 
-  const filteredPincodes = pincodes.filter((pin) =>
-    (pin?.pinCode ?? "").toString().includes(pincodeSearch.trim())
-  );
-
-  const paginatedPincodes = filteredPincodes.slice(
-    (pincodePage - 1) * PINCODE_LIMIT,
-    pincodePage * PINCODE_LIMIT
-  );
+  const visiblePincodes = pincodes;
 
   // ────────────────────────────────────────────────
   //                     STOCK MANAGEMENT
@@ -693,7 +757,7 @@ export default function Warehouse() {
                   <div className="text-center py-10 text-gray-500">Loading pincodes...</div>
                 ) : pincodes.length === 0 ? (
                   <div className="text-center py-10 text-gray-500">No pincodes added yet</div>
-                ) : filteredPincodes.length === 0 ? (
+                ) : visiblePincodes.length === 0 ? (
                   <div className="text-center py-10 text-gray-500">No matching pincodes</div>
                 ) : (
                   <>
@@ -711,11 +775,11 @@ export default function Warehouse() {
                             </tr>
                           </thead>
                           <tbody className="divide-y">
-                            {paginatedPincodes.map((pin, i) => {
-                              const value = pin?.pinCode ?? "—";
-                              const pincodeId = pin?._id || pin?.id;
+                            {visiblePincodes.map((pin, i) => {
+                              const value = getPinCodeValue(pin) || "—";
+                              const pincodeId = getPinCodeId(pin);
                               const isAssigned =
-                                (pincodeId && assignedPincodeIds.has(pincodeId)) ||
+                                (pincodeId && assignedPincodeIds.has(String(pincodeId))) ||
                                 assignedPinCodes.has(String(value));
                               return (
                                 <tr key={pincodeId || i} className="hover:bg-gray-50">
@@ -745,12 +809,12 @@ export default function Warehouse() {
                       </div>
                     </div>
 
-                    {filteredPincodes.length > PINCODE_LIMIT && (
+                    {pincodeTotal > 0 && (
                       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-600">
                         <div>
                           Showing {(pincodePage - 1) * PINCODE_LIMIT + 1} –{" "}
-                          {Math.min(pincodePage * PINCODE_LIMIT, filteredPincodes.length)} of{" "}
-                          {filteredPincodes.length}
+                          {Math.min(pincodePage * PINCODE_LIMIT, pincodeTotal)} of{" "}
+                          {pincodeTotal}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -761,20 +825,15 @@ export default function Warehouse() {
                             Prev
                           </button>
                           <span className="px-4 py-1.5 font-medium bg-gray-100 rounded">
-                            Page {pincodePage} of {Math.ceil(filteredPincodes.length / PINCODE_LIMIT)}
+                            Page {pincodePage} of {pincodeTotalPages}
                           </span>
                           <button
                             onClick={() =>
                               setPincodePage((p) =>
-                                Math.min(
-                                  Math.ceil(filteredPincodes.length / PINCODE_LIMIT),
-                                  p + 1
-                                )
+                                Math.min(pincodeTotalPages, p + 1)
                               )
                             }
-                            disabled={
-                              pincodePage >= Math.ceil(filteredPincodes.length / PINCODE_LIMIT)
-                            }
+                            disabled={pincodePage >= pincodeTotalPages}
                             className="px-4 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
                           >
                             Next
