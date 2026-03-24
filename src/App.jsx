@@ -3,13 +3,16 @@ import { Toaster } from "react-hot-toast";
 import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
+import SubAdminRoutes from "./routes/subadminroutes";
+import DesignerRoutes from "./routes/designerroutes";
 import { NotificationProvider } from "./context/NotificationContext";
 import { NotificationSocketConnector } from "./context/NotificationSocketConnector";
-// import SubAdminRoutes from "./routes/subadminroutes";
+import SubadminPreferredPathRedirect from "./components/SubadminPreferredPathRedirect";
 
 function App() {
   return (
     <NotificationProvider>
+      <SubadminPreferredPathRedirect />
       <NotificationSocketConnector />
       <Toaster
         position="top-center"
@@ -29,7 +32,10 @@ function App() {
        <Route path="/driver/*" element={<DriverRoutes />} /> 
       
       {/* SubAdmin Routes */}
-      {/* <Route path="/subadmin/*" element={<SubAdminRoutes />} /> */}
+      <Route path="/subadmin/*" element={<SubAdminRoutes />} />
+
+      {/* Designer Routes */}
+      <Route path="/designer/*" element={<DesignerRoutes />} />
       
       {/* Root redirect - default to admin login */}
       <Route path="/" element={<Navigate to="/admin" replace />} />

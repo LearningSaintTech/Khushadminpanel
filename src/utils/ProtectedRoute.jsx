@@ -24,7 +24,9 @@ const ProtectedRoute = ({ allowedRoles = [], redirectTo = null, children }) => {
     return <Navigate to={getDefaultLoginPath(allowedRoles)} replace />;
   }
 
-  const userRole = (decoded.role || decoded.userRole || 'UNKNOWN').toUpperCase();
+  const rawUserRole = (decoded.role || decoded.userRole || "UNKNOWN").toUpperCase();
+  // Treat SUPER_SUBADMIN same as SUBADMIN for frontend routing/permissions.
+  const userRole = rawUserRole === "SUPER_SUBADMIN" ? "SUBADMIN" : rawUserRole;
 
   if (allowedRoles.length > 0) {
     const hasAccess = allowedRoles.some(
@@ -46,6 +48,7 @@ const getDefaultLoginPath = (allowedRoles) => {
   if (allowedRoles.includes('ADMIN')) return '/admin/login';
   if (allowedRoles.includes('SUBADMIN')) return '/subadmin/login';
   if (allowedRoles.includes('DRIVER')) return '/driver/login';
+  if (allowedRoles.includes('DESIGNER')) return '/designer/login';
   if (allowedRoles.includes('INFLUENCER')) return '/influencer/login';
   return '/admin/login'; // fallback
 };
@@ -53,10 +56,13 @@ const getDefaultLoginPath = (allowedRoles) => {
 const getDashboardPath = (userRole) => {
   switch (userRole) {
     case 'ADMIN':
-    case 'SUBADMIN':
       return '/admin/dashboard';
+    case 'SUBADMIN':
+      return '/subadmin/dashboard';
     case 'DRIVER':
       return '/driver/dashboard';
+    case 'DESIGNER':
+      return '/designer/dashboard';
     case 'INFLUENCER':
       return '/influencer/dashboard';
     default:

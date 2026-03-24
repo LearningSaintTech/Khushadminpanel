@@ -58,12 +58,19 @@ axiosInstance.interceptors.response.use(
  * @param {object} headers
  * @param {object} params
  */
+function isFormDataPayload(bodyData) {
+  if (!bodyData || typeof bodyData !== "object") return false;
+  if (typeof FormData !== "undefined" && bodyData instanceof FormData) return true;
+  return Object.prototype.toString.call(bodyData) === "[object FormData]";
+}
+
 export const apiConnector = (
   method,
   url,
   bodyData = null,
   headers = {},
-  params = {}
+  params = {},
+  requestConfig = {}
 ) => {
   const finalHeaders = { ...headers };
 
@@ -71,12 +78,12 @@ export const apiConnector = (
   // For FormData, let axios/browser set Content-Type automatically with boundary
   if (
     bodyData &&
-    !(bodyData instanceof FormData) &&
-    !finalHeaders["Content-Type"]
+    !isFormDataPayload(bodyData) &&
+    !finalHeaders["Content-Type"] &&
+    !finalHeaders["content-type"]
   ) {
     finalHeaders["Content-Type"] = "application/json";
   }
-  // If bodyData is FormData, don't set Content-Type - browser will add it with boundary
 
   return axiosInstance({
     method,
@@ -84,5 +91,6 @@ export const apiConnector = (
     data: bodyData,
     headers: finalHeaders,
     params,
+    ...requestConfig,
   });
 };

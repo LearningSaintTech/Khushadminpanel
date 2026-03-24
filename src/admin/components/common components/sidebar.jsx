@@ -24,13 +24,20 @@ import {
   UserPlus,
   Truck,
   Building2,
+  ShieldCheck,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { logoutUser } from "../../apis/Authapi";
 import { logout } from "../../../redux/GlobalSlice";
+import { subadminApi } from "../../../subadmin/apis/subadminApi";
 
-const Sidebar = () => {
+const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
+  const ap = (suffix) => {
+    const t = String(suffix || "").replace(/^\/+/,"");
+    return `${basePath}/${t}`.replace(/\/+/g, "/");
+  };
+
   const dispatch = useDispatch();
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -40,15 +47,48 @@ const Sidebar = () => {
   const [isCouponOpen, setIsCouponOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
+  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const bellRef = useRef(null);
 
+  const rawRole = useSelector((s) => s.global?.role);
+  const isFullAdminUser = String(rawRole || "").toUpperCase() === "ADMIN";
+  const [allowedModules, setAllowedModules] = useState(null);
+
   const { unreadCount, dropdownList, markRead, markAllRead, refreshUnreadCount, refreshList } = useNotification();
 
-  const isActive = (path) => location.pathname === path;
-  const isNotificationSectionActive = () => location.pathname.startsWith("/admin/notifications");
+  useEffect(() => {
+    if (!filterByModules || isFullAdminUser) {
+      setAllowedModules(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await subadminApi.getMyModuleAccess();
+        const list = res?.data?.allowedModules ?? [];
+        if (!cancelled) setAllowedModules(new Set(Array.isArray(list) ? list : []));
+      } catch {
+        if (!cancelled) setAllowedModules(new Set());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filterByModules, isFullAdminUser]);
+
+  const canUse = (keys) => {
+    if (!filterByModules || isFullAdminUser) return true;
+    if (!keys?.length) return true;
+    if (allowedModules === null) return false;
+    return keys.some((k) => allowedModules.has(k));
+  };
+
+  const isActive = (path) => location.pathname === path || location.pathname.replace(/\/+/g, "/") === path;
+  const isNotificationSectionActive = () => location.pathname.startsWith(ap("notifications"));
+  const isDesignerSectionActive = () => location.pathname.startsWith(ap("designer"));
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -69,6 +109,12 @@ const Sidebar = () => {
     }
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (isDesignerSectionActive()) {
+      setIsDesignerOpen(true);
+    }
+  }, [location.pathname]);
+
   const handleLogout = async () => {
     console.log("🚪 Logout button clicked");
 
@@ -81,10 +127,17 @@ const Sidebar = () => {
       setIsLoggingOut(true);
       console.log("📡 Calling logout API...");
 
-      await logoutUser();
+      if (basePath === "/subadmin") {
+        try {
+          await subadminApi.logout();
+        } catch {
+          /* ignore */
+        }
+      } else {
+        await logoutUser();
+      }
       dispatch(logout());
-      navigate("/admin");
-      window.location.href = "/";
+      navigate(basePath === "/subadmin" ? "/subadmin/login" : "/admin");
     } catch (error) {
       console.error("❌ Logout error:", error);
       console.error("❌ Error details:", {
@@ -94,8 +147,7 @@ const Sidebar = () => {
       });
 
       dispatch(logout());
-      navigate("/admin");
-      window.location.href = "/";
+      navigate(basePath === "/subadmin" ? "/subadmin/login" : "/admin");
     } finally {
       setIsLoggingOut(false);
       console.log("🏁 Logout process finished");
@@ -128,81 +180,95 @@ const Sidebar = () => {
               <img src={Khush} alt="Khush Logo" className="w-full h-full object-contain" />
             </div>
           </div>
-          <div className="relative shrink-0" ref={bellRef}>
-            <button
-              type="button"
-              onClick={() => { setIsBellOpen((o) => !o); refreshList(1).catch(() => {}); }}
-              className="relative p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition"
-              aria-label="Notifications"
-            >
-              <Bell size={22} />
-              {unreadCount > 0 && (
-                <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </button>
-            {isBellOpen && (
-              <div className="absolute top-full right-0 mt-1 w-72 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
-                  <span className="text-sm font-medium text-white">Notifications</span>
-                  {unreadCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => { markAllRead(); setIsBellOpen(false); }}
-                      className="text-xs text-gray-400 hover:text-white"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {dropdownList.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-gray-500">No notifications</p>
-                  ) : (
-                    dropdownList.map((n) => (
-                      <Link
-                        key={n._id}
-                        to="/admin/notifications"
-                        onClick={() => { markRead(n._id); setIsBellOpen(false); }}
-                        className={`block px-3 py-2.5 hover:bg-white/5 border-b border-gray-800 last:border-0 ${!n.read ? "bg-white/5" : ""}`}
+          {canUse(["admin"]) && (
+            <div className="relative shrink-0" ref={bellRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBellOpen((o) => !o);
+                  refreshList(1).catch(() => {});
+                }}
+                className="relative p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition"
+                aria-label="Notifications"
+              >
+                <Bell size={22} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {isBellOpen && (
+                <div className="absolute top-full right-0 mt-1 w-72 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
+                    <span className="text-sm font-medium text-white">Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          markAllRead();
+                          setIsBellOpen(false);
+                        }}
+                        className="text-xs text-gray-400 hover:text-white"
                       >
-                        <p className="text-sm text-gray-200 font-medium truncate">{n.title}</p>
-                        {n.body && <p className="text-xs text-gray-500 truncate mt-0.5">{n.body}</p>}
-                      </Link>
-                    ))
-                  )}
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {dropdownList.length === 0 ? (
+                      <p className="px-3 py-4 text-sm text-gray-500">No notifications</p>
+                    ) : (
+                      dropdownList.map((n) => (
+                        <Link
+                          key={n._id}
+                          to={ap("notifications")}
+                          onClick={() => {
+                            markRead(n._id);
+                            setIsBellOpen(false);
+                          }}
+                          className={`block px-3 py-2.5 hover:bg-white/5 border-b border-gray-800 last:border-0 ${!n.read ? "bg-white/5" : ""}`}
+                        >
+                          <p className="text-sm text-gray-200 font-medium truncate">{n.title}</p>
+                          {n.body && <p className="text-xs text-gray-500 truncate mt-0.5">{n.body}</p>}
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                  <Link
+                    to={ap("notifications")}
+                    onClick={() => setIsBellOpen(false)}
+                    className="block px-3 py-2.5 text-center text-sm font-medium text-gray-300 hover:bg-white/5 border-t border-gray-700"
+                  >
+                    See all
+                  </Link>
                 </div>
-                <Link
-                  to="/admin/notifications"
-                  onClick={() => setIsBellOpen(false)}
-                  className="block px-3 py-2.5 text-center text-sm font-medium text-gray-300 hover:bg-white/5 border-t border-gray-700"
-                >
-                  See all
-                </Link>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Navigation - scrollable but scrollbar hidden */}
         <nav className="flex-1 px-4 py-5 overflow-y-auto scrollbar-hide">
           <div className="space-y-1.5">
             {/* Dashboard */}
-            <Link
-              to="/admin/dashboard"
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/dashboard") ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <LayoutDashboard
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Dashboard</span>
-            </Link>
+            {canUse(["admin"]) && (
+              <Link
+                to={ap("dashboard")}
+                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                  isActive(ap("dashboard")) ? "bg-white/10 text-white" : ""
+                }`}
+              >
+                <LayoutDashboard
+                  size={20}
+                  className="text-gray-400 group-hover:text-black"
+                />
+                <span>Dashboard</span>
+              </Link>
+            )}
 
             {/* Notifications dropdown */}
+            {canUse(["admin"]) && (
             <div>
               <button
                 onClick={() => {
@@ -230,9 +296,9 @@ const Sidebar = () => {
               >
                 <div className="pl-4 pr-2 py-1 space-y-0.5 border-l-2 border-gray-700 ml-5">
                   <Link
-                    to="/admin/notifications"
+                    to={ap("notifications")}
                     className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      location.pathname === "/admin/notifications"
+                      location.pathname === ap("notifications")
                         ? "bg-white/10 text-white"
                         : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
                     }`}
@@ -240,9 +306,9 @@ const Sidebar = () => {
                     1. All notifications
                   </Link>
                   <Link
-                    to="/admin/notifications/sent"
+                    to={ap("notifications/sent")}
                     className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      isActive("/admin/notifications/sent")
+                      isActive(ap("notifications/sent"))
                         ? "bg-white/10 text-white"
                         : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
                     }`}
@@ -253,7 +319,7 @@ const Sidebar = () => {
                     <button
                       onClick={() => setIsTemplatesOpen((o) => !o)}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded text-sm font-medium ${
-                        isActive("/admin/notifications/templates") || isActive("/admin/notifications/email-templates")
+                        isActive(ap("notifications/templates")) || isActive(ap("notifications/email-templates"))
                           ? "bg-white/10 text-white"
                           : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
                       }`}
@@ -263,13 +329,13 @@ const Sidebar = () => {
                     </button>
                     <div className={`overflow-hidden ${isTemplatesOpen ? "max-h-24" : "max-h-0"}`}>
                       <Link
-                        to="/admin/notifications/templates"
+                        to={ap("notifications/templates")}
                         className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
                       >
                         In-app
                       </Link>
                       <Link
-                        to="/admin/notifications/email-templates"
+                        to={ap("notifications/email-templates")}
                         className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
                       >
                         Email
@@ -277,9 +343,9 @@ const Sidebar = () => {
                     </div>
                   </div>
                   <Link
-                    to="/admin/notifications/broadcast"
+                    to={ap("notifications/broadcast")}
                     className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      isActive("/admin/notifications/broadcast")
+                      isActive(ap("notifications/broadcast"))
                         ? "bg-white/10 text-white"
                         : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
                     }`}
@@ -287,13 +353,13 @@ const Sidebar = () => {
                     4. Broadcast
                   </Link>
                   <Link
-                    to="/admin/notifications/history"
+                    to={ap("notifications/history")}
                     className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
                   >
                     History
                   </Link>
                   <Link
-                    to="/admin/notifications/test"
+                    to={ap("notifications/test")}
                     className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
                   >
                     Test
@@ -301,8 +367,10 @@ const Sidebar = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Inventory Dropdown */}
+            {canUse(["categories", "subcategories", "items", "warehouse"]) && (
             <div>
               <button
                 onClick={() => setIsInventoryOpen(!isInventoryOpen)}
@@ -334,9 +402,9 @@ const Sidebar = () => {
               >
                 <div className="pl-10 pr-4 py-2 space-y-1">
                   <Link
-                    to="/admin/inventory/categories"
+                    to={ap("inventory/categories")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes("/admin/inventory/categories")
+                      location.pathname.includes(ap("inventory/categories"))
                         ? "bg-white/10 text-white"
                         : ""
                     }`}
@@ -345,9 +413,20 @@ const Sidebar = () => {
                   </Link>
 
                   <Link
-                    to="/admin/subcategoriess"
+                    to={ap("inventory-codes")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes("/admin/subcategoriess")
+                      location.pathname.includes(ap("inventory-codes"))
+                        ? "bg-white/10 text-white"
+                        : ""
+                    }`}
+                  >
+                    Inventory codes
+                  </Link>
+
+                  <Link
+                    to={ap("subcategoriess")}
+                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
+                      location.pathname.includes(ap("subcategoriess"))
                         ? "bg-white/10 text-white"
                         : ""
                     }`}
@@ -355,38 +434,29 @@ const Sidebar = () => {
                     SubCategories
                   </Link>
                   <Link
-                    to="/admin/items"
+                    to={ap("items")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes("/admin/items")
+                      location.pathname.includes(ap("items"))
                         ? "bg-white/10 text-white"
                         : ""
                     }`}
                   >
                     Items
                   </Link>
-                  {/* <Link
-                    to="/admin/inventory/subcategoriesss"
+                  <Link
+                    to={ap("inventory/central")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes('/admin/inventory/categories') ? 'bg-white/10 text-white' : ''
-                    }`}
-                  >
-                    SubCategories
-                  </Link> */}
-
-                  {/* <Link
-                    to="/admin/inventory/central"
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes("/admin/items")
+                      location.pathname.includes(ap("items"))
                         ? "bg-white/10 text-white"
                         : ""
                     }`}
                   >
                   Central  Stock management
-                  </Link> */}
+                  </Link>
                   <Link
-                    to="/admin/stocks"
+                    to={ap("stocks")}
                     className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes("/admin/items")
+                      location.pathname.includes(ap("items"))
                         ? "bg-white/10 text-white"
                         : ""
                     }`}
@@ -396,9 +466,11 @@ const Sidebar = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Other items */}
             {/* Coupons Dropdown */}
+            {canUse(["coupons"]) && (
             <div>
               <button
                 onClick={() => setIsCouponOpen(!isCouponOpen)}
@@ -427,14 +499,14 @@ const Sidebar = () => {
               >
                 <div className="pl-10 pr-4 py-2 space-y-1">
                   <Link
-                    to="/admin/coupons"
+                    to={ap("coupons")}
                     className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
                   >
                     Coupon List
                   </Link>
 
                   <Link
-                    to="/admin/coupon-analytics"
+                    to={ap("coupon-analytics")}
                     className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
                   >
                     Coupon Analytics
@@ -442,11 +514,13 @@ const Sidebar = () => {
                 </div>
               </div>
             </div>
+            )}
 
+            {canUse(["sections"]) && (
             <Link
-              to="/admin/sections"
+              to={ap("sections")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/sections") ? "bg-white/10 text-white" : ""
+                isActive(ap("sections")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <ShoppingCart
@@ -455,7 +529,9 @@ const Sidebar = () => {
               />
               <span>Sections</span>
             </Link>
+            )}
             {/* Policy Dropdown */}
+            {canUse(["exchange", "admin"]) && (
             <div>
               <button
                 onClick={() => setIsPolicyOpen(!isPolicyOpen)}
@@ -484,35 +560,41 @@ const Sidebar = () => {
                 }`}
               >
                 <div className="pl-10 pr-4 py-2 space-y-1">
-                  <Link
-                    to="/admin/exchange"
-                    className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
-                      location.pathname.includes("/admin/exchange")
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Exchange
-                  </Link>
+                  {canUse(["exchange"]) && (
+                    <Link
+                      to={ap("exchange")}
+                      className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
+                        location.pathname.includes(ap("exchange"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Exchange
+                    </Link>
+                  )}
 
-                  <Link
-                    to="/admin/cancellation"
-                    className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
-                      location.pathname.includes("/admin/cancellation")
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Cancellation
-                  </Link>
+                  {canUse(["admin"]) && (
+                    <Link
+                      to={ap("cancellation")}
+                      className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
+                        location.pathname.includes(ap("cancellation"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Cancellation
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
+            )}
 
+            {canUse(["banner"]) && (
             <Link
-              to="/admin/banners"
+              to={ap("banners")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/banners") ? "bg-white/10 text-white" : ""
+                isActive(ap("banners")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <FileText
@@ -521,11 +603,13 @@ const Sidebar = () => {
               />
               <span>Banner</span>
             </Link>
+            )}
 
+            {canUse(["brands"]) && (
             <Link
-              to="/admin/brands"
+              to={ap("brands")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/brands") ? "bg-white/10 text-white" : ""
+                isActive(ap("brands")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <FileText
@@ -534,11 +618,13 @@ const Sidebar = () => {
               />
               <span>Brands</span>
             </Link>
+            )}
 
+            {canUse(["features"]) && (
             <Link
-              to="/admin/features"
+              to={ap("features")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/features") ? "bg-white/10 text-white" : ""
+                isActive(ap("features")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Package
@@ -547,11 +633,13 @@ const Sidebar = () => {
               />
               <span>Features</span>
             </Link>
+            )}
 
+            {canUse(["admin"]) && (
             <Link
-              to="/admin/orders"
+              to={ap("orders")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/orders") ? "bg-white/10 text-white" : ""
+                isActive(ap("orders")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Package
@@ -560,11 +648,12 @@ const Sidebar = () => {
               />
               <span>Orders</span>
             </Link>
+            )}
 
             {/* <Link
-              to="/admin/status"
+              to={ap("status")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/status") ? "bg-white/10 text-white" : ""
+                isActive(ap("status")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Package
@@ -576,10 +665,11 @@ const Sidebar = () => {
               
             </Link> */}
 
+            {canUse(["filters"]) && (
             <Link
-              to="/admin/filters"
+              to={ap("filters")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/filters") ? "bg-white/10 text-white" : ""
+                isActive(ap("filters")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Package
@@ -588,11 +678,13 @@ const Sidebar = () => {
               />
               <span>Filters</span>
             </Link>
+            )}
 
+            {canUse(["banner"]) && (
             <Link
-              to="/admin/splash"
+              to={ap("splash")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/splash") ? "bg-white/10 text-white" : ""
+                isActive(ap("splash")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Package
@@ -601,13 +693,13 @@ const Sidebar = () => {
               />
               <span>Home banners</span>
             </Link>
+            )}
 
-            
-
+            {canUse(["warehouse"]) && (
             <Link
-              to="/admin/warehouse"
+              to={ap("warehouse")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/warehouse") ? "bg-white/10 text-white" : ""
+                isActive(ap("warehouse")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Building2
@@ -616,11 +708,13 @@ const Sidebar = () => {
               />
               <span>Warehouse</span>
             </Link>
+            )}
 
+            {canUse(["cart-charges"]) && (
             <Link
-              to="/admin/cart-charges"
+              to={ap("cart-charges")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/cart-charges") ? "bg-white/10 text-white" : ""
+                isActive(ap("cart-charges")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Receipt
@@ -629,11 +723,13 @@ const Sidebar = () => {
               />
               <span>Cart Charges</span>
             </Link>
+            )}
 
+            {canUse(["reviews"]) && (
             <Link
-              to="/admin/reviews"
+              to={ap("reviews")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/reviews") ? "bg-white/10 text-white" : ""
+                isActive(ap("reviews")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Receipt
@@ -642,11 +738,13 @@ const Sidebar = () => {
               />
               <span>Reviews</span>
             </Link>
+            )}
 
+            {canUse(["contact-us"]) && (
             <Link
-              to="/admin/contact-us"
+              to={ap("contact-us")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/contact-us") ? "bg-white/10 text-white" : ""
+                isActive(ap("contact-us")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Mail
@@ -655,11 +753,13 @@ const Sidebar = () => {
               />
               <span>Contact Requests</span>
             </Link>
+            )}
 
+            {canUse(["delivery"]) && (
             <Link
-              to="/admin/delivery"
+              to={ap("delivery")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/delivery") ? "bg-white/10 text-white" : ""
+                isActive(ap("delivery")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <GrDeliver
@@ -668,11 +768,13 @@ const Sidebar = () => {
               />
               <span>Delivery</span>
             </Link>
+            )}
 
+            {canUse(["servicablePincode"]) && (
             <Link
-              to="/admin/pincode"
+              to={ap("pincode")}
               className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive("/admin/pincode") ? "bg-white/10 text-white" : ""
+                isActive(ap("pincode")) ? "bg-white/10 text-white" : ""
               }`}
             >
               <Receipt
@@ -681,17 +783,19 @@ const Sidebar = () => {
               />
               <span>Pincode</span>
             </Link>
+            )}
 
             {/* Panel Management Section */}
+            {canUse(["admin"]) && (
             <div className="pt-4 mt-4 border-t border-gray-800">
               <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Panel Management
               </div>
 
               <Link
-                to="/admin/subadmin"
+                to={ap("subadmin")}
                 className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive("/admin/subadmin") ? "bg-white/10 text-white" : ""
+                  isActive(ap("subadmin")) ? "bg-white/10 text-white" : ""
                 }`}
               >
                 <UserPlus
@@ -700,6 +804,28 @@ const Sidebar = () => {
                 />
                 <span>Sub Admin</span>
               </Link>
+
+              <Link
+                to={ap("subadmin/module-access")}
+                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                  isActive(ap("subadmin/module-access")) ? "bg-white/10 text-white" : ""
+                }`}
+              >
+                <ShieldCheck size={20} className="text-gray-400 group-hover:text-black" />
+                <span>Module Access</span>
+              </Link>
+
+              {!filterByModules && (
+                <Link
+                  to={ap("audit-logs")}
+                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isActive(ap("audit-logs")) ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <History size={20} className="text-gray-400 group-hover:text-black" />
+                  <span>Audit Logs</span>
+                </Link>
+              )}
 
               {/* Influencer Dropdown */}
               <div>
@@ -730,14 +856,14 @@ const Sidebar = () => {
                 >
                   <div className="pl-10 pr-4 py-2 space-y-1">
                     <Link
-                      to="/admin/influencer"
+                      to={ap("influencer")}
                       className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
                     >
                       Influencer List
                     </Link>
 
                     <Link
-                      to="/admin/influencer/coupons"
+                      to={ap("influencer/coupons")}
                       className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
                     >
                       Influencer Coupons
@@ -747,9 +873,9 @@ const Sidebar = () => {
               </div>
 
               <Link
-                to="/admin/driver"
+                to={ap("driver")}
                 className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive("/admin/driver") ? "bg-white/10 text-white" : ""
+                  isActive(ap("driver")) ? "bg-white/10 text-white" : ""
                 }`}
               >
                 <Truck
@@ -758,14 +884,69 @@ const Sidebar = () => {
                 />
                 <span>Driver</span>
               </Link>
+
+              <div>
+                <button
+                  onClick={() => setIsDesignerOpen(!isDesignerOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isDesignerSectionActive() ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users
+                      size={20}
+                      className="text-gray-400 group-hover:text-black"
+                    />
+                    <span>Designer</span>
+                  </div>
+                  {isDesignerOpen ? (
+                    <ChevronDown size={18} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={18} className="text-gray-400" />
+                  )}
+                </button>
+
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${
+                    isDesignerOpen
+                      ? "max-h-40 opacity-100 mt-1"
+                      : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="pl-10 pr-4 py-2 space-y-1">
+                    <Link
+                      to={ap("designer")}
+                      className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
+                        isActive(ap("designer"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Management
+                    </Link>
+
+                    <Link
+                      to={ap("designer/inventory")}
+                      className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
+                        isActive(ap("designer/inventory"))
+                          ? "bg-white/10 text-white"
+                          : ""
+                      }`}
+                    >
+                      Inventory
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
+            )}
           </div>
         </nav>
 
         {/* Bottom */}
         <div className="p-4 border-t border-gray-800 shrink-0">
           <Link
-            to="/admin/settings"
+            to={ap("settings")}
             className="flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white/10 hover:text-white transition-all duration-200 font-medium group mb-2"
           >
             <Settings
@@ -775,7 +956,7 @@ const Sidebar = () => {
             <span>Settings</span>
           </Link>
           <Link
-            to="/admin/profile"
+            to={ap("profile")}
             className="flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white/10 hover:text-white transition-all duration-200 font-medium group mb-2"
           >
             <Settings
