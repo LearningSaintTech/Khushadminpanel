@@ -9,6 +9,14 @@ import { Plus, Edit2, Trash2, CheckCircle, XCircle, Loader2, Search, Package } f
 import Deliveryform from "./Deliveryform";
 
 const LIMIT = 10;
+const cleanApiErrorMessage = (err, fallback = "Request failed") => {
+  const raw = String(err?.response?.data?.message || err?.message || "");
+  const cleaned = raw
+    .replace(/<!DOCTYPE[\s\S]*?<\/html>/gi, "")
+    .replace(/\{\{baseUrl\}\}[\s\S]*/gi, "")
+    .trim();
+  return cleaned || fallback;
+};
 
 export default function Delivery() {
   const [deliveries, setDeliveries] = useState([]);
@@ -60,13 +68,16 @@ export default function Delivery() {
   const fetchDeliveries = async (page = 1, searchTerm = "") => {
     setLoading(true);
     try {
+      console.log("[Delivery] fetch:start", { page, searchTerm, statusFilter });
       const res = await getDeliveries(undefined, undefined, searchTerm, true);
       const data = res?.data ?? res;
       const items = Array.isArray(res) ? res : Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
       const fullList = Array.isArray(items) ? items : [];
+      console.log("[Delivery] fetch:success", { count: fullList.length });
       setAllDeliveries(fullList);
       setPageFromFullList(fullList, page, searchTerm, statusFilter);
-    } catch {
+    } catch (err) {
+      console.error("[Delivery] fetch:error", err);
       toast.error("Could not load delivery options");
       setDeliveries([]);
       setAllDeliveries([]);
@@ -110,13 +121,28 @@ export default function Delivery() {
     setActionLoading(true);
     let failed = 0;
     try {
-      for (const id of ids) {
-        try {
-          await deleteDelivery(id);
-        } catch {
-          failed += 1;
-        }
-      }
+   for (const id of ids) {
+  try {
+    console.log("[Delivery] bulkDelete:item:start", { id });
+
+    const res = await deleteDelivery(id);
+
+    console.log("Delete response:", res);
+
+    // ✅ CHECK SUCCESS PROPERLY
+    const success = res?.data?.success ?? res?.success;
+
+    if (!success) {
+      throw new Error(res?.data?.message || "Delete failed");
+    }
+
+    console.log("[Delivery] bulkDelete:item:success", { id });
+
+  } catch (err) {
+    console.error("[Delivery] bulkDelete:item:error", { id, err });
+    failed += 1;
+  }
+}
       if (failed > 0) toast.error(`Deleted ${ids.length - failed}; ${failed} failed`);
       else toast.success(`Deleted ${ids.length} option(s)`);
       setSelectedIds(new Set());
@@ -360,21 +386,37 @@ export default function Delivery() {
                               <Edit2 size={18} />
                             </button>
                             <button
-                              onClick={() => {
-                                if (window.confirm("Delete this delivery option?")) {
-                                  setActionLoading(true);
-                                  deleteDelivery(item._id)
-                                    .then(() => {
-                                      toast.success("Deleted");
-                                      fetchDeliveries(currentPage, deliverySearch);
-                                    })
-                                    .catch(() => toast.error("Failed to delete"))
-                                    .finally(() => setActionLoading(false));
-                                }
-                              }}
-                              disabled={actionLoading}
-                              className="p-2 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-50"
-                              title="Delete"
+                             onClick={async () => {
+  if (!window.confirm("Delete this delivery option?")) return;
+
+  setActionLoading(true);
+  console.log("[Delivery] rowDelete:start", { id: item._id });
+
+  try {
+    const res = await deleteDelivery(item._id);
+
+    console.log("Delete response:", res);
+
+    // ✅ IMPORTANT: check success properly
+    const success = res?.data?.success ?? res?.success;
+
+    if (!success) {
+      throw new Error(res?.data?.message || "Delete failed");
+    }
+
+    toast.success("Deleted");
+
+    // ✅ refresh list
+    await fetchDeliveries(currentPage, deliverySearch);
+
+  } catch (err) {
+    console.error("[Delivery] rowDelete:error", err);
+
+    toast.error(cleanApiErrorMessage(err, "Failed to delete"));
+  } finally {
+    setActionLoading(false);
+  }
+}}
                             >
                               <Trash2 size={18} />
                             </button>

@@ -11,6 +11,15 @@ import { Search, Loader2, Trash2, X } from "lucide-react";
 
 const PINCODE_PAGE_SIZE = 10;
 
+const cleanApiErrorMessage = (err, fallback = "Failed to delete") => {
+  const raw = String(err?.response?.data?.message || err?.message || "");
+  const cleaned = raw
+    .replace(/<!DOCTYPE[\s\S]*?<\/html>/gi, "")
+    .replace(/\{\{baseUrl\}\}[\s\S]*/gi, "")
+    .trim();
+  return cleaned || fallback;
+};
+
 /** Only these delivery types are supported in this form (matches backend expectations). */
 const DELIVERY_TYPE_OPTIONS = [
   { value: "NORMAL", label: "NORMAL" },
@@ -34,6 +43,7 @@ const defaultFormData = {
 export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   const [formData, setFormData] = useState(defaultFormData);
   const [selectedPincodes, setSelectedPincodes] = useState([]);
+  const [editPincodes, setEditPincodes] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [apiErrors, setApiErrors] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -51,8 +61,10 @@ const formRef = useRef(null);
 
   useEffect(() => {
     if (editId) {
+      setEditPincodes(false);
       loadDelivery(editId);
     } else {
+      setEditPincodes(true);
       setFormData(defaultFormData);
       setSelectedPincodes([]);
       setFormErrors({});
@@ -74,7 +86,13 @@ const formRef = useRef(null);
     try {
       const res = await getPincodes(page, PINCODE_PAGE_SIZE, search);
       const raw = res?.data ?? res;
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.data?.data)
+          ? raw.data.data
+          : Array.isArray(raw?.data)
+            ? raw.data
+            : [];
       setPincodes(Array.isArray(list) ? list : []);
       setPincodePage(page);
       const pagination = raw?.pagination ?? res?.pagination;
@@ -92,7 +110,17 @@ const formRef = useRef(null);
       const res = await getSingleDelivery(id);
       const item = res?.data?.data || res?.data;
       if (!item?._id) throw new Error("Delivery not found");
-      setSelectedPincodes(item.serviceablePincodes || []);
+      const normalizedPincodeIds = Array.isArray(item.serviceablePincodes)
+        ? item.serviceablePincodes
+            .map((pin) =>
+              typeof pin === "string"
+                ? pin
+                : pin?._id || pin?.id || pin?.pincodeId?._id || pin?.pincodeId?.id,
+            )
+            .filter(Boolean)
+            .map(String)
+        : [];
+      setSelectedPincodes(normalizedPincodeIds);
       setFormData({
         deliveryType: item.deliveryType || "",
         min: String(item.deliveryDuration?.min ?? ""),
@@ -116,6 +144,7 @@ const formRef = useRef(null);
 
   const validate = () => {
     const errors = {};
+    const shouldValidatePincodes = !editId || editPincodes;
     const dt = formData.deliveryType?.trim() || "";
     if (!dt) errors.deliveryType = "Delivery type is required";
     else if (!DELIVERY_TYPE_OPTIONS.some((o) => o.value === dt))
@@ -125,7 +154,9 @@ const formRef = useRef(null);
     if (Number(formData.min) > Number(formData.max)) errors.max = "Max must be ≥ Min";
     if (formData.deliveryCharge === "" || Number(formData.deliveryCharge) < 0)
       errors.deliveryCharge = "Delivery charge is required (≥ 0)";
-    if (selectedPincodes.length === 0) errors.pincodes = "Select at least one pincode";
+    if (shouldValidatePincodes && selectedPincodes.length === 0) {
+      errors.pincodes = "Select at least one pincode";
+    }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -140,7 +171,6 @@ const formRef = useRef(null);
     setSaving(true);
     const payload = {
       deliveryType: formData.deliveryType.trim(),
-      serviceablePincodes: selectedPincodes,
       deliveryDuration: {
         min: Number(formData.min),
         max: Number(formData.max),
@@ -154,7 +184,22 @@ const formRef = useRef(null);
       deliveryCharge: Number(formData.deliveryCharge),
       isActive: formData.isActive,
     };
+    if (!editId || editPincodes) {
+      payload.serviceablePincodes = selectedPincodes.map(String);
+    }
     try {
+      console.log("[DeliveryForm] submit:start", {
+        editId,
+        payloadPreview: {
+          ...payload,
+          serviceablePincodesCount: Array.isArray(payload.serviceablePincodes)
+            ? payload.serviceablePincodes.length
+            : 0,
+          serviceablePincodesSample: Array.isArray(payload.serviceablePincodes)
+            ? payload.serviceablePincodes.slice(0, 10)
+            : [],
+        },
+      });
       if (editId) {
         await updateDelivery(editId, payload);
         toast.success("Delivery option updated");
@@ -164,6 +209,7 @@ const formRef = useRef(null);
       }
       onSuccess?.();
     } catch (err) {
+      console.error("[DeliveryForm] submit:error", err);
       const raw = err?.response?.data ?? err ?? {};
       const data = typeof raw === "string" ? { message: raw } : raw;
       const msgs = [];
@@ -182,27 +228,35 @@ const formRef = useRef(null);
 
   const handleDelete = async () => {
     if (!editId) return;
-    if (!window.confirm("Delete this delivery option? This cannot be undone.")) return;
+    if (!window.confirm("Delete this delivery option?")) return;
     setSaving(true);
     try {
-      await deleteDelivery(editId);
+      console.log("[DeliveryForm] delete:start", { editId });
+      const res = await deleteDelivery(editId);
+      const success = res?.data?.success ?? res?.success ?? true;
+      if (!success) {
+        throw new Error(res?.data?.message || res?.message || "Delete failed");
+      }
+      console.log("[DeliveryForm] delete:success", { editId });
       toast.success("Delivery option deleted");
       onSuccess?.();
-    } catch {
-      toast.error("Failed to delete");
+    } catch (err) {
+      console.error("[DeliveryForm] delete:error", err);
+      toast.error(cleanApiErrorMessage(err));
     } finally {
       setSaving(false);
     }
   };
 
   const togglePincode = (id) => {
+    const idStr = String(id);
     setSelectedPincodes((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(idStr) ? prev.filter((x) => x !== idStr) : [...prev, idStr]
     );
   };
 
   const toggleSelectAllPincodes = () => {
-    const ids = pincodes.map((p) => p._id).filter(Boolean);
+    const ids = pincodes.map((p) => p._id).filter(Boolean).map(String);
     const allSelected = ids.length > 0 && ids.every((id) => selectedPincodes.includes(id));
     setSelectedPincodes((prev) =>
       allSelected ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])]
@@ -257,6 +311,25 @@ const formRef = useRef(null);
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {editId && (
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editPincodes}
+                  onChange={(e) => setEditPincodes(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
+                />
+                Update serviceable pincodes in this edit
+              </label>
+              {!editPincodes && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Pincodes will remain unchanged to avoid large update payloads.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Delivery type <span className="text-red-500">*</span>
@@ -280,25 +353,30 @@ const formRef = useRef(null);
             )}
           </div>
 
-          <div className="md:col-span-2">
+          <div className={`md:col-span-2 ${editId && !editPincodes ? "opacity-60" : ""}`}>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Serviceable pincodes <span className="text-red-500">*</span>
             </label>
-            <form onSubmit={handlePincodeSearch} className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   type="text"
+                  disabled={!!editId && !editPincodes}
                   value={pincodeSearch}
                   onChange={(e) => setPincodeSearch(e.target.value)}
                   placeholder="Search pincode..."
                   className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-500 outline-none"
                 />
               </div>
-              <button type="submit" className="px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-medium hover:bg-slate-800">
+               <button
+  type="button"
+  disabled={!!editId && !editPincodes}
+  onClick={handlePincodeSearch}
+ className="px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
                 Search
               </button>
-            </form>
+            </div>
             <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-44 overflow-y-auto">
               {pincodesLoading ? (
                 <p className="text-sm text-slate-500 py-2">Loading...</p>
@@ -309,6 +387,7 @@ const formRef = useRef(null);
                   <label className="flex items-center gap-2 py-1.5 text-sm font-medium text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={!!editId && !editPincodes}
                       checked={pincodes.length > 0 && pincodes.every((p) => selectedPincodes.includes(p._id))}
                       onChange={toggleSelectAllPincodes}
                       className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
@@ -320,6 +399,7 @@ const formRef = useRef(null);
                       <label key={p._id} className="flex items-center gap-2 py-1 text-sm cursor-pointer hover:bg-slate-100 rounded-lg px-2">
                         <input
                           type="checkbox"
+                          disabled={!!editId && !editPincodes}
                           checked={selectedPincodes.includes(p._id)}
                           onChange={() => togglePincode(p._id)}
                           className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
@@ -336,7 +416,7 @@ const formRef = useRef(null);
               <div className="flex gap-1">
                 <button
                   type="button"
-                  disabled={pincodePage <= 1 || pincodesLoading}
+                  disabled={pincodePage <= 1 || pincodesLoading || (!!editId && !editPincodes)}
                   onClick={() => fetchPincodes(pincodePage - 1, pincodeSearch.trim())}
                   className="px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
                 >
@@ -344,7 +424,7 @@ const formRef = useRef(null);
                 </button>
                 <button
                   type="button"
-                  disabled={pincodePage >= pincodeTotalPages || pincodesLoading}
+                  disabled={pincodePage >= pincodeTotalPages || pincodesLoading || (!!editId && !editPincodes)}
                   onClick={() => fetchPincodes(pincodePage + 1, pincodeSearch.trim())}
                   className="px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
                 >
