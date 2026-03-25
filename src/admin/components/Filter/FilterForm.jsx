@@ -157,6 +157,9 @@ const FilterForm = () => {
       setLoading(true);
       setError(null);
 
+      // DEBUG: verify what values are being sent for color hex swatches
+      console.log("[DEBUG admin FilterForm] submitting payload", payload);
+
       if (isEdit) {
         await updateFilter(id, payload);
       } else {
