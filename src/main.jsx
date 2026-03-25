@@ -20,13 +20,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           }}
         >
           <App />
-          <Toaster
+          {/* <Toaster
             position="top-right"
             toastOptions={{
               duration: 4000,
               style: { maxWidth: 440 },
             }}
-          />
+          /> */}
         </BrowserRouter>
       </PersistGate>
     </Provider>

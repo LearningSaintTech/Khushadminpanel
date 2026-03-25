@@ -31,22 +31,41 @@ const CartChargesConfigForm = () => {
 
           if (data) {
           const mapRule = (r) => {
-            const hasPercent = r?.percent !== undefined && r?.percent !== null && r?.percent !== "";
+            const hasPercentField =
+              r?.percent !== undefined && r?.percent !== null && r?.percent !== "";
+            const isPercentType = String(r?.type || "").toUpperCase() === "PERCENT";
+
+            const resolvedType = hasPercentField || isPercentType ? "PERCENT" : "FLAT";
+
             return {
               min: r?.min ?? "",
               max: r?.max === null || r?.max === undefined ? "" : r.max,
-              type: hasPercent ? "PERCENT" : "FLAT",
-              amount: hasPercent ? (r.percent ?? "") : (r.value ?? ""),
+              type: resolvedType,
+              // Backend sometimes returns either `percent` or `value` for percent rules.
+              amount:
+                resolvedType === "PERCENT"
+                  ? (r?.percent ?? r?.value ?? "")
+                  : (r?.value ?? ""),
             };
           };
+
           const list = data.cartCharge || [];
           const byKey = {};
           list.forEach((item) => {
             const key = item.key || "";
-            const rule = item.rules && !Array.isArray(item.rules) ? item.rules : (item.rules && item.rules[0]) || {};
-            if (!byKey[key]) byKey[key] = { key, rules: [] };
+            const rule =
+              item.rules && !Array.isArray(item.rules)
+                ? item.rules
+                : (item.rules && item.rules[0]) || {};
+
+            const nextIsCODSpecial = item.isCODSpecial !== undefined ? !!item.isCODSpecial : false;
+
+            if (!byKey[key]) byKey[key] = { key, isCODSpecial: nextIsCODSpecial, rules: [] };
+            else if (item.isCODSpecial !== undefined) byKey[key].isCODSpecial = nextIsCODSpecial;
+
             byKey[key].rules.push(mapRule(rule));
           });
+
           setFormData({
             isActive: data.isActive !== false,
             cartCharge: Object.values(byKey),
@@ -76,7 +95,7 @@ const CartChargesConfigForm = () => {
   const addNewCharge = () => {
     setFormData((prev) => ({
       ...prev,
-      cartCharge: [...prev.cartCharge, { key: "", rules: [] }],
+      cartCharge: [...prev.cartCharge, { key: "", isCODSpecial: false, rules: [] }],
     }));
   };
 
@@ -158,68 +177,7 @@ const CartChargesConfigForm = () => {
     setFormData({ ...formData, cartCharge: updated });
   };
 
-  // const updateRule = (chargeIndex, ruleKey, value) => {
-  //   const updated = [...formData.cartCharge];
-  //   const rules = { ...updated[chargeIndex].rules };
-
-  //   // Convert numeric values
-  //   if (ruleKey === "min" || ruleKey === "max" || ruleKey === "value" ||
-  //       ruleKey === "base" || ruleKey === "percent" || ruleKey === "threshold" ||
-  //       ruleKey === "multiplier") {
-  //     rules[ruleKey] = value === "" ? 0 : Number(value);
-  //   } else {
-  //     rules[ruleKey] = value;
-  //   }
-
-  //   updated[chargeIndex].rules = rules;
-  //   setFormData({ ...formData, cartCharge: updated });
-  // };
-
-  // Get rule fields based on charge key type
-  // const getRuleFields = (charge) => {
-  //   const keyType = charge?.key?.toLowerCase() || "";
-
-  //   if (keyType === "delivery" || keyType === "packing") {
-  //     return [
-  //       { label: "Min", key: "min", type: "number" },
-  //       { label: "Max", key: "max", type: "number" },
-  //       { label: "Value", key: "value", type: "number" },
-  //     ];
-  //   } else if (keyType === "platformfee" || keyType === "convienece") {
-  //     return [
-  //       { label: "Base", key: "base", type: "number" },
-  //       { label: "Percent", key: "percent", type: "number" },
-  //     ];
-  //   } else if (keyType === "surge") {
-  //     return [
-  //       { label: "Threshold", key: "threshold", type: "number" },
-  //       { label: "Multiplier", key: "multiplier", type: "number", step: "0.1" },
-  //     ];
-  //   } else if (keyType === "nightcharge") {
-  //     return [
-  //       { label: "Start Time", key: "startTime", type: "time" },
-  //       { label: "End Time", key: "endTime", type: "time" },
-  //       { label: "Value", key: "value", type: "number" },
-  //     ];
-  //   }
-
-  //   // For unknown keys, show dynamic rule editor based on existing rules
-  //   const rules = charge?.rules || {};
-  //   if (Object.keys(rules).length > 0) {
-  //     return Object.keys(rules).map(ruleKey => ({
-  //       label: ruleKey,
-  //       key: ruleKey,
-  //       type: typeof rules[ruleKey] === "number" ? "number" : "text",
-  //     }));
-  //   }
-
-  //   // Default empty state
-  //   return [];
-  // };
-
-  // ============================
-  // Submit
-  // ============================
+ 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -243,10 +201,16 @@ const CartChargesConfigForm = () => {
       const cleaned = {};
       if (rule.min !== "" && rule.min !== undefined) cleaned.min = Number(rule.min);
       cleaned.max = rule.max === "" || rule.max === undefined ? null : Number(rule.max);
-      if (rule.type === "PERCENT") {
-        if (rule.amount !== "" && rule.amount !== undefined) cleaned.percent = Number(rule.amount);
-      } else {
-        if (rule.amount !== "" && rule.amount !== undefined) cleaned.value = Number(rule.amount);
+      cleaned.type = rule.type ?? "FLAT";
+
+      if (rule.amount !== "" && rule.amount !== undefined) {
+        if (rule.type === "PERCENT") {
+          // Send both `percent` and `value` to support backend variations.
+          cleaned.percent = Number(rule.amount);
+          cleaned.value = Number(rule.amount);
+        } else {
+          cleaned.value = Number(rule.amount);
+        }
       }
       return cleaned;
     };
@@ -256,6 +220,7 @@ const CartChargesConfigForm = () => {
       cartCharge: formData.cartCharge.flatMap((charge) =>
         (charge.rules || []).map((rule) => ({
           key: charge.key.trim(),
+          isCODSpecial: !!charge.isCODSpecial,
           rules: buildRule(rule),
         }))
       ),
@@ -386,6 +351,25 @@ const CartChargesConfigForm = () => {
 
                 {charge.key && (
                   <div className="space-y-3 pt-3 border-t border-gray-300">
+                    <div className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={!!charge.isCODSpecial}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => {
+                            const updated = [...prev.cartCharge];
+                            updated[index] = { ...updated[index], isCODSpecial: checked };
+                            return { ...prev, cartCharge: updated };
+                          });
+                        }}
+                        className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                      />
+                      <span className="text-sm font-semibold text-gray-800">
+                        isCODSpecial
+                      </span>
+                    </div>
+
                     <h4 className="text-sm font-semibold text-gray-700">
                       Rules
                     </h4>

@@ -105,7 +105,9 @@ const CartChargesPage = () => {
   const getChargeSummary = (cartCharge) => {
     const list = Array.isArray(cartCharge) ? cartCharge : (cartCharge ? [cartCharge] : []);
     if (list.length === 0) return '—';
-    return list.map((c) => c.key || '—').join(', ');
+    return list
+      .map((c) => `${c.key || '—'}${c.isCODSpecial ? ' (COD Special)' : ''}`)
+      .join(', ');
   };
 
 const handleDeleteRule = async (id, key) => {
@@ -162,7 +164,7 @@ const handleDeleteRule = async (id, key) => {
     return list
       .map((c) => {
         const rules = Object.entries(c.rules || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
-        return `${c.key || '—'} (${rules})`;
+        return `${c.key || '—'}${c.isCODSpecial ? ' [COD Special]' : ''} (${rules})`;
       })
       .join(' | ');
   };
@@ -256,7 +258,8 @@ const handleDeleteRule = async (id, key) => {
       className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-md text-xs"
     >
       <span>
-        {rule.key} (
+        {rule.key}
+        {rule.isCODSpecial ? ' [COD Special]' : ''} (
         {Object.entries(rule.rules || {})
           .map(([k, v]) => `${k}:${v}`)
           .join(', ')})

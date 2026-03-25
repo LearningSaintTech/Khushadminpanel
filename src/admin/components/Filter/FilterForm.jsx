@@ -19,10 +19,22 @@ const FilterForm = () => {
     key: "",
     label: "",
     description: "",
-    values: [{ label: "", value: "" }],
+    values: [{ label: "", value: "", hex: "" }],
     isActive: true,
     sortOrder: 1,
+    // If true, show `hex` input for each values row (useful for color filters).
+    valueHasHex: false,
   });
+
+  const normalizeHex = (hex) => {
+    const v = String(hex ?? "").trim();
+    if (!v) return null;
+    const withHash = v.startsWith("#") ? v : `#${v}`;
+    const normalized = withHash.toUpperCase();
+    // Only accept #RRGGBB (schema allows any string, but this keeps data clean)
+    if (!/^#[0-9A-F]{6}$/.test(normalized)) return null;
+    return normalized;
+  };
 
   // Load filter data if editing
  useEffect(() => {
@@ -36,16 +48,25 @@ const FilterForm = () => {
       const response = await getFilterById(id);
       const filter = response?.data?.data || response?.data;
 
+        const hasHex = Array.isArray(filter.values)
+          ? filter.values.some((v) => String(v?.hex ?? "").trim().length > 0)
+          : false;
+
       setFormData({
         key: filter.key || "",
         label: filter.label || "",
         description: filter.description || "",
         values:
           filter.values?.length > 0
-            ? filter.values
-            : [{ label: "", value: "" }],
+            ? filter.values.map((v) => ({
+                label: v?.label ?? "",
+                value: v?.value ?? "",
+                hex: v?.hex ?? "",
+              }))
+            : [{ label: "", value: "", hex: "" }],
         isActive: filter.isActive !== false,
         sortOrder: filter.sortOrder || 1,
+          valueHasHex: hasHex,
       });
     } catch (err) {
       console.error("Error loading filter:", err);
@@ -57,6 +78,14 @@ const FilterForm = () => {
 
   loadFilter();
 }, [id, isEdit]);
+
+  // Auto-suggest hex field for common color keys, but allow manual override.
+  useEffect(() => {
+    const keyLower = String(formData.key ?? "").trim().toLowerCase();
+    if (!isEdit && (keyLower === "color" || keyLower.includes("color"))) {
+      setFormData((prev) => ({ ...prev, valueHasHex: true }));
+    }
+  }, [formData.key, isEdit]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -75,7 +104,7 @@ const FilterForm = () => {
   const addValuePair = () => {
     setFormData((prev) => ({
       ...prev,
-      values: [...prev.values, { label: "", value: "" }],
+      values: [...prev.values, { label: "", value: "", hex: "" }],
     }));
   };
 
@@ -101,11 +130,25 @@ const FilterForm = () => {
       return;
     }
 
+    if (formData.valueHasHex) {
+      // If hex is entered but invalid, normalize will return null (and we don't fail the request).
+      // If you want strict validation, we can enforce it here.
+      // eslint-disable-next-line no-unused-vars
+      const _normalizedForValidation = validValues.map((v) => normalizeHex(v.hex));
+    }
+
     const payload = {
       key: formData.key,
       label: formData.label,
       description: formData.description,
-      values: validValues,
+      values: validValues.map((v) => {
+        const base = { label: v.label, value: v.value };
+        if (!formData.valueHasHex) return base;
+        return {
+          ...base,
+          hex: normalizeHex(v.hex),
+        };
+      }),
       isActive: formData.isActive,
       sortOrder: Number(formData.sortOrder) || 1,
     };
@@ -224,6 +267,32 @@ const FilterForm = () => {
                   <span>Add Value</span>
                 </button>
               </div>
+
+              <div className="flex items-center gap-3 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="valueHasHex"
+                    checked={formData.valueHasHex}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setFormData((prev) => ({
+                        ...prev,
+                        valueHasHex: next,
+                        values: prev.values.map((v) => ({
+                          ...v,
+                          hex: next ? v.hex ?? "" : "",
+                        })),
+                      }));
+                    }}
+                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                    Add `hex` field to each value (for color filters)
+                  </span>
+                </label>
+              </div>
+
               <div className="space-y-3">
                 {formData.values.map((value, index) => (
                   <div key={index} className="flex gap-3 items-center">
@@ -245,6 +314,18 @@ const FilterForm = () => {
                       }
                       className="flex-1 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                     />
+
+                    {formData.valueHasHex && (
+                      <input
+                        type="text"
+                        placeholder="Hex (e.g. #FF0000)"
+                        value={value.hex ?? ""}
+                        onChange={(e) =>
+                          handleValueChange(index, "hex", e.target.value)
+                        }
+                        className="w-56 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                      />
+                    )}
                     {formData.values.length > 1 && (
                       <button
                         type="button"
