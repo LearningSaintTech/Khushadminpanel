@@ -21,13 +21,23 @@ export const toggleDesignerStatus = (id) =>
   apiConnector("PUT", `${ADMIN_BASE}/designers/${id}/toggle-status`);
 
 // Admin-side designer inventory
-export const getDesignerInventory = ({ page = 1, limit = 10, search = "", status = "", designerId = "" } = {}) => {
+export const getDesignerInventory = ({
+  page = 1,
+  limit = 10,
+  search = "",
+  status = "",
+  designerId = "",
+  isListed = "",
+} = {}) => {
   const q = new URLSearchParams({
     page: String(page),
     limit: String(limit),
     ...(search ? { search: String(search) } : {}),
     ...(status ? { status: String(status) } : {}),
     ...(designerId ? { designerId: String(designerId) } : {}),
+    ...(isListed !== "" && isListed !== undefined && isListed !== null
+      ? { isListed: String(isListed) }
+      : {}),
   });
   return apiConnector("GET", `${ADMIN_BASE}/inventory/list?${q.toString()}`);
 };
@@ -37,6 +47,8 @@ export const updateDesignerInventory = (id, data) =>
   apiConnector("PUT", `${ADMIN_BASE}/inventory/${id}/update`, data);
 export const changeDesignerInventoryStatus = (id, status) =>
   apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/status`, { status });
+export const patchDesignerInventoryListed = (id, body) =>
+  apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/listed`, body);
 export const exportDesignerInventory = (type = "csv", params = {}) =>
   apiConnector(
     "GET",

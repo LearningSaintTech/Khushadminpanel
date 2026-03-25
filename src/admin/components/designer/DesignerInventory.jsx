@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
-import { changeDesignerInventoryStatus, exportDesignerInventory, getDesignerInventory } from "../../apis/Designerapi";
+import {
+  changeDesignerInventoryStatus,
+  exportDesignerInventory,
+  getDesignerInventory,
+  patchDesignerInventoryListed,
+} from "../../apis/Designerapi";
+import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
@@ -9,13 +15,16 @@ const DesignerInventory = () => {
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
+  const [listedFilter, setListedFilter] = useState("");
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({ totalPages: 1 });
   const [loading, setLoading] = useState(false);
   const [exportingType, setExportingType] = useState("");
   const [error, setError] = useState("");
   const [busyStatusId, setBusyStatusId] = useState("");
+  const [busyListedId, setBusyListedId] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
+  const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
 
   const getSkuIds = (item) => {
@@ -68,6 +77,7 @@ const DesignerInventory = () => {
         search,
         status,
         designerId: presetDesignerId,
+        isListed: listedFilter,
       });
       if (res?.success) {
         setRows(res.data?.items || []);
@@ -82,7 +92,7 @@ const DesignerInventory = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [page, status, search, presetDesignerId]);
+  }, [page, status, listedFilter, search, presetDesignerId]);
 
   const onChangeStatus = async (id, nextStatus) => {
     setBusyStatusId(id);
@@ -97,6 +107,34 @@ const DesignerInventory = () => {
     }
   };
 
+  const listedSelectValue = (r) => {
+    if (listModalDesigner && listModalDesigner._id === r._id) return "false";
+    return r.isListed ? "true" : "false";
+  };
+
+  const handleListedSelect = async (r, e) => {
+    const next = e.target.value === "true";
+    if (next) {
+      if (r.isListed) return;
+      setListModalDesigner(r);
+      return;
+    }
+    if (!r.isListed) return;
+    setBusyListedId(r._id);
+    setError("");
+    try {
+      const res = await patchDesignerInventoryListed(r._id, { isListed: false });
+      if (res?.success && selectedItem?._id === r._id) {
+        setSelectedItem(res.data);
+      }
+      await fetchRows();
+    } catch (err) {
+      setError(err?.message || "Failed to update listing.");
+    } finally {
+      setBusyListedId("");
+    }
+  };
+
   const onExport = async (type) => {
     setExportingType(type);
     setError("");
@@ -104,6 +142,7 @@ const DesignerInventory = () => {
       const res = await exportDesignerInventory(type, {
         search,
         status,
+        ...(listedFilter ? { isListed: listedFilter } : {}),
         ...(presetDesignerId ? { designerId: presetDesignerId } : {}),
       });
       const url = window.URL.createObjectURL(res);
@@ -182,6 +221,11 @@ const DesignerInventory = () => {
           <option value="rejected">rejected</option>
           <option value="archived">archived</option>
         </select>
+        <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[160px]" value={listedFilter} onChange={(e) => { setPage(1); setListedFilter(e.target.value); }}>
+          <option value="">All listing</option>
+          <option value="true">Listed</option>
+          <option value="false">Not listed</option>
+        </select>
       </div>
       {error ? (
         <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -199,11 +243,12 @@ const DesignerInventory = () => {
               <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">SKU IDs</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Listed</th>
               <th className="p-2.5 text-right font-semibold text-gray-700">Action</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={7} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={7} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
+            {loading ? <tr><td colSpan={8} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={8} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
               <tr key={r._id} className="border-t border-black/5">
                 <td className="p-2.5">
                   <div className="font-medium">{r.StyleNumber || "-"}</div>
@@ -228,6 +273,17 @@ const DesignerInventory = () => {
                   <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusClasses(r.status)}`}>
                     {r.status}
                   </span>
+                </td>
+                <td className="p-2.5">
+                  <select
+                    className="max-w-[140px] rounded-lg border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-medium text-teal-800 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={busyListedId === r._id}
+                    value={listedSelectValue(r)}
+                    onChange={(e) => handleListedSelect(r, e)}
+                  >
+                    <option value="false">Not listed</option>
+                    <option value="true">Listed</option>
+                  </select>
                 </td>
                 <td className="p-2.5">
                   <div className="flex items-center justify-end gap-2 whitespace-nowrap">
@@ -312,6 +368,8 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Designer:</span> {selectedItem.designerName || "-"}</div>
               <div><span className="font-medium">Employee ID:</span> {selectedItem.employeeId || "-"}</div>
               <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
+              <div><span className="font-medium">Listed (catalog):</span> {selectedItem.isListed ? "Yes" : "No"}</div>
+              <div><span className="font-medium">Main inventory item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
               <div><span className="font-medium">Product Type:</span> {selectedItem.productType || "-"}</div>
               <div><span className="font-medium">Fit Type:</span> {selectedItem.fitType || "-"}</div>
               <div><span className="font-medium">Gender:</span> {selectedItem.gender || "-"}</div>
@@ -410,6 +468,16 @@ const DesignerInventory = () => {
           </div>
         </div>
       ) : null}
+
+      <ListDesignerToCatalogModal
+        open={Boolean(listModalDesigner)}
+        designerRow={listModalDesigner}
+        onClose={() => setListModalDesigner(null)}
+        onPublished={async () => {
+          setListModalDesigner(null);
+          await fetchRows();
+        }}
+      />
     </div>
   );
 };
