@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2, Loader2, ImagePlus } from "lucide-react";
 import { createDesignerItem, getDesignerItemById, updateDesignerItem } from "../../apis/designerApi";
+import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
 
 function isLocalPickedFile(img) {
   if (img == null || typeof img !== "object") return false;
@@ -101,8 +102,11 @@ const DesignerInventoryForm = () => {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+  const [submitErrors, setSubmitErrors] = useState([]);
   const [loadItem, setLoadItem] = useState(isEdit);
+  /** Admin-only field; shown read-only on edit. */
+  const [readOnlyListed, setReadOnlyListed] = useState(null);
+  const [loadItemErrors, setLoadItemErrors] = useState([]);
   const [form, setForm] = useState({
     StyleNumber: "",
     styleName: "",
@@ -122,10 +126,12 @@ const DesignerInventoryForm = () => {
     if (!isEdit) return;
     (async () => {
       setLoadItem(true);
+      setLoadItemErrors([]);
       try {
         const res = await getDesignerItemById(id);
         if (res?.success && res.data) {
           const d = res.data;
+          setReadOnlyListed(Boolean(d.isListed));
           setForm({
             StyleNumber: d.StyleNumber || "",
             styleName: d.styleName || "",
@@ -158,7 +164,11 @@ const DesignerInventoryForm = () => {
                   }))
                 : [emptyVariant()],
           });
+        } else {
+          setLoadItemErrors(extractBackendMessages(res || { message: "Could not load item." }));
         }
+      } catch (e) {
+        setLoadItemErrors(extractBackendMessages(e));
       } finally {
         setLoadItem(false);
       }
@@ -251,7 +261,7 @@ const DesignerInventoryForm = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setSubmitError("");
+    setSubmitErrors([]);
     try {
       const formData = new FormData();
       formData.append("StyleNumber", form.StyleNumber);
@@ -297,11 +307,8 @@ const DesignerInventoryForm = () => {
       else await createDesignerItem(formData);
       navigate("/designer/inventory");
     } catch (err) {
-      const msg =
-        typeof err === "string"
-          ? err
-          : err?.message || err?.response?.data?.message || "Save failed. Check required fields and inventory codes.";
-      setSubmitError(msg);
+      const msgs = extractBackendMessages(err);
+      setSubmitErrors(msgs.length ? msgs : ["Save failed. Check required fields and inventory codes."]);
     } finally {
       setLoading(false);
     }
@@ -311,6 +318,26 @@ const DesignerInventoryForm = () => {
     return (
       <div className="flex items-center gap-2 text-sm text-indigo-800">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading item…
+      </div>
+    );
+  }
+
+  if (isEdit && loadItemErrors.length > 0) {
+    return (
+      <div className="max-w-2xl space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+        <p className="font-semibold">Could not load this item</p>
+        <ul className="list-disc space-y-1 pl-5">
+          {loadItemErrors.map((msg, idx) => (
+            <li key={idx}>{msg}</li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-rose-800 hover:bg-rose-100"
+          onClick={() => navigate("/designer/inventory")}
+        >
+          Back to inventory
+        </button>
       </div>
     );
   }
@@ -326,10 +353,25 @@ const DesignerInventoryForm = () => {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm">
-        {submitError ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{submitError}</div>
+        {submitErrors.length > 0 ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+            <p className="font-semibold text-rose-950">Could not save — please fix the following:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-800">
+              {submitErrors.map((msg, idx) => (
+                <li key={idx}>{msg}</li>
+              ))}
+            </ul>
+          </div>
         ) : null}
         <h2 className="border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-indigo-900">Core</h2>
+        {isEdit && readOnlyListed !== null ? (
+          <p className="text-xs text-gray-600">
+            Catalog listing (set by admin):{" "}
+            <span className={readOnlyListed ? "font-medium text-teal-800" : "text-gray-500"}>
+              {readOnlyListed ? "Listed" : "Not listed"}
+            </span>
+          </p>
+        ) : null}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[
             ["StyleNumber", "Style number", true],

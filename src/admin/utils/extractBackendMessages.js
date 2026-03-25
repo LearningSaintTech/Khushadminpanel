@@ -24,10 +24,37 @@ export function extractBackendMessages(err) {
 
   add(data.message);
   add(data.error);
-  if (data.errors && typeof data.errors === "object") {
-    Object.values(data.errors).forEach((val) => {
-      if (Array.isArray(val)) val.forEach((m) => add(m));
-      else add(val);
+
+  // express-validator (validate.middleware): errors is an array of { msg, path, type, ... }
+  if (Array.isArray(data.errors)) {
+    data.errors.forEach((item) => {
+      if (typeof item === "string") {
+        add(item);
+        return;
+      }
+      if (item != null && typeof item === "object") {
+        const m = item.msg ?? item.message;
+        if (m != null && String(m).trim()) {
+          const loc = item.path ?? item.param;
+          const prefix = loc != null && String(loc).trim() ? `${String(loc)}: ` : "";
+          messages.add(`${prefix}${String(m).trim()}`);
+        }
+      }
+    });
+  } else if (data.errors && typeof data.errors === "object") {
+    Object.entries(data.errors).forEach(([key, val]) => {
+      if (Array.isArray(val)) {
+        val.forEach((m) => {
+          if (typeof m === "string" && m.trim()) messages.add(`${key}: ${m.trim()}`);
+          else if (m != null && typeof m === "object" && (m.msg || m.message)) {
+            messages.add(`${key}: ${String(m.msg || m.message).trim()}`);
+          } else add(m);
+        });
+      } else if (val != null && typeof val === "object" && (val.msg || val.message)) {
+        messages.add(`${key}: ${String(val.msg || val.message).trim()}`);
+      } else {
+        add(val);
+      }
     });
   }
   if (Array.isArray(data.details)) {

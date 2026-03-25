@@ -6,6 +6,7 @@ import {
   listDesignerItems,
   regenerateDesignerSku,
 } from "../../apis/designerApi";
+import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
 import { ChevronLeft, ChevronRight, Eye, Pencil, Trash2, RefreshCw, Send, Plus, Loader2, X } from "lucide-react";
 
 const getStatusClasses = (value) => {
@@ -67,6 +68,8 @@ const DesignerInventoryList = () => {
   const [busyId, setBusyId] = useState("");
   const [selected, setSelected] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+  const [listErrors, setListErrors] = useState([]);
+  const [actionErrors, setActionErrors] = useState([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
@@ -79,6 +82,7 @@ const DesignerInventoryList = () => {
 
   const fetchRows = async () => {
     setLoading(true);
+    setListErrors([]);
     try {
       const res = await listDesignerItems({
         page,
@@ -89,7 +93,11 @@ const DesignerInventoryList = () => {
       if (res?.success) {
         setRows(res.data?.items || []);
         setPagination(res.data?.pagination || { totalPages: 1 });
+      } else {
+        setListErrors(extractBackendMessages(res || { message: "Could not load inventory." }));
       }
+    } catch (e) {
+      setListErrors(extractBackendMessages(e));
     } finally {
       setLoading(false);
     }
@@ -101,9 +109,12 @@ const DesignerInventoryList = () => {
 
   const run = async (id, fn) => {
     setBusyId(id);
+    setActionErrors([]);
     try {
       await fn();
       await fetchRows();
+    } catch (e) {
+      setActionErrors(extractBackendMessages(e));
     } finally {
       setBusyId("");
     }
@@ -169,12 +180,18 @@ const DesignerInventoryList = () => {
           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           placeholder="Search style, SKU, employee…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setActionErrors([]);
+            setSearch(e.target.value);
+          }}
         />
         <select
           className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800 outline-none sm:min-w-[160px]"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            setActionErrors([]);
+            setStatus(e.target.value);
+          }}
         >
           <option value="">All status</option>
           <option value="draft">draft</option>
@@ -184,6 +201,28 @@ const DesignerInventoryList = () => {
           <option value="archived">archived</option>
         </select>
       </div>
+
+      {listErrors.length > 0 ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+          <p className="font-semibold text-rose-950">Could not load list</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-rose-800">
+            {listErrors.map((msg, idx) => (
+              <li key={idx}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {actionErrors.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="font-semibold">Action failed</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-900">
+            {actionErrors.map((msg, idx) => (
+              <li key={idx}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -195,19 +234,20 @@ const DesignerInventoryList = () => {
               <th className="p-2.5 text-left font-semibold text-gray-700">SKUs</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Qty</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Listed</th>
               <th className="p-2.5 text-right font-semibold text-gray-700">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="p-4 text-center text-indigo-800">
+                <td colSpan={8} className="p-4 text-center text-indigo-800">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-4 text-center text-gray-500">
+                <td colSpan={8} className="p-4 text-center text-gray-500">
                   No records.
                 </td>
               </tr>
@@ -236,6 +276,16 @@ const DesignerInventoryList = () => {
                   <td className="p-2.5">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusClasses(r.status)}`}>
                       {r.status}
+                    </span>
+                  </td>
+                  <td className="p-2.5">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        r.isListed ? "bg-teal-100 text-teal-800 ring-1 ring-teal-200" : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
+                      }`}
+                      title="Set by admin for catalog visibility"
+                    >
+                      {r.isListed ? "Yes" : "No"}
                     </span>
                   </td>
                   <td className="p-2.5">
@@ -385,6 +435,17 @@ const DesignerInventoryList = () => {
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusClasses(selected.status)}`}>
                   {selected.status}
                 </span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">Listed (catalog):</span>{" "}
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                    selected.isListed ? "bg-teal-100 text-teal-800 ring-1 ring-teal-200" : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
+                  }`}
+                >
+                  {selected.isListed ? "Yes" : "No"}
+                </span>
+                <span className="ml-1 text-xs text-gray-400">(admin)</span>
               </div>
               <div>
                 <span className="font-medium text-gray-600">Product / fit:</span> {selected.productType} / {selected.fitType}
