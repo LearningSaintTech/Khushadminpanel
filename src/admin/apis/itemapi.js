@@ -146,14 +146,8 @@ export const updateItemSkuUid = async (itemId, skuUidId, body) => {
  */
 export const createItem = async (formData) => {
   try {
-    const response = await apiConnector(
-      'POST',
-      '/items/create',
-      formData,
-      {
-        'Content-Type': 'multipart/form-data',
-      }
-    );
+    // Do not set Content-Type — browser/axios must add multipart boundary automatically.
+    const response = await apiConnector('POST', '/items/create', formData);
     return response;
   } catch (error) {
     console.error('Error creating item:', error);
@@ -175,14 +169,7 @@ export const updateItem = async (productId, formData) => {
   if (!productId) throw new Error('productId is required');
 
   try {
-    const response = await apiConnector(
-      'PATCH',
-      `/items/update/${productId}`,
-      formData,
-      {
-        'Content-Type': 'multipart/form-data',
-      }
-    );
+    const response = await apiConnector('PATCH', `/items/update/${productId}`, formData);
     return response;
   } catch (error) {
     console.error('Error updating item:', error);
@@ -241,14 +228,7 @@ export const getItemsWithSkus = (
 
 export const bulkUploadItems = async (formData) => {
   try {
-    const response = await apiConnector(
-      "POST",
-      ITEMS_API.BULK_UPLOAD_ITEMS,
-      formData,
-      {
-        "Content-Type": "multipart/form-data",
-      }
-    );
+    const response = await apiConnector("POST", ITEMS_API.BULK_UPLOAD_ITEMS, formData);
 
     return response;
   } catch (error) {
