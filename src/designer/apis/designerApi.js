@@ -22,6 +22,12 @@ export const designerApi = {
   deleteItem: (id) => apiConnector("DELETE", `${INVENTORY}/${id}/delete`),
   changeStatus: (id, status) => apiConnector("PATCH", `${INVENTORY}/${id}/status`, { status }),
   regenerateSku: (id) => apiConnector("PATCH", `${INVENTORY}/${id}/generate-sku`),
+  getInventoryCodes: (params = {}) => {
+    const q = new URLSearchParams(params);
+    const url = `${INVENTORY}/meta/inventory-codes?${q.toString()}`;
+    console.log("[designerApi.getInventoryCodes] request:", { url, params });
+    return apiConnector("GET", url);
+  },
 };
 
 // Named exports for direct imports in designer components
@@ -32,5 +38,6 @@ export const updateDesignerItem = (id, data) => designerApi.updateItem(id, data)
 export const deleteDesignerItem = (id) => designerApi.deleteItem(id);
 export const changeDesignerItemStatus = (id, status) => designerApi.changeStatus(id, status);
 export const regenerateDesignerSku = (id) => designerApi.regenerateSku(id);
+export const getDesignerInventoryCodes = (params = {}) => designerApi.getInventoryCodes(params);
 export const updateDesignerProfile = (data) => designerApi.updateProfile(data);
 

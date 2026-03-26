@@ -1,7 +1,12 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2, Loader2, ImagePlus } from "lucide-react";
-import { createDesignerItem, getDesignerItemById, updateDesignerItem } from "../../apis/designerApi";
+import {
+  createDesignerItem,
+  getDesignerInventoryCodes,
+  getDesignerItemById,
+  updateDesignerItem,
+} from "../../apis/designerApi";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
 
 function isLocalPickedFile(img) {
@@ -97,6 +102,123 @@ const toNumberOrZero = (value) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+function normalizeCodeOptionsResponse(res) {
+  const root = res?.data ?? res ?? {};
+  const payload = root?.data ?? root;
+  const list =
+    payload?.items ||
+    payload?.inventoryCodes ||
+    payload?.codes ||
+    payload?.data ||
+    (Array.isArray(payload) ? payload : []);
+
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .filter((row) => row?.isActive !== false)
+    .map((row) => ({
+      value: String(row?.code || row?.name || "").trim(),
+      label: String(row?.name || row?.code || "").trim(),
+    }))
+    .filter((row) => row.value.length > 0)
+    .filter((row, idx, arr) => arr.findIndex((x) => x.value === row.value) === idx);
+}
+
+function SearchableCodeSelect({
+  label,
+  required,
+  value,
+  onChange,
+  options,
+  loading,
+  placeholder,
+  allowCustom = false,
+}) {
+  const wrapperRef = useRef(null);
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = normalizedSearch
+    ? options.filter(
+        (opt) =>
+          opt.label.toLowerCase().includes(normalizedSearch) ||
+          opt.value.toLowerCase().includes(normalizedSearch)
+      )
+    : options;
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!wrapperRef.current?.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
+      <div className="space-y-1">
+        <input
+          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          placeholder={loading ? "Loading options..." : "Search options..."}
+          value={search}
+          onChange={(e) => {
+            const next = e.target.value;
+            setSearch(next);
+            if (allowCustom) onChange(next);
+          }}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          disabled={loading}
+        />
+        <input type="hidden" value={value || ""} required={required} readOnly />
+        <button
+          type="button"
+          onClick={() => setOpen((s) => !s)}
+          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50"
+          disabled={loading}
+        >
+          {value || placeholder}
+        </button>
+        {open && !loading ? (
+          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              className="w-full border-b border-gray-100 px-2 py-1.5 text-left text-sm text-gray-500 hover:bg-gray-50"
+            >
+              {placeholder}
+            </button>
+            {filtered.length === 0 ? (
+              <div className="px-2 py-2 text-xs text-gray-500">No matching options</div>
+            ) : (
+              filtered.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setSearch("");
+                    setOpen(false);
+                  }}
+                  className="w-full border-b border-gray-100 px-2 py-1.5 text-left text-sm hover:bg-indigo-50"
+                >
+                  {opt.label} ({opt.value})
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 const DesignerInventoryForm = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -107,6 +229,11 @@ const DesignerInventoryForm = () => {
   /** Admin-only field; shown read-only on edit. */
   const [readOnlyListed, setReadOnlyListed] = useState(null);
   const [loadItemErrors, setLoadItemErrors] = useState([]);
+  const [productTypeOptions, setProductTypeOptions] = useState([]);
+  const [fitTypeOptions, setFitTypeOptions] = useState([]);
+  const [colorCodeOptions, setColorCodeOptions] = useState([]);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeLoadError, setCodeLoadError] = useState("");
   const [form, setForm] = useState({
     StyleNumber: "",
     styleName: "",
@@ -174,6 +301,45 @@ const DesignerInventoryForm = () => {
       }
     })();
   }, [id, isEdit]);
+
+  useEffect(() => {
+    (async () => {
+      setCodeLoading(true);
+      setCodeLoadError("");
+      try {
+        console.log("[DesignerInventoryForm] Loading inventory code options...");
+        const [categoryRes, fitRes, colorRes] = await Promise.all([
+          getDesignerInventoryCodes({ type: "CATEGORY", limit: 200 }),
+          getDesignerInventoryCodes({ type: "FIT", limit: 200 }),
+          getDesignerInventoryCodes({ type: "COLOR", limit: 200 }),
+        ]);
+
+        const categoryOptions = normalizeCodeOptionsResponse(categoryRes);
+        const fitOptions = normalizeCodeOptionsResponse(fitRes);
+        const colorOptions = normalizeCodeOptionsResponse(colorRes);
+
+        console.log("[DesignerInventoryForm] Code options loaded:", {
+          categoryCount: categoryOptions.length,
+          fitCount: fitOptions.length,
+          colorCount: colorOptions.length,
+          categorySample: categoryOptions.slice(0, 5),
+          fitSample: fitOptions.slice(0, 5),
+          colorSample: colorOptions.slice(0, 5),
+        });
+
+        setProductTypeOptions(categoryOptions);
+        setFitTypeOptions(fitOptions);
+        setColorCodeOptions(colorOptions);
+      } catch (err) {
+        console.error("[DesignerInventoryForm] Failed to load code options:", err);
+        setCodeLoadError(
+          extractBackendMessages(err)?.[0] || "Could not load product/fit/color codes."
+        );
+      } finally {
+        setCodeLoading(false);
+      }
+    })();
+  }, []);
 
   const setFabric = (k, v) => setForm((s) => ({ ...s, fabric: { ...s.fabric, [k]: v } }));
   const setCosts = (k, v) => setForm((s) => ({ ...s, costs: { ...s.costs, [k]: v } }));
@@ -363,6 +529,11 @@ const DesignerInventoryForm = () => {
             </ul>
           </div>
         ) : null}
+        {codeLoadError ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {codeLoadError} You can still type values manually.
+          </div>
+        ) : null}
         <h2 className="border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-indigo-900">Core</h2>
         {isEdit && readOnlyListed !== null ? (
           <p className="text-xs text-gray-600">
@@ -378,9 +549,6 @@ const DesignerInventoryForm = () => {
             ["styleName", "Style name", true],
             ["designerName", "Designer name", true],
             ["employeeId", "Employee ID", true],
-            ["productType", "Product type", true],
-            ["fitType", "Fit type", true],
-            ["defaultColor", "Default color", false],
           ].map(([key, label, req]) => (
             <div key={key}>
               <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
@@ -392,6 +560,33 @@ const DesignerInventoryForm = () => {
               />
             </div>
           ))}
+          <SearchableCodeSelect
+            label="Product type"
+            required
+            value={form.productType}
+            options={productTypeOptions}
+            loading={codeLoading}
+            placeholder="Select product type"
+            onChange={(val) => setForm((s) => ({ ...s, productType: val }))}
+          />
+          <SearchableCodeSelect
+            label="Fit type"
+            required
+            value={form.fitType}
+            options={fitTypeOptions}
+            loading={codeLoading}
+            placeholder="Select fit type"
+            onChange={(val) => setForm((s) => ({ ...s, fitType: val }))}
+          />
+          <SearchableCodeSelect
+            label="Color code"
+            required={false}
+            value={form.defaultColor}
+            options={colorCodeOptions}
+            loading={codeLoading}
+            placeholder="Select color code"
+            onChange={(val) => setForm((s) => ({ ...s, defaultColor: val }))}
+          />
           <div>
             <label className="mb-0.5 block text-xs font-medium text-gray-700">Gender</label>
             <select
@@ -488,18 +683,37 @@ const DesignerInventoryForm = () => {
               </div>
               <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <div>
-                  <label className="mb-0.5 block text-xs text-gray-600">Color name</label>
-                  <input
-                    className={fieldClass}
-                    value={variant.color.name}
-                    onChange={(e) =>
-                      updateVariant(vIdx, (v) => ({
-                        ...v,
-                        color: { ...v.color, name: e.target.value },
-                      }))
-                    }
-                    required
-                  />
+                  {colorCodeOptions.length > 0 ? (
+                    <SearchableCodeSelect
+                      label="Color name"
+                      required
+                      value={variant.color.name}
+                      options={colorCodeOptions}
+                      loading={codeLoading}
+                      placeholder="Select color code"
+                      onChange={(val) =>
+                        updateVariant(vIdx, (v) => ({
+                          ...v,
+                          color: { ...v.color, name: val },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <>
+                      <label className="mb-0.5 block text-xs text-gray-600">Color name</label>
+                      <input
+                        className={fieldClass}
+                        value={variant.color.name}
+                        onChange={(e) =>
+                          updateVariant(vIdx, (v) => ({
+                            ...v,
+                            color: { ...v.color, name: e.target.value },
+                          }))
+                        }
+                        required
+                      />
+                    </>
+                  )}
                 </div>
                 <div>
                   <label className="mb-0.5 block text-xs text-gray-600">Hex</label>

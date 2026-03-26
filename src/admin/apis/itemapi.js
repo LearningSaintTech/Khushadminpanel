@@ -52,7 +52,7 @@ export const getAllItems = async (page = 1, limit = 10, search = "", categoryId 
  * @returns {Promise<Object>} { success, message, data: { items, pagination } }
  */
 export const searchItems = async (query = {}) => {
-  const params = { ...query };
+  const params = { includeInactive: true, ...query };
   const kw = (params.keywords ?? params.search ?? "").toString().trim();
   delete params.search;
   delete params.keywords;

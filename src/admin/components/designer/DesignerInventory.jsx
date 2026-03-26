@@ -5,6 +5,7 @@ import {
   changeDesignerInventoryStatus,
   exportDesignerInventory,
   getDesignerInventory,
+  regenerateDesignerSku,
   patchDesignerInventoryListed,
 } from "../../apis/Designerapi";
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
@@ -23,6 +24,7 @@ const DesignerInventory = () => {
   const [error, setError] = useState("");
   const [busyStatusId, setBusyStatusId] = useState("");
   const [busyListedId, setBusyListedId] = useState("");
+  const [regeneratingAll, setRegeneratingAll] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
@@ -158,6 +160,53 @@ const DesignerInventory = () => {
     }
   };
 
+  const onRegenerateAllSkuIds = async () => {
+    if (regeneratingAll) return;
+    const ok = window.confirm(
+      "Regenerate SKU IDs for all designer inventory items matching current filters?\n\nThis can take some time."
+    );
+    if (!ok) return;
+
+    setRegeneratingAll(true);
+    setError("");
+    try {
+      const limit = 50;
+      let currentPage = 1;
+      const allIds = [];
+
+      // Fetch all IDs matching current filters.
+      while (true) {
+        const res = await getDesignerInventory({
+          page: currentPage,
+          limit,
+          search,
+          status,
+          designerId: presetDesignerId,
+          isListed: listedFilter,
+        });
+
+        const items = res?.data?.items || [];
+        allIds.push(...items.map((x) => x._id).filter(Boolean));
+
+        const totalPages = res?.data?.pagination?.totalPages || 1;
+        if (currentPage >= totalPages) break;
+        currentPage += 1;
+      }
+
+      const uniqueIds = [...new Set(allIds)];
+      for (const id of uniqueIds) {
+        await regenerateDesignerSku(id);
+      }
+
+      await fetchRows();
+      setError("");
+    } catch (err) {
+      setError(err?.message || "Failed to regenerate SKU IDs.");
+    } finally {
+      setRegeneratingAll(false);
+    }
+  };
+
   const openLightbox = (images, index = 0) => {
     if (!Array.isArray(images) || images.length === 0) return;
     const safeIndex = Math.min(Math.max(index, 0), images.length - 1);
@@ -208,6 +257,14 @@ const DesignerInventory = () => {
           <button className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("csv")}>{exportingType === "csv" ? "Exporting..." : "CSV"}</button>
           <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("excel")}>{exportingType === "excel" ? "Exporting..." : "Excel"}</button>
           <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("pdf")}>{exportingType === "pdf" ? "Exporting..." : "PDF"}</button>
+          <button
+            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={exportingType !== "" || regeneratingAll}
+            onClick={onRegenerateAllSkuIds}
+            title="Regenerate all SKU IDs for the current filters"
+          >
+            {regeneratingAll ? "Regenerating..." : "Regenerate all SKU IDs"}
+          </button>
         </div>
       </div>
 
