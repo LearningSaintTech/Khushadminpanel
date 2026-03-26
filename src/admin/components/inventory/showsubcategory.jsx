@@ -181,6 +181,7 @@ const Showsubcategory = () => {
         ? subs.map((sub) => ({
             ...sub,
             isNavbar: sub.isNavbar ?? sub.showInNavbar ?? false,
+              isFooter: sub.isFooter ?? sub.showInFooter ?? false,
             categoryId: sub.categoryId || sub.parentCategory || sub.category?._id || sub.category?.id || (typeof sub.category === 'string' ? sub.category : null),
           }))
         : [];
@@ -489,6 +490,9 @@ const Showsubcategory = () => {
                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">Description</th>
                     <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                     <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">Navbar</th>
+                    <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
+  Footer
+</th>
                     <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -589,6 +593,22 @@ const Showsubcategory = () => {
                             {sub.isNavbar ? "Shown" : "Hidden"}
                           </button>
                         </td>
+
+                        <td className="px-4 py-4 text-center hidden md:table-cell">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      // toggleFooter(sub._id);
+    }}
+    className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
+      sub.isFooter
+        ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+    }`}
+  >
+    {sub.isFooter ? "Shown" : "Hidden"}
+  </button>
+</td>
                         <td className="px-4 py-4 text-right">
                           <button
                             onClick={(e) => {

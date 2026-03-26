@@ -45,6 +45,7 @@ export default function SubcategoryEditStandalone() {
     imagePreview: null,
     isActive: true,
     showInNavbar: false,
+     isFooter: false,
   });
 
   function normalizeSubList(res) {
@@ -87,6 +88,7 @@ export default function SubcategoryEditStandalone() {
       imagePreview: subcategory.imageUrl || null,
       isActive: subcategory.isActive !== false,
       showInNavbar: subcategory.showInNavbar ?? subcategory.isNavbar ?? false,
+       isFooter: subcategory.isFooter ?? false, 
     });
   }
 
@@ -177,6 +179,7 @@ export default function SubcategoryEditStandalone() {
       formData.append("description", form.description.trim());
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.showInNavbar);
+      formData.append("isFooter", form.isFooter); // ✅ ADD
       if (form.image) formData.append("image", form.image);
       if (editSortOrder) {
         formData.append(
@@ -398,6 +401,20 @@ export default function SubcategoryEditStandalone() {
                 />
                 <span className="text-sm font-medium text-gray-700">Show in Navbar</span>
               </label>
+
+              <label className="flex items-center gap-2.5 cursor-pointer">
+  <input
+    type="checkbox"
+    name="isFooter"
+    checked={form.isFooter}
+    onChange={handleChange}
+    disabled={!form.isActive}
+    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black disabled:opacity-50"
+  />
+  <span className="text-sm font-medium text-gray-700">
+    Show in Footer
+  </span>
+</label>
             </div>
             <div className="flex gap-3 pt-6 border-t border-gray-200">
               <button
