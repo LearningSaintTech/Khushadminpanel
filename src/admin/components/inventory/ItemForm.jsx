@@ -109,6 +109,15 @@ function variantImageToPayloadEntry(img, idx) {
   return base;
 }
 
+const DEFAULT_SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL"];
+const createDefaultSizes = () =>
+  DEFAULT_SIZE_ORDER.map((size) => ({
+    sku: "",
+    size,
+    stock: "",
+    skuUidSeriesStart: "",
+  }));
+
 const ItemForm = () => {
   const { categoryId, subcategoryId, id } = useParams();
   const navigate = useNavigate();
@@ -165,16 +174,7 @@ const ItemForm = () => {
         color: { name: "Black", hex: "#000000" },
         skuCodeInputs: { colour: "" },
         images: [],
-        sizes: [
-                    { sku: "", size: "XS", stock: "", skuUidSeriesStart: "" },
-
-          { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
-          { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
-          { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
-          { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
-                    { sku: "", size: "XXL", stock: "", skuUidSeriesStart: "" },
-
-        ],
+        sizes: createDefaultSizes(),
       },
     ],
 
@@ -343,7 +343,7 @@ const ItemForm = () => {
               console.log(`[loadItem] Processing variant #${vIdx + 1}:`, variant.color?.name);
 
               const sizeMap = {};
-              const defaultSizes = ["XS", "S", "M", "L", "XL", "XXL"];
+              const defaultSizes = DEFAULT_SIZE_ORDER;
               if (variant.sizes) {
                 variant.sizes.forEach((size) => {
                   sizeMap[size.size] = {
@@ -383,12 +383,7 @@ const ItemForm = () => {
                 color: { name: "Black", hex: "#000000" },
                 skuCodeInputs: { colour: "" },
                 images: [],
-                sizes: [
-                  { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
-                  { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
-                  { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
-                  { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
-                ],
+                sizes: createDefaultSizes(),
               },
             ],
 
@@ -491,12 +486,7 @@ const ItemForm = () => {
             color: { name: "", hex: "#000000" },
             skuCodeInputs: { colour: "" },
             images: [],
-            sizes: [
-              { sku: "", size: "S", stock: "", skuUidSeriesStart: "" },
-              { sku: "", size: "M", stock: "", skuUidSeriesStart: "" },
-              { sku: "", size: "L", stock: "", skuUidSeriesStart: "" },
-              { sku: "", size: "XL", stock: "", skuUidSeriesStart: "" },
-            ],
+            sizes: createDefaultSizes(),
           },
         ],
       };

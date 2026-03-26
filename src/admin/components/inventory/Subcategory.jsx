@@ -50,7 +50,12 @@ export default function Subcategories() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getSubcategoriesByCategory(categoryId, page, limit, debouncedSearchTerm);
+      const res = await getSubcategoriesByCategory(
+        categoryId,
+        page,
+        limit,
+        debouncedSearchTerm,
+      );
       const data = res.data?.data || res.data || {};
       const subs = data.subcategories || data.subCategories || data || [];
       const pag = data.pagination || null;
@@ -66,8 +71,8 @@ export default function Subcategories() {
     } catch (err) {
       setError(
         err.response?.data?.message ||
-        err.message ||
-        "Failed to load subcategories."
+          err.message ||
+          "Failed to load subcategories.",
       );
     } finally {
       setLoading(false);
@@ -87,7 +92,7 @@ export default function Subcategories() {
     try {
       await toggleSubcategoryActiveStatus(id);
       setSubcategories((prev) =>
-        prev.map((s) => (s._id === id ? { ...s, isActive: !s.isActive } : s))
+        prev.map((s) => (s._id === id ? { ...s, isActive: !s.isActive } : s)),
       );
     } catch (err) {
       alert("Failed to toggle active status");
@@ -98,13 +103,16 @@ export default function Subcategories() {
     try {
       await toggleSubcategoryNavbarStatus(id);
       setSubcategories((prev) =>
-        prev.map((s) => (s._id === id ? { ...s, isNavbar: !(s.isNavbar ?? s.showInNavbar ?? false) } : s))
+        prev.map((s) =>
+          s._id === id
+            ? { ...s, isNavbar: !(s.isNavbar ?? s.showInNavbar ?? false) }
+            : s,
+        ),
       );
     } catch (err) {
       alert("Failed to toggle navbar visibility");
     }
   };
-
 
   // Render
   return (
@@ -153,7 +161,6 @@ export default function Subcategories() {
       </div>
 
       <main className="px-4 sm:px-6 py-6 bg-gray-50/50">
-
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
             {error}
@@ -166,20 +173,42 @@ export default function Subcategories() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Order</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
-                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">Description</th>
-                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">Navbar</th>
-                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    #
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">
+                    Order
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Image
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">
+                    Description
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
+                    Navbar
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
+                    Footer
+                  </th>
+                  <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center text-gray-500">
+                    <td
+                      colSpan={8}
+                      className="px-5 py-16 text-center text-gray-500"
+                    >
                       <div className="inline-flex items-center gap-3">
                         <div className="w-6 h-6 border-2 border-gray-300 border-t-black rounded-full animate-spin"></div>
                         <span>Loading subcategories...</span>
@@ -188,22 +217,37 @@ export default function Subcategories() {
                   </tr>
                 ) : subcategories.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center text-gray-500 italic">
-                      {debouncedSearchTerm ? "No matching subcategories found..." : "No subcategories yet."}
+                    <td
+                      colSpan={8}
+                      className="px-5 py-16 text-center text-gray-500 italic"
+                    >
+                      {debouncedSearchTerm
+                        ? "No matching subcategories found..."
+                        : "No subcategories yet."}
                     </td>
                   </tr>
                 ) : (
                   subcategories.map((sub, i) => (
-                    <tr key={sub._id} className="group hover:bg-gray-50/70 transition-colors duration-150">
-                      <td className="px-4 py-4 text-sm text-gray-600">{i + 1}</td>
-                      <td className="px-4 py-4 text-sm text-gray-600 hidden sm:table-cell">{sub.sortOrder || "—"}</td>
+                    <tr
+                      key={sub._id}
+                      className="group hover:bg-gray-50/70 transition-colors duration-150"
+                    >
+                      <td className="px-4 py-4 text-sm text-gray-600">
+                        {i + 1}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600 hidden sm:table-cell">
+                        {sub.sortOrder || "—"}
+                      </td>
                       <td className="px-4 py-4">
-                        <div 
+                        <div
                           className="relative group cursor-pointer h-12 w-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (sub.imageUrl) {
-                              setZoomedImage({ url: sub.imageUrl, name: sub.name });
+                              setZoomedImage({
+                                url: sub.imageUrl,
+                                name: sub.name,
+                              });
                             }
                           }}
                         >
@@ -213,7 +257,10 @@ export default function Subcategories() {
                                 src={sub.imageUrl}
                                 alt={sub.name}
                                 className="h-full w-full object-cover"
-                                onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=?")}
+                                onError={(e) =>
+                                  (e.target.src =
+                                    "https://via.placeholder.com/48?text=?")
+                                }
                               />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100">
                                 <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -228,7 +275,11 @@ export default function Subcategories() {
                       </td>
                       <td className="px-4 py-4">
                         <div
-                          onClick={() => navigate(`/admin/inventory/items/${categoryId}/${sub._id}`)}
+                          onClick={() =>
+                            navigate(
+                              `/admin/inventory/items/${categoryId}/${sub._id}`,
+                            )
+                          }
                           className="text-sm font-semibold text-gray-900 cursor-pointer group-hover:text-gray-700 transition-colors underline-offset-2 hover:underline"
                         >
                           {sub.name}
@@ -238,7 +289,9 @@ export default function Subcategories() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-sm text-gray-600 hidden lg:table-cell max-w-md">
-                        <div className="line-clamp-2">{sub.description || "—"}</div>
+                        <div className="line-clamp-2">
+                          {sub.description || "—"}
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-center">
                         <button
@@ -267,7 +320,25 @@ export default function Subcategories() {
                               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                           }`}
                         >
-                          {(sub.isNavbar ?? sub.showInNavbar ?? false) ? "Shown" : "Hidden"}
+                          {(sub.isNavbar ?? sub.showInNavbar ?? false)
+                            ? "Shown"
+                            : "Hidden"}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-4 text-center hidden md:table-cell">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // toggleFooter(sub._id);
+                          }}
+                          className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
+                            sub.isFooter
+                              ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                        >
+                          {sub.isFooter ? "Shown" : "Hidden"}
                         </button>
                       </td>
                       <td className="px-4 py-4 text-right">
@@ -300,38 +371,41 @@ export default function Subcategories() {
                 "Loading..."
               ) : (
                 <>
-                  Showing <span className="font-bold">{subcategories.length}</span> of{" "}
-                  <span className="font-bold">{pagination?.total || subcategories.length}</span>{" "}
+                  Showing{" "}
+                  <span className="font-bold">{subcategories.length}</span> of{" "}
+                  <span className="font-bold">
+                    {pagination?.total || subcategories.length}
+                  </span>{" "}
                   subcategories
                 </>
               )}
             </div>
 
             {/* Pagination controls */}
-           {/* Pagination controls */}
-{pagination && (
-  <div className="flex items-center gap-3">
-    <button
-      disabled={currentPage <= 1 || loading}
-      onClick={() => setCurrentPage((prev) => prev - 1)}
-      className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
-    >
-      Previous
-    </button>
+            {/* Pagination controls */}
+            {pagination && (
+              <div className="flex items-center gap-3">
+                <button
+                  disabled={currentPage <= 1 || loading}
+                  onClick={() => setCurrentPage((prev) => prev - 1)}
+                  className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                >
+                  Previous
+                </button>
 
-    <span className="px-5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-700 min-w-[140px] text-center">
-      Page {currentPage} of {pagination.totalPages}
-    </span>
+                <span className="px-5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-700 min-w-[140px] text-center">
+                  Page {currentPage} of {pagination.totalPages}
+                </span>
 
-    <button
-      disabled={currentPage >= pagination.totalPages || loading}
-      onClick={() => setCurrentPage((prev) => prev + 1)}
-      className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
-    >
-      Next
-    </button>
-  </div>
-)}
+                <button
+                  disabled={currentPage >= pagination.totalPages || loading}
+                  onClick={() => setCurrentPage((prev) => prev + 1)}
+                  className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -358,7 +432,7 @@ export default function Subcategories() {
               alt={zoomedImage.name}
               className="max-w-[95vw] max-h-[90vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '95vw', maxHeight: '90vh' }}
+              style={{ maxWidth: "95vw", maxHeight: "90vh" }}
             />
           </div>
 

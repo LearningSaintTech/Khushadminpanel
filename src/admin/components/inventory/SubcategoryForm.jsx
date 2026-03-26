@@ -40,6 +40,7 @@ const SubcategoryForm = () => {
     imagePreview: null,
     isActive: true,
     showInNavbar: false,
+    isFooter:false,
   });
 
   const computeNextSortOrderValue = useCallback(async () => {
@@ -102,6 +103,7 @@ const SubcategoryForm = () => {
               isActive: subcategory.isActive !== false,
               showInNavbar:
                 subcategory.showInNavbar || subcategory.isNavbar || false,
+                 isFooter: subcategory.isFooter || false,
             });
           } else {
             console.error("Subcategory not found for id:", id);
@@ -173,6 +175,7 @@ const SubcategoryForm = () => {
       formData.append("description", form.description.trim());
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.showInNavbar);
+      formData.append("isFooter", form.isFooter); // ✅ ADD THIS
       if (form.image) formData.append("image", form.image);
       if (!isEdit) {
         formData.append("sortOrder", form.sortOrder?.trim() || "1");
@@ -432,6 +435,21 @@ const SubcategoryForm = () => {
                 />
                 <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Show in Navbar</span>
               </label>
+
+
+              <label className="flex items-center gap-2.5 cursor-pointer group">
+  <input
+    type="checkbox"
+    name="isFooter"
+    checked={form.isFooter}
+    onChange={handleChange}
+    disabled={!form.isActive}
+    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer disabled:opacity-50"
+  />
+  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+    Show in Footer
+  </span>
+</label>
             </div>
 
             {/* Buttons */}
