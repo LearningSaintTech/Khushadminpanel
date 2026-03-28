@@ -15,6 +15,7 @@ const CouponPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [influencerFilter, setInfluencerFilter] = useState("all"); // all | influencer | normal
+  const [autoIncludedFilter, setAutoIncludedFilter] = useState("all"); // all | auto | manual
 
   // Modal states
   const [selectedCoupon, setSelectedCoupon] = useState(null);
@@ -35,7 +36,7 @@ const CouponPage = () => {
 
   useEffect(() => {
     fetchCoupons();
-  }, [currentPage, debouncedSearchTerm, influencerFilter]);
+  }, [currentPage, debouncedSearchTerm, influencerFilter, autoIncludedFilter]);
 
   const fetchCoupons = async () => {
     try {
@@ -51,11 +52,21 @@ const CouponPage = () => {
         isInfluencerParam = undefined; // all
       }
 
+      let isAutoIncludedParam;
+      if (autoIncludedFilter === "auto") {
+        isAutoIncludedParam = "true";
+      } else if (autoIncludedFilter === "manual") {
+        isAutoIncludedParam = "false";
+      } else {
+        isAutoIncludedParam = undefined; // all
+      }
+
       const response = await getCoupons(
         currentPage,
         limit,
         debouncedSearchTerm,
-        isInfluencerParam
+        isInfluencerParam,
+        isAutoIncludedParam
       );
       const data = response?.data?.data || response?.data || {};
       const couponsList = Array.isArray(data) ? data : data.coupons || data.data || [];
@@ -128,6 +139,18 @@ const CouponPage = () => {
                   <option value="normal">Normal coupons only</option>
                   <option value="influencer">Influencer coupons only</option>
                 </select>
+                <select
+                  value={autoIncludedFilter}
+                  onChange={(e) => {
+                    setCurrentPage(1);
+                    setAutoIncludedFilter(e.target.value);
+                  }}
+                  className="w-full sm:w-56 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 bg-white shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
+                >
+                  <option value="all">All include types</option>
+                  <option value="auto">Auto included only</option>
+                  <option value="manual">Manual apply only</option>
+                </select>
               </div>
               <button
                 onClick={() => navigate("/admin/coupons/create")}
@@ -193,6 +216,9 @@ const CouponPage = () => {
                         Influencer
                       </th>
                       <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Auto Include
+                      </th>
+                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Status
                       </th>
                       <th className="px-4 lg:px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -228,6 +254,17 @@ const CouponPage = () => {
                             }`}
                           >
                             {coupon.isInfluencer ? "Influencer" : "Normal"}
+                          </span>
+                        </td>
+                        <td className="px-4 lg:px-6 py-3 sm:py-4">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                              coupon.isAutoIncluded
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {coupon.isAutoIncluded ? "Auto" : "Manual"}
                           </span>
                         </td>
                         <td className="px-4 lg:px-6 py-3 sm:py-4">
@@ -327,6 +364,18 @@ const CouponPage = () => {
                         <span className="ml-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium
                           bg-gray-100 text-gray-700">
                           {coupon.isInfluencer ? "Influencer coupon" : "Normal coupon"}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-500">Inclusion:</span>
+                        <span
+                          className={`ml-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            coupon.isAutoIncluded
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {coupon.isAutoIncluded ? "Auto included" : "Manual apply"}
                         </span>
                     </div>
                   </div>
@@ -456,6 +505,21 @@ const CouponPage = () => {
                         }`}
                       >
                         {selectedCoupon.isInfluencer ? "Yes (influencer)" : "No (normal)"}
+                      </span>
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt className="text-gray-500 font-medium">Auto Included</dt>
+                    <dd className="mt-1">
+                      <span
+                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                          selectedCoupon.isAutoIncluded
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {selectedCoupon.isAutoIncluded ? "Yes (auto apply)" : "No (manual apply)"}
                       </span>
                     </dd>
                   </div>

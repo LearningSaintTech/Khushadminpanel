@@ -28,6 +28,7 @@ const CouponForm = () => {
     expiryDate: "",
     applicableOn: "ALL",
     isInfluencer: false,
+    isAutoIncluded: false,
   });
 
   // Load coupon data if editing
@@ -60,6 +61,7 @@ const CouponForm = () => {
               : "",
             applicableOn: coupon.applicableOn || "ALL",
             isInfluencer: !!coupon.isInfluencer,
+            isAutoIncluded: !!coupon.isAutoIncluded,
           });
         } else {
           setError("Coupon not found");
@@ -123,6 +125,7 @@ const CouponForm = () => {
       expiryDate: formData.expiryDate,
       applicableOn: formData.applicableOn,
       isInfluencer: !!formData.isInfluencer,
+      isAutoIncluded: !!formData.isAutoIncluded,
     };
 
     try {
@@ -313,6 +316,23 @@ const CouponForm = () => {
               <p className="mt-1 text-xs text-gray-500">
                 If checked, this coupon is treated as an influencer coupon and will also
                 appear in influencer coupon management.
+              </p>
+            </div>
+
+            {/* Auto included coupon flag */}
+            <div className="mb-6">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  name="isAutoIncluded"
+                  checked={!!formData.isAutoIncluded}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+                />
+                <span>Auto include coupon</span>
+              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                If checked, this coupon can be auto-applied by default in cart/checkout.
               </p>
             </div>
 

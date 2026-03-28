@@ -25,6 +25,9 @@ const DesignerInventory = () => {
   const [busyStatusId, setBusyStatusId] = useState("");
   const [busyListedId, setBusyListedId] = useState("");
   const [regeneratingAll, setRegeneratingAll] = useState(false);
+  const [regeneratingSelected, setRegeneratingSelected] = useState(false);
+  const [selectedRowIds, setSelectedRowIds] = useState([]);
+  const [selectedRegenProgress, setSelectedRegenProgress] = useState({ done: 0, total: 0 });
   const [selectedItem, setSelectedItem] = useState(null);
   const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
@@ -94,6 +97,10 @@ const DesignerInventory = () => {
 
   useEffect(() => {
     fetchRows();
+  }, [page, status, listedFilter, search, presetDesignerId]);
+
+  useEffect(() => {
+    setSelectedRowIds([]);
   }, [page, status, listedFilter, search, presetDesignerId]);
 
   const onChangeStatus = async (id, nextStatus) => {
@@ -207,6 +214,51 @@ const DesignerInventory = () => {
     }
   };
 
+  const visibleRowIds = rows.map((r) => r._id).filter(Boolean);
+  const allVisibleSelected =
+    visibleRowIds.length > 0 &&
+    visibleRowIds.every((id) => selectedRowIds.includes(id));
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedRowIds((prev) => prev.filter((id) => !visibleRowIds.includes(id)));
+      return;
+    }
+    setSelectedRowIds((prev) => [...new Set([...prev, ...visibleRowIds])]);
+  };
+
+  const toggleSelectRow = (id) => {
+    if (!id) return;
+    setSelectedRowIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const onRegenerateSelectedSkuIds = async () => {
+    if (regeneratingSelected || selectedRowIds.length === 0) return;
+    const ok = window.confirm(
+      `Regenerate SKU IDs for ${selectedRowIds.length} selected item(s)?`
+    );
+    if (!ok) return;
+    setRegeneratingSelected(true);
+    setSelectedRegenProgress({ done: 0, total: selectedRowIds.length });
+    setError("");
+    try {
+      for (let i = 0; i < selectedRowIds.length; i += 1) {
+        const id = selectedRowIds[i];
+        await regenerateDesignerSku(id);
+        setSelectedRegenProgress({ done: i + 1, total: selectedRowIds.length });
+      }
+      setSelectedRowIds([]);
+      await fetchRows();
+    } catch (err) {
+      setError(err?.message || "Failed to regenerate selected SKU IDs.");
+    } finally {
+      setRegeneratingSelected(false);
+      setSelectedRegenProgress({ done: 0, total: 0 });
+    }
+  };
+
   const openLightbox = (images, index = 0) => {
     if (!Array.isArray(images) || images.length === 0) return;
     const safeIndex = Math.min(Math.max(index, 0), images.length - 1);
@@ -258,8 +310,18 @@ const DesignerInventory = () => {
           <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("excel")}>{exportingType === "excel" ? "Exporting..." : "Excel"}</button>
           <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("pdf")}>{exportingType === "pdf" ? "Exporting..." : "PDF"}</button>
           <button
+            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={exportingType !== "" || regeneratingAll || regeneratingSelected || selectedRowIds.length === 0}
+            onClick={onRegenerateSelectedSkuIds}
+            title="Regenerate SKU IDs only for selected rows"
+          >
+            {regeneratingSelected
+              ? `Regenerating selected... (${selectedRegenProgress.done}/${selectedRegenProgress.total})`
+              : `Regenerate selected SKU IDs${selectedRowIds.length ? ` (${selectedRowIds.length})` : ""}`}
+          </button>
+          <button
             className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={exportingType !== "" || regeneratingAll}
+            disabled={exportingType !== "" || regeneratingAll || regeneratingSelected}
             onClick={onRegenerateAllSkuIds}
             title="Regenerate all SKU IDs for the current filters"
           >
@@ -294,9 +356,18 @@ const DesignerInventory = () => {
         <table className="w-full text-sm">
           <thead className="bg-gray-50/80">
             <tr>
+              <th className="p-2.5 text-center font-semibold text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAllVisible}
+                  aria-label="Select all visible items"
+                />
+              </th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Style</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Designer</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Product</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Price</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">SKU IDs</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
@@ -305,14 +376,26 @@ const DesignerInventory = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={8} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={8} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
+            {loading ? <tr><td colSpan={10} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={10} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
               <tr key={r._id} className="border-t border-black/5">
+                <td className="p-2.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedRowIds.includes(r._id)}
+                    onChange={() => toggleSelectRow(r._id)}
+                    aria-label={`Select item ${r.StyleNumber || r._id}`}
+                  />
+                </td>
                 <td className="p-2.5">
                   <div className="font-medium">{r.StyleNumber || "-"}</div>
                   <div className="text-xs text-gray-500">{r.employeeId || "-"}</div>
                 </td>
                 <td className="p-2.5 text-gray-700">{r.designerName}</td>
                 <td className="p-2.5 text-gray-700">{r.productType} / {r.fitType}</td>
+                <td className="p-2.5 text-gray-700">
+                  <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
+                  <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
+                </td>
                 <td className="p-2.5">
                   <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}>
                     {r.gender || "-"}
@@ -430,6 +513,8 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Product Type:</span> {selectedItem.productType || "-"}</div>
               <div><span className="font-medium">Fit Type:</span> {selectedItem.fitType || "-"}</div>
               <div><span className="font-medium">Gender:</span> {selectedItem.gender || "-"}</div>
+              <div><span className="font-medium">MRP:</span> {Number(selectedItem.mrp ?? 0)}</div>
+              <div><span className="font-medium">Discount Price:</span> {Number(selectedItem.discountPrice ?? 0)}</div>
               <div><span className="font-medium">Total Production Qty:</span> {selectedItem.totalProductionQty ?? 0}</div>
               <div><span className="font-medium">Default Color:</span> {selectedItem.defaultColor || "-"}</div>
               <div><span className="font-medium">Top SKU ID:</span> {selectedItem?.sku?.skuId || "-"}</div>
