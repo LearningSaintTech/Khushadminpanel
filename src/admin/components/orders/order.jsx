@@ -12,6 +12,9 @@ import {
   unassignOrder,
   listDeliveryAgents,
   approveExchange,
+  getInvoice,
+  downloadShippingLabel,
+  downloadManifest,
 } from "../../apis/Orderapi";
 import toast from "react-hot-toast";
 import {
@@ -24,7 +27,6 @@ import {
   XCircle,
   Truck,
   RefreshCw,
-  Eye,
   AlertCircle,
   User,
   CreditCard,
@@ -154,7 +156,14 @@ const getNormalDeliveryShiprocket = (item) => {
       (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
     status: sr.status || null,
     shiprocketOrderId: sr.orderId ?? null,
-    shipmentId: sr.shipmentId ?? null,
+    // Backend download endpoints often expect shipment group id.
+    shipmentId: sr.shipmentId ?? item.shipmentId ?? null,
+    shipmentGroupId:
+      sr.shipmentGroupId ??
+      item.shipmentGroupId ??
+      sr.shipment_group_id ??
+      item.shipment_group_id ??
+      null,
     courier: item.courier || null,
     labelUrl: sr.labelUrl || null,
     invoiceUrl: sr.invoiceUrl || null,
@@ -243,28 +252,20 @@ function ShiprocketDetails({ sr, compact }) {
           {sr.shipmentId != null && <>Shipment: {sr.shipmentId}</>}
         </p>
       )}
-      <div className="flex flex-wrap gap-2 pt-1">
-        {sr.labelUrl && (
-          <a
-            href={sr.labelUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-indigo-600 hover:underline"
-          >
-            Label
-          </a>
-        )}
-        {sr.invoiceUrl && (
-          <a
-            href={sr.invoiceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-medium text-indigo-600 hover:underline"
-          >
-            Invoice
-          </a>
-        )}
-      </div>
+      {(sr.labelUrl || sr.invoiceUrl) && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {sr.labelUrl && (
+            <span className="text-xs font-medium text-indigo-600">
+              Label ready
+            </span>
+          )}
+          {sr.invoiceUrl && (
+            <span className="text-xs font-medium text-indigo-600">
+              Invoice ready
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -339,8 +340,196 @@ const Orders = () => {
   const [orderAssignments, setOrderAssignments] = useState(null);
   const [unassignLoading, setUnassignLoading] = useState(false);
   const [unassignError, setUnassignError] = useState(null);
+  const [docDownloadLoading, setDocDownloadLoading] = useState(false);
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
+
+  const resolveDocUrl = (res) => {
+    if (!res) return null;
+    if (typeof res === "string") return res;
+    if (res instanceof Blob) return null; // handled in openDocUrl
+    const data = res?.data ?? res;
+    return (
+      res?.url ||
+      res?.data?.url ||
+      data?.url ||
+      data?.invoice_url ||
+      data?.label_url ||
+      data?.manifest_url ||
+      data?.manifestUrl ||
+      res?.invoice_url ||
+      res?.label_url ||
+      res?.manifest_url ||
+      data?.fileUrl ||
+      data?.downloadUrl ||
+      data?.invoiceUrl ||
+      data?.labelUrl ||
+      res?.invoiceUrl ||
+      res?.labelUrl ||
+      null
+    );
+  };
+
+  const openDocUrl = (urlOrBlob, fallbackMsg) => {
+    if (!urlOrBlob) {
+      toast.error(fallbackMsg);
+      return;
+    }
+    if (urlOrBlob instanceof Blob) {
+      const objectUrl = URL.createObjectURL(urlOrBlob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+      return;
+    }
+
+    const url = typeof urlOrBlob === "string" ? urlOrBlob : null;
+    if (!url) {
+      toast.error(fallbackMsg);
+      return;
+    }
+    const normalizedUrl =
+      typeof url === "string" && url.startsWith("/")
+        ? new URL(url, window.location.origin).href
+        : url;
+    // Use a temporary anchor click to let the browser decide (download vs open).
+    const a = document.createElement("a");
+    a.href = normalizedUrl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleGetInvoiceClick = async (orderObj, itemObj) => {
+    if (!orderObj || !itemObj) return;
+    setDocDownloadLoading(true);
+    try {
+      const orderIds = [
+        orderObj?.orderId,
+        orderObj?._id,
+        orderObj?.id,
+        orderObj?.order_id,
+      ]
+        .filter(Boolean)
+        .map(String);
+      const itemIds = [
+        itemObj?.itemId,
+        itemObj?._id,
+        itemObj?.id,
+        itemObj?.productItemId,
+        itemObj?.item_id,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      const uniqueOrderIds = Array.from(new Set(orderIds));
+      const uniqueItemIds = Array.from(new Set(itemIds));
+
+      let lastErr = null;
+
+      for (const oid of uniqueOrderIds) {
+        for (const iid of uniqueItemIds) {
+          try {
+            const res = await getInvoice(oid, iid);
+            // Common backend response shape:
+            // { is_invoice_created: true, invoice_url: "...pdf" }
+            const data = res?.data ?? res;
+            const url =
+              data?.invoice_url ||
+              data?.invoiceUrl ||
+              data?.url ||
+              res?.invoice_url ||
+              res?.invoiceUrl ||
+              resolveDocUrl(res) ||
+              resolveDocUrl(data);
+
+            if (res instanceof Blob) {
+              openDocUrl(res, "Failed to download invoice");
+              return;
+            }
+
+            if (url) {
+              openDocUrl(url, "Failed to download invoice");
+              return;
+            }
+
+            lastErr = new Error(
+              data?.message ||
+                res?.message ||
+                "Invoice not available for this delivery line"
+            );
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+      }
+
+      toast.error(
+        apiErrMessage(lastErr, "Failed to download invoice (404/Not Found)")
+      );
+    } catch (err) {
+      console.error("Invoice download failed:", err);
+      toast.error(apiErrMessage(err, "Failed to download invoice"));
+    } finally {
+      setDocDownloadLoading(false);
+    }
+  };
+
+  const handleDownloadLabelsClick = async (shipmentIds) => {
+    const ids = Array.isArray(shipmentIds) ? shipmentIds.filter(Boolean) : [];
+    if (!ids.length) return;
+    setDocDownloadLoading(true);
+    try {
+      const res = await downloadShippingLabel(ids);
+      const data = res?.data ?? res;
+      if (data?.label_url || data?.labelUrl) {
+        openDocUrl(resolveDocUrl(res) || data?.label_url || data?.labelUrl, "Failed to download shipping label(s)");
+        return;
+      }
+      const msg = data?.message || "Failed to download shipping label(s)";
+      toast.error(msg);
+    } catch (err) {
+      console.error("Shipping label download failed:", err);
+      toast.error(apiErrMessage(err, "Failed to download shipping label(s)"));
+    } finally {
+      setDocDownloadLoading(false);
+    }
+  };
+
+  const handleDownloadManifestClick = async (shipmentIds) => {
+    const ids = Array.isArray(shipmentIds) ? shipmentIds.filter(Boolean) : [];
+    if (!ids.length) return;
+    setDocDownloadLoading(true);
+    try {
+      const res = await downloadManifest(ids);
+      const data = res?.data ?? res;
+      const manifestUrl =
+        data?.manifest_url ||
+        data?.manifestUrl ||
+        resolveDocUrl(res);
+      if (!manifestUrl) {
+        const msg = data?.message || "Failed to generate manifest PDF";
+        const checkIds = Array.isArray(data?.check_ids)
+          ? data.check_ids.join(", ")
+          : null;
+        toast.error(checkIds ? `${msg} (check_ids: ${checkIds})` : msg);
+        return;
+      }
+      openDocUrl(manifestUrl, "Failed to download manifest(s)");
+    } catch (err) {
+      console.error("Manifest download failed:", err);
+      toast.error(apiErrMessage(err, "Failed to download manifest(s)"));
+    } finally {
+      setDocDownloadLoading(false);
+    }
+  };
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -1404,7 +1593,7 @@ const Orders = () => {
                             className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
                             title="View order details"
                           >
-                            <Eye size={18} />
+                          <span className="text-sm font-medium">View details</span>
                           </button>
                         </td>
                       </tr>
@@ -1583,7 +1772,7 @@ const Orders = () => {
                               className="rounded-lg p-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 transition-colors"
                               title="View & update item status"
                             >
-                              <Eye size={20} />
+                              <span className="text-sm font-medium">View details</span>
                             </button>
                           </div>
                         </div>
@@ -1828,13 +2017,66 @@ const Orders = () => {
                       </h4>
                       {(() => {
                         const sr = getNormalDeliveryShiprocket(focusedItem);
-                        return sr ? (
-                          <ShiprocketDetails sr={sr} />
-                        ) : (
-                          <p className="text-sm text-amber-800">
-                            No Shiprocket shipment linked yet. After you create the shipment, AWB and tracking will
-                            appear here.
-                          </p>
+                        return (
+                          <div className="space-y-2">
+                            {sr ? (
+                              <ShiprocketDetails sr={sr} />
+                            ) : (
+                              <p className="text-sm text-amber-800">
+                                No Shiprocket shipment linked yet. After you create the shipment, AWB and tracking will
+                                appear here.
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={docDownloadLoading}
+                                onClick={() =>
+                                  handleGetInvoiceClick(
+                                    selectedOrder,
+                                    focusedItem
+                                  )
+                                }
+                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                              >
+                                <CreditCard size={14} />
+                                Download invoice
+                              </button>
+
+                              {sr && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={docDownloadLoading || !(sr.shipmentId || sr.shipmentGroupId)}
+                                    onClick={() =>
+                                      handleDownloadLabelsClick([
+                                        sr.shipmentId || sr.shipmentGroupId,
+                                      ])
+                                    }
+                                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                  >
+                                    <Truck size={14} />
+                                    Download label
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={docDownloadLoading || !(sr.shipmentId || sr.shipmentGroupId)}
+                                    onClick={() =>
+                                      handleDownloadManifestClick([
+                                        sr.shipmentId || sr.shipmentGroupId,
+                                      ])
+                                    }
+                                    className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
+                                  >
+                                    <Package size={14} />
+                                    Manifest
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         );
                       })()}
                     </div>
@@ -2179,6 +2421,43 @@ const Orders = () => {
                             Shipments / Warehouses
                           </h4>
                         </div>
+
+                        {(() => {
+                          const normalShips = (selectedOrder?.shipments || []).filter(
+                            (s) => String(s?.deliveryType || "").toUpperCase() === "NORMAL"
+                          );
+                          const shipmentIds = normalShips
+                            .map((s) => s?.shipmentId ?? s?.shipmentGroupId ?? s?.shipment_id ?? s?._id ?? null)
+                            .filter(Boolean)
+                            .map(String);
+                          const uniqueIds = Array.from(new Set(shipmentIds));
+
+                          if (uniqueIds.length === 0) return null;
+
+                          return (
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              {/* <button
+                                type="button"
+                                disabled={docDownloadLoading}
+                                onClick={() => handleDownloadLabelsClick(uniqueIds)}
+                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                              >
+                                <Truck size={14} />
+                                Download labels
+                              </button> */}
+                              {/* <button
+                                type="button"
+                                disabled={docDownloadLoading}
+                                onClick={() => handleDownloadManifestClick(uniqueIds)}
+                                className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60 flex items-center gap-2"
+                              >
+                                <Package size={14} />
+                                Download manifest
+                              </button> */}
+                            </div>
+                          );
+                        })()}
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           {selectedOrder.shipments.map((ship, idx) => (
                             <div
@@ -2375,12 +2654,65 @@ const Orders = () => {
                                 {isNormalDeliveryLine(item) ? (
                                   (() => {
                                     const sr = getNormalDeliveryShiprocket(item);
-                                    return sr ? (
-                                      <ShiprocketDetails sr={sr} />
-                                    ) : (
-                                      <span className="text-xs text-amber-800">
-                                        Normal delivery — no AWB / tracking yet
-                                      </span>
+                                    return (
+                                      <div className="space-y-2">
+                                        {sr ? (
+                                          <ShiprocketDetails sr={sr} />
+                                        ) : (
+                                          <p className="text-xs text-amber-800">
+                                            Normal delivery — shiprocket not available yet
+                                          </p>
+                                        )}
+                                        <div className="flex flex-wrap gap-2">
+                                          <button
+                                            type="button"
+                                            disabled={docDownloadLoading}
+                                            onClick={() =>
+                                              handleGetInvoiceClick(
+                                                selectedOrder,
+                                                item
+                                              )
+                                            }
+                                            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                          >
+                                            <CreditCard size={14} />
+                                            Download invoice
+                                          </button>
+
+                                          {sr && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                disabled={docDownloadLoading}
+                                                onClick={() =>
+                                                  handleDownloadLabelsClick([
+                                                    sr.shipmentId ||
+                                                      sr.shipmentGroupId,
+                                                  ])
+                                                }
+                                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                              >
+                                                <Truck size={14} />
+                                                Download label
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={docDownloadLoading}
+                                                onClick={() =>
+                                                  handleDownloadManifestClick([
+                                                    sr.shipmentId ||
+                                                      sr.shipmentGroupId,
+                                                  ])
+                                                }
+                                                className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
+                                              >
+                                                <Package size={14} />
+                                                Manifest
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
                                     );
                                   })()
                                 ) : (

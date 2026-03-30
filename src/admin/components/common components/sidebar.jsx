@@ -166,7 +166,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-40 w-72 bg-black text-gray-100 flex flex-col
+          fixed inset-y-0 left-0 z-40 w-60 bg-black text-gray-100 flex flex-col
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
@@ -199,7 +199,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                 )}
               </button>
               {isBellOpen && (
-                <div className="absolute top-full right-0 mt-1 w-72 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full right-0 mt-1 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
                   <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
                     <span className="text-sm font-medium text-white">Notifications</span>
                     {unreadCount > 0 && (

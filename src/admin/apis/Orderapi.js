@@ -37,7 +37,7 @@ const orderEndpoints = {
     return url;
   },
   GET_INVOICE: (orderId, itemId) =>
-  `/api/order/invoice/${orderId}/${itemId}`,
+  `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
   GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "") => {
@@ -76,10 +76,39 @@ const orderEndpoints = {
     `/api/exchangeUser/${exchangeId}`,
   APPROVE_EXCHANGE: (exchangeId) =>
   `/api/exchangeUser/approve/${exchangeId}`,
-};
 
+
+// Shipping Label Download
+DOWNLOAD_SHIPPING_LABEL: `/admin/orders/shipping-labels/download`,
  
-
+MANIFEST_DOWNLOAD: `/admin/orders/manifests/download`,
+};
+// ✅ Download Shipping Label
+export const downloadShippingLabel = (shipmentIds) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.DOWNLOAD_SHIPPING_LABEL,
+    {
+      shipment_id: shipmentIds, // array required
+    },
+    {},
+    {},
+    {}
+  );
+};
+//download Manifest
+export const downloadManifest = (shipmentIds) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.MANIFEST_DOWNLOAD,
+    {
+      shipment_id: shipmentIds, // must be array
+    },
+    {},
+    {},
+    {}
+  );
+};
 // ✅ Get All Orders
 export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType) => {
   return apiConnector(
@@ -161,7 +190,11 @@ export const listDeliveryAgents = (page = 1, limit = 100) => {
 export const getInvoice = (orderId, itemId) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_INVOICE(orderId, itemId)
+    orderEndpoints.GET_INVOICE(orderId, itemId),
+    null,
+    {},
+    {},
+    {}
   );
 };
 
