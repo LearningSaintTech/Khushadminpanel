@@ -346,19 +346,47 @@ export default function Stockmanagement() {
     const form = getFormForWarehouse(warehouseId);
     const sku = (form.sku || "").trim();
     const quantity = Number(form.quantity);
+    console.log("[StockManagement] handleUpdateStock submit", {
+      warehouseId,
+      form,
+      parsed: { sku, quantity },
+    });
 
     if (!sku || Number.isNaN(quantity) || quantity < 0) {
+      console.warn("[StockManagement] handleUpdateStock validation failed", {
+        warehouseId,
+        sku,
+        quantity,
+      });
       toast.error("Enter a valid SKU and a non-negative quantity");
       return;
     }
 
     setUpdatingStockByWarehouseId((prev) => ({ ...prev, [warehouseId]: true }));
     try {
-      await updateWarehouseStock(warehouseId, { sku, quantity });
+      const payload = { sku, quantity };
+      console.log("[StockManagement] updateWarehouseStock request", {
+        warehouseId,
+        payload,
+      });
+      const updateResponse = await updateWarehouseStock(warehouseId, payload);
+      console.log("[StockManagement] updateWarehouseStock response", {
+        warehouseId,
+        success: updateResponse?.success,
+        message: updateResponse?.message,
+        data: updateResponse?.data,
+      });
       await refetchStockRow(warehouseId);
+      console.log("[StockManagement] refetchStockRow completed", { warehouseId });
       setFormForWarehouse(warehouseId, { sku: "", quantity: "" });
       toast.success(`Moved ${quantity} unit(s) to warehouse — ${sku}`);
     } catch (err) {
+      console.error("[StockManagement] handleUpdateStock error", {
+        warehouseId,
+        sku,
+        quantity,
+        message: err?.response?.data?.message || err?.message,
+      });
       const msg =
         typeof err === "string"
           ? err
@@ -391,21 +419,56 @@ export default function Stockmanagement() {
 
   const handleInlineAddStock = async (warehouseId, sku, quantityStr) => {
     const quantity = Number(quantityStr);
+    console.log("[StockManagement] handleInlineAddStock submit", {
+      warehouseId,
+      sku,
+      quantityStr,
+      parsedQuantity: quantity,
+    });
     if (Number.isNaN(quantity) || quantity <= 0) {
+      console.warn("[StockManagement] handleInlineAddStock validation failed", {
+        warehouseId,
+        sku,
+        quantity,
+      });
       toast.error("Enter a quantity greater than 0");
       return;
     }
     const key = `${warehouseId}-${sku}`;
     setUpdatingInlineKey(key);
     try {
-      await updateWarehouseStock(warehouseId, {
+      const payload = {
         sku: sku.trim(),
         quantity,
+      };
+      console.log("[StockManagement] inline updateWarehouseStock request", {
+        warehouseId,
+        payload,
+        key,
+      });
+      const updateResponse = await updateWarehouseStock(warehouseId, payload);
+      console.log("[StockManagement] inline updateWarehouseStock response", {
+        warehouseId,
+        key,
+        success: updateResponse?.success,
+        message: updateResponse?.message,
+        data: updateResponse?.data,
       });
       await refetchStockRow(warehouseId);
+      console.log("[StockManagement] inline refetchStockRow completed", {
+        warehouseId,
+        key,
+      });
       setInlineAddQty((prev) => ({ ...prev, [key]: "" }));
       toast.success(`Added ${quantity} to warehouse — ${sku.trim()}`);
     } catch (err) {
+      console.error("[StockManagement] handleInlineAddStock error", {
+        warehouseId,
+        sku,
+        quantity,
+        key,
+        message: err?.response?.data?.message || err?.message,
+      });
       const msg =
         typeof err === "string"
           ? err

@@ -30,6 +30,11 @@ const ItemInventory = () => {
   }, [search]);
 
   const fetchItems = useCallback(async () => {
+    console.log("[CentralStock] fetchItems start", {
+      page: pagination.page,
+      limit: pagination.limit,
+      search: debouncedSearch,
+    });
     setLoading(true);
     try {
       const res = await getItemsWithSkus(
@@ -43,6 +48,10 @@ const ItemInventory = () => {
       console.log("API Response:", res);
 
       if (res?.success && Array.isArray(res?.data?.items)) {
+        console.log("[CentralStock] fetchItems success", {
+          itemCount: res?.data?.items?.length ?? 0,
+          pagination: res?.data?.pagination,
+        });
         setItems(res.data.items);
         setPagination(res.data.pagination || {
           page: 1,
@@ -51,6 +60,11 @@ const ItemInventory = () => {
           totalPages: 1,
         });
       } else {
+        console.warn("[CentralStock] fetchItems unexpected response", {
+          success: res?.success,
+          message: res?.message,
+          hasItemsArray: Array.isArray(res?.data?.items),
+        });
         toast.error(res?.message || 'Failed to load items');
         setItems([]);
       }
@@ -77,6 +91,7 @@ const ItemInventory = () => {
   };
 
   const startEditing = (itemId, skuCode, currentStock) => {
+    console.log("[CentralStock] startEditing", { itemId, skuCode, currentStock });
     const key = `${itemId}-${skuCode}`;
     setEditingStock(prev => ({
       ...prev,
@@ -85,15 +100,29 @@ const ItemInventory = () => {
   };
 
   const saveStock = async (itemId, sku) => {
+    console.log("[CentralStock] saveStock submit", {
+      itemId,
+      sku,
+    });
     if (!itemId || !sku?.sku) {
+      console.warn("[CentralStock] saveStock invalid item/sku", { itemId, sku });
       toast.error('Invalid item or SKU');
       return;
     }
 
     const key = `${itemId}-${sku.sku}`;
     const newStock = Number(editingStock[key]);
+    console.log("[CentralStock] saveStock parsed stock", {
+      key,
+      raw: editingStock[key],
+      parsed: newStock,
+    });
 
     if (isNaN(newStock) || newStock < 0) {
+      console.warn("[CentralStock] saveStock validation failed", {
+        key,
+        newStock,
+      });
       toast.error('Please enter a valid non-negative number');
       return;
     }
@@ -105,14 +134,24 @@ const ItemInventory = () => {
           stock: newStock
         }]
       };
+      console.log("[CentralStock] updateItem request", { itemId, payload });
 
       const res = await updateItem(itemId, payload);
       console.log('Update response:', res);
 
       if (res?.success) {
+        console.log("[CentralStock] updateItem success", {
+          itemId,
+          sku: sku.sku,
+          stock: newStock,
+        });
         toast.success('Stock updated');
         fetchItems(); // refresh list
       } else {
+        console.warn("[CentralStock] updateItem failed response", {
+          itemId,
+          response: res,
+        });
         toast.error(res?.message || 'Update failed');
       }
     } catch (err) {
@@ -128,6 +167,7 @@ const ItemInventory = () => {
   };
 
   const cancelEdit = (itemId, skuCode) => {
+    console.log("[CentralStock] cancelEdit", { itemId, skuCode });
     const key = `${itemId}-${skuCode}`;
     setEditingStock(prev => {
       const next = { ...prev };
