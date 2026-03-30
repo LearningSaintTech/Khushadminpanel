@@ -244,6 +244,8 @@ const DesignerInventoryForm = () => {
     fitType: "",
     gender: "men",
     defaultColor: "",
+    mrp: 0,
+    discountPrice: 0,
     fabric: emptyFabric(),
     costs: emptyCosts(),
     variants: [emptyVariant()],
@@ -269,6 +271,8 @@ const DesignerInventoryForm = () => {
             fitType: d.fitType || "",
             gender: d.gender || "men",
             defaultColor: d.defaultColor || "",
+            mrp: d.mrp ?? 0,
+            discountPrice: d.discountPrice ?? 0,
             fabric: { ...emptyFabric(), ...(d.fabric || {}) },
             costs: { ...emptyCosts(), ...(d.costs || {}) },
             variants:
@@ -439,6 +443,8 @@ const DesignerInventoryForm = () => {
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
+      formData.append("mrp", String(toNumberOrZero(form.mrp)));
+      formData.append("discountPrice", String(toNumberOrZero(form.discountPrice)));
       const normalizedFabric = {
         ...form.fabric,
         gsm: toNumberOrZero(form.fabric?.gsm),
@@ -599,6 +605,26 @@ const DesignerInventoryForm = () => {
               <option value="unisex">unisex</option>
               <option value="kids">kids</option>
             </select>
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">MRP</label>
+            <input
+              type="number"
+              min="0"
+              className={fieldClass}
+              value={form.mrp}
+              onChange={(e) => setForm((s) => ({ ...s, mrp: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">Discount price</label>
+            <input
+              type="number"
+              min="0"
+              className={fieldClass}
+              value={form.discountPrice}
+              onChange={(e) => setForm((s) => ({ ...s, discountPrice: e.target.value }))}
+            />
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="mb-0.5 block text-xs font-medium text-gray-700">Description</label>

@@ -21,13 +21,22 @@ export const createCoupon = (data) => {
 // - "true"  → only influencer coupons
 // - "false" → only non-influencer coupons
 // - undefined/null → backend default (currently non-influencer)
-export const getCoupons = (page = 1, limit = 10, search = "", isInfluencer) => {
+export const getCoupons = (
+  page = 1,
+  limit = 10,
+  search = "",
+  isInfluencer,
+  isAutoIncluded,
+) => {
   let url = `${COUPON_API.GET_ALL}?page=${page}&limit=${limit}`;
   if (search && search.trim()) {
     url += `&search=${encodeURIComponent(search.trim())}`;
   }
   if (typeof isInfluencer === "string" && isInfluencer.length) {
     url += `&isInfluencer=${encodeURIComponent(isInfluencer)}`;
+  }
+  if (typeof isAutoIncluded === "string" && isAutoIncluded.length) {
+    url += `&isAutoIncluded=${encodeURIComponent(isAutoIncluded)}`;
   }
   return apiConnector("GET", url);
 };

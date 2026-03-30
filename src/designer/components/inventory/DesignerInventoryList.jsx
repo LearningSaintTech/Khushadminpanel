@@ -230,6 +230,7 @@ const DesignerInventoryList = () => {
             <tr>
               <th className="p-2.5 text-left font-semibold text-gray-700">Style</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Product</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Price</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">SKUs</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Qty</th>
@@ -261,6 +262,10 @@ const DesignerInventoryList = () => {
                   </td>
                   <td className="p-2.5 text-gray-700">
                     {r.productType} / {r.fitType}
+                  </td>
+                  <td className="p-2.5 text-gray-700">
+                    <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
+                    <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
                   </td>
                   <td className="p-2.5">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}>
@@ -449,6 +454,12 @@ const DesignerInventoryList = () => {
               </div>
               <div>
                 <span className="font-medium text-gray-600">Product / fit:</span> {selected.productType} / {selected.fitType}
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">MRP:</span> {Number(selected.mrp ?? 0)}
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">Discount price:</span> {Number(selected.discountPrice ?? 0)}
               </div>
               <div>
                 <span className="font-medium text-gray-600">Gender:</span>{" "}

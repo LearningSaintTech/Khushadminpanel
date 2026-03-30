@@ -13,7 +13,7 @@ export default function Items() {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [pagination, setPagination] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
@@ -69,43 +69,26 @@ export default function Items() {
   };
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearchTerm(searchTerm), 400);
-    return () => clearTimeout(t);
-  }, [searchTerm]);
-
-  useEffect(() => {
     console.log("[Items.jsx] useEffect triggered — fetching items");
-    if (subcategoryId) {
-      fetchItems(1, 10, debouncedSearchTerm);
-    } else {
+    if (!subcategoryId) {
       console.warn("[Items.jsx] No subcategoryId → skipping fetch");
+      return;
     }
-  }, [subcategoryId, debouncedSearchTerm]);
+    const normalizedSearch = appliedSearchTerm.trim();
+    // Search API query is sent only when the user enters text.
+    fetchItems(1, 10, normalizedSearch);
+  }, [subcategoryId, appliedSearchTerm]);
 
-  const q = debouncedSearchTerm.toLowerCase().trim();
-  const filteredItems =
-    q.length === 0
-      ? items
-      : items.filter((item) => {
-          const hay = [
-            item.name,
-            item.productId,
-            item.shortDescription,
-            item.longDescription,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          const skuHay = (item.variants || [])
-            .flatMap((v) => (v.sizes || []).map((s) => s.sku))
-            .join(" ")
-            .toLowerCase();
-          return (
-            hay.includes(q) ||
-            skuHay.includes(q) ||
-            item.name?.toLowerCase().includes(q)
-          );
-        });
+  const handleSearchClick = () => {
+    const normalized = searchTerm.trim();
+    if (!normalized) return;
+    setAppliedSearchTerm(normalized);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setAppliedSearchTerm("");
+  };
 
   // Navigation
   const openCreate = () => {
@@ -225,13 +208,27 @@ export default function Items() {
                     );
                     setSearchTerm(e.target.value);
                   }}
-                  placeholder="Search by name, product ID, description, or SKU..."
+                  placeholder="Search by product name or product ID..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-full border border-black/10 text-sm focus:outline-none focus:ring-2 focus:ring-black/80 focus:border-black/80 bg-white"
                 />
                 <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
                   🔍
                 </span>
               </div>
+              <button
+                onClick={handleSearchClick}
+                disabled={!searchTerm.trim()}
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Search
+              </button>
+              <button
+                onClick={handleClearSearch}
+                disabled={!searchTerm && !appliedSearchTerm}
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/20 text-sm font-medium hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Clear
+              </button>
 
               <button
                 onClick={openCreate}
@@ -325,7 +322,7 @@ export default function Items() {
                     Loading products...
                   </td>
                 </tr>
-              ) : filteredItems.length === 0 ? (
+              ) : items.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
@@ -335,7 +332,7 @@ export default function Items() {
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item, index) => (
+                items.map((item, index) => (
                   <tr
                     key={item._id}
                     onClick={() => {
@@ -440,7 +437,7 @@ export default function Items() {
                   "[Items.jsx] Previous page clicked → page:",
                   pagination.page - 1,
                 );
-                fetchItems(pagination.page - 1, 10, debouncedSearchTerm);
+                fetchItems(pagination.page - 1, 10, appliedSearchTerm.trim());
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
             >
@@ -458,7 +455,7 @@ export default function Items() {
                   "[Items.jsx] Next page clicked → page:",
                   pagination.page + 1,
                 );
-                fetchItems(pagination.page + 1, 10, debouncedSearchTerm);
+                fetchItems(pagination.page + 1, 10, appliedSearchTerm.trim());
               }}
               className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
             >

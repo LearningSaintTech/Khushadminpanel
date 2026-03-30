@@ -20,7 +20,7 @@ const ShowItems = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingSubcategories, setLoadingSubcategories] = useState(false);
@@ -113,20 +113,11 @@ const ShowItems = () => {
     }
   }, [subcategoryCurrentPage, debouncedSubcategorySearchTerm]);
 
-  // Debounce search term to avoid too many API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 500); // Wait 500ms after user stops typing
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   // Fetch items when filters or search change
   useEffect(() => {
     setCurrentPage(1);
     fetchItems(1);
-  }, [selectedCategoryId, selectedSubcategoryId, debouncedSearchTerm]);
+  }, [selectedCategoryId, selectedSubcategoryId, appliedSearchTerm]);
 
   // Re-fetch items when page changes (but not on initial mount)
   useEffect(() => {
@@ -333,7 +324,7 @@ const ShowItems = () => {
     setLoading(true);
     setError(null);
 
-    const q = (debouncedSearchTerm || "").trim();
+    const q = (appliedSearchTerm || "").trim();
 
     const runSearchItems = () => {
       const queryParams = { page, limit };
@@ -481,6 +472,17 @@ const ShowItems = () => {
     } else {
       alert("Please select both category and subcategory to create a new item");
     }
+  };
+
+  const handleSearchClick = () => {
+    const normalized = searchTerm.trim();
+    if (!normalized) return;
+    setAppliedSearchTerm(normalized);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setAppliedSearchTerm("");
   };
   const handleBulkUpload = async () => {
     if (!jsonFile) {
@@ -890,15 +892,33 @@ const ShowItems = () => {
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Search Products
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search items..."
-                  className="w-full px-4 py-2.5 pl-10 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all"
-                />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by product name or product ID..."
+                    className="w-full px-4 py-2.5 pl-10 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all"
+                  />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSearchClick}
+                  disabled={!searchTerm.trim()}
+                  className="px-4 py-2.5 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Search
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  disabled={!searchTerm && !appliedSearchTerm}
+                  className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Clear
+                </button>
               </div>
             </div>
           </div>
