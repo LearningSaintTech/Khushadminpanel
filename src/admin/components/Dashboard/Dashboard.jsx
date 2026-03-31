@@ -4,14 +4,16 @@ import {
   getItemsCount, 
   getCategoryCount, 
   getSubcategoryCount, 
-  getCouponAnalytics 
+  getCouponAnalytics,
+  getOrdersCount,
 } from "../../apis/Dashboardapi";
 import { FiZoomIn, FiX } from "react-icons/fi";     // cleaner zoom icons
 import { 
   FiPackage, 
   FiLayers, 
   FiTag, 
-  FiGift 
+  FiGift,
+  FiShoppingCart,
 } from "react-icons/fi";   // subtle icons for cards
 
 export default function Dashboard() {
@@ -26,12 +28,14 @@ export default function Dashboard() {
           itemsRes,
           categoriesRes,
           subcategoriesRes,
-          couponsRes
+          couponsRes,
+          ordersRes,
         ] = await Promise.all([
           getItemsCount(),
           getCategoryCount(),
           getSubcategoryCount(),
-          getCouponAnalytics()
+          getCouponAnalytics(),
+          getOrdersCount(),
         ]);
 
         setCounts({
@@ -62,7 +66,14 @@ export default function Dashboard() {
             inactive: couponsRes?.data?.summary?.inactiveCoupons ?? 0,
             path: "/admin/coupons",
             icon: <FiGift className="w-6 h-6 text-gray-500" />
-          }
+          },
+          Orders: {
+            total: ordersRes?.data?.orders?.total ?? 0,
+            active: ordersRes?.data?.orders?.active ?? 0,
+            inactive: ordersRes?.data?.orders?.inactive ?? 0,
+            path: "/admin/orders",
+            icon: <FiShoppingCart className="w-6 h-6 text-gray-500" />
+          },
         });
       } catch (err) {
         console.error("Dashboard fetch error:", err);

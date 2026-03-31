@@ -1,7 +1,8 @@
 // src/pages/ItemInventory.jsx   (or wherever your centralstock.jsx is located)
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getItemsWithSkus, updateItem } from '../../apis/Skuapi'; // ← adjust import path
+import { bulkUploadStockFile } from '../../apis/Warehouseapi';
 import toast from 'react-hot-toast'; // or your preferred toast library
 
 const ItemInventory = () => {
@@ -18,6 +19,11 @@ const ItemInventory = () => {
   const [expandedItemId, setExpandedItemId] = useState(null);
 
   const [editingStock, setEditingStock] = useState({});
+
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkLastResult, setBulkLastResult] = useState(null);
+  const bulkFileInputRef = useRef(null);
 
   // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -176,6 +182,41 @@ const ItemInventory = () => {
     });
   };
 
+  const handleBulkUpload = async () => {
+    if (!bulkFile) {
+      toast.error('Choose a file (.json, .csv, .xlsx, .xls, or .xml)');
+      return;
+    }
+    setBulkSubmitting(true);
+    setBulkLastResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', bulkFile);
+      const res = await bulkUploadStockFile(formData);
+      if (res?.success) {
+        const data = res.data ?? {};
+        setBulkLastResult(data);
+        const errCount = data.errors?.length ?? 0;
+        const appliedCount = data.applied?.length ?? 0;
+        if (errCount > 0) {
+          toast.error(`Bulk finished with ${errCount} error(s); ${appliedCount} applied`);
+        } else {
+          toast.success(`Bulk stock applied (${appliedCount} operations)`);
+        }
+        setBulkFile(null);
+        if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+        fetchItems();
+      } else {
+        toast.error(res?.message || 'Bulk upload failed');
+      }
+    } catch (err) {
+      console.error('[CentralStock] bulk upload', err);
+      toast.error(typeof err === 'string' ? err : err?.message || 'Bulk upload failed');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen  py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -201,6 +242,80 @@ const ItemInventory = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 mb-6">
+          <h2 className="text-sm font-semibold text-gray-900">Bulk stock upload</h2>
+          <p className="mt-1 text-xs text-gray-500 max-w-3xl">
+            Upload a file to update <strong>central</strong> stock and/or <strong>warehouse</strong> stock by SKU.
+            Formats: JSON, CSV, Excel (.xlsx). Use columns <code className="text-indigo-700 bg-indigo-50 px-1 rounded">sku</code>,{' '}
+            <code className="text-indigo-700 bg-indigo-50 px-1 rounded">central_stock</code> (optional),{' '}
+            <code className="text-indigo-700 bg-indigo-50 px-1 rounded">warehouse_id</code> and{' '}
+            <code className="text-indigo-700 bg-indigo-50 px-1 rounded">warehouse_delta</code> (optional).
+            Max 2000 rows; duplicate SKUs in one file are rejected. See backend <code className="text-xs">docs/bulk-stock-upload-format.md</code>.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".json,.csv,.xlsx,.xls,.xml,application/json,text/csv"
+              disabled={bulkSubmitting}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setBulkFile(f);
+                setBulkLastResult(null);
+              }}
+              className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+            />
+            <button
+              type="button"
+              disabled={bulkSubmitting || !bulkFile}
+              onClick={handleBulkUpload}
+              className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkSubmitting ? 'Uploading…' : 'Upload & apply'}
+            </button>
+            <details className="relative">
+              <summary className="list-none cursor-pointer inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">
+                Download template
+              </summary>
+              <div className="absolute z-10 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg p-1.5 space-y-1">
+                <a
+                  href="/templates/bulk-stock-upload.sample.csv"
+                  download
+                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  CSV format
+                </a>
+                <a
+                  href="/templates/bulk-stock-upload.sample.json"
+                  download
+                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  JSON format
+                </a>
+                <a
+                  href="/templates/bulk-stock-upload.sample.xml"
+                  download
+                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Excel format
+                </a>
+              </div>
+            </details>
+          </div>
+          {bulkLastResult?.errors?.length > 0 ? (
+            <div className="mt-4 max-h-48 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+              <p className="font-semibold mb-1">Row errors ({bulkLastResult.errors.length})</p>
+              <ul className="space-y-1 font-mono">
+                {bulkLastResult.errors.map((row, i) => (
+                  <li key={`${row.sku}-${row.rowIndex}-${i}`}>
+                    {row.sku ? `${row.sku}: ` : ''}{row.rowIndex != null ? `(row ${row.rowIndex}) ` : ''}{row.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         {loading ? (

@@ -12,11 +12,13 @@ import {
   RefreshCw,
   ChevronsLeft,
   ChevronsRight,
+  Upload,
 } from "lucide-react";
 import {
   getWarehouses,
   getWarehouseStock,
   updateWarehouseStock,
+  bulkUploadStockFile,
 } from "../../apis/Warehouseapi";
 
 const WAREHOUSE_PAGE_SIZE = 8;
@@ -88,6 +90,13 @@ export default function Stockmanagement() {
   /** Collapsed = compact header-only row (easier scanning of many warehouses) */
   const [collapsedWarehouseIds, setCollapsedWarehouseIds] = useState(() => new Set());
   const [copiedSkuKey, setCopiedSkuKey] = useState(null);
+
+  const [stockRefreshTick, setStockRefreshTick] = useState(0);
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkDefaultWarehouseId, setBulkDefaultWarehouseId] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkLastResult, setBulkLastResult] = useState(null);
+  const bulkFileInputRef = useRef(null);
 
   const warehouseIdsKey = useMemo(
     () => warehouses.map((w) => w.id).join(","),
@@ -290,6 +299,7 @@ export default function Stockmanagement() {
     debouncedStockItemSearch,
     debouncedStockSkuSearch,
     stockPageSize,
+    stockRefreshTick,
   ]);
 
   const mergeStockState = useCallback((warehouseId, res) => {
@@ -352,13 +362,15 @@ export default function Stockmanagement() {
       parsed: { sku, quantity },
     });
 
-    if (!sku || Number.isNaN(quantity) || quantity < 0) {
+    if (!sku || Number.isNaN(quantity) || quantity === 0) {
       console.warn("[StockManagement] handleUpdateStock validation failed", {
         warehouseId,
         sku,
         quantity,
       });
-      toast.error("Enter a valid SKU and a non-negative quantity");
+      toast.error(
+        "Enter a valid SKU and a non-zero quantity (positive = to warehouse, negative = return to central)"
+      );
       return;
     }
 
@@ -379,7 +391,11 @@ export default function Stockmanagement() {
       await refetchStockRow(warehouseId);
       console.log("[StockManagement] refetchStockRow completed", { warehouseId });
       setFormForWarehouse(warehouseId, { sku: "", quantity: "" });
-      toast.success(`Moved ${quantity} unit(s) to warehouse — ${sku}`);
+      if (quantity > 0) {
+        toast.success(`Moved ${quantity} unit(s) to warehouse — ${sku}`);
+      } else {
+        toast.success(`Returned ${Math.abs(quantity)} unit(s) to central — ${sku}`);
+      }
     } catch (err) {
       console.error("[StockManagement] handleUpdateStock error", {
         warehouseId,
@@ -396,13 +412,20 @@ export default function Stockmanagement() {
       const isSkuNotFound = /does not exist|not exist in central|could not find sku/i.test(
         msg
       );
-      const isInsufficientStock =
-        /insufficient stock|available.*requested/i.test(msg) && !isSkuNotFound;
+      const isInsufficientCentral =
+        /central inventory/i.test(msg) &&
+        /insufficient|available/i.test(msg) &&
+        !isSkuNotFound;
+      const isInsufficientWarehouse =
+        /insufficient stock in warehouse/i.test(msg) ||
+        (/warehouse/i.test(msg) && /insufficient|available/i.test(msg));
       if (isSkuNotFound) {
         toast.error(
           "SKU not in catalog — add it to an item in Central stock / catalog first."
         );
-      } else if (isInsufficientStock) {
+      } else if (isInsufficientWarehouse) {
+        toast.error(msg);
+      } else if (isInsufficientCentral) {
         toast.error(
           "Not enough central stock — lower the quantity or add stock on the item."
         );
@@ -425,13 +448,15 @@ export default function Stockmanagement() {
       quantityStr,
       parsedQuantity: quantity,
     });
-    if (Number.isNaN(quantity) || quantity <= 0) {
+    if (Number.isNaN(quantity) || quantity === 0) {
       console.warn("[StockManagement] handleInlineAddStock validation failed", {
         warehouseId,
         sku,
         quantity,
       });
-      toast.error("Enter a quantity greater than 0");
+      toast.error(
+        "Enter a non-zero quantity (positive adds from central; negative returns to central)"
+      );
       return;
     }
     const key = `${warehouseId}-${sku}`;
@@ -460,7 +485,13 @@ export default function Stockmanagement() {
         key,
       });
       setInlineAddQty((prev) => ({ ...prev, [key]: "" }));
-      toast.success(`Added ${quantity} to warehouse — ${sku.trim()}`);
+      if (quantity > 0) {
+        toast.success(`Added ${quantity} to warehouse — ${sku.trim()}`);
+      } else {
+        toast.success(
+          `Returned ${Math.abs(quantity)} to central from warehouse — ${sku.trim()}`
+        );
+      }
     } catch (err) {
       console.error("[StockManagement] handleInlineAddStock error", {
         warehouseId,
@@ -478,13 +509,20 @@ export default function Stockmanagement() {
       const isSkuNotFound = /does not exist|not exist in central|could not find sku/i.test(
         msg
       );
-      const isInsufficientStock =
-        /insufficient stock|available.*requested/i.test(msg) && !isSkuNotFound;
+      const isInsufficientCentral =
+        /central inventory/i.test(msg) &&
+        /insufficient|available/i.test(msg) &&
+        !isSkuNotFound;
+      const isInsufficientWarehouse =
+        /insufficient stock in warehouse/i.test(msg) ||
+        (/warehouse/i.test(msg) && /insufficient|available/i.test(msg));
       if (isSkuNotFound) {
         toast.error(
           "SKU not in catalog — add it to an item in Central stock / catalog first."
         );
-      } else if (isInsufficientStock) {
+      } else if (isInsufficientWarehouse) {
+        toast.error(msg);
+      } else if (isInsufficientCentral) {
         toast.error(
           "Not enough central stock — lower the quantity or add stock on the item."
         );
@@ -503,6 +541,47 @@ export default function Stockmanagement() {
     }));
   };
 
+  const handleBulkStockUpload = async () => {
+    if (!bulkFile) {
+      toast.error("Choose a file (.json, .csv, .xlsx, .xls, or .xml)");
+      return;
+    }
+    setBulkSubmitting(true);
+    setBulkLastResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", bulkFile);
+      const wh = bulkDefaultWarehouseId.trim();
+      if (wh) formData.append("warehouseId", wh);
+      const res = await bulkUploadStockFile(formData);
+      if (res?.success) {
+        const data = res.data ?? {};
+        setBulkLastResult(data);
+        const errCount = data.errors?.length ?? 0;
+        const appliedCount = data.applied?.length ?? 0;
+        if (errCount > 0) {
+          toast.error(
+            `Bulk finished with ${errCount} error(s); ${appliedCount} applied`
+          );
+        } else {
+          toast.success(`Bulk stock applied (${appliedCount} operations)`);
+        }
+        setBulkFile(null);
+        if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+        setStockRefreshTick((t) => t + 1);
+      } else {
+        toast.error(res?.message || "Bulk upload failed");
+      }
+    } catch (err) {
+      console.error("[StockManagement] bulk upload", err);
+      toast.error(
+        typeof err === "string" ? err : err?.message || "Bulk upload failed"
+      );
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   return (
     <div className="w-full min-h-screen bg-white">
       <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
@@ -515,14 +594,124 @@ export default function Stockmanagement() {
               Stock Management
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">
-              Move stock from <strong>central catalog</strong> into each warehouse. Use
-              filters and pagination to work with large lists.
+              Move stock between <strong>central catalog</strong> and each warehouse (use
+              negative quantity to return stock to central). Filters and pagination help with
+              large lists.
             </p>
           </div>
         </div>
       </div>
 
       <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-6">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
+              <Upload size={20} className="text-gray-700" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm sm:text-base font-semibold text-gray-900">
+                Bulk stock upload
+              </h2>
+              <p className="mt-1 text-xs text-gray-500 max-w-3xl">
+                JSON, CSV, or Excel with{" "}
+                <span className="font-mono text-gray-700">sku</span>, optional{" "}
+                <span className="font-mono text-gray-700">central_stock</span>,{" "}
+                <span className="font-mono text-gray-700">warehouse_id</span>,{" "}
+                <span className="font-mono text-gray-700">warehouse_delta</span>{" "}
+                (+ into warehouse from central, − back to central). Max 2000 rows per file. Optional
+                default warehouse applies when rows omit warehouse id.
+              </p>
+              <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
+                <label className="flex flex-col gap-1 text-xs text-gray-600 sm:min-w-[200px]">
+                  <span className="font-medium text-gray-700">Default warehouse ID (optional)</span>
+                  <input
+                    type="text"
+                    placeholder="69c5308e5033cadea9873121"
+                    value={bulkDefaultWarehouseId}
+                    onChange={(e) => setBulkDefaultWarehouseId(e.target.value)}
+                    disabled={bulkSubmitting}
+                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-black focus:ring-1 focus:ring-black"
+                  />
+                </label>
+                <input
+                  ref={bulkFileInputRef}
+                  type="file"
+                  accept=".json,.csv,.xlsx,.xls,.xml,application/json,text/csv"
+                  disabled={bulkSubmitting}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setBulkFile(f);
+                    setBulkLastResult(null);
+                  }}
+                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200"
+                />
+                <button
+                  type="button"
+                  disabled={bulkSubmitting || !bulkFile}
+                  onClick={handleBulkStockUpload}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkSubmitting ? (
+                    <>
+                      <Loader2 className="animate-spin" size={16} />
+                      Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={16} />
+                      Upload & apply
+                    </>
+                  )}
+                </button>
+                <details className="relative">
+                  <summary className="list-none cursor-pointer inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Download template
+                  </summary>
+                  <div className="absolute z-10 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg p-1.5 space-y-1">
+                    <a
+                      href="/templates/bulk-stock-upload.sample.csv"
+                      download
+                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      CSV format
+                    </a>
+                    <a
+                      href="/templates/bulk-stock-upload.sample.json"
+                      download
+                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      JSON format
+                    </a>
+                    <a
+                      href="/templates/bulk-stock-upload.sample.xml"
+                      download
+                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Excel format
+                    </a>
+                  </div>
+                </details>
+              </div>
+              {bulkLastResult?.errors?.length > 0 ? (
+                <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-950">
+                  <p className="font-semibold mb-1">
+                    Errors ({bulkLastResult.errors.length})
+                  </p>
+                  <ul className="space-y-1 font-mono">
+                    {bulkLastResult.errors.map((row, i) => (
+                      <li key={`${row.sku}-${row.rowIndex}-${i}`}>
+                        {row.sku ? `${row.sku}: ` : ""}
+                        {row.rowIndex != null ? `(row ${row.rowIndex}) ` : ""}
+                        {row.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-4 sm:px-5 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -702,12 +891,13 @@ export default function Stockmanagement() {
                           <>
                         <div className="px-5 py-4 sm:px-6 sm:py-5 bg-white border-b border-gray-100">
                           <h4 className="text-sm font-semibold text-gray-900 mb-1">
-                            Add stock from central inventory
+                            Adjust stock (central ↔ warehouse)
                           </h4>
                           <p className="text-xs text-gray-500 mb-3 max-w-2xl">
-                            Quantity is deducted from the item&apos;s{" "}
-                            <strong>central</strong> stock and added to this warehouse.
-                            SKU must already exist on a product.
+                            <strong>Positive</strong> quantity moves units from central catalog
+                            stock into this warehouse. <strong>Negative</strong> quantity returns
+                            units from this warehouse back to central. SKU must already exist on
+                            a product.
                           </p>
                           <form
                             className="grid grid-cols-1 sm:grid-cols-3 gap-3"
@@ -731,8 +921,7 @@ export default function Stockmanagement() {
                             />
                             <input
                               type="number"
-                              placeholder="Quantity to move"
-                              min="0"
+                              placeholder="Qty (+ to warehouse, − to central)"
                               value={form.quantity}
                               onChange={(e) =>
                                 setFormForWarehouse(wh.id, {
@@ -753,7 +942,7 @@ export default function Stockmanagement() {
                                   Updating…
                                 </>
                               ) : (
-                                "Move to warehouse"
+                                "Apply"
                               )}
                             </button>
                           </form>
@@ -1029,7 +1218,7 @@ export default function Stockmanagement() {
                                             Central stock
                                           </span>
                                           <span className="ml-auto">
-                                            Add quantity
+                                            ± Qty adjust
                                           </span>
                                         </div>
                                         <ul className="divide-y divide-gray-100">
@@ -1130,12 +1319,11 @@ export default function Stockmanagement() {
                                                   </span>
                                                   <div className="flex items-center gap-2 ml-auto">
                                                     <span className="text-xs text-gray-500 whitespace-nowrap">
-                                                      Add quantity:
+                                                      ± Qty:
                                                     </span>
                                                     <input
                                                       type="number"
-                                                      min="1"
-                                                      placeholder="Qty"
+                                                      placeholder="+/−"
                                                       value={inlineVal}
                                                       onChange={(e) =>
                                                         setInlineAddQty(
@@ -1171,7 +1359,8 @@ export default function Stockmanagement() {
                                                       disabled={
                                                         isInlineUpdating ||
                                                         !inlineVal ||
-                                                        Number(inlineVal) <= 0
+                                                        Number(inlineVal) === 0 ||
+                                                        Number.isNaN(Number(inlineVal))
                                                       }
                                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
                                                     >
@@ -1181,10 +1370,10 @@ export default function Stockmanagement() {
                                                             className="animate-spin"
                                                             size={14}
                                                           />
-                                                          Add…
+                                                          …
                                                         </>
                                                       ) : (
-                                                        "Add"
+                                                        "Apply"
                                                       )}
                                                     </button>
                                                   </div>
