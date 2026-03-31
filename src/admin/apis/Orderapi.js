@@ -72,10 +72,9 @@ const orderEndpoints = {
   DELIVERY_AGENTS_LIST: (page = 1, limit = 100) =>
     `/admin/panels/delivery-agent/list?page=${page}&limit=${limit}`,
 
-  EXCHANGE_DETAILS: (exchangeId) =>
-    `/api/exchangeUser/${exchangeId}`,
-  APPROVE_EXCHANGE: (exchangeId) =>
-  `/api/exchangeUser/approve/${exchangeId}`,
+  EXCHANGE_DETAILS: (exchangeId) => `/exchangeUser/${exchangeId}`,
+  APPROVE_EXCHANGE: (exchangeId) => `/exchangeUser/approve/${exchangeId}`,
+  APPROVE_EXCHANGE_ALT: (exchangeId) => `/exchangeUser/${exchangeId}/approve`,
 
 
 // Shipping Label Download
@@ -194,7 +193,9 @@ export const getInvoice = (orderId, itemId) => {
     null,
     {},
     {},
-    {}
+    {
+      responseType: "blob",
+    }
   );
 };
 
@@ -216,8 +217,16 @@ export const getExchangeDetails = (exchangeId) => {
 };
 
 export const approveExchange = (exchangeId) => {
-  return apiConnector(
-    "PATCH", // or PATCH depending on backend
-    orderEndpoints.APPROVE_EXCHANGE(exchangeId)
-  );
+  const primaryUrl = orderEndpoints.APPROVE_EXCHANGE(exchangeId);
+  const fallbackUrl = orderEndpoints.APPROVE_EXCHANGE_ALT(exchangeId);
+
+  return apiConnector("PATCH", primaryUrl).catch((patchErr) => {
+    return apiConnector("POST", primaryUrl).catch((postErr) => {
+      return apiConnector("PATCH", fallbackUrl).catch(() => {
+        return apiConnector("POST", fallbackUrl).catch(() => {
+          throw postErr?.response?.data ? postErr : patchErr;
+        });
+      });
+    });
+  });
 };

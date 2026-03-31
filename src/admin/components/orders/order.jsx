@@ -119,6 +119,60 @@ const getLatestExchangeId = (item) => {
   return exchanges[0]?._id ? String(exchanges[0]._id) : null;
 };
 
+const getLatestExchange = (item) => {
+  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
+  if (exchanges.length === 0) return null;
+  exchanges.sort((a, b) => {
+    const aTs = new Date(a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.createdAt || 0).getTime();
+    return bTs - aTs;
+  });
+  return exchanges[0] || null;
+};
+
+const extractExchangeImageUrls = (exchange) => {
+  if (!exchange || typeof exchange !== "object") return [];
+  const candidates = [
+    exchange.images,
+    exchange.imageUrls,
+    exchange.uploadedImages,
+    exchange.exchangeImages,
+    exchange.proofImages,
+    exchange.media,
+    exchange.mediaUrls,
+    exchange.photos,
+  ];
+  const urls = [];
+  candidates.forEach((entry) => {
+    if (!entry) return;
+    const list = Array.isArray(entry) ? entry : [entry];
+    list.forEach((v) => {
+      const value =
+        typeof v === "string"
+          ? v
+          : v?.url || v?.secure_url || v?.imageUrl || v?.src || null;
+      if (value) urls.push(String(value));
+    });
+  });
+  return Array.from(new Set(urls.filter(Boolean)));
+};
+
+const getExchangeReason = (exchange) => {
+  if (!exchange || typeof exchange !== "object") return "";
+  const reason =
+    exchange.reason ||
+    exchange.exchangeReason ||
+    exchange.requestReason ||
+    exchange.note ||
+    "";
+  return String(reason || "").trim();
+};
+
+const canDownloadInvoice = (item) => {
+  const status = String(item?.status || "").toUpperCase();
+  return status === "PROCESSING";
+};
+
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
 const ORDERS_DEBUG =
   import.meta.env.DEV || String(import.meta.env.VITE_DEBUG_ORDERS ?? "") === "true";
@@ -191,27 +245,30 @@ function ShiprocketDetails({ sr, compact }) {
   if (!sr) return <span className="text-gray-400">—</span>;
   if (compact) {
     return (
-      <div className="max-w-56 space-y-0.5">
+      <div className="min-w-0 w-full space-y-0.5">
         {sr.trackingUrl ? (
           <a
             href={sr.trackingUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-mono text-indigo-600 hover:underline wrap-break-word"
+            className="inline-flex max-w-full items-center gap-0.5 text-[11px] font-mono text-indigo-600 hover:underline truncate"
+            title={sr.awb || "Track"}
           >
-            <ExternalLink size={12} className="shrink-0" />
-            {sr.awb || "Track"}
+            <ExternalLink size={11} className="shrink-0" />
+            <span className="truncate">{sr.awb || "Track"}</span>
           </a>
         ) : (
-          <span className="font-mono text-xs text-gray-800">{sr.awb || "—"}</span>
+          <span className="block truncate font-mono text-[11px] text-gray-800" title={sr.awb || undefined}>
+            {sr.awb || "—"}
+          </span>
         )}
         {sr.status && (
-          <p className="truncate text-[11px] text-gray-500" title={sr.status}>
+          <p className="truncate text-[10px] leading-tight text-gray-500" title={sr.status}>
             {sr.status}
           </p>
         )}
         {sr.courier && (
-          <p className="truncate text-[11px] text-gray-400" title={sr.courier}>
+          <p className="truncate text-[10px] leading-tight text-gray-400" title={sr.courier}>
             {sr.courier}
           </p>
         )}
@@ -341,6 +398,9 @@ const Orders = () => {
   const [unassignLoading, setUnassignLoading] = useState(false);
   const [unassignError, setUnassignError] = useState(null);
   const [docDownloadLoading, setDocDownloadLoading] = useState(false);
+  const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
+    () => new Set(),
+  );
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
 
@@ -506,9 +566,27 @@ const Orders = () => {
   const handleDownloadManifestClick = async (shipmentIds) => {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.filter(Boolean) : [];
     if (!ids.length) return;
+
+    const alreadyDownloaded = ids.filter((id) =>
+      downloadedManifestShipments.has(String(id)),
+    );
+    const pendingIds = ids.filter(
+      (id) => !downloadedManifestShipments.has(String(id)),
+    );
+
+    if (!pendingIds.length) {
+      toast.error("Manifest already downloaded for this shipment.");
+      return;
+    }
+    if (alreadyDownloaded.length) {
+      toast.error(
+        "Manifest already downloaded for some shipments. Downloading for remaining ones.",
+      );
+    }
+
     setDocDownloadLoading(true);
     try {
-      const res = await downloadManifest(ids);
+      const res = await downloadManifest(pendingIds);
       const data = res?.data ?? res;
       const manifestUrl =
         data?.manifest_url ||
@@ -523,6 +601,11 @@ const Orders = () => {
         return;
       }
       openDocUrl(manifestUrl, "Failed to download manifest(s)");
+      setDownloadedManifestShipments((prev) => {
+        const next = new Set(prev);
+        pendingIds.forEach((id) => next.add(String(id)));
+        return next;
+      });
     } catch (err) {
       console.error("Manifest download failed:", err);
       toast.error(apiErrMessage(err, "Failed to download manifest(s)"));
@@ -868,6 +951,11 @@ const Orders = () => {
         for (const item of targetItems) {
           const exchangeId = getLatestExchangeId(item);
           if (!exchangeId) continue;
+          dbgOrders("approveExchange:wholeOrder", {
+            orderId: selectedOrder?.orderId,
+            itemId: item?.itemId || item?._id,
+            exchangeId,
+          });
           await approveExchange(exchangeId);
         }
       }
@@ -978,6 +1066,11 @@ const Orders = () => {
               `No exchange found for item ${String(itemId)} to approve.`,
             );
           }
+          dbgOrders("approveExchange:bulk", {
+            orderId: selectedOrder?.orderId,
+            itemId,
+            exchangeId,
+          });
           await approveExchange(exchangeId);
         }
         await updateOrderItemStatus(selectedOrder.orderId, itemId, {
@@ -1087,6 +1180,7 @@ const Orders = () => {
         if (!exchangeId) {
           throw new Error("No exchange request found for this item.");
         }
+        dbgOrders("approveExchange:single", { orderId, itemId, exchangeId });
         await approveExchange(exchangeId);
       }
       await updateOrderItemStatus(orderId, itemId, payload);
@@ -1275,10 +1369,11 @@ const Orders = () => {
     }
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs sm:text-sm font-medium ${bg} ${text} max-w-full truncate`}
+        className={`inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${bg} ${text} truncate`}
+        title={displayText}
       >
-        <Icon size={14} />
-        {displayText}
+        <Icon size={12} className="shrink-0" />
+        <span className="truncate">{displayText}</span>
       </span>
     );
   };
@@ -1306,8 +1401,8 @@ const Orders = () => {
   ];
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 ">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6">
+      <div className="mx-auto w-full max-w-[1920px] min-w-0">
         {/* Header + Search */}
         <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
@@ -1500,22 +1595,32 @@ const Orders = () => {
                 )}
               </div>
 
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-              <table className="min-w-full table-auto divide-y divide-gray-200">
+            <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+              <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
+                <colgroup>
+                  <col className="w-[9%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                </colgroup>
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Order</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Customer</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Phone</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Items</th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Total</th>
-                    <th className="px-4 py-4 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                    <th className="px-4 py-4 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                      Shiprocket
-                      <span className="block font-normal normal-case text-gray-400">(normal)</span>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Order</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Customer</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Phone</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Qty</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Total</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Status</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Shiprocket (normal delivery)">
+                      Courier / SR
                     </th>
-                    <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Date</th>
-                    <th className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">View</th>
+                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Date</th>
+                    <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">View</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -1534,51 +1639,61 @@ const Orders = () => {
                   ) : (
                     orders.map((order) => (
                       <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
-                        <td className="wrap-break-word px-4 py-4 font-medium text-indigo-600">
-                          #{order.orderId || order._id?.slice(-8).toUpperCase()}
+                        <td className="min-w-0 px-2 py-2 align-top font-medium text-indigo-600">
+                          <span className="block truncate text-xs" title={`#${order.orderId || order._id}`}>
+                            #{order.orderId || order._id?.slice(-8).toUpperCase()}
+                          </span>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-medium text-gray-900">
+                        <td className="min-w-0 px-2 py-2 align-top">
+                          <div
+                            className="truncate text-xs font-medium text-gray-900"
+                            title={order.user?.name || order.address?.name || "—"}
+                          >
                             {order.user?.name || order.address?.name || "—"}
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-700">
-                          {order.user?.countryCode || ""}
-                          {order.user?.phoneNumber || order.address?.phone || "—"}
+                        <td className="min-w-0 px-2 py-2 align-top text-xs text-gray-700">
+                          <span
+                            className="block truncate"
+                            title={`${order.user?.countryCode || ""}${order.user?.phoneNumber || order.address?.phone || "—"}`}
+                          >
+                            {order.user?.countryCode || ""}
+                            {order.user?.phoneNumber || order.address?.phone || "—"}
+                          </span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">
+                        <td className="px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums">
                           {order.totalItems || order.totalQuantity || order.items?.length || "?"}
                         </td>
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900">
+                        <td className="min-w-0 px-2 py-2 align-top text-xs font-medium text-gray-900 tabular-nums">
                           ₹{(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}
                         </td>
-                        <td className="px-4 py-4 min-w-[160px]">
+                        <td className="min-w-0 px-2 py-2 align-top">
                           {getStatusBadge(order.status || order.orderStatus)}
                         </td>
-                        <td className="px-4 py-4 align-top text-sm">
+                        <td className="min-w-0 px-2 py-2 align-top">
                           {(() => {
                             const prev = getOrderNormalShiprocketPreview(order);
                             if (!prev) {
-                              return <span className="text-gray-400">—</span>;
+                              return <span className="text-xs text-gray-400">—</span>;
                             }
                             return (
                               <div>
                                 <ShiprocketDetails sr={prev.primary} compact />
                                 {prev.count > 1 && (
-                                  <p className="mt-1 text-[11px] text-gray-400">{prev.count} lines</p>
+                                  <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
                                 )}
                               </div>
                             );
                           })()}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-500">
+                        <td className="min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500">
                           {new Date(order.createdAt).toLocaleDateString("en-IN", {
                             day: "numeric",
                             month: "short",
-                            year: "numeric",
+                            year: "2-digit",
                           })}
                         </td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-1 py-2 align-middle text-center">
                           <button
                           onClick={() => {
                             const customOrderId = order.orderId;
@@ -1590,10 +1705,11 @@ const Orders = () => {
                             setItemPage(1);
                             fetchSingleOrder(customOrderId);
                           }}
-                            className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
+                            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
                             title="View order details"
+                            type="button"
                           >
-                          <span className="text-sm font-medium">View details</span>
+                            Details
                           </button>
                         </td>
                       </tr>
@@ -1601,7 +1717,7 @@ const Orders = () => {
                   )}
                 </tbody>
               </table>
-              <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-3 py-3">
                 <div className="text-sm text-gray-700">
                   Page <span className="font-medium">{pagination.page}</span> of{" "}
                   <span className="font-medium">{pagination.totalPages || 1}</span>
@@ -1840,7 +1956,7 @@ const Orders = () => {
                 : null;
 
             return (
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="min-w-0 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 {/* Header */}
                 <div className="border-b bg-gray-50 px-6 py-5">
                   <button
@@ -1974,6 +2090,52 @@ const Orders = () => {
                             </p>
                           );
                         })()}
+                        {(() => {
+                          const latestExchange = getLatestExchange(focusedItem);
+                          const exchangeImageUrls = extractExchangeImageUrls(latestExchange);
+                          const exchangeReason = getExchangeReason(latestExchange);
+                          if (!exchangeReason && exchangeImageUrls.length === 0) return null;
+                          return (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                                Exchange details
+                              </p>
+                              {exchangeReason ? (
+                                <p className="mt-1 break-all text-xs text-amber-900">
+                                  Reason: {exchangeReason}
+                                </p>
+                              ) : null}
+                              {exchangeImageUrls.length > 0 ? (
+                                <>
+                                  <p className="mb-2 mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                    User uploaded images
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    {exchangeImageUrls.map((url, idx) => (
+                                      <a
+                                        key={`${url}-${idx}`}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="group block overflow-hidden rounded-lg border border-gray-200 bg-white"
+                                        title="Open full image"
+                                      >
+                                        <img
+                                          src={url}
+                                          alt={`Exchange upload ${idx + 1}`}
+                                          className="h-20 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                                          loading="lazy"
+                                        />
+                                      </a>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <p className="mt-1 text-xs text-amber-700">No exchange images uploaded.</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <h3 className="text-xl font-bold text-gray-900 mt-1">
                           {focusedItem.sku || focusedItem.variant?.sku || "—"}
                         </h3>
@@ -1985,6 +2147,31 @@ const Orders = () => {
                           <span className="font-semibold text-gray-800">Qty: {focusedItem.quantity}</span>
                           <span className="text-gray-600">₹{(focusedItem.unitPrice || 0).toLocaleString("en-IN")} each</span>
                         </div>
+                      {!isNormalDeliveryLine(focusedItem) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {canDownloadInvoice(focusedItem) ? (
+                            <button
+                              type="button"
+                              disabled={docDownloadLoading}
+                              onClick={() =>
+                                handleGetInvoiceClick(
+                                  selectedOrder,
+                                  focusedItem,
+                                )
+                              }
+                              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                            >
+                              <CreditCard size={14} />
+                              Download invoice
+                            </button>
+                          ) : (
+                            <p className="text-xs text-amber-700">
+                              Invoice can only be downloaded when status is{" "}
+                              <span className="font-semibold">Processing</span>.
+                            </p>
+                          )}
+                        </div>
+                      )}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Current status</p>
@@ -2029,20 +2216,27 @@ const Orders = () => {
                             )}
 
                             <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                disabled={docDownloadLoading}
-                                onClick={() =>
-                                  handleGetInvoiceClick(
-                                    selectedOrder,
-                                    focusedItem
-                                  )
-                                }
-                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
-                              >
-                                <CreditCard size={14} />
-                                Download invoice
-                              </button>
+                              {canDownloadInvoice(focusedItem) ? (
+                                <button
+                                  type="button"
+                                  disabled={docDownloadLoading}
+                                  onClick={() =>
+                                    handleGetInvoiceClick(
+                                      selectedOrder,
+                                      focusedItem
+                                    )
+                                  }
+                                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                >
+                                  <CreditCard size={14} />
+                                  Download invoice
+                                </button>
+                              ) : (
+                                <p className="text-xs text-amber-700">
+                                  Invoice available only when status is{" "}
+                                  <span className="font-semibold">Processing</span>.
+                                </p>
+                              )}
 
                               {sr && (
                                 <>
@@ -2062,13 +2256,30 @@ const Orders = () => {
 
                                   <button
                                     type="button"
-                                    disabled={docDownloadLoading || !(sr.shipmentId || sr.shipmentGroupId)}
+                                    disabled={
+                                      docDownloadLoading ||
+                                      !(sr.shipmentId || sr.shipmentGroupId) ||
+                                      downloadedManifestShipments.has(
+                                        String(
+                                          sr.shipmentId || sr.shipmentGroupId,
+                                        ),
+                                      )
+                                    }
                                     onClick={() =>
                                       handleDownloadManifestClick([
                                         sr.shipmentId || sr.shipmentGroupId,
                                       ])
                                     }
                                     className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
+                                    title={
+                                      downloadedManifestShipments.has(
+                                        String(
+                                          sr.shipmentId || sr.shipmentGroupId,
+                                        ),
+                                      )
+                                        ? "Manifest already downloaded for this shipment"
+                                        : "Download manifest"
+                                    }
                                   >
                                     <Package size={14} />
                                     Manifest
@@ -2092,7 +2303,11 @@ const Orders = () => {
                         value={focusedItem.status || "CREATED"}
                         onChange={(e) => {
                           const newVal = e.target.value;
-                          handleUpdateItemStatus(selectedOrder.orderId, focusedItem.itemId, newVal);
+                          handleUpdateItemStatus(
+                            selectedOrder.orderId,
+                            focusedItem.itemId || focusedItem._id,
+                            newVal,
+                          );
                         }}
                         disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
                         className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
@@ -2566,11 +2781,21 @@ const Orders = () => {
                 ) : !selectedOrder?.items?.length ? (
                   <div className="py-12 text-center text-gray-500">No items found</div>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
+                  <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
+                      <colgroup>
+                        <col className="w-[3%]" />
+                        <col className="w-[29%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[21%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[11%]" />
+                      </colgroup>
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-3.5 text-left">
+                          <th className="px-1.5 py-2 text-left align-middle">
                             <input
                               type="checkbox"
                               checked={
@@ -2583,16 +2808,15 @@ const Orders = () => {
                               className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                             />
                           </th>
-                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Product</th>
-                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Qty</th>
-                          <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Price</th>
-                          <th className="px-5 py-3.5 min-w-[160px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                          <th className="px-5 py-3.5 min-w-[200px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                            Shiprocket
-                            <span className="block font-normal normal-case text-gray-400">(normal only)</span>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Product</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Qty</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Price</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Status</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Shiprocket — normal delivery only">
+                            Ship / docs
                           </th>
-                          <th className="px-5 py-3.5 min-w-[140px] text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Driver partner</th>
-                          <th className="px-5 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Change Status</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Driver</th>
+                          <th className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">Update</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 bg-white">
@@ -2603,7 +2827,7 @@ const Orders = () => {
                           const driverDisplay = getDriverPartnerDisplay(item);
                           return (
                             <tr key={itemId} className={`hover:bg-gray-50/60 ${isSelected ? "bg-indigo-50/50" : ""}`}>
-                              <td className="px-4 py-4">
+                              <td className="px-1.5 py-2 align-top">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -2611,129 +2835,225 @@ const Orders = () => {
                                   className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                 />
                               </td>
-                              <td className="px-5 py-4">
-                                <div className="flex items-center gap-3">
+                              <td className="min-w-0 px-2 py-2 align-top">
+                                <div className="flex items-start gap-2">
                                   {item.variant?.imageUrl && (
                                     <img
                                       src={item.variant.imageUrl}
                                       alt={item.sku}
-                                      className="h-12 w-12 rounded object-cover"
+                                      className="h-9 w-9 shrink-0 rounded object-cover"
                                     />
                                   )}
-                                  <div>
-                                    <div className="font-medium text-gray-900">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-xs font-medium text-gray-900" title={item.sku || item.variant?.sku || ""}>
                                       {item.sku || item.variant?.sku || "—"}
                                     </div>
-                                    <div className="mt-0.5 text-[11px] text-gray-500">
+                                    <div className="mt-0.5 break-all text-[10px] leading-snug text-gray-500">
                                       Item ID: {String(item.itemId || item._id || "—")}
                                     </div>
                                     {(() => {
                                       const exIds = getItemExchangeIds(item);
                                       if (exIds.length === 0) return null;
                                       return (
-                                        <div className="mt-0.5 text-[11px] text-gray-500 break-all">
+                                        <div className="mt-0.5 break-all text-[10px] leading-snug text-gray-500">
                                           Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
                                         </div>
                                       );
                                     })()}
-                                    <div className="mt-0.5 text-xs text-gray-500">
-                                      {item.variant?.color && `Color: ${item.variant.color}`}
-                                      {item.variant?.size && ` • Size: ${item.variant.size}`}
+                                    {(() => {
+                                      const latestExchange = getLatestExchange(item);
+                                      if (!latestExchange) return null;
+                                      const exchangeReason = getExchangeReason(latestExchange);
+                                      const exchangeImages = extractExchangeImageUrls(latestExchange);
+                                      return (
+                                        <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+                                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                                            Exchange
+                                          </p>
+                                          {exchangeReason ? (
+                                            <p className="mt-0.5 break-all text-[10px] text-amber-900">
+                                              Reason: {exchangeReason}
+                                            </p>
+                                          ) : null}
+                                          {exchangeImages.length > 0 ? (
+                                            <div className="mt-1 grid grid-cols-3 gap-1.5">
+                                              {exchangeImages.slice(0, 3).map((url, idx) => (
+                                                <a
+                                                  key={`${url}-${idx}`}
+                                                  href={url}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="block overflow-hidden rounded border border-amber-200 bg-white"
+                                                  title="Open exchange image"
+                                                >
+                                                  <img
+                                                    src={url}
+                                                    alt={`Exchange ${idx + 1}`}
+                                                    className="h-10 w-full object-cover"
+                                                    loading="lazy"
+                                                  />
+                                                </a>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="mt-0.5 text-[10px] text-amber-700">
+                                              No exchange images uploaded.
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                    <div className="mt-0.5 truncate text-[10px] text-gray-500">
+                                      {[item.variant?.color, item.variant?.size].filter(Boolean).join(" · ") || ""}
                                     </div>
                                   </div>
                                 </div>
                               </td>
-                              <td className="whitespace-nowrap px-5 py-4 text-gray-700">{item.quantity}</td>
-                              <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-900">
+                              <td className="px-2 py-2 align-top text-center text-xs tabular-nums text-gray-700">{item.quantity}</td>
+                              <td className="px-2 py-2 align-top text-xs font-medium tabular-nums text-gray-900">
                                 ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
                               </td>
-                              <td className="px-5 py-4 min-w-[160px]">
+                              <td className="min-w-0 px-2 py-2 align-top">
                                 {getStatusBadge(item.status)}
                               </td>
-                              <td className="px-5 py-4 min-w-[200px] align-top text-sm">
-                                {isNormalDeliveryLine(item) ? (
-                                  (() => {
-                                    const sr = getNormalDeliveryShiprocket(item);
-                                    return (
-                                      <div className="space-y-2">
-                                        {sr ? (
-                                          <ShiprocketDetails sr={sr} />
-                                        ) : (
-                                          <p className="text-xs text-amber-800">
-                                            Normal delivery — shiprocket not available yet
-                                          </p>
-                                        )}
-                                        <div className="flex flex-wrap gap-2">
-                                          <button
-                                            type="button"
-                                            disabled={docDownloadLoading}
-                                            onClick={() =>
-                                              handleGetInvoiceClick(
-                                                selectedOrder,
-                                                item
-                                              )
-                                            }
-                                            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
-                                          >
-                                            <CreditCard size={14} />
-                                            Download invoice
-                                          </button>
-
-                                          {sr && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                disabled={docDownloadLoading}
-                                                onClick={() =>
-                                                  handleDownloadLabelsClick([
-                                                    sr.shipmentId ||
-                                                      sr.shipmentGroupId,
-                                                  ])
-                                                }
-                                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
-                                              >
-                                                <Truck size={14} />
-                                                Download label
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={docDownloadLoading}
-                                                onClick={() =>
-                                                  handleDownloadManifestClick([
-                                                    sr.shipmentId ||
-                                                      sr.shipmentGroupId,
-                                                  ])
-                                                }
-                                                className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
-                                              >
-                                                <Package size={14} />
-                                                Manifest
-                                              </button>
-                                            </>
+                              <td className="min-w-0 px-2 py-2 align-top text-xs">
+                                <div className="space-y-1.5">
+                                  {isNormalDeliveryLine(item) ? (
+                                    (() => {
+                                      const sr = getNormalDeliveryShiprocket(item);
+                                      return (
+                                        <>
+                                          {sr ? (
+                                            <ShiprocketDetails sr={sr} compact />
+                                          ) : (
+                                            <p className="text-[10px] leading-snug text-amber-800">
+                                              Normal — SR pending
+                                            </p>
                                           )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()
-                                ) : (
-                                  <span className="text-gray-400">—</span>
-                                )}
+                                          <div className="flex flex-col gap-1">
+                                            {canDownloadInvoice(item) ? (
+                                              <button
+                                                type="button"
+                                                disabled={docDownloadLoading}
+                                                onClick={() =>
+                                                  handleGetInvoiceClick(
+                                                    selectedOrder,
+                                                    item,
+                                                  )
+                                                }
+                                                className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                                title="Download invoice"
+                                              >
+                                                <CreditCard size={11} className="shrink-0" />
+                                                Invoice
+                                              </button>
+                                            ) : (
+                                              <p className="text-[10px] text-amber-700">
+                                                Invoice only when status is{" "}
+                                                <span className="font-semibold">Processing</span>.
+                                              </p>
+                                            )}
+
+                                            {sr && (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  disabled={docDownloadLoading}
+                                                  onClick={() =>
+                                                    handleDownloadLabelsClick([
+                                                      sr.shipmentId ||
+                                                        sr.shipmentGroupId,
+                                                    ])
+                                                  }
+                                                  className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                                  title="Download shipping label"
+                                                >
+                                                  <Truck size={11} className="shrink-0" />
+                                                  Label
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                disabled={
+                                                  docDownloadLoading ||
+                                                  downloadedManifestShipments.has(
+                                                    String(
+                                                      sr.shipmentId ||
+                                                        sr.shipmentGroupId,
+                                                    ),
+                                                  )
+                                                }
+                                                  onClick={() =>
+                                                    handleDownloadManifestClick([
+                                                      sr.shipmentId ||
+                                                        sr.shipmentGroupId,
+                                                    ])
+                                                  }
+                                                className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                                                title={
+                                                  downloadedManifestShipments.has(
+                                                    String(
+                                                      sr.shipmentId ||
+                                                        sr.shipmentGroupId,
+                                                    ),
+                                                  )
+                                                    ? "Manifest already downloaded for this shipment"
+                                                    : "Download manifest"
+                                                }
+                                                >
+                                                  <Package size={11} className="shrink-0" />
+                                                  Manifest
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </>
+                                      );
+                                    })()
+                                  ) : canDownloadInvoice(item) ? (
+                                    <button
+                                      type="button"
+                                      disabled={docDownloadLoading}
+                                      onClick={() =>
+                                        handleGetInvoiceClick(
+                                          selectedOrder,
+                                          item,
+                                        )
+                                      }
+                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                      title="Download invoice"
+                                    >
+                                      <CreditCard size={11} className="shrink-0" />
+                                      Invoice
+                                    </button>
+                                  ) : (
+                                    <p className="text-[10px] text-amber-700">
+                                      Invoice only when status is{" "}
+                                      <span className="font-semibold">Processing</span>.
+                                    </p>
+                                  )}
+                                </div>
                               </td>
-                              <td className="px-5 py-4 min-w-[140px] text-sm text-gray-700">
+                              <td className="min-w-0 px-2 py-2 align-top text-xs text-gray-700">
                                 {driverDisplay ? (
-                                  <span className="inline-flex items-center gap-1.5">
-                                    <UserCircle size={14} className="text-indigo-600 shrink-0" />
-                                    {driverDisplay.name}
+                                  <span className="flex min-w-0 flex-col gap-0.5">
+                                    <span className="inline-flex min-w-0 items-center gap-1">
+                                      <UserCircle size={12} className="shrink-0 text-indigo-600" />
+                                      <span className="truncate font-medium" title={driverDisplay.name}>
+                                        {driverDisplay.name}
+                                      </span>
+                                    </span>
                                     {driverDisplay.phone && (
-                                      <span className="text-gray-500 text-xs">· {driverDisplay.phone}</span>
+                                      <span className="truncate pl-5 text-[10px] text-gray-500 tabular-nums" title={driverDisplay.phone}>
+                                        {driverDisplay.phone}
+                                      </span>
                                     )}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400">—</span>
                                 )}
                               </td>
-                              <td className="whitespace-nowrap px-5 py-4 text-center">
-                                <div className="relative inline-block">
+                              <td className="min-w-0 px-1 py-2 align-top text-center">
+                                <div className="relative mx-auto w-full max-w-[160px]">
                                   <select
                                     value={item.status || "CREATED"}
                                     onChange={(e) => {
@@ -2741,7 +3061,7 @@ const Orders = () => {
                                       handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
                                     }}
                                     disabled={isUpdating}
-                                    className={`rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 ${
+                                    className={`w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-indigo-500 ${
                                       isUpdating ? "opacity-60 cursor-wait" : ""
                                     }`}
                                   >
@@ -2752,8 +3072,8 @@ const Orders = () => {
                                     ))}
                                   </select>
                                   {isUpdating && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded">
-                                      <RefreshCw size={16} className="animate-spin text-indigo-600" />
+                                    <div className="absolute inset-0 flex items-center justify-center rounded bg-white/60">
+                                      <RefreshCw size={14} className="animate-spin text-indigo-600" />
                                     </div>
                                   )}
                                 </div>
