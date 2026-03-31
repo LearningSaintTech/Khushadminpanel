@@ -184,3 +184,16 @@ export const updateWarehouseStock = (warehouseId, data) => {
     return res;
   });
 };
+
+// Central + warehouse bulk stock by SKU (admin). Max 2000 rows. See KhushBackend/docs/bulk-stock-upload-format.md
+const BULK_STOCK_ADMIN_PATH = "/admin/inventory/stock/bulk";
+
+/** multipart/form-data: field `file` (.json .csv .xlsx .xls .xml), optional `warehouseId` */
+export const bulkUploadStockFile = (formData) => {
+  return apiConnector("POST", BULK_STOCK_ADMIN_PATH, formData);
+};
+
+/** JSON body: array of lines or { warehouseId?, lines: [] } */
+export const bulkUploadStockJson = (payload) => {
+  return apiConnector("POST", BULK_STOCK_ADMIN_PATH, payload);
+};

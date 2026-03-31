@@ -4,6 +4,7 @@ export const dashboardEndpoints = {
   ITEMS_COUNT: "/admin/dashboard/counts?type=items",
   CATEGORY_COUNT: "/admin/dashboard/counts?type=category",
   SUBCATEGORY_COUNT: "/admin/dashboard/counts?type=subcategory",
+  ORDERS_COUNT: "/admin/dashboard/counts?type=orders",
   ANALYTICS: "/coupons/analytics", 
 };
 
@@ -24,4 +25,8 @@ export const getSubcategoryCount = () => {
 
 export const getCouponAnalytics = () => {
   return apiConnector("GET", dashboardEndpoints.ANALYTICS);
+};
+
+export const getOrdersCount = () => {
+  return apiConnector("GET", dashboardEndpoints.ORDERS_COUNT);
 };
