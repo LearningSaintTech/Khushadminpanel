@@ -50,6 +50,7 @@ import Exchanges from "../admin/components/Policy/exchangePolicy";
 import Status from "../admin/components/Status/Status";
 import StatusPage from "../admin/components/Status/Statusform";
 import Orders from "../admin/components/orders/order";
+import ExchangeOrders from "../admin/components/orders/ExchangeOrders";
 import Reviews from "../admin/components/Review/Reviews";
 import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
@@ -126,6 +127,7 @@ export const adminPanelChildRoutes = [
   <Route key="splash-f-id" path="banner-form/:id" element={<SplashForm />} />,
   <Route key="delivery" path="delivery" element={<Delivery />} />,
   <Route key="orders" path="orders" element={<Orders />} />,
+  <Route key="exchange-orders" path="exchange-orders" element={<ExchangeOrders />} />,
   <Route key="subadm" path="subadmin" element={<SubAdmin />} />,
   <Route key="subadm-cr" path="subadmin/create" element={<SubAdminForm />} />,
   <Route key="subadm-ed" path="subadmin/edit/:id" element={<SubAdminForm />} />,

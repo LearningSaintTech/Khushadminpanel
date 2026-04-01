@@ -81,6 +81,9 @@ const orderEndpoints = {
 DOWNLOAD_SHIPPING_LABEL: `/admin/orders/shipping-labels/download`,
  
 MANIFEST_DOWNLOAD: `/admin/orders/manifests/download`,
+
+FORWARD_SHIPMENT: (exchangeId) =>
+  `/exchangeUser/forward-shipment/${exchangeId}`,
 };
 // ✅ Download Shipping Label
 export const downloadShippingLabel = (shipmentIds) => {
@@ -181,7 +184,22 @@ export const listDeliveryAgents = (page = 1, limit = 100) => {
 // ADD THIS IN orderEndpoints
 // ===============================
 
-
+// ✅ Create Forward Shipment (Exchange replacement)
+export const createForwardShipment = (exchangeId) => {
+  const url = orderEndpoints.FORWARD_SHIPMENT(exchangeId);
+  return apiConnector("POST", url).catch((postErr) => {
+    const postMsg = String(postErr?.message || "").toLowerCase();
+    const shouldTryPatch =
+      postMsg.includes("method not allowed") ||
+      postMsg.includes("not found") ||
+      postMsg.includes("cannot") ||
+      postMsg.includes("unsupported");
+    if (!shouldTryPatch) throw postErr;
+    return apiConnector("PATCH", url).catch(() => {
+      throw postErr;
+    });
+  });
+};
 
 // ===============================
 // ADD THIS FUNCTION
