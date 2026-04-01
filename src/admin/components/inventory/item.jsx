@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getItemsBySubcategory, bulkUploadItems } from "../../apis/itemapi";
+import {
+  getItemsBySubcategory,
+  bulkUploadItems,
+  updateItem,
+} from "../../apis/itemapi";
 
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
@@ -15,6 +19,11 @@ export default function Items() {
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editingPriceItemId, setEditingPriceItemId] = useState(null);
+  const [editingDiscountItemId, setEditingDiscountItemId] = useState(null);
+  const [editingPriceValue, setEditingPriceValue] = useState("");
+  const [editingDiscountValue, setEditingDiscountValue] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
   console.log(
@@ -142,12 +151,85 @@ export default function Items() {
 
       alert(res?.data?.message || "Bulk upload completed");
 
-      fetchItems(1, 10, debouncedSearchTerm); // refresh list
+      fetchItems(1, 10, appliedSearchTerm.trim()); // refresh list
     } catch (error) {
       console.error("Bulk upload failed:", error);
       alert(error?.message || "Bulk upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const startPriceEdit = (e, item) => {
+    e.stopPropagation();
+    setEditingDiscountItemId(null);
+    setEditingPriceItemId(item._id);
+    setEditingPriceValue(String(item.price ?? ""));
+  };
+
+  const startDiscountEdit = (e, item) => {
+    e.stopPropagation();
+    setEditingPriceItemId(null);
+    setEditingDiscountItemId(item._id);
+    setEditingDiscountValue(
+      item.discountedPrice === null || item.discountedPrice === undefined
+        ? ""
+        : String(item.discountedPrice),
+    );
+  };
+
+  const cancelInlineEdit = (e) => {
+    e.stopPropagation();
+    setEditingPriceItemId(null);
+    setEditingDiscountItemId(null);
+    setEditingPriceValue("");
+    setEditingDiscountValue("");
+  };
+
+  const saveInlinePrice = async (e, itemId) => {
+    e.stopPropagation();
+    const numericPrice = Number(editingPriceValue);
+    if (Number.isNaN(numericPrice) || numericPrice < 0) {
+      alert("Please enter a valid MRP");
+      return;
+    }
+    try {
+      setSavingPrice(true);
+      const formData = new FormData();
+      formData.append("price", String(numericPrice));
+      await updateItem(itemId, formData);
+      setEditingPriceItemId(null);
+      setEditingPriceValue("");
+      await fetchItems(pagination?.page || 1, 10, appliedSearchTerm.trim());
+    } catch (error) {
+      console.error("Failed to update MRP:", error);
+      alert(error?.message || "Failed to update MRP");
+    } finally {
+      setSavingPrice(false);
+    }
+  };
+
+  const saveInlineDiscount = async (e, itemId) => {
+    e.stopPropagation();
+    const hasValue = String(editingDiscountValue).trim() !== "";
+    const numericDiscount = Number(editingDiscountValue);
+    if (hasValue && (Number.isNaN(numericDiscount) || numericDiscount < 0)) {
+      alert("Please enter a valid discounted price");
+      return;
+    }
+    try {
+      setSavingPrice(true);
+      const formData = new FormData();
+      formData.append("discountedPrice", hasValue ? String(numericDiscount) : "");
+      await updateItem(itemId, formData);
+      setEditingDiscountItemId(null);
+      setEditingDiscountValue("");
+      await fetchItems(pagination?.page || 1, 10, appliedSearchTerm.trim());
+    } catch (error) {
+      console.error("Failed to update discounted price:", error);
+      alert(error?.message || "Failed to update discounted price");
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -370,16 +452,98 @@ export default function Items() {
                     </td>
 
                     <td className="px-4 py-3 align-middle text-right text-sm">
-                      ₹{item.price}
+                      {editingPriceItemId === item._id ? (
+                        <div
+                          className="flex items-center justify-end gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            autoFocus
+                            value={editingPriceValue}
+                            onChange={(e) => setEditingPriceValue(e.target.value)}
+                            className="w-24 rounded border border-black/20 px-2 py-1 text-right text-xs sm:text-sm"
+                            placeholder="MRP"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => saveInlinePrice(e, item._id)}
+                            disabled={savingPrice}
+                            className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelInlineEdit}
+                            disabled={savingPrice}
+                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <span>₹{item.price}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => startPriceEdit(e, item)}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                            title="Edit MRP"
+                          >
+                            ✎
+                          </button>
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 align-middle text-right text-sm">
-                      {item.discountedPrice ? (
-                        <span className="font-semibold">
-                          ₹{item.discountedPrice}
-                        </span>
+                      {editingDiscountItemId === item._id ? (
+                        <div
+                          className="flex items-center justify-end gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            autoFocus
+                            value={editingDiscountValue}
+                            onChange={(e) => setEditingDiscountValue(e.target.value)}
+                            className="w-24 rounded border border-black/20 px-2 py-1 text-right text-xs sm:text-sm"
+                            placeholder="Discount"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => saveInlineDiscount(e, item._id)}
+                            disabled={savingPrice}
+                            className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelInlineEdit}
+                            disabled={savingPrice}
+                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <div className="flex items-center justify-end gap-2">
+                          {item.discountedPrice ? (
+                            <span className="font-semibold">
+                              ₹{item.discountedPrice}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => startDiscountEdit(e, item)}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                            title="Edit discounted price"
+                          >
+                            ✎
+                          </button>
+                        </div>
                       )}
                     </td>
 

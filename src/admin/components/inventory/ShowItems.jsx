@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Edit, Plus, ZoomIn, X, Eye, ChevronDown } from "lucide-react";
-import { searchItems, getItemsBySubcategory } from "../../apis/itemapi";
+import {
+  searchItems,
+  getItemsBySubcategory,
+  updateItem,
+} from "../../apis/itemapi";
 import { getAllCategories } from "../../apis/categoryapi";
 import {
   getAllSubcategories,
@@ -33,6 +37,11 @@ const ShowItems = () => {
   const [jsonFile, setJsonFile] = useState(null);
   const [imageFiles, setImageFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [editingPriceItemId, setEditingPriceItemId] = useState(null);
+  const [editingDiscountItemId, setEditingDiscountItemId] = useState(null);
+  const [editingPriceValue, setEditingPriceValue] = useState("");
+  const [editingDiscountValue, setEditingDiscountValue] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
   // Category dropdown states
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
@@ -519,6 +528,74 @@ const ShowItems = () => {
       alert("Bulk upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const startPriceEdit = (item) => {
+    setEditingDiscountItemId(null);
+    setEditingPriceItemId(item._id || item.productId);
+    setEditingPriceValue(String(item.price ?? ""));
+  };
+
+  const startDiscountEdit = (item) => {
+    setEditingPriceItemId(null);
+    setEditingDiscountItemId(item._id || item.productId);
+    setEditingDiscountValue(
+      item.discountedPrice === null || item.discountedPrice === undefined
+        ? ""
+        : String(item.discountedPrice),
+    );
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingPriceItemId(null);
+    setEditingDiscountItemId(null);
+    setEditingPriceValue("");
+    setEditingDiscountValue("");
+  };
+
+  const saveInlinePrice = async (itemId) => {
+    const numericPrice = Number(editingPriceValue);
+    if (Number.isNaN(numericPrice) || numericPrice < 0) {
+      alert("Please enter a valid MRP");
+      return;
+    }
+    try {
+      setSavingPrice(true);
+      const formData = new FormData();
+      formData.append("price", String(numericPrice));
+      await updateItem(itemId, formData);
+      setEditingPriceItemId(null);
+      setEditingPriceValue("");
+      await fetchItems(currentPage);
+    } catch (error) {
+      console.error("Failed to update MRP:", error);
+      alert(error?.message || "Failed to update MRP");
+    } finally {
+      setSavingPrice(false);
+    }
+  };
+
+  const saveInlineDiscount = async (itemId) => {
+    const hasValue = String(editingDiscountValue).trim() !== "";
+    const numericDiscount = Number(editingDiscountValue);
+    if (hasValue && (Number.isNaN(numericDiscount) || numericDiscount < 0)) {
+      alert("Please enter a valid discounted price");
+      return;
+    }
+    try {
+      setSavingPrice(true);
+      const formData = new FormData();
+      formData.append("discountedPrice", hasValue ? String(numericDiscount) : "");
+      await updateItem(itemId, formData);
+      setEditingDiscountItemId(null);
+      setEditingDiscountValue("");
+      await fetchItems(currentPage);
+    } catch (error) {
+      console.error("Failed to update discounted price:", error);
+      alert(error?.message || "Failed to update discounted price");
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -1042,15 +1119,95 @@ const ShowItems = () => {
                         {item.shortDescription || item.description || "—"}
                       </td>
                       <td className="px-4 py-4 text-right font-medium">
-                        ₹{item.price || 0}
+                        {editingPriceItemId === (item._id || item.productId) ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <input
+                              autoFocus
+                              value={editingPriceValue}
+                              onChange={(e) => setEditingPriceValue(e.target.value)}
+                              className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-xs sm:text-sm"
+                              placeholder="MRP"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveInlinePrice(item._id || item.productId)}
+                              disabled={savingPrice}
+                              className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelInlineEdit}
+                              disabled={savingPrice}
+                              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <span>₹{item.price || 0}</span>
+                            <button
+                              type="button"
+                              onClick={() => startPriceEdit(item)}
+                              className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition"
+                              title="Edit MRP"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-right">
-                        {item.discountedPrice ? (
-                          <span className="text-green-600 font-semibold">
-                            ₹{item.discountedPrice}
-                          </span>
+                        {editingDiscountItemId === (item._id || item.productId) ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <input
+                              autoFocus
+                              value={editingDiscountValue}
+                              onChange={(e) =>
+                                setEditingDiscountValue(e.target.value)
+                              }
+                              className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-xs sm:text-sm"
+                              placeholder="Discount"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                saveInlineDiscount(item._id || item.productId)
+                              }
+                              disabled={savingPrice}
+                              className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelInlineEdit}
+                              disabled={savingPrice}
+                              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         ) : (
-                          "—"
+                          <div className="flex items-center justify-end gap-2">
+                            {item.discountedPrice ? (
+                              <span className="text-green-600 font-semibold">
+                                ₹{item.discountedPrice}
+                              </span>
+                            ) : (
+                              <span>—</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => startDiscountEdit(item)}
+                              className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition"
+                              title="Edit discounted price"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-4 text-center">
