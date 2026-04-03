@@ -636,18 +636,32 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
             )}
 
             {canUse(["admin"]) && (
-            <Link
-              to={ap("orders")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("orders")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Package
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Orders</span>
-            </Link>
+              <>
+                <Link
+                  to={ap("orders")}
+                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isActive(ap("orders")) ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <Package
+                    size={20}
+                    className="text-gray-400 group-hover:text-black"
+                  />
+                  <span>Orders</span>
+                </Link>
+                <Link
+                  to={ap("exchange-orders")}
+                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isActive(ap("exchange-orders")) ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <Receipt
+                    size={20}
+                    className="text-gray-400 group-hover:text-black"
+                  />
+                  <span>Exchange Orders</span>
+                </Link>
+              </>
             )}
 
             {/* <Link

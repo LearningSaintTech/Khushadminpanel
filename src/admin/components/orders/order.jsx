@@ -12,6 +12,7 @@ import {
   unassignOrder,
   listDeliveryAgents,
   approveExchange,
+  createForwardShipment,
   getInvoice,
   downloadShippingLabel,
   downloadManifest,
@@ -130,6 +131,14 @@ const getLatestExchange = (item) => {
   return exchanges[0] || null;
 };
 
+const getLatestExchangeForwardOrder = (item) => {
+  const latest = getLatestExchange(item);
+  const forward = latest?.shiprocket?.forwardOrder;
+  if (!forward || typeof forward !== "object") return null;
+  return forward;
+};
+
+
 const extractExchangeImageUrls = (exchange) => {
   if (!exchange || typeof exchange !== "object") return [];
   const candidates = [
@@ -172,6 +181,17 @@ const canDownloadInvoice = (item) => {
   const status = String(item?.status || "").toUpperCase();
   // Invoice visible for all states EXCEPT: CREATED, CONFIRMED, SHIPPED
   return !["CREATED", "CONFIRMED", "SHIPPED"].includes(status);
+};
+
+const isExchangeStatus = (status) =>
+  String(status || "").toUpperCase().startsWith("EXCHANGE_");
+
+const isExchangeLineItem = (item) =>
+  isExchangeStatus(item?.status) || (Array.isArray(item?.exchanges) && item.exchanges.length > 0);
+
+const isExchangeOrderEntry = (order) => {
+  if (isExchangeStatus(order?.status || order?.orderStatus)) return true;
+  return Array.isArray(order?.items) && order.items.some((item) => isExchangeLineItem(item));
 };
 
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
@@ -225,11 +245,101 @@ const getNormalDeliveryShiprocket = (item) => {
   };
 };
 
+const getExchangeForwardShiprocket = (item) => {
+  const fwd = getLatestExchangeForwardOrder(item);
+  if (!fwd) return null;
+  const awb = fwd.awbCode || item?.trackingId || null;
+  const hasAny =
+    awb ||
+    fwd.orderId != null ||
+    fwd.shipmentId != null ||
+    (fwd.status && String(fwd.status).trim()) ||
+    (fwd.courierName && String(fwd.courierName).trim());
+  if (!hasAny) return null;
+  return {
+    awb,
+    trackingUrl:
+      fwd.trackingUrl ||
+      (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
+    status: fwd.status || null,
+    shiprocketOrderId: fwd.orderId ?? null,
+    shipmentId: fwd.shipmentId ?? null,
+    shipmentGroupId: null,
+    courier: fwd.courierName || item?.courier || null,
+    labelUrl: fwd.labelUrl || null,
+    invoiceUrl: fwd.invoiceUrl || null,
+  };
+};
+
+const getLineShiprocket = (item) => {
+  if (!item) return null;
+  if (isExchangeStatus(item?.status)) {
+    const forward = getExchangeForwardShiprocket(item);
+    if (forward) return forward;
+  }
+  return getNormalDeliveryShiprocket(item);
+};
+
 const getOrderNormalShiprocketPreview = (order) => {
   const items = order?.items || [];
   const rows = items.map((it) => getNormalDeliveryShiprocket(it)).filter(Boolean);
   if (rows.length === 0) return null;
   return { primary: rows[0], count: rows.length };
+};
+
+const getOrderShiprocketPreview = (order) => {
+  const items = order?.items || [];
+  const rows = items.map((it) => getLineShiprocket(it)).filter(Boolean);
+  if (rows.length === 0) return null;
+  return { primary: rows[0], count: rows.length };
+};
+
+const getOrderShipmentIds = (order) => {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const ids = items.flatMap((it) => {
+    const sr = getLineShiprocket(it);
+    const forward = getLatestExchangeForwardOrder(it);
+    return [
+      sr?.shipmentId,
+      sr?.shipmentGroupId,
+      forward?.shipmentId,
+      it?.shipmentId,
+      it?.shipmentGroupId,
+      it?.shiprocket?.shipmentId,
+      it?.shiprocket?.shipmentGroupId,
+      it?.exchanges?.[0]?.shiprocket?.forwardOrder?.shipmentId,
+    ]
+      .filter(Boolean)
+      .map(String);
+  });
+  return Array.from(new Set(ids));
+};
+
+const getOrderForwardPreview = (order) => {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  for (const item of items) {
+    const forward = getLatestExchangeForwardOrder(item);
+    if (forward?.shipmentId || forward?.trackingUrl || forward?.awbCode) {
+      return forward;
+    }
+  }
+  return null;
+};
+
+const hasNormalDeliveryInOrder = (order) =>
+  Array.isArray(order?.items) &&
+  order.items.some((item) => isNormalDeliveryLine(item));
+
+const getOrderForwardCreateTarget = (order) => {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  for (const item of items) {
+    if (!isNormalDeliveryLine(item)) continue;
+    if (!isExchangeStatus(item?.status)) continue;
+    const latestExchange = getLatestExchange(item);
+    if (!latestExchange?._id) continue;
+    return { exchangeId: String(latestExchange._id), item };
+  }
+  return null;
 };
 
 /** Merge admin item-row shape (deliveryType + nested item) into a line for shiprocket helpers */
@@ -239,7 +349,7 @@ const shiprocketFromItemRow = (row) => {
     ...(row.item && typeof row.item === "object" ? row.item : {}),
     delivery: { type: row.deliveryType || row.item?.delivery?.type },
   };
-  return getNormalDeliveryShiprocket(line);
+  return getLineShiprocket(line);
 };
 
 function ShiprocketDetails({ sr, compact }) {
@@ -328,8 +438,10 @@ function ShiprocketDetails({ sr, compact }) {
   );
 }
 
-const Orders = () => {
-  const [viewMode, setViewMode] = useState(VIEW_ORDER); // "order" | "item"
+const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
+  const [viewMode, setViewMode] = useState(
+    defaultViewMode === VIEW_ITEM ? VIEW_ITEM : VIEW_ORDER,
+  ); // "order" | "item"
   const [orders, setOrders] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -399,11 +511,19 @@ const Orders = () => {
   const [unassignLoading, setUnassignLoading] = useState(false);
   const [unassignError, setUnassignError] = useState(null);
   const [docDownloadLoading, setDocDownloadLoading] = useState(false);
+  const [docActionType, setDocActionType] = useState(null); // "label" | "manifest" | "invoice" | "forward"
+  const [zoomImageUrl, setZoomImageUrl] = useState(null);
   const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
     () => new Set(),
   );
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
+
+  useEffect(() => {
+    if (exchangeOnly && viewMode !== VIEW_ORDER) {
+      setViewMode(VIEW_ORDER);
+    }
+  }, [exchangeOnly, viewMode]);
 
   const resolveDocUrl = (res) => {
     if (!res) return null;
@@ -546,6 +666,7 @@ const Orders = () => {
   const handleDownloadLabelsClick = async (shipmentIds) => {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.filter(Boolean) : [];
     if (!ids.length) return;
+    setDocActionType("label");
     setDocDownloadLoading(true);
     try {
       const numericIds = ids
@@ -590,6 +711,7 @@ const Orders = () => {
       toast.error(apiErrMessage(err, "Failed to download shipping label(s)"));
     } finally {
       setDocDownloadLoading(false);
+      setDocActionType(null);
     }
   };
 
@@ -614,6 +736,7 @@ const Orders = () => {
       );
     }
 
+    setDocActionType("manifest");
     setDocDownloadLoading(true);
     try {
       const numericPendingIds = pendingIds
@@ -669,18 +792,22 @@ const Orders = () => {
       toast.error(apiErrMessage(err, "Failed to download manifest(s)"));
     } finally {
       setDocDownloadLoading(false);
+      setDocActionType(null);
     }
   };
 
   const getShipmentIdsForItem = (item) => {
-    const sr = getNormalDeliveryShiprocket(item);
+    const sr = getLineShiprocket(item);
+    const forward = getLatestExchangeForwardOrder(item);
     const ids = [
       sr?.shipmentId,
       sr?.shipmentGroupId,
+      forward?.shipmentId,
       item?.shipmentId,
       item?.shipmentGroupId,
       item?.shiprocket?.shipmentId,
       item?.shiprocket?.shipmentGroupId,
+      item?.exchanges?.[0]?.shiprocket?.forwardOrder?.shipmentId,
     ]
       .filter(Boolean)
       .map(String);
@@ -688,6 +815,11 @@ const Orders = () => {
   };
 
   const handleLabelForItem = (item) => {
+    const forwardLabelUrl = getLatestExchangeForwardOrder(item)?.labelUrl;
+    if (forwardLabelUrl) {
+      openDocUrl(forwardLabelUrl, "Failed to download shipping label(s)");
+      return;
+    }
     const ids = getShipmentIdsForItem(item);
     if (!ids.length) {
       toast.error("Shipment ID not available yet for this item.");
@@ -703,6 +835,58 @@ const Orders = () => {
       return;
     }
     handleDownloadManifestClick(ids);
+  };
+
+  const handleLabelForOrder = (order) => {
+    const ids = getOrderShipmentIds(order);
+    if (!ids.length) {
+      toast.error("Shipment ID not available yet for this order.");
+      return;
+    }
+    handleDownloadLabelsClick(ids);
+  };
+
+  const handleManifestForOrder = (order) => {
+    const ids = getOrderShipmentIds(order);
+    if (!ids.length) {
+      toast.error("Shipment ID not available yet for this order.");
+      return;
+    }
+    handleDownloadManifestClick(ids);
+  };
+
+  const handleCreateForwardShipmentForOrder = async (order) => {
+    setDocActionType("forward");
+    setDocDownloadLoading(true);
+    try {
+      let target = getOrderForwardCreateTarget(order);
+      // List API can omit nested exchanges; refetch single order to get exact exchangeId.
+      if (!target?.exchangeId && order?.orderId) {
+        const freshRes = await getSingleOrder(order.orderId, 1, itemLimit);
+        const freshOrder = freshRes?.data ?? freshRes;
+        target = getOrderForwardCreateTarget(freshOrder);
+      }
+      if (!target?.exchangeId) {
+        toast.error("Exchange ID not found for forward shipment creation.");
+        return;
+      }
+      dbgOrders("createForwardShipment:start", {
+        orderId: order?.orderId || order?._id,
+        exchangeId: target.exchangeId,
+      });
+      const res = await createForwardShipment(target.exchangeId);
+      const msg =
+        res?.message ||
+        res?.data?.message ||
+        "Forward shipment created successfully.";
+      toast.success(msg);
+      await fetchOrders();
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to create forward shipment.");
+    } finally {
+      setDocDownloadLoading(false);
+      setDocActionType(null);
+    }
   };
 
   const fetchOrders = useCallback(async () => {
@@ -723,7 +907,12 @@ const Orders = () => {
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
       const payload = res?.data ?? {};
-      const list = payload.orders ?? payload.data ?? [];
+      const rawList = payload.orders ?? payload.data ?? [];
+      const list = exchangeOnly
+        ? (Array.isArray(rawList)
+            ? rawList.filter((row) => isExchangeOrderEntry(row))
+            : [])
+        : rawList;
       dbgOrdersVerbose("getOrders:payload", payload);
       dbgOrders("getOrders:summary", {
         rowCount: Array.isArray(list) ? list.length : 0,
@@ -748,7 +937,7 @@ const Orders = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter]);
+  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, exchangeOnly]);
 
   useEffect(() => {
     fetchOrders();
@@ -775,7 +964,11 @@ const Orders = () => {
         rowCount: Array.isArray(payload.items) ? payload.items.length : 0,
         pagination: payload.pagination,
       });
-      setOrderItems(Array.isArray(payload.items) ? payload.items : []);
+      const rawItems = Array.isArray(payload.items) ? payload.items : [];
+      const list = exchangeOnly
+        ? rawItems.filter((row) => isExchangeLineItem(row?.item || row))
+        : rawItems;
+      setOrderItems(list);
       setItemPagination((prev) => ({
         ...prev,
         total: payload.pagination?.total ?? 0,
@@ -787,7 +980,7 @@ const Orders = () => {
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, exchangeOnly]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -805,7 +998,12 @@ const Orders = () => {
       dbgOrders("getSingleOrder:response", { orderId, res });
       const singlePayload = res?.data ?? res;
       dbgOrdersVerbose("getSingleOrder:order", singlePayload);
-      setSelectedOrder(singlePayload || null);
+      if (exchangeOnly && singlePayload?.items) {
+        const filteredItems = singlePayload.items.filter((it) => isExchangeLineItem(it));
+        setSelectedOrder({ ...singlePayload, items: filteredItems });
+      } else {
+        setSelectedOrder(singlePayload || null);
+      }
       // Fetch assignment view for Reassign / Remove driver
       try {
         const assignRes = await getAssignmentView(orderId);
@@ -1490,6 +1688,9 @@ const Orders = () => {
     { value: "EXCHANGE_DELIVERED", label: "Exchange delivered" },
     { value: "EXCHANGE_COMPLETED", label: "Exchange completed" },
   ];
+  const filteredStatusOptions = exchangeOnly
+    ? statusOptions.filter((opt) => isExchangeStatus(opt.value))
+    : statusOptions;
 
   return (
     <div className="min-h-screen w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6">
@@ -1498,7 +1699,7 @@ const Orders = () => {
         <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
             <Package className="h-8 w-8 text-indigo-600" />
-            Order Management
+            {exchangeOnly ? "Exchange Orders" : "Order Management"}
           </h1>
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -1525,30 +1726,36 @@ const Orders = () => {
         </div>
 
         {/* View mode tabs: By order | By item */}
-        <div className="mb-6 flex gap-2 border-b border-gray-200">
-          <button
-            type="button"
-            onClick={() => setViewMode(VIEW_ORDER)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              viewMode === VIEW_ORDER
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            By order
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode(VIEW_ITEM)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              viewMode === VIEW_ITEM
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-            }`}
-          >
-            By item
-          </button>
-        </div>
+        {!exchangeOnly ? (
+          <div className="mb-6 flex gap-2 border-b border-gray-200">
+            <button
+              type="button"
+              onClick={() => setViewMode(VIEW_ORDER)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                viewMode === VIEW_ORDER
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              By order
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode(VIEW_ITEM)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                viewMode === VIEW_ITEM
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              By item
+            </button>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700">
+            Exchange Orders are shown in By order mode.
+          </div>
+        )}
 
         {/* Delivery type — filters both list APIs on the backend */}
         <div className="mb-6">
@@ -1638,7 +1845,7 @@ const Orders = () => {
                       className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[160px]"
                     >
                       <option value="">All statuses</option>
-                      {statusOptions.map((opt) => (
+                      {filteredStatusOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>
@@ -1763,15 +1970,79 @@ const Orders = () => {
                         </td>
                         <td className="min-w-0 px-2 py-2 align-top">
                           {(() => {
-                            const prev = getOrderNormalShiprocketPreview(order);
+                            const prev = getOrderShiprocketPreview(order);
                             if (!prev) {
-                              return <span className="text-xs text-gray-400">—</span>;
+                              return (
+                                <div className="space-y-1">
+                                  <span className="text-xs text-gray-400">—</span>
+                                  {hasNormalDeliveryInOrder(order) && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={docDownloadLoading}
+                                        onClick={() => handleLabelForOrder(order)}
+                                        className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                      >
+                                    {docDownloadLoading && docActionType === "label" ? (
+                                      <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                    ) : (
+                                      <Truck size={11} className="shrink-0" />
+                                    )}
+                                    {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={docDownloadLoading}
+                                        onClick={() => handleManifestForOrder(order)}
+                                        className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                                      >
+                                    {docDownloadLoading && docActionType === "manifest" ? (
+                                      <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                    ) : (
+                                      <Package size={11} className="shrink-0" />
+                                    )}
+                                    {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              );
                             }
                             return (
-                              <div>
+                              <div className="space-y-1">
                                 <ShiprocketDetails sr={prev.primary} compact />
                                 {prev.count > 1 && (
                                   <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
+                                )}
+                                {hasNormalDeliveryInOrder(order) && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={docDownloadLoading}
+                                      onClick={() => handleLabelForOrder(order)}
+                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                    >
+                                  {docDownloadLoading && docActionType === "label" ? (
+                                    <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                  ) : (
+                                    <Truck size={11} className="shrink-0" />
+                                  )}
+                                  {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={docDownloadLoading}
+                                      onClick={() => handleManifestForOrder(order)}
+                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                                    >
+                                  {docDownloadLoading && docActionType === "manifest" ? (
+                                    <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                  ) : (
+                                    <Package size={11} className="shrink-0" />
+                                  )}
+                                  {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             );
@@ -1849,7 +2120,7 @@ const Orders = () => {
                     className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-colors min-w-[200px]"
                   >
                     <option value="">All statuses</option>
-                    {statusOptions.map((opt) => (
+                    {filteredStatusOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -1955,6 +2226,84 @@ const Orders = () => {
                               })()}
                             </div>
                           )}
+                          {(() => {
+                            const rowItem = {
+                              ...(row.item && typeof row.item === "object" ? row.item : {}),
+                              delivery: {
+                                type: row.deliveryType || row.item?.delivery?.type,
+                              },
+                              shipmentId:
+                                row.item?.shipmentId ?? row.shipmentId ?? null,
+                              shipmentGroupId:
+                                row.item?.shipmentGroupId ??
+                                row.shipmentGroupId ??
+                                null,
+                              shiprocket: {
+                                ...(row.item?.shiprocket || {}),
+                                shipmentId:
+                                  row.item?.shiprocket?.shipmentId ??
+                                  row.item?.shipmentId ??
+                                  row.shipmentId ??
+                                  null,
+                                shipmentGroupId:
+                                  row.item?.shiprocket?.shipmentGroupId ??
+                                  row.item?.shipmentGroupId ??
+                                  row.shipmentGroupId ??
+                                  null,
+                              },
+                            };
+                            if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") {
+                              return null;
+                            }
+                            return (
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={docDownloadLoading}
+                                  onClick={() => handleLabelForItem(rowItem)}
+                                  className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                >
+                                  {docDownloadLoading && docActionType === "label" ? (
+                                    <RefreshCw size={12} className="animate-spin" />
+                                  ) : (
+                                    <Truck size={12} className="shrink-0" />
+                                  )}
+                                  {docDownloadLoading && docActionType === "label"
+                                    ? "Loading..."
+                                    : "Download label"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={
+                                    docDownloadLoading ||
+                                    (() => {
+                                      const ids = getShipmentIdsForItem(rowItem);
+                                      return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
+                                    })()
+                                  }
+                                  onClick={() => handleManifestForItem(rowItem)}
+                                  className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                                  title={
+                                    (() => {
+                                      const ids = getShipmentIdsForItem(rowItem);
+                                      return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
+                                        ? "Manifest already downloaded for this shipment"
+                                        : "Download manifest";
+                                    })()
+                                  }
+                                >
+                                  {docDownloadLoading && docActionType === "manifest" ? (
+                                    <RefreshCw size={12} className="animate-spin" />
+                                  ) : (
+                                    <Package size={12} className="shrink-0" />
+                                  )}
+                                  {docDownloadLoading && docActionType === "manifest"
+                                    ? "Loading..."
+                                    : "Manifest"}
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="flex items-center gap-4 shrink-0">
                           <div className="text-right">
@@ -2118,7 +2467,7 @@ const Orders = () => {
                             className="min-w-[160px] rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-60"
                           >
                             <option value="">Select status…</option>
-                            {statusOptions.map((opt) => (
+                            {filteredStatusOptions.map((opt) => (
                               <option key={opt.value} value={opt.value}>
                                 {opt.label}
                               </option>
@@ -2196,19 +2545,66 @@ const Orders = () => {
                                   Reason: {exchangeReason}
                                 </p>
                               ) : null}
+                              {latestExchange?.desiredColor || latestExchange?.desiredSize ? (
+                                <p className="mt-1 text-lg font-bold text-amber-900">
+                                  Requested:{" "}
+                                  {[latestExchange?.desiredColor, latestExchange?.desiredSize]
+                                    .filter(Boolean)
+                                    .join(" / ")}
+                                </p>
+                              ) : null}
+                              {latestExchange?.replacedItem ? (
+                                <div className="mt-1 rounded border border-amber-200 bg-white px-2 py-1">
+                                  <p className="text-[11px] font-semibold text-amber-900">
+                                    Replacement item
+                                  </p>
+                                  <p className="text-[11px] text-amber-800">
+                                    {latestExchange.replacedItem?.sku || "—"}
+                                    {latestExchange.replacedItem?.variant?.color
+                                      ? ` · ${latestExchange.replacedItem.variant.color}`
+                                      : ""}
+                                    {latestExchange.replacedItem?.variant?.size
+                                      ? ` · ${latestExchange.replacedItem.variant.size}`
+                                      : ""}
+                                  </p>
+                                  {latestExchange.replacedItem?.variant?.imageUrl ? (
+                                    <div className="mt-1">
+                                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                                        Desired replacement image
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setZoomImageUrl(
+                                            latestExchange.replacedItem.variant.imageUrl,
+                                          )
+                                        }
+                                        className="block overflow-hidden rounded border border-amber-200 bg-white"
+                                        title="Open desired replacement image"
+                                      >
+                                        <img
+                                          src={latestExchange.replacedItem.variant.imageUrl}
+                                          alt="Desired replacement item"
+                                          className="h-16 w-16 object-cover"
+                                          loading="lazy"
+                                        />
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                               {exchangeImageUrls.length > 0 ? (
                                 <>
                                   <p className="mb-2 mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                    User uploaded images
+                                    User uploaded exchange pics
                                   </p>
                                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                     {exchangeImageUrls.map((url, idx) => (
-                                      <a
+                                      <button
                                         key={`${url}-${idx}`}
-                                        href={url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="group block overflow-hidden rounded-lg border border-gray-200 bg-white"
+                                        type="button"
+                                        onClick={() => setZoomImageUrl(url)}
+                                        className="group block overflow-hidden rounded-lg border border-gray-200 bg-white text-left"
                                         title="Open full image"
                                       >
                                         <img
@@ -2217,7 +2613,7 @@ const Orders = () => {
                                           className="h-20 w-full object-cover transition-transform duration-200 group-hover:scale-105"
                                           loading="lazy"
                                         />
-                                      </a>
+                                      </button>
                                     ))}
                                   </div>
                                 </>
@@ -2296,7 +2692,7 @@ const Orders = () => {
                         Shiprocket (normal delivery)
                       </h4>
                       {(() => {
-                        const sr = getNormalDeliveryShiprocket(focusedItem);
+                        const sr = getLineShiprocket(focusedItem);
                         return (
                           <div className="space-y-2">
                             {sr ? (
@@ -2339,8 +2735,14 @@ const Orders = () => {
                                 onClick={() => handleLabelForItem(focusedItem)}
                                 className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
                               >
-                                <Truck size={14} />
-                                Download label
+                                {docDownloadLoading && docActionType === "label" ? (
+                                  <RefreshCw size={14} className="animate-spin" />
+                                ) : (
+                                  <Truck size={14} />
+                                )}
+                                {docDownloadLoading && docActionType === "label"
+                                  ? "Loading..."
+                                  : "Download label"}
                               </button>
 
                               <button
@@ -2363,55 +2765,19 @@ const Orders = () => {
                                   })()
                                 }
                               >
-                                <Package size={14} />
-                                Manifest
+                                {docDownloadLoading && docActionType === "manifest" ? (
+                                  <RefreshCw size={14} className="animate-spin" />
+                                ) : (
+                                  <Package size={14} />
+                                )}
+                                {docDownloadLoading && docActionType === "manifest"
+                                  ? "Loading..."
+                                  : "Manifest"}
                               </button>
                             </div>
                           </div>
                         );
                       })()}
-                    </div>
-                  )}
-                  {!isNormalDeliveryLine(focusedItem) && (
-                    <div className="rounded-xl border-2 border-gray-200 bg-gray-50/90 p-5 shadow-sm">
-                      <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                        <Package size={16} className="text-gray-700" />
-                        Shipping documents
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={docDownloadLoading}
-                          onClick={() => handleLabelForItem(focusedItem)}
-                          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
-                        >
-                          <Truck size={14} />
-                          Download label
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            docDownloadLoading ||
-                            (() => {
-                              const ids = getShipmentIdsForItem(focusedItem);
-                              return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
-                            })()
-                          }
-                          onClick={() => handleManifestForItem(focusedItem)}
-                          className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
-                          title={
-                            (() => {
-                              const ids = getShipmentIdsForItem(focusedItem);
-                              return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                ? "Manifest already downloaded for this shipment"
-                                : "Download manifest";
-                            })()
-                          }
-                        >
-                          <Package size={14} />
-                          Manifest
-                        </button>
-                      </div>
                     </div>
                   )}
                   {/* Change status card */}
@@ -2434,7 +2800,7 @@ const Orders = () => {
                         disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
                         className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
                       >
-                        {statusOptions.map((opt) => (
+                        {filteredStatusOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
@@ -2821,6 +3187,53 @@ const Orders = () => {
                       </div>
                     )}
 
+                    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700">
+                            Forward shipment
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Create replacement forward shipment for NORMAL exchange orders.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={docDownloadLoading}
+                          onClick={() => handleCreateForwardShipmentForOrder(selectedOrder)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-60"
+                        >
+                          {docDownloadLoading && docActionType === "forward" ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            <Truck size={14} />
+                          )}
+                          {docDownloadLoading && docActionType === "forward"
+                            ? "Creating..."
+                            : "Create Forward Shipment"}
+                        </button>
+                      </div>
+                      {(() => {
+                        const forwardPreview = getOrderForwardPreview(selectedOrder);
+                        if (!forwardPreview) return null;
+                        return (
+                          <div className="mt-3 rounded border border-sky-200 bg-white px-3 py-2 text-xs">
+                            <p className="font-medium text-sky-700">Forward shipment created</p>
+                            {forwardPreview.trackingUrl ? (
+                              <a
+                                href={forwardPreview.trackingUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-700 underline"
+                              >
+                                Track forward
+                              </a>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     <div className="space-y-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -2848,7 +3261,7 @@ const Orders = () => {
                               className="min-w-[180px] rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-60"
                             >
                               <option value="">Update selected to…</option>
-                              {statusOptions.map((opt) => (
+                              {filteredStatusOptions.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                   {opt.label}
                                 </option>
@@ -2988,23 +3401,70 @@ const Orders = () => {
                                       const exchangeReason = getExchangeReason(latestExchange);
                                       const exchangeImages = extractExchangeImageUrls(latestExchange);
                                       return (
-                                        <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
-                                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                                        <div className="mt-1.5 rounded- border border-amber-200 bg-amber-50 px-2 py-1.5">
+                                          <p className="text-[10px] font-bold uppercase tracking-wide text-black">
                                             Exchange
                                           </p>
                                           {exchangeReason ? (
-                                            <p className="mt-0.5 break-all text-[10px] text-amber-900">
+                                            <p className="mt-0.5 break-all text-[10px] text-red-900 font-bold">
                                               Reason: {exchangeReason}
+                                            </p>
+                                          ) : null}
+                                          {latestExchange?.desiredColor || latestExchange?.desiredSize ? (
+                                            <p className="mt-0.5 text-[10px] text-red-900 font-bold">
+                                              Requested:{" "}
+                                              {[latestExchange?.desiredColor, latestExchange?.desiredSize]
+                                                .filter(Boolean)
+                                                .join(" / ")}
+                                            </p>
+                                          ) : null}
+                                          {latestExchange?.replacedItem ? (
+                                            <p className="mt-0.5 break-all text-[10px] text-amber-900 font-bold">
+                                              Replacement: {latestExchange.replacedItem?.sku || "—"}
+                                              {latestExchange.replacedItem?.variant?.color
+                                                ? ` · ${latestExchange.replacedItem.variant.color}`
+                                                : ""}
+                                              {latestExchange.replacedItem?.variant?.size
+                                                ? ` · ${latestExchange.replacedItem.variant.size}`
+                                                : ""}
+                                            </p>
+                                          ) : null}
+                                          {latestExchange?.replacedItem?.variant?.imageUrl ? (
+                                            <div className="mt-1">
+                                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                                                Desired Product
+                                              </p>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setZoomImageUrl(
+                                                    latestExchange.replacedItem.variant.imageUrl,
+                                                  )
+                                                }
+                                                className="block overflow-hidden rounded border border-amber-200 bg-white"
+                                                title="Open desired replacement image"
+                                              >
+                                                <img
+                                                  src={latestExchange.replacedItem.variant.imageUrl}
+                                                  alt="Desired replacement item"
+                                                  className="h-10 w-10 object-cover"
+                                                  loading="lazy"
+                                                />
+                                              </button>
+                                            </div>
+                                          ) : null}
+                                          {exchangeImages.length > 0 ? (
+                                            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                                              User uploaded exchange items pics
                                             </p>
                                           ) : null}
                                           {exchangeImages.length > 0 ? (
                                             <div className="mt-1 grid grid-cols-3 gap-1.5">
                                               {exchangeImages.slice(0, 3).map((url, idx) => (
-                                                <a
+                                                <button
                                                   key={`${url}-${idx}`}
-                                                  href={url}
-                                                  target="_blank"
-                                                  rel="noreferrer"
+                                                  type="button"
+                                                  onClick={() => setZoomImageUrl(url)}
                                                   className="block overflow-hidden rounded border border-amber-200 bg-white"
                                                   title="Open exchange image"
                                                 >
@@ -3014,7 +3474,7 @@ const Orders = () => {
                                                     className="h-10 w-full object-cover"
                                                     loading="lazy"
                                                   />
-                                                </a>
+                                                </button>
                                               ))}
                                             </div>
                                           ) : (
@@ -3042,7 +3502,7 @@ const Orders = () => {
                                 <div className="space-y-1.5">
                                   {isNormalDeliveryLine(item) ? (
                                     (() => {
-                                      const sr = getNormalDeliveryShiprocket(item);
+                                      const sr = getLineShiprocket(item);
                                       return (
                                         <>
                                           {sr ? (
@@ -3083,8 +3543,14 @@ const Orders = () => {
                                               className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
                                               title="Download shipping label"
                                             >
-                                              <Truck size={11} className="shrink-0" />
-                                              Label
+                                              {docDownloadLoading && docActionType === "label" ? (
+                                                <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                              ) : (
+                                                <Truck size={11} className="shrink-0" />
+                                              )}
+                                              {docDownloadLoading && docActionType === "label"
+                                                ? "Loading..."
+                                                : "Label"}
                                             </button>
                                             <button
                                               type="button"
@@ -3106,8 +3572,14 @@ const Orders = () => {
                                                 })()
                                               }
                                             >
-                                              <Package size={11} className="shrink-0" />
-                                              Manifest
+                                              {docDownloadLoading && docActionType === "manifest" ? (
+                                                <RefreshCw size={11} className="shrink-0 animate-spin" />
+                                              ) : (
+                                                <Package size={11} className="shrink-0" />
+                                              )}
+                                              {docDownloadLoading && docActionType === "manifest"
+                                                ? "Loading..."
+                                                : "Manifest"}
                                             </button>
                                           </div>
                                         </>
@@ -3204,7 +3676,7 @@ const Orders = () => {
                                       isUpdating ? "opacity-60 cursor-wait" : ""
                                     }`}
                                   >
-                                    {statusOptions.map((opt) => (
+                                    {filteredStatusOptions.map((opt) => (
                                       <option key={opt.value} value={opt.value}>
                                         {opt.label}
                                       </option>
@@ -3228,6 +3700,31 @@ const Orders = () => {
               </div>
             </div>
             ) : null}
+
+        {zoomImageUrl && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <div
+              className="relative max-h-[90vh] max-w-[90vw]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="absolute -top-10 right-0 rounded bg-white/90 px-3 py-1 text-xs font-medium text-gray-800 hover:bg-white"
+                onClick={() => setZoomImageUrl(null)}
+              >
+                Close
+              </button>
+              <img
+                src={zoomImageUrl}
+                alt="Zoomed exchange upload"
+                className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Assignment Modal */}
         {assignmentModalOpen && (
