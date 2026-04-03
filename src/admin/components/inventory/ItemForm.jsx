@@ -191,8 +191,8 @@ const ItemForm = () => {
     sizeChart: {
       unit: "in",
       headers: [
-        { key: "chest", label: "Chest" },
-        { key: "length", label: "Length" }
+        { key: "chest", label: "Chest (in/cm)" },
+        { key: "length", label: "Length (in/cm)" }
       ],
       rows: [],
       measureImages: [],
@@ -235,6 +235,30 @@ const ItemForm = () => {
       iconFile: null,
     },
   });
+
+  const parseInchesValue = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return NaN;
+    const mixed = raw.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+    if (mixed) {
+      const whole = Number(mixed[1]);
+      const num = Number(mixed[2]);
+      const den = Number(mixed[3]);
+      if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+        return whole + num / den;
+      }
+    }
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) ? numeric : NaN;
+  };
+
+  const inchesToCmText = (value) => {
+    const inch = parseInchesValue(value);
+    if (!Number.isFinite(inch)) return "—";
+    const cm = inch * 2.54;
+    const rounded = Math.round(cm * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  };
 
   const validateBasicTab = () => {
     const errors = {};
@@ -410,11 +434,24 @@ const ItemForm = () => {
 
             sizeChart: {
               unit: itemData.sizeChart?.unit || "in",
-              headers: [
-                { key: "chest", label: "Chest" },
-                { key: "length", label: "Length" }
-              ],
-              rows: itemData.sizeChart?.rows || [],
+              headers:
+                itemData.sizeChart?.headers?.length > 0
+                  ? itemData.sizeChart.headers.map((h) => ({
+                      key: h?.key || "",
+                      label: h?.label || "",
+                    }))
+                  : [
+                      { key: "chest", label: "Chest (in/cm)" },
+                      { key: "length", label: "Length (in/cm)" },
+                    ],
+              rows:
+                itemData.sizeChart?.rows?.map((row) => ({
+                  size: row?.size || "",
+                  measurements:
+                    row?.measurements instanceof Map
+                      ? Object.fromEntries(row.measurements.entries())
+                      : row?.measurements || {},
+                })) || [],
               measureImages: itemData.sizeChart?.measureImage?.map((img, idx) => {
                 console.log(`[loadItem] sizeChart image #${idx + 1}:`, img.url || img);
                 return img.url || img;
@@ -666,7 +703,7 @@ const ItemForm = () => {
             .replace(/\s+/g, " ")
             .trim();
           header.label =
-            pretty.charAt(0).toUpperCase() + pretty.slice(1) + ` (${prev.sizeChart.unit})`;
+            pretty.charAt(0).toUpperCase() + pretty.slice(1) + " (in/cm)";
         }
       } else if (field === "label") {
         header.label = value;
@@ -1878,27 +1915,12 @@ const ItemForm = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Unit
                   </label>
-                  <select
-                    value={form.sizeChart.unit}
-                    onChange={(e) => {
-                      const newUnit = e.target.value;
-                      setForm({
-                        ...form,
-                        sizeChart: { 
-                          ...form.sizeChart, 
-                          unit: newUnit,
-                          headers: form.sizeChart.headers.map(header => ({
-                            ...header,
-                            label: header.label.replace(/\(in\)|\(cm\)/g, `(${newUnit})`)
-                          }))
-                        },
-                      });
-                    }}
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  >
-                    <option value="in">Inches (in)</option>
-                    <option value="cm">Centimeters (cm)</option>
-                  </select>
+                  <input
+                    type="text"
+                    value="Both (in & cm)"
+                    readOnly
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-gray-50 text-gray-700"
+                  />
                 </div>
 
                 {/* Headers */}
@@ -1941,7 +1963,7 @@ const ItemForm = () => {
                             onChange={(e) =>
                               updateSizeChartHeader(index, "label", e.target.value)
                             }
-                            placeholder={`Label (e.g. Chest (${form.sizeChart.unit}))`}
+                            placeholder="Label (e.g. Chest (in/cm))"
                             className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                           />
                           <button
@@ -1954,6 +1976,89 @@ const ItemForm = () => {
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-4">Size Chart Preview</h3>
+                  <div className="space-y-3">
+                    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                      <table className="w-full min-w-[640px] text-sm">
+                        <thead>
+                          <tr className="bg-gray-100 text-left text-gray-700">
+                            <th className="px-3 py-2 font-semibold">Size</th>
+                            {form.sizeChart.headers.map((h, idx) => (
+                              <th key={`in-h-${idx}`} className="px-3 py-2 font-semibold">
+                                {h.label || h.key || "-"}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.sizeChart.rows.length ? (
+                            form.sizeChart.rows.map((row, rowIdx) => (
+                              <tr key={`in-r-${rowIdx}`} className="border-t border-gray-100">
+                                <td className="px-3 py-2">{row.size || "-"}</td>
+                                {form.sizeChart.headers.map((h, colIdx) => (
+                                  <td key={`in-c-${rowIdx}-${colIdx}`} className="px-3 py-2">
+                                    {row.measurements?.[h.key] ?? "-"}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={Math.max(form.sizeChart.headers.length + 1, 2)}
+                                className="px-3 py-3 text-gray-500"
+                              >
+                                Add rows to preview inches table.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                      <table className="w-full min-w-[640px] text-sm">
+                        <thead>
+                          <tr className="bg-gray-100 text-left text-gray-700">
+                            <th className="px-3 py-2 font-semibold">Size</th>
+                            {form.sizeChart.headers.map((h, idx) => (
+                              <th key={`cm-h-${idx}`} className="px-3 py-2 font-semibold">
+                                {String(h.label || h.key || "-")
+                                  .replace("(in/cm)", "(cm)")
+                                  .replace("(in)", "(cm)")}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.sizeChart.rows.length ? (
+                            form.sizeChart.rows.map((row, rowIdx) => (
+                              <tr key={`cm-r-${rowIdx}`} className="border-t border-gray-100">
+                                <td className="px-3 py-2">{row.size || "-"}</td>
+                                {form.sizeChart.headers.map((h, colIdx) => (
+                                  <td key={`cm-c-${rowIdx}-${colIdx}`} className="px-3 py-2">
+                                    {inchesToCmText(row.measurements?.[h.key])}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={Math.max(form.sizeChart.headers.length + 1, 2)}
+                                className="px-3 py-3 text-gray-500"
+                              >
+                                Add rows to preview centimeters table.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Rows */}

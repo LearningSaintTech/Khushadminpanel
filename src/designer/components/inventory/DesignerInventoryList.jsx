@@ -502,6 +502,87 @@ const DesignerInventoryList = () => {
               {getSkuIds(selected).length ? getSkuIds(selected).join(", ") : "—"}
             </div>
 
+            <div className="mt-3 space-y-2 rounded-xl border border-cyan-100 bg-cyan-50/30 p-3">
+              <h3 className="text-xs font-semibold text-cyan-900">Size chart</h3>
+              <p className="text-xs text-gray-700">
+                <span className="font-medium text-gray-600">Unit:</span>{" "}
+                {selected?.sizeChart?.unit || "in"}
+              </p>
+
+              {Array.isArray(selected?.sizeChart?.headers) &&
+              selected.sizeChart.headers.length > 0 ? (
+                <div className="overflow-x-auto rounded-md border border-cyan-100 bg-white/90 p-2">
+                  <table className="w-full min-w-[420px] text-xs">
+                    <thead>
+                      <tr className="bg-cyan-50 text-left text-gray-700">
+                        <th className="p-1.5 font-semibold">Size</th>
+                        {selected.sizeChart.headers.map((h, idx) => (
+                          <th key={`${h?.key || "h"}-${idx}`} className="p-1.5 font-semibold">
+                            {h?.label || h?.key || "—"}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selected?.sizeChart?.rows || []).map((row, rowIdx) => (
+                        <tr key={`${row?.size || "row"}-${rowIdx}`} className="border-t border-gray-100">
+                          <td className="p-1.5 text-gray-800">{row?.size || "—"}</td>
+                          {selected.sizeChart.headers.map((h, hIdx) => {
+                            const key = h?.key;
+                            const value = key ? row?.measurements?.[key] : "";
+                            return (
+                              <td key={`${rowIdx}-${hIdx}`} className="p-1.5 text-gray-700">
+                                {value ?? "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">No size chart headers/rows.</p>
+              )}
+
+              {Array.isArray(selected?.sizeChart?.measureImage) &&
+              selected.sizeChart.measureImage.length > 0 ? (
+                <div className="rounded-md border border-cyan-100 bg-white/90 p-2">
+                  <p className="mb-2 text-xs font-medium text-gray-700">Measurement images</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selected.sizeChart.measureImage
+                      .map((img) => (typeof img === "string" ? img : img?.url || ""))
+                      .filter(Boolean)
+                      .map((src, idx) => (
+                        <button
+                          key={`${src}-${idx}`}
+                          type="button"
+                          onClick={() =>
+                            openLightbox(
+                              selected.sizeChart.measureImage
+                                .map((im) => (typeof im === "string" ? im : im?.url || ""))
+                                .filter(Boolean),
+                              idx
+                            )
+                          }
+                          className="shrink-0 rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                          title="Open image viewer"
+                        >
+                          <img
+                            src={src}
+                            alt=""
+                            className="h-20 w-20 rounded-lg object-cover hover:opacity-90 sm:h-24 sm:w-24"
+                            loading="lazy"
+                          />
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">No measurement images.</p>
+              )}
+            </div>
+
             <div className="mt-3 space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
               <h3 className="text-xs font-semibold text-indigo-900">Variants &amp; images</h3>
               {(selected.variants || []).length === 0 ? (
