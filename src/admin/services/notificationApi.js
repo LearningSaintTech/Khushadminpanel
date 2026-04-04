@@ -34,6 +34,12 @@ export const notificationApi = {
 
   pushUnsubscribe: (endpoint) =>
     apiConnector("POST", `${BASE}/push-unsubscribe`, { endpoint }).then(getData),
+
+  mobilePushRegister: (body) =>
+    apiConnector("POST", `${BASE}/mobile-push/register`, body).then(getData),
+
+  mobilePushUnregister: (token) =>
+    apiConnector("POST", `${BASE}/mobile-push/unregister`, { token }).then(getData),
 };
 
 /** Admin-only APIs (send) – may 403 for SubAdmin */

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getSingleItem } from "../../apis/itemapi";
 import SkuUidsModal from "./SkuUidsModal.jsx";
+import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
+import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
 
 export default function ItemDetails() {
   const { itemId } = useParams();
@@ -86,28 +88,6 @@ export default function ItemDetails() {
       setSkuUidModalOpen(true);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    console.log("[ItemDetails] activeTab changed:", activeTab);
-    if (activeTab === "size" && item) {
-      console.log(
-        "[ItemDetails] Size tab opened. Current item.sizeChart:",
-        item.sizeChart,
-      );
-      if (item.sizeChart) {
-        console.log(
-          "[ItemDetails] sizeChart.unit:",
-          item.sizeChart.unit,
-          "headers:",
-          item.sizeChart.headers,
-          "rows:",
-          item.sizeChart.rows,
-          "measureImage:",
-          item.sizeChart.measureImage,
-        );
-      }
-    }
-  }, [activeTab, item]);
 
   const closeSkuUidModal = () => {
     setSkuUidModalOpen(false);
@@ -462,66 +442,18 @@ export default function ItemDetails() {
             )}
 
             {/* SIZE */}
-            {activeTab === "size" && item.sizeChart ? (
+            {activeTab === "size" && itemHasSizeChartContent(item) ? (
               <div className="space-y-6 sm:space-y-8 lg:space-y-10">
-                {console.log(
-                  "[ItemDetails] Rendering Size tab with sizeChart:",
-                  item.sizeChart,
-                )}
-                <div className="overflow-x-auto -mx-4 sm:mx-0">
-                  <div className="inline-block min-w-full align-middle">
-                    <table className="w-full text-xs sm:text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 text-gray-700">
-                          <th className="p-3 sm:p-4 text-left font-medium rounded-l-lg whitespace-nowrap">
-                            Size
-                          </th>
-                          {item.sizeChart.headers?.map((h) => (
-                            <th
-                              key={h.key}
-                              className="p-3 sm:p-4 text-left font-medium whitespace-nowrap"
-                            >
-                              {h.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="text-gray-600">
-                        {item.sizeChart.rows?.map((row) => (
-                          <tr
-                            key={row.size}
-                            className="hover:bg-gray-50/70 transition"
-                          >
-                            <td className="p-3 sm:p-4 font-medium bg-white rounded-l-lg border-l border-gray-100 whitespace-nowrap">
-                              {row.size}
-                            </td>
-                            {item.sizeChart.headers?.map((h) => (
-                              <td
-                                key={h.key}
-                                className="p-3 sm:p-4 bg-white border-r border-gray-100 last:rounded-r-lg"
-                              >
-                                {row.measurements?.[h.key] ?? "—"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {item.sizeChart.measureImage?.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {item.sizeChart.measureImage.map((img) => (
-                      <img
-                        key={img._id}
-                        src={img.url}
-                        className="w-full h-auto max-h-48 sm:max-h-64 object-contain rounded-lg border border-gray-200 shadow-sm"
-                        alt="Size guide illustration"
-                      />
-                    ))}
-                  </div>
-                )}
+                <DesignerSizeChartReadonlyTables
+                  item={item}
+                  outerClassName="space-y-6"
+                  tableWrapClass="overflow-x-auto -mx-4 sm:mx-0 rounded-lg border border-gray-100 bg-white sm:mx-0"
+                  showMeasureImages
+                  onMeasureImageClick={(urls, idx) => {
+                    const u = urls?.[idx];
+                    if (u) setZoomVariantUrl(u);
+                  }}
+                />
               </div>
             ) : activeTab === "size" ? (
               <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base">

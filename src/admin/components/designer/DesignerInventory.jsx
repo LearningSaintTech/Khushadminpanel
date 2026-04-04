@@ -9,6 +9,7 @@ import {
   patchDesignerInventoryListed,
 } from "../../apis/Designerapi";
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
+import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
@@ -52,30 +53,6 @@ const DesignerInventory = () => {
   const orderedVariantImages = (variant) => {
     const raw = Array.isArray(variant?.images) ? variant.images : [];
     return [...raw].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0));
-  };
-
-  const parseInchesValue = (value) => {
-    const raw = String(value ?? "").trim();
-    if (!raw) return NaN;
-    const mixed = raw.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-    if (mixed) {
-      const whole = Number(mixed[1]);
-      const num = Number(mixed[2]);
-      const den = Number(mixed[3]);
-      if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
-        return whole + num / den;
-      }
-    }
-    const asNum = Number(raw);
-    return Number.isFinite(asNum) ? asNum : NaN;
-  };
-
-  const inchesToCmText = (value) => {
-    const inch = parseInchesValue(value);
-    if (!Number.isFinite(inch)) return "—";
-    const cm = inch * 2.54;
-    const rounded = Math.round(cm * 10) / 10;
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   };
 
   const getStatusClasses = (value) => {
@@ -572,69 +549,13 @@ const DesignerInventory = () => {
 
             <div className="mt-3">
               <h3 className="mb-2 border-l-4 border-cyan-400 pl-2 font-medium text-cyan-700">
-                Size Chart (in & cm)
+                Size chart (in &amp; cm)
               </h3>
-              {Array.isArray(selectedItem?.sizeChart?.headers) && selectedItem.sizeChart.headers.length > 0 ? (
-                <div className="space-y-3 rounded-xl border border-black/10 bg-gray-50 p-2.5">
-                  <div className="overflow-x-auto rounded-lg border border-black/10 bg-white">
-                    <table className="w-full min-w-[620px] text-xs">
-                      <thead>
-                        <tr className="bg-gray-100 text-left text-gray-700">
-                          <th className="p-2 font-semibold">Size</th>
-                          {selectedItem.sizeChart.headers.map((h, idx) => (
-                            <th key={`in-h-${idx}`} className="p-2 font-semibold">
-                              {h?.label || h?.key || "-"}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedItem.sizeChart.rows || []).map((row, rowIdx) => (
-                          <tr key={`in-r-${rowIdx}`} className="border-t border-black/5">
-                            <td className="p-2 text-gray-800">{row?.size || "-"}</td>
-                            {selectedItem.sizeChart.headers.map((h, colIdx) => (
-                              <td key={`in-c-${rowIdx}-${colIdx}`} className="p-2 text-gray-700">
-                                {row?.measurements?.[h?.key] ?? "-"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="overflow-x-auto rounded-lg border border-black/10 bg-white">
-                    <table className="w-full min-w-[620px] text-xs">
-                      <thead>
-                        <tr className="bg-gray-100 text-left text-gray-700">
-                          <th className="p-2 font-semibold">Size</th>
-                          {selectedItem.sizeChart.headers.map((h, idx) => (
-                            <th key={`cm-h-${idx}`} className="p-2 font-semibold">
-                              {String(h?.label || h?.key || "-").replace("(in)", "(cm)")}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedItem.sizeChart.rows || []).map((row, rowIdx) => (
-                          <tr key={`cm-r-${rowIdx}`} className="border-t border-black/5">
-                            <td className="p-2 text-gray-800">{row?.size || "-"}</td>
-                            {selectedItem.sizeChart.headers.map((h, colIdx) => (
-                              <td key={`cm-c-${rowIdx}-${colIdx}`} className="p-2 text-gray-700">
-                                {inchesToCmText(row?.measurements?.[h?.key])}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm text-gray-500">
-                  No size chart data.
-                </div>
-              )}
+              <DesignerSizeChartReadonlyTables
+                item={selectedItem}
+                showMeasureImages
+                onMeasureImageClick={(urls, idx) => openLightbox(urls, idx)}
+              />
             </div>
 
             <div className="mt-3">

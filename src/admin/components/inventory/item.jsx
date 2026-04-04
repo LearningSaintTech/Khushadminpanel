@@ -5,6 +5,7 @@ import {
   bulkUploadItems,
   updateItem,
 } from "../../apis/itemapi";
+import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
 
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
@@ -387,6 +388,7 @@ export default function Items() {
                 <th className="px-4 py-3 text-left font-medium">Image</th>
                 <th className="px-4 py-3 text-left font-medium">Name</th>
                 <th className="px-4 py-3 text-left font-medium">Description</th>
+                <th className="px-4 py-3 text-center font-medium">Size chart</th>
                 <th className="px-4 py-3 text-right font-medium">Price</th>
                 <th className="px-4 py-3 text-right font-medium">Discounted</th>
                 <th className="px-4 py-3 text-center font-medium">Status</th>
@@ -398,7 +400,7 @@ export default function Items() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-10 text-center text-gray-500 text-sm"
                   >
                     Loading products...
@@ -407,7 +409,7 @@ export default function Items() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-10 text-center text-gray-500 text-sm"
                   >
                     No products found
@@ -449,6 +451,16 @@ export default function Items() {
 
                     <td className="px-4 py-3 align-middle text-xs sm:text-sm text-gray-600 max-w-xs truncate">
                       {item.shortDescription || "—"}
+                    </td>
+
+                    <td className="px-4 py-3 align-middle text-center text-xs text-gray-600">
+                      {itemHasSizeChartContent(item) ? (
+                        <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 border border-emerald-100">
+                          Yes
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 align-middle text-right text-sm">

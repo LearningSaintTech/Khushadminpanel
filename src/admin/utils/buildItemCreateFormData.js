@@ -1,3 +1,5 @@
+import { designerItemToFormSizeCharts } from "../../utils/designerSizeChartDisplay.js";
+
 /**
  * Builds multipart FormData for POST /items/create (same field layout as ItemForm.jsx handleSave, create path).
  * @param {object} form - Shape aligned with ItemForm `form` state
@@ -136,36 +138,103 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
     }
   });
 
-  const cleanedHeaders = (form.sizeChart?.headers || []).filter((h) => h && h.key && h.key.trim());
-
-  const cleanedRows = (form.sizeChart?.rows || [])
-    .filter((row) => {
-      if (!row || !row.size || !row.size.toString().trim()) return false;
-      const measurements = row.measurements || {};
-      return Object.values(measurements).some(
-        (val) => val !== "" && val !== null && val !== undefined
-      );
-    })
-    .map((row) => ({
-      size: row.size,
-      measurements: row.measurements || {},
-    }));
-
-  const sizeChartData = {
-    unit: form.sizeChart?.unit || "in",
-    headers: cleanedHeaders,
-    rows: cleanedRows,
-    measureImage: (form.sizeChart?.measureImages || []).map((_, idx) => ({
-      imageKey: `measureImages/${idx}`,
-    })),
-  };
-  formData.append("sizeChart", JSON.stringify(sizeChartData));
-
-  (form.sizeChart?.measureImages || []).forEach((file) => {
-    if (file instanceof File) {
-      formData.append("measureImages", file);
+  const cleanChartSide = (chart) => {
+    if (!chart) {
+      return { headers: [], rows: [], measureImage: [] };
     }
-  });
+    const cleanedHeaders = (chart.headers || []).filter((h) => h && h.key && h.key.trim());
+    const cleanedRows = (chart.rows || [])
+      .filter((row) => {
+        if (!row || !row.size || !row.size.toString().trim()) return false;
+        const measurements = row.measurements || {};
+        return Object.values(measurements).some(
+          (val) => val !== "" && val !== null && val !== undefined
+        );
+      })
+      .map((row) => ({
+        size: row.size,
+        measurements: row.measurements || {},
+      }));
+    const imgs = chart.measureImages || [];
+    const measureImage = imgs.map((img, idx) => {
+      if (img instanceof File) {
+        return { imageKey: `slot-${idx}` };
+      }
+      if (typeof img === "string" && img.trim()) {
+        return { url: img.trim(), imageKey: `existing-${idx}` };
+      }
+      if (img && typeof img === "object" && img.url) {
+        return { url: img.url, imageKey: img.imageKey || `existing-${idx}` };
+      }
+      return { imageKey: `slot-${idx}` };
+    });
+    return { headers: cleanedHeaders, rows: cleanedRows, measureImage };
+  };
+
+  const sc = form.sizeCharts;
+  const hasDual =
+    sc &&
+    typeof sc === "object" &&
+    ((sc.in?.headers?.length ||
+      sc.in?.rows?.length ||
+      (sc.in?.measureImages || []).length > 0) ||
+      (sc.cm?.headers?.length ||
+        sc.cm?.rows?.length ||
+        (sc.cm?.measureImages || []).length > 0));
+
+  if (hasDual) {
+    const inPayload = cleanChartSide(sc.in);
+    const cmPayload = cleanChartSide(sc.cm);
+    formData.append(
+      "sizeCharts",
+      JSON.stringify({
+        in: {
+          headers: inPayload.headers,
+          rows: inPayload.rows,
+          measureImage: inPayload.measureImage,
+        },
+        cm: {
+          headers: cmPayload.headers,
+          rows: cmPayload.rows,
+          measureImage: cmPayload.measureImage,
+        },
+      })
+    );
+    (sc.in?.measureImages || []).forEach((file) => {
+      if (file instanceof File) formData.append("measureImagesIn", file);
+    });
+    (sc.cm?.measureImages || []).forEach((file) => {
+      if (file instanceof File) formData.append("measureImagesCm", file);
+    });
+  } else {
+    const cleanedHeaders = (form.sizeChart?.headers || []).filter((h) => h && h.key && h.key.trim());
+    const cleanedRows = (form.sizeChart?.rows || [])
+      .filter((row) => {
+        if (!row || !row.size || !row.size.toString().trim()) return false;
+        const measurements = row.measurements || {};
+        return Object.values(measurements).some(
+          (val) => val !== "" && val !== null && val !== undefined
+        );
+      })
+      .map((row) => ({
+        size: row.size,
+        measurements: row.measurements || {},
+      }));
+    const sizeChartData = {
+      unit: form.sizeChart?.unit || "in",
+      headers: cleanedHeaders,
+      rows: cleanedRows,
+      measureImage: (form.sizeChart?.measureImages || []).map((_, idx) => ({
+        imageKey: `measureImages/${idx}`,
+      })),
+    };
+    formData.append("sizeChart", JSON.stringify(sizeChartData));
+    (form.sizeChart?.measureImages || []).forEach((file) => {
+      if (file instanceof File) {
+        formData.append("measureImages", file);
+      }
+    });
+  }
 
   const shippingData = {
     iconUrl: form.shipping?.iconUrl || "",
@@ -328,15 +397,7 @@ export function designerInventoryToItemFormState(designer) {
       description: "",
       instructions: [],
     },
-    sizeChart: {
-      unit: "in",
-      headers: [
-        { key: "chest", label: "Chest" },
-        { key: "length", label: "Length" },
-      ],
-      rows: [],
-      measureImages: [],
-    },
+    sizeCharts: designerItemToFormSizeCharts(designer),
     shipping: {
       iconUrl: "",
       iconKey: "",

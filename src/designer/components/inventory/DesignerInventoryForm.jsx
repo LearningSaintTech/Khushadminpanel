@@ -8,6 +8,11 @@ import {
   updateDesignerItem,
 } from "../../apis/designerApi";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
+import {
+  SIZE_CHART_PRESETS,
+  inchesToCmText,
+  mergeSizeChartsWithPreset,
+} from "../../../utils/sizeChartPresets.js";
 
 function isLocalPickedFile(img) {
   if (img == null || typeof img !== "object") return false;
@@ -96,163 +101,68 @@ const emptyCosts = () => ({
   finishingCost: 0,
 });
 
-const emptySizeChart = () => ({
-  unit: "in",
+/** One unit table (inches or cm) — matches API `sizeCharts.in` / `sizeCharts.cm`. */
+const emptyChartSide = () => ({
   headers: [],
   rows: [],
   measureImages: [],
 });
 
-const SIZE_CHART_PRESETS = {
-  men: {
-    upper: {
-      title: "Men Shirt",
-      unit: "in",
-      sizes: ["S", "M", "L", "XL", "XXL"],
-      headers: [
-        { key: "chest", label: "Chest (in)" },
-        { key: "front_length", label: "Front Length (in)" },
-        { key: "across_shoulder", label: "Across Shoulder (in)" },
-        { key: "sleeve_length", label: "Sleeve Length (in)" },
-      ],
-      sampleValues: {
-        chest: ["39", "41", "43", "45", "47"],
-        front_length: ["28 5/8", "29", "29 3/8", "29 3/4", "30 1/8"],
-        across_shoulder: ["16", "16.5", "17", "17.5", "18"],
-        sleeve_length: ["24.5", "24 3/4", "25", "25.25", "25.50"],
+const emptySizeCharts = () => ({
+  in: emptyChartSide(),
+  cm: emptyChartSide(),
+});
+
+function mapApiRowsToForm(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => {
+    const measurements = r?.measurements;
+    const asObj =
+      measurements instanceof Map
+        ? Object.fromEntries(measurements.entries())
+        : measurements && typeof measurements === "object"
+          ? measurements
+          : {};
+    return { size: r?.size || "", measurements: asObj };
+  });
+}
+
+function mapApiMeasureImagesToForm(measureImage) {
+  if (!Array.isArray(measureImage)) return [];
+  return measureImage.map((img) => img?.url || img);
+}
+
+function loadSizeChartsFromDesignerItem(d) {
+  const sc = d.sizeCharts;
+  if (sc && typeof sc === "object" && (sc.in || sc.cm)) {
+    return {
+      in: {
+        headers: Array.isArray(sc.in?.headers) ? sc.in.headers : [],
+        rows: mapApiRowsToForm(sc.in?.rows),
+        measureImages: mapApiMeasureImagesToForm(sc.in?.measureImage),
       },
-    },
-    lower: {
-      title: "Men Pant",
-      unit: "in",
-      sizes: ["28", "30", "32", "34", "36", "38"],
-      headers: [
-        { key: "hip", label: "Hip (in)" },
-        { key: "inseam", label: "Inseam (in)" },
-        { key: "outseam", label: "Outseam (in)" },
-      ],
-      sampleValues: {
-        hip: ["36", "38", "40", "42", "44", "46"],
-        inseam: ["31", "30.5", "30", "29.5", "29", "28.5"],
-        outseam: ["42", "42", "42", "42", "42", "42"],
+      cm: {
+        headers: Array.isArray(sc.cm?.headers) ? sc.cm.headers : [],
+        rows: mapApiRowsToForm(sc.cm?.rows),
+        measureImages: mapApiMeasureImagesToForm(sc.cm?.measureImage),
       },
-    },
-  },
-  women: {
-    upper: {
-      title: "Women Body Measurements",
-      unit: "in",
-      sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-      headers: [
-        { key: "bust", label: "Bust (in)" },
-        { key: "waist", label: "Waist (in)" },
-        { key: "hip", label: "Hip (in)" },
-        { key: "shoulder", label: "Shoulder (in)" },
-      ],
-      sampleValues: {
-        bust: ["32", "34", "36", "38", "40", "42"],
-        waist: ["26", "28", "30", "32", "34", "36"],
-        hip: ["36", "38", "40", "42", "44", "46"],
-        shoulder: ["13.5", "14", "14.5", "15", "15.5", "16"],
-      },
-    },
-    lower: {
-      title: "Bottom Body Measurements",
-      unit: "in",
-      sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-      headers: [
-        { key: "waist", label: "Waist (in)" },
-        { key: "hip", label: "Hip (in)" },
-        { key: "thigh", label: "Thigh (in)" },
-        { key: "length", label: "Length (in)" },
-        { key: "inseam", label: "Inseam (in)" },
-      ],
-      sampleValues: {
-        waist: ["26", "28", "30", "32", "34", "36"],
-        hip: ["36", "38", "40", "42", "44", "46"],
-        thigh: ["20", "21", "22", "23", "24", "25"],
-        length: ["41", "41", "41", "41", "41", "41"],
-        inseam: ["29", "28.5", "28", "27.5", "27", "26.5"],
-      },
-    },
-  },
-  unisex: {
-    upper: {
-      title: "Unisex Body Measurements",
-      unit: "in",
-      sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-      headers: [
-        { key: "chest", label: "Chest (in)" },
-        { key: "waist", label: "Waist (in)" },
-        { key: "hip", label: "Hip (in)" },
-      ],
-    },
-    lower: {
-      title: "Unisex Body Measurements",
-      unit: "in",
-      sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-      headers: [
-        { key: "waist", label: "Waist (in)" },
-        { key: "hip", label: "Hip (in)" },
-        { key: "inseam", label: "Inseam (in)" },
-      ],
-    },
-  },
-  kids: {
-    upper: {
-      title: "Kids Size Chart",
-      unit: "in",
-      sizes: ["2Y", "4Y", "6Y", "8Y", "10Y", "12Y"],
-      headers: [
-        { key: "chest", label: "Chest (in)" },
-        { key: "length", label: "Length (in)" },
-        { key: "shoulder", label: "Shoulder (in)" },
-      ],
-    },
-    lower: {
-      title: "Kids Size Chart",
-      unit: "in",
-      sizes: ["2Y", "4Y", "6Y", "8Y", "10Y", "12Y"],
-      headers: [
-        { key: "waist", label: "Waist (in)" },
-        { key: "hip", label: "Hip (in)" },
-        { key: "outseam", label: "Outseam (in)" },
-      ],
-    },
-  },
-};
+    };
+  }
+  const leg = d.sizeChart;
+  const next = emptySizeCharts();
+  const u = leg?.unit === "cm" ? "cm" : "in";
+  next[u] = {
+    headers: Array.isArray(leg?.headers) ? leg.headers : [],
+    rows: mapApiRowsToForm(leg?.rows),
+    measureImages: mapApiMeasureImagesToForm(leg?.measureImage),
+  };
+  return next;
+}
 
 const toNumberOrZero = (value) => {
   if (value === "" || value == null) return 0;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-};
-
-const parseInchesValue = (value) => {
-  const raw = String(value ?? "").trim();
-  if (!raw) return NaN;
-
-  // Support values like: "24.5", "24 3/4", "28 5/8"
-  const mixed = raw.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-  if (mixed) {
-    const whole = Number(mixed[1]);
-    const num = Number(mixed[2]);
-    const den = Number(mixed[3]);
-    if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
-      return whole + num / den;
-    }
-  }
-
-  const asNum = Number(raw);
-  return Number.isFinite(asNum) ? asNum : NaN;
-};
-
-const inchesToCmText = (value) => {
-  const inch = parseInchesValue(value);
-  if (!Number.isFinite(inch)) return "—";
-  const cm = inch * 2.54;
-  const rounded = Math.round(cm * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
 function normalizeCodeOptionsResponse(res) {
@@ -403,7 +313,7 @@ const DesignerInventoryForm = () => {
     fabric: emptyFabric(),
     costs: emptyCosts(),
     variants: [emptyVariant()],
-    sizeChart: emptySizeChart(),
+    sizeCharts: emptySizeCharts(),
   });
 
   useEffect(() => {
@@ -449,28 +359,7 @@ const DesignerInventoryForm = () => {
                     images: Array.isArray(v.images) ? v.images : [],
                   }))
                 : [emptyVariant()],
-            sizeChart: {
-              unit: d.sizeChart?.unit || "in",
-              headers: Array.isArray(d.sizeChart?.headers) ? d.sizeChart.headers : [],
-              rows: Array.isArray(d.sizeChart?.rows)
-                ? d.sizeChart.rows.map((r) => {
-                    const measurements = r?.measurements;
-                    const asObj =
-                      measurements instanceof Map
-                        ? Object.fromEntries(measurements.entries())
-                        : measurements && typeof measurements === "object"
-                          ? measurements
-                          : {};
-                    return {
-                      size: r?.size || "",
-                      measurements: asObj,
-                    };
-                  })
-                : [],
-              measureImages: Array.isArray(d.sizeChart?.measureImage)
-                ? d.sizeChart.measureImage.map((img) => img?.url || img)
-                : [],
-            },
+            sizeCharts: loadSizeChartsFromDesignerItem(d),
           });
         } else {
           setLoadItemErrors(extractBackendMessages(res || { message: "Could not load item." }));
@@ -580,20 +469,26 @@ const DesignerInventoryForm = () => {
       };
     });
 
-  // Size chart handlers (designer) - mirrors item admin payload keys
-  const addSizeChartHeader = () => {
+  // Size chart handlers — `side` is "in" | "cm" (matches API `sizeCharts`)
+  const addSizeChartHeader = (side) => {
     setForm((s) => ({
       ...s,
-      sizeChart: {
-        ...s.sizeChart,
-        headers: [...(s.sizeChart.headers || []), { key: "", label: "" }],
+      sizeCharts: {
+        ...s.sizeCharts,
+        [side]: {
+          ...s.sizeCharts[side],
+          headers: [...(s.sizeCharts[side].headers || []), { key: "", label: "" }],
+        },
       },
     }));
   };
 
-  const updateSizeChartHeader = (index, field, value) => {
+  const defaultLabelSuffix = (side) => (side === "cm" ? " (cm)" : " (in)");
+
+  const updateSizeChartHeader = (side, index, field, value) => {
     setForm((s) => {
-      const newHeaders = [...(s.sizeChart.headers || [])];
+      const chart = s.sizeCharts[side];
+      const newHeaders = [...(chart.headers || [])];
       const header = { ...(newHeaders[index] || {}) };
 
       if (field === "key") {
@@ -603,7 +498,7 @@ const DesignerInventoryForm = () => {
             .replace(/[_\-]+/g, " ")
             .replace(/\s+/g, " ")
             .trim();
-          header.label = pretty.charAt(0).toUpperCase() + pretty.slice(1) + " (in/cm)";
+          header.label = pretty.charAt(0).toUpperCase() + pretty.slice(1) + defaultLabelSuffix(side);
         }
       } else if (field === "label") {
         header.label = value;
@@ -619,39 +514,56 @@ const DesignerInventoryForm = () => {
       }
 
       newHeaders[index] = header;
-      return { ...s, sizeChart: { ...s.sizeChart, headers: newHeaders } };
-    });
-  };
-
-  const removeSizeChartHeader = (index) => {
-    setForm((s) => ({
-      ...s,
-      sizeChart: {
-        ...s.sizeChart,
-        headers: (s.sizeChart.headers || []).filter((_, i) => i !== index),
-      },
-    }));
-  };
-
-  const addSizeChartRow = () => {
-    setForm((s) => {
-      const measurements = {};
-      (s.sizeChart.headers || []).forEach((h) => {
-        if (h.key) measurements[h.key] = "";
-      });
       return {
         ...s,
-        sizeChart: {
-          ...s.sizeChart,
-          rows: [...(s.sizeChart.rows || []), { size: "", measurements }],
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: { ...chart, headers: newHeaders },
         },
       };
     });
   };
 
-  const updateSizeChartRow = (rowIndex, field, value) => {
+  const removeSizeChartHeader = (side, index) => {
     setForm((s) => {
-      const newRows = [...(s.sizeChart.rows || [])];
+      const chart = s.sizeCharts[side];
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: {
+            ...chart,
+            headers: (chart.headers || []).filter((_, i) => i !== index),
+          },
+        },
+      };
+    });
+  };
+
+  const addSizeChartRow = (side) => {
+    setForm((s) => {
+      const chart = s.sizeCharts[side];
+      const measurements = {};
+      (chart.headers || []).forEach((h) => {
+        if (h.key) measurements[h.key] = "";
+      });
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: {
+            ...chart,
+            rows: [...(chart.rows || []), { size: "", measurements }],
+          },
+        },
+      };
+    });
+  };
+
+  const updateSizeChartRow = (side, rowIndex, field, value) => {
+    setForm((s) => {
+      const chart = s.sizeCharts[side];
+      const newRows = [...(chart.rows || [])];
       const row = { ...(newRows[rowIndex] || {}) };
 
       if (field === "size") {
@@ -664,37 +576,62 @@ const DesignerInventoryForm = () => {
       }
 
       newRows[rowIndex] = row;
-      return { ...s, sizeChart: { ...s.sizeChart, rows: newRows } };
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: { ...chart, rows: newRows },
+        },
+      };
     });
   };
 
-  const removeSizeChartRow = (index) => {
-    setForm((s) => ({
-      ...s,
-      sizeChart: {
-        ...s.sizeChart,
-        rows: (s.sizeChart.rows || []).filter((_, i) => i !== index),
-      },
-    }));
+  const removeSizeChartRow = (side, index) => {
+    setForm((s) => {
+      const chart = s.sizeCharts[side];
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: {
+            ...chart,
+            rows: (chart.rows || []).filter((_, i) => i !== index),
+          },
+        },
+      };
+    });
   };
 
-  const addSizeChartImages = (files) => {
+  const addSizeChartImages = (side, files) => {
     if (!files?.length) return;
     const next = Array.from(files);
-    setForm((s) => ({
-      ...s,
-      sizeChart: {
-        ...s.sizeChart,
-        measureImages: [...(s.sizeChart.measureImages || []), ...next],
-      },
-    }));
+    setForm((s) => {
+      const chart = s.sizeCharts[side];
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: {
+            ...chart,
+            measureImages: [...(chart.measureImages || []), ...next],
+          },
+        },
+      };
+    });
   };
 
-  const removeSizeChartImage = (index) => {
+  const removeSizeChartImage = (side, index) => {
     setForm((s) => {
-      const next = [...(s.sizeChart.measureImages || [])];
-      next.splice(index, 1);
-      return { ...s, sizeChart: { ...s.sizeChart, measureImages: next } };
+      const chart = s.sizeCharts[side];
+      const imgs = [...(chart.measureImages || [])];
+      imgs.splice(index, 1);
+      return {
+        ...s,
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: { ...chart, measureImages: imgs },
+        },
+      };
     });
   };
 
@@ -702,23 +639,9 @@ const DesignerInventoryForm = () => {
     const genderKey = SIZE_CHART_PRESETS[form.gender] ? form.gender : "unisex";
     const preset = SIZE_CHART_PRESETS[genderKey]?.[sizeChartCategory];
     if (!preset) return;
-
-    const rows = preset.sizes.map((size) => {
-      const measurements = {};
-      preset.headers.forEach((h) => {
-        measurements[h.key] = "";
-      });
-      return { size, measurements };
-    });
-
     setForm((s) => ({
       ...s,
-      sizeChart: {
-        ...s.sizeChart,
-        unit: preset.unit,
-        headers: preset.headers,
-        rows,
-      },
+      sizeCharts: mergeSizeChartsWithPreset(s.sizeCharts, preset),
     }));
   };
 
@@ -781,40 +704,43 @@ const DesignerInventoryForm = () => {
       formData.append("costs", JSON.stringify(normalizedCosts));
       formData.append("variants", JSON.stringify(buildVariantsForPayload()));
 
-      // Size chart - JSON + measure images (multipart)
-      const cleanedHeaders = (form.sizeChart.headers || []).filter(
-        (h) => h && h.key && String(h.key).trim()
-      );
-
-      const cleanedRows = (form.sizeChart.rows || [])
-        .filter((row) => {
-          if (!row || !row.size || !String(row.size).trim()) return false;
-          const measurements = row.measurements || {};
-          return Object.values(measurements).some(
-            (val) => val !== "" && val !== null && val !== undefined
-          );
-        })
-        .map((row) => ({
-          size: row.size,
-          measurements: row.measurements || {},
-        }));
-
-      const sizeChartData = {
-        unit: form.sizeChart.unit || "in",
-        headers: cleanedHeaders,
-        rows: cleanedRows,
-        // Backend uses the length of this array to know desired image slots.
-        measureImage: (form.sizeChart.measureImages || []).map((_, idx) => ({
-          imageKey: `measureImages/${idx}`,
-        })),
+      const buildChartPayload = (side) => {
+        const chart = form.sizeCharts[side];
+        const cleanedHeaders = (chart.headers || []).filter(
+          (h) => h && h.key && String(h.key).trim()
+        );
+        const cleanedRows = (chart.rows || [])
+          .filter((row) => {
+            if (!row || !row.size || !String(row.size).trim()) return false;
+            const measurements = row.measurements || {};
+            return Object.values(measurements).some(
+              (val) => val !== "" && val !== null && val !== undefined
+            );
+          })
+          .map((row) => ({
+            size: row.size,
+            measurements: row.measurements || {},
+          }));
+        return {
+          headers: cleanedHeaders,
+          rows: cleanedRows,
+          measureImage: (chart.measureImages || []).map((_, idx) => ({
+            imageKey: `${side === "in" ? "measureImagesIn" : "measureImagesCm"}/${idx}`,
+          })),
+        };
       };
 
-      formData.append("sizeChart", JSON.stringify(sizeChartData));
+      const sizeChartsPayload = {
+        in: buildChartPayload("in"),
+        cm: buildChartPayload("cm"),
+      };
+      formData.append("sizeCharts", JSON.stringify(sizeChartsPayload));
 
-      (form.sizeChart.measureImages || []).forEach((img) => {
-        if (isLocalPickedFile(img)) {
-          formData.append("measureImages", img);
-        }
+      (form.sizeCharts.in.measureImages || []).forEach((img) => {
+        if (isLocalPickedFile(img)) formData.append("measureImagesIn", img);
+      });
+      (form.sizeCharts.cm.measureImages || []).forEach((img) => {
+        if (isLocalPickedFile(img)) formData.append("measureImagesCm", img);
       });
 
       form.variants.forEach((variant) => {
@@ -873,7 +799,7 @@ const DesignerInventoryForm = () => {
     "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
   const activePreset =
     SIZE_CHART_PRESETS[form.gender]?.[sizeChartCategory] ||
-    SIZE_CHART_PRESETS.unisex.upper;
+    SIZE_CHART_PRESETS.unisex?.[sizeChartCategory];
 
   return (
     <div className="max-w-6xl space-y-3">
@@ -1293,22 +1219,13 @@ const DesignerInventoryForm = () => {
               </select>
             </div>
             <div className="flex items-end justify-end">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={addSizeChartHeader}
-                  className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
-                >
-                  + Header
-                </button>
-                <button
-                  type="button"
-                  onClick={applySizeChartPreset}
-                  className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
-                >
-                  Apply preset
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={applySizeChartPreset}
+                className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
+              >
+                Apply preset (fills in + cm tables)
+              </button>
             </div>
           </div>
 
@@ -1386,143 +1303,170 @@ const DesignerInventoryForm = () => {
             </div>
           </div>
 
-          {form.sizeChart.headers.length === 0 ? (
-            <p className="mt-3 text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
-              No headers added yet
-            </p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {form.sizeChart.headers.map((header, idx) => (
-                <div
-                  key={idx}
-                  className="flex flex-col sm:flex-row gap-2 items-stretch bg-white/80 border border-gray-200 rounded-lg p-2"
-                >
-                  <input
-                    className={fieldClass}
-                    value={header.key}
-                    placeholder="Key (e.g. chest, length)"
-                    onChange={(e) => updateSizeChartHeader(idx, "key", e.target.value)}
-                  />
-                  <input
-                    className={fieldClass}
-                    value={header.label}
-                    placeholder="Label (e.g. Chest (in/cm))"
-                    onChange={(e) => updateSizeChartHeader(idx, "label", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeSizeChartHeader(idx)}
-                    className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-gray-700">Size Rows</h3>
-            <button
-              type="button"
-              onClick={addSizeChartRow}
-              className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
-            >
-              + Row
-            </button>
-          </div>
-
-          {form.sizeChart.rows.length === 0 ? (
-            <p className="mt-2 text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
-              No rows added yet
-            </p>
-          ) : (
-            <div className="mt-2 space-y-2">
-              {form.sizeChart.rows.map((row, rowIndex) => (
-                <div
-                  key={rowIndex}
-                  className="border border-gray-200 rounded-lg bg-white/80 p-2 space-y-2"
-                >
-                  <div className="flex flex-col sm:flex-row gap-2 items-stretch">
-                    <input
-                      className={fieldClass}
-                      value={row.size}
-                      placeholder="Size (e.g. S, M, L)"
-                      onChange={(e) => updateSizeChartRow(rowIndex, "size", e.target.value)}
-                    />
+          {(["in", "cm"]).map((side) => {
+            const chart = form.sizeCharts[side];
+            const sideTitle = side === "in" ? "Inches (in)" : "Centimeters (cm)";
+            const labelPh =
+              side === "in" ? "Label (e.g. Chest (in))" : "Label (e.g. Chest (cm))";
+            return (
+              <div
+                key={side}
+                className="mt-4 rounded-lg border border-indigo-200/80 bg-white/70 p-3 shadow-sm"
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-indigo-950">{sideTitle}</h3>
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => removeSizeChartRow(rowIndex)}
-                      className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                      onClick={() => addSizeChartHeader(side)}
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
                     >
-                      Remove
+                      + Header
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addSizeChartRow(side)}
+                      className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
+                    >
+                      + Row
                     </button>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {(form.sizeChart.headers || []).map((h) => (
-                      <input
-                        key={h.key}
-                        type="number"
-                        className={fieldClass}
-                        value={row.measurements?.[h.key] ?? ""}
-                        placeholder={h.label || h.key}
-                        onChange={(e) => updateSizeChartRow(rowIndex, h.key, e.target.value)}
-                      />
+                {chart.headers.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
+                    No headers for this table yet
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {chart.headers.map((header, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row gap-2 items-stretch bg-white/80 border border-gray-200 rounded-lg p-2"
+                      >
+                        <input
+                          className={fieldClass}
+                          value={header.key}
+                          placeholder="Key (e.g. chest, length)"
+                          onChange={(e) => updateSizeChartHeader(side, idx, "key", e.target.value)}
+                        />
+                        <input
+                          className={fieldClass}
+                          value={header.label}
+                          placeholder={labelPh}
+                          onChange={(e) => updateSizeChartHeader(side, idx, "label", e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSizeChartHeader(side, idx)}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                )}
 
-          <div className="mt-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-gray-700">Measurement Images</h3>
-              <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                + Add
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => addSizeChartImages(e.target.files)}
-                />
-              </label>
-            </div>
-
-            {form.sizeChart.measureImages.length === 0 ? (
-              <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
-                No measurement images yet
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {form.sizeChart.measureImages.map((img, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={
-                        isLocalPickedFile(img)
-                          ? URL.createObjectURL(img)
-                          : typeof img === "string"
-                            ? img
-                            : img?.url || ""
-                      }
-                      alt=""
-                      className="aspect-square object-cover rounded-xl border border-gray-200 shadow-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeSizeChartImage(idx)}
-                      className="absolute top-2 right-2 bg-rose-600 text-white text-xs w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg"
-                      aria-label="Remove measurement image"
-                    >
-                      ×
-                    </button>
+                {chart.rows.length === 0 ? (
+                  <p className="mt-2 text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
+                    No size rows for this table yet
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {chart.rows.map((row, rowIndex) => (
+                      <div
+                        key={rowIndex}
+                        className="border border-gray-200 rounded-lg bg-white/80 p-2 space-y-2"
+                      >
+                        <div className="flex flex-col sm:flex-row gap-2 items-stretch">
+                          <input
+                            className={fieldClass}
+                            value={row.size}
+                            placeholder="Size (e.g. S, M, L)"
+                            onChange={(e) =>
+                              updateSizeChartRow(side, rowIndex, "size", e.target.value)
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSizeChartRow(side, rowIndex)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {(chart.headers || []).map((h) => (
+                            <input
+                              key={h.key}
+                              type="number"
+                              step="any"
+                              className={fieldClass}
+                              value={row.measurements?.[h.key] ?? ""}
+                              placeholder={h.label || h.key}
+                              onChange={(e) =>
+                                updateSizeChartRow(side, rowIndex, h.key, e.target.value)
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                <div className="mt-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-gray-700">
+                      Measurement images ({side === "in" ? "measureImagesIn" : "measureImagesCm"})
+                    </h4>
+                    <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                      + Add
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => addSizeChartImages(side, e.target.files)}
+                      />
+                    </label>
+                  </div>
+                  {chart.measureImages.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
+                      No images for this unit
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                      {chart.measureImages.map((img, idx) => (
+                        <div key={idx} className="relative group">
+                          <img
+                            src={
+                              isLocalPickedFile(img)
+                                ? URL.createObjectURL(img)
+                                : typeof img === "string"
+                                  ? img
+                                  : img?.url || ""
+                            }
+                            alt=""
+                            className="aspect-square object-cover rounded-xl border border-gray-200 shadow-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSizeChartImage(side, idx)}
+                            className="absolute top-2 right-2 bg-rose-600 text-white text-xs w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg"
+                            aria-label="Remove measurement image"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            );
+          })}
         </div>
 
         <button
