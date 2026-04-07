@@ -569,7 +569,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                           : ""
                       }`}
                     >
-                      Exchange
+                      Exchange Policy
                     </Link>
                   )}
 
@@ -582,7 +582,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                           : ""
                       }`}
                     >
-                      Cancellation
+                      Cancellation Policy
                     </Link>
                   )}
                 </div>
