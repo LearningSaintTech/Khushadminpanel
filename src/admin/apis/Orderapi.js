@@ -205,16 +205,10 @@ export const createForwardShipment = (exchangeId) => {
 // ADD THIS FUNCTION
 // ===============================
 export const getInvoice = (orderId, itemId) => {
-  return apiConnector(
-    "GET",
-    orderEndpoints.GET_INVOICE(orderId, itemId),
-    null,
-    {},
-    {},
-    {
-      responseType: "blob",
-    }
-  );
+  // Default JSON — backend returns { is_invoice_created, invoice_url, ... }.
+  // Do NOT use responseType: "blob" for that, or axios wraps JSON in a Blob and the
+  // UI opens a blob: URL of JSON text (broken "PDF") instead of the S3 invoice_url.
+  return apiConnector("GET", orderEndpoints.GET_INVOICE(orderId, itemId));
 };
 
 

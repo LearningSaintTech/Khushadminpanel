@@ -169,45 +169,45 @@ export default function Categories() {
           </button>
         </div>
       </div>
-      <div className="px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+      <div className="min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         {error && (
           <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
             {error}
           </div>
         )}
         {/* Table - Mobile Card View / Desktop Table View */}
-        <div className="overflow-hidden rounded-lg sm:rounded-xl lg:rounded-2xl border border-gray-200 bg-white shadow-sm">
-          {/* Desktop Table View */}
-          <div className="hidden md:block w-full">
-            <div className="w-full overflow-hidden">
-              <table className="w-full divide-y divide-gray-200 table-fixed">
+        <div className="min-w-0 overflow-hidden rounded-lg sm:rounded-xl lg:rounded-2xl border border-gray-200 bg-white shadow-sm">
+          {/* Desktop Table View — horizontal scroll so Actions never clips */}
+          <div className="hidden md:block w-full min-w-0">
+            <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
+              <table className="w-full min-w-[640px] divide-y divide-gray-200 table-auto">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="w-12 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-12 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       #
                     </th>
-                    <th className="w-20 px-2 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-16 shrink-0 px-2 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Image
                     </th>
-                    <th className="w-32 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="min-w-[7rem] px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Name
                     </th>
-                    <th className="hidden lg:table-cell w-48 px-4 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden lg:table-cell min-w-[10rem] max-w-xs px-3 lg:px-4 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Description
                     </th>
-                    <th className="hidden md:table-cell w-24 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden md:table-cell w-20 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Order
                     </th>
-                    <th className="w-28 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Status
                     </th>
-                    <th className="hidden xl:table-cell w-28 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
                       Navbar
                     </th>
-                    <th className="hidden xl:table-cell w-28 px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
-  Footer
-</th>
-                    <th className="w-24 px-3 py-3 lg:py-4 text-right text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                      Footer
+                    </th>
+                    <th className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-right text-xs lg:text-sm font-semibold text-gray-600">
                       Actions
                     </th>
                   </tr>
@@ -216,7 +216,7 @@ export default function Categories() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-6 py-12 text-center text-gray-500 text-sm"
                       >
                         Loading categories...
@@ -225,7 +225,7 @@ export default function Categories() {
                   ) : categories.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-6 py-12 text-center text-gray-500 text-sm"
                       >
                         {debouncedSearchTerm
@@ -240,10 +240,10 @@ export default function Categories() {
                         onClick={() => handleCategoryClick(cat.id)}
                         className="group hover:bg-gray-50/70 transition-colors cursor-pointer"
                       >
-                        <td className="px-3 py-3 lg:py-4 text-xs lg:text-sm text-gray-500">
+                        <td className="px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm text-gray-500">
                           {(currentPage - 1) * limit + idx + 1}
                         </td>
-                        <td className="px-2 py-3 lg:py-4">
+                        <td className="px-2 py-3 lg:py-4 shrink-0">
                           <div
                             className="relative group cursor-pointer"
                             onClick={(e) => {
@@ -264,7 +264,7 @@ export default function Categories() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-900">
+                        <td className="px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-900 min-w-0">
                           <div>
                             <span
                               className={`${
@@ -289,7 +289,7 @@ export default function Categories() {
                             )}
                           </div>
                         </td>
-                        <td className="hidden lg:table-cell px-4 py-3 lg:py-4 text-xs lg:text-sm text-gray-600">
+                        <td className="hidden lg:table-cell min-w-0 max-w-xs px-3 lg:px-4 py-3 lg:py-4 text-xs lg:text-sm text-gray-600">
                           <div
                             className="line-clamp-2 cursor-pointer hover:text-black"
                             onClick={(e) => {
@@ -302,10 +302,10 @@ export default function Categories() {
                             {cat.description || "—"}
                           </div>
                         </td>
-                        <td className="hidden md:table-cell px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-800">
+                        <td className="hidden md:table-cell px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-800 whitespace-nowrap">
                           {cat.sortOrder}
                         </td>
-                        <td className="px-3 py-3 lg:py-4">
+                        <td className="px-2 sm:px-3 py-3 lg:py-4 whitespace-nowrap">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -320,7 +320,7 @@ export default function Categories() {
                             {cat.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="hidden xl:table-cell px-3 py-3 lg:py-4">
+                        <td className="hidden xl:table-cell px-2 sm:px-3 py-3 lg:py-4 whitespace-nowrap">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -335,7 +335,7 @@ export default function Categories() {
                             {cat.isNavbar ? "Shown" : "Hidden"}
                           </button>
                         </td>
-                        <td className="hidden xl:table-cell px-3 py-3">
+                        <td className="hidden xl:table-cell px-2 sm:px-3 py-3 whitespace-nowrap">
                           <button
                             className={`px-2 py-1 rounded-full text-xs ${
                               cat.isFooter
@@ -346,7 +346,7 @@ export default function Categories() {
                             {cat.isFooter ? "Footer" : "Hidden"}
                           </button>
                         </td>
-                        <td className="px-3 py-3 lg:py-4 text-right text-xs lg:text-sm">
+                        <td className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-right text-xs lg:text-sm">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
