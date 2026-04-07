@@ -12,6 +12,7 @@ import {
   getSubcategoriesByCategory,
 } from "../../apis/subcategoryapis";
 import { bulkUploadItems } from "../../apis/itemapi";
+import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
 const ShowItems = () => {
   const navigate = useNavigate();
   const categoryDropdownRef = useRef(null);
@@ -1054,6 +1055,7 @@ const ShowItems = () => {
                   <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Product ID</th>
                   <th className="px-4 py-3 text-left">Description</th>
+                  <th className="px-4 py-3 text-center">Size chart</th>
                   <th className="px-4 py-3 text-right">Price</th>
                   <th className="px-4 py-3 text-right">Discounted</th>
                   <th className="px-4 py-3 text-center">Status</th>
@@ -1064,7 +1066,7 @@ const ShowItems = () => {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-gray-500"
                     >
                       Loading items...
@@ -1073,7 +1075,7 @@ const ShowItems = () => {
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-gray-500"
                     >
                       No items found
@@ -1117,6 +1119,15 @@ const ShowItems = () => {
                         title={item.shortDescription || item.description}
                       >
                         {item.shortDescription || item.description || "—"}
+                      </td>
+                      <td className="px-4 py-4 text-center text-sm text-gray-600">
+                        {itemHasSizeChartContent(item) ? (
+                          <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-right font-medium">
                         {editingPriceItemId === (item._id || item.productId) ? (

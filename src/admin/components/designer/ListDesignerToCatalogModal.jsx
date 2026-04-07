@@ -9,6 +9,7 @@ import {
   buildItemCreateFormData,
   designerInventoryToItemFormState,
 } from "../../utils/buildItemCreateFormData";
+import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 
 const fieldClass =
   "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -37,30 +38,6 @@ function allSkusFromDesigner(d) {
     }
   }
   return [...new Set(skus.filter(Boolean))];
-}
-
-function parseInchesValue(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return NaN;
-  const mixed = raw.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-  if (mixed) {
-    const whole = Number(mixed[1]);
-    const num = Number(mixed[2]);
-    const den = Number(mixed[3]);
-    if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
-      return whole + num / den;
-    }
-  }
-  const asNum = Number(raw);
-  return Number.isFinite(asNum) ? asNum : NaN;
-}
-
-function inchesToCmText(value) {
-  const inch = parseInchesValue(value);
-  if (!Number.isFinite(inch)) return "—";
-  const cm = inch * 2.54;
-  const rounded = Math.round(cm * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
 function DesignerSourceDetails({ d }) {
@@ -175,66 +152,13 @@ function DesignerSourceDetails({ d }) {
       </div>
 
       <div className={detailBox}>
-        <h3 className={sectionTitle}>Size chart (in & cm)</h3>
-        {Array.isArray(d?.sizeChart?.headers) && d.sizeChart.headers.length > 0 ? (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-              <table className="w-full min-w-[620px] text-xs">
-                <thead>
-                  <tr className="bg-gray-100 text-left text-gray-700">
-                    <th className="p-2 font-semibold">Size</th>
-                    {d.sizeChart.headers.map((h, idx) => (
-                      <th key={`in-h-${idx}`} className="p-2 font-semibold">
-                        {h?.label || h?.key || "—"}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(d.sizeChart.rows || []).map((row, rowIdx) => (
-                    <tr key={`in-r-${rowIdx}`} className="border-t border-gray-100 text-gray-800">
-                      <td className="p-2">{row?.size || "—"}</td>
-                      {d.sizeChart.headers.map((h, colIdx) => (
-                        <td key={`in-c-${rowIdx}-${colIdx}`} className="p-2">
-                          {row?.measurements?.[h?.key] ?? "—"}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-              <table className="w-full min-w-[620px] text-xs">
-                <thead>
-                  <tr className="bg-gray-100 text-left text-gray-700">
-                    <th className="p-2 font-semibold">Size</th>
-                    {d.sizeChart.headers.map((h, idx) => (
-                      <th key={`cm-h-${idx}`} className="p-2 font-semibold">
-                        {String(h?.label || h?.key || "—").replace("(in)", "(cm)")}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(d.sizeChart.rows || []).map((row, rowIdx) => (
-                    <tr key={`cm-r-${rowIdx}`} className="border-t border-gray-100 text-gray-800">
-                      <td className="p-2">{row?.size || "—"}</td>
-                      {d.sizeChart.headers.map((h, colIdx) => (
-                        <td key={`cm-c-${rowIdx}-${colIdx}`} className="p-2">
-                          {inchesToCmText(row?.measurements?.[h?.key])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">No size chart data.</p>
-        )}
+        <h3 className={sectionTitle}>Size chart (in &amp; cm)</h3>
+        <DesignerSizeChartReadonlyTables
+          item={d}
+          outerClassName="space-y-3"
+          tableWrapClass="overflow-x-auto rounded-lg border border-gray-200 bg-white"
+          showMeasureImages
+        />
       </div>
 
       <div className={detailBox}>
