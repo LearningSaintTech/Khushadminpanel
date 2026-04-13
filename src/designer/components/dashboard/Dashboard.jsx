@@ -15,6 +15,7 @@ import {
   Factory,
 } from "lucide-react";
 import { listDesignerItems } from "../../apis/designerApi";
+import { formatProductTypeAndFit } from "../../utils/inventoryDisplay";
 
 const STATUSES = [
   { key: "draft", label: "Drafts", icon: FileEdit, bar: "bg-amber-400", card: "border-amber-200 from-amber-50/90 to-white text-amber-950" },
@@ -230,9 +231,7 @@ const DesignerDashboard = () => {
                         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2 text-xs transition hover:border-indigo-200 hover:bg-indigo-50/40"
                       >
                         <span className="font-medium text-gray-900">{row.StyleNumber}</span>
-                        <span className="text-gray-500">
-                          {row.productType} / {row.fitType}
-                        </span>
+                        <span className="text-gray-500">{formatProductTypeAndFit(row)}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${getStatusBadgeClass(row.status)}`}>
                           {row.status}
                         </span>

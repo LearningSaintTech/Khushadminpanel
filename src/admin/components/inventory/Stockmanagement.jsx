@@ -19,7 +19,9 @@ import {
   getWarehouseStock,
   updateWarehouseStock,
   bulkUploadStockFile,
+  addWarehouseStockFromItem,
 } from "../../apis/Warehouseapi";
+import { searchItems, getSingleItem } from "../../apis/itemapi";
 
 const WAREHOUSE_PAGE_SIZE = 8;
 const STOCK_PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -54,6 +56,437 @@ function parseStockApiResponse(res) {
           : 0,
     },
   };
+}
+
+/** Stable key so all SKUs of one catalog item nest under one product block */
+function stockRowGroupKey(row) {
+  const id = row?.itemId != null ? String(row.itemId).trim() : "";
+  if (id) return `item:${id}`;
+  const name = String(row?.productName || row?.name || "").trim();
+  if (name) return `name:${name.toLowerCase()}`;
+  const sku = String(row?.sku || row?.SKU || "").trim();
+  return sku ? `sku:${sku}` : "unknown";
+}
+
+function displayProductTitleForGroup(rows) {
+  const first = rows?.[0];
+  const title =
+    (first?.productName && String(first.productName).trim()) ||
+    (first?.name && String(first.name).trim()) ||
+    "";
+  if (title) return title;
+  const sku = String(first?.sku || first?.SKU || "").trim();
+  return sku ? `SKU: ${sku}` : "Item";
+}
+
+function countSkusOnItem(item) {
+  return collectSkuListFromItem(item).length;
+}
+
+function collectSkuListFromItem(item) {
+  if (!item?.variants?.length) return [];
+  const set = new Set();
+  for (const v of item.variants) {
+    for (const sz of v.sizes || []) {
+      const s = sz?.sku != null ? String(sz.sku).trim() : "";
+      if (s) set.add(s);
+    }
+  }
+  return [...set];
+}
+
+function isWarehouseFromItemRouteUnavailable(err) {
+  const msg = String(err?.message || err || "");
+  if (/404|cannot post|not found|status code 404/i.test(msg)) return true;
+  if (Number(err?.status) === 404) return true;
+  return false;
+}
+
+function parseItemSearchResponse(res) {
+  const payload = res?.data ?? res ?? {};
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (payload.data && Array.isArray(payload.data.items)) return payload.data.items;
+  return [];
+}
+
+/** Catalog product id (human-facing) or Mongo _id fallback */
+function getItemProductIdDisplay(item) {
+  const p = item?.productId;
+  if (p != null && String(p).trim() !== "") return String(p).trim();
+  const id = item?._id || item?.id;
+  return id ? String(id) : "—";
+}
+
+/** Total units in central catalog for this item (sum of variant size stocks). */
+function getCentralStockTotal(item) {
+  if (item != null) {
+    const t = item.totalStock;
+    if (typeof t === "number" && !Number.isNaN(t)) return t;
+  }
+  let sum = 0;
+  for (const v of item?.variants || []) {
+    for (const sz of v.sizes || []) {
+      const s = sz?.stock;
+      const n = typeof s === "number" ? s : Number(s);
+      if (!Number.isNaN(n)) sum += n;
+    }
+  }
+  return sum;
+}
+
+/** Search catalog by name, pick one item, move the same qty from central into this warehouse for every SKU on that item. */
+function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) {
+  const rootRef = useRef(null);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [skuCount, setSkuCount] = useState(0);
+  const [qtyPerSku, setQtyPerSku] = useState("1");
+  const [applying, setApplying] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  useEffect(() => {
+    const onDoc = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    if (debouncedQuery.length < 2) {
+      setResults([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setSearching(true);
+      try {
+        const res = await searchItems({
+          keywords: debouncedQuery,
+          page: 1,
+          limit: 20,
+        });
+        const list = parseItemSearchResponse(res);
+        if (!cancelled) setResults(list);
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery]);
+
+  const pickItem = async (item) => {
+    const id = item?._id || item?.id;
+    if (!id) return;
+    setQuery(item.name || item.title || "");
+    setOpen(false);
+    let doc = item;
+    let n = countSkusOnItem(doc);
+    if (n === 0) {
+      try {
+        const res = await getSingleItem(String(id));
+        const inner = res?.data ?? {};
+        const full = inner.item ?? inner;
+        if (full?.variants) {
+          doc = full;
+          n = countSkusOnItem(full);
+        }
+      } catch {
+        /* keep search row */
+      }
+    }
+    setSelected(doc);
+    setSkuCount(n);
+  };
+
+  const clearSelection = () => {
+    setSelected(null);
+    setSkuCount(0);
+    setQuery("");
+    setResults([]);
+  };
+
+  const handleApply = async () => {
+    const id = selected?._id || selected?.id;
+    if (!id) {
+      toast.error("Search and select an item first");
+      return;
+    }
+    const q = Number(qtyPerSku);
+    if (!Number.isInteger(q) || q < 1) {
+      toast.error(
+        "Enter a positive whole number (units per SKU to move from central)"
+      );
+      return;
+    }
+    if (skuCount === 0) {
+      toast.error("This item has no SKUs to move");
+      return;
+    }
+    setApplying(true);
+    try {
+      let data;
+      let successMessage;
+
+      try {
+        const res = await addWarehouseStockFromItem(String(warehouseId), {
+          itemId: String(id),
+          quantity: q,
+        });
+        data = res?.data ?? {};
+        successMessage = res?.message;
+      } catch (bulkErr) {
+        if (!isWarehouseFromItemRouteUnavailable(bulkErr)) throw bulkErr;
+
+        let doc = selected;
+        let skus = collectSkuListFromItem(doc);
+        if (skus.length === 0) {
+          try {
+            const r = await getSingleItem(String(id));
+            const inner = r?.data ?? {};
+            const full = inner.item ?? inner;
+            if (full?.variants) doc = full;
+            skus = collectSkuListFromItem(doc);
+          } catch {
+            /* ignore */
+          }
+        }
+        if (skus.length === 0) {
+          toast.error(
+            "Could not load SKUs for this item. Update the API or open the item once, then retry."
+          );
+          return;
+        }
+
+        const applied = [];
+        const failed = [];
+        for (const sku of skus) {
+          try {
+            await updateWarehouseStock(String(warehouseId), {
+              sku,
+              quantity: q,
+            });
+            applied.push(sku);
+          } catch (e) {
+            failed.push({
+              sku,
+              message:
+                (e && typeof e === "object" && e.message) ||
+                String(e || "Failed"),
+            });
+          }
+        }
+        data = { applied, failed };
+        successMessage = `Moved stock for ${applied.length} SKU(s)`;
+      }
+
+      const failed = data.failed ?? [];
+      const applied = data.applied ?? [];
+      if (applied.length > 0 && typeof onStockUpdated === "function") {
+        await onStockUpdated();
+      }
+      if (failed.length === 0) {
+        toast.success(successMessage || `Moved stock for ${applied.length} SKU(s)`);
+        clearSelection();
+        setQtyPerSku("1");
+      } else {
+        const firstErr = failed[0]?.message || "";
+        toast.error(
+          `${applied.length} SKU(s) updated, ${failed.length} failed.${
+            firstErr ? ` ${firstErr}` : ""
+          }`
+        );
+      }
+    } catch (err) {
+      toast.error(
+        typeof err === "string"
+          ? err
+          : err?.message || "Could not apply stock for this item"
+      );
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const selectedId = selected?._id || selected?.id;
+  const selectedName =
+    (selected?.name || selected?.title || "").trim() || "Selected item";
+
+  return (
+    <div
+      ref={rootRef}
+      className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50/80 p-4"
+    >
+      <h5 className="text-xs font-semibold text-gray-900 uppercase tracking-wide mb-1">
+        Add all SKUs from one item
+      </h5>
+      <p className="text-xs text-gray-500 mb-3 max-w-2xl">
+        Search by product name (same catalog search as Items). Choose an item,
+        set units <strong>per SKU</strong>, then apply — each variant size
+        moves that many units from <strong>central</strong> into this warehouse.
+        SKUs with insufficient central stock are reported and skipped.
+      </p>
+      <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+        <div className="flex-1 min-w-0 relative">
+          <label className="sr-only" htmlFor={`item-pick-${warehouseId}`}>
+            Search item by name
+          </label>
+          <input
+            id={`item-pick-${warehouseId}`}
+            type="text"
+            placeholder="Type item name…"
+            value={query}
+            disabled={disabled || applying}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+              if (selected) {
+                setSelected(null);
+                setSkuCount(0);
+              }
+            }}
+            onFocus={() => setOpen(true)}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            autoComplete="off"
+          />
+          {open && debouncedQuery.length >= 2 && !selectedId ? (
+            <div className="absolute z-20 left-0 right-0 mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {searching ? (
+                <div className="px-3 py-4 flex items-center justify-center gap-2 text-xs text-gray-500">
+                  <Loader2 className="animate-spin" size={14} />
+                  Searching…
+                </div>
+              ) : results.length === 0 ? (
+                <p className="px-3 py-3 text-xs text-gray-500">No items found</p>
+              ) : (
+                <ul className="py-1">
+                  {results.map((it) => {
+                    const rid = it._id || it.id;
+                    const label = (it.name || it.title || "Untitled").trim();
+                    const pid = getItemProductIdDisplay(it);
+                    const central = getCentralStockTotal(it);
+                    const nSkus = countSkusOnItem(it);
+                    return (
+                      <li key={rid ? String(rid) : label}>
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => pickItem(it)}
+                        >
+                          <span className="block font-medium text-gray-900 truncate pr-1">
+                            {label}
+                          </span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                            <span className="font-mono text-gray-600" title="Product ID">
+                              {pid}
+                            </span>
+                            <span className="text-gray-300" aria-hidden>
+                              ·
+                            </span>
+                            <span title="Total central catalog stock (all SKUs)">
+                              Central{" "}
+                              <strong className="font-semibold text-gray-700">
+                                {central.toLocaleString()}
+                              </strong>
+                            </span>
+                            <span className="text-gray-300" aria-hidden>
+                              ·
+                            </span>
+                            <span>
+                              {nSkus} SKU{nSkus !== 1 ? "s" : ""}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          {selectedId ? (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 max-w-md min-w-0">
+              <div className="min-w-0 flex-1">
+                <span
+                  className="block truncate font-medium text-gray-900"
+                  title={selectedName}
+                >
+                  {selectedName}
+                </span>
+                <span className="mt-0.5 block text-[11px] text-gray-500 font-mono truncate" title="Product ID · central stock">
+                  {getItemProductIdDisplay(selected)} · central{" "}
+                  {getCentralStockTotal(selected).toLocaleString()} ·{" "}
+                  {skuCount} SKU{skuCount !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={clearSelection}
+                disabled={applying}
+                className="p-0.5 rounded text-gray-400 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+                aria-label="Clear item"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : null}
+          <label className="flex flex-col gap-0.5 text-xs text-gray-600">
+            <span className="font-medium text-gray-700">Qty per SKU</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={qtyPerSku}
+              disabled={disabled || applying}
+              onChange={(e) => setQtyPerSku(e.target.value)}
+              className="w-24 px-2.5 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={
+              disabled ||
+              applying ||
+              !selectedId ||
+              skuCount === 0 ||
+              !Number.isInteger(Number(qtyPerSku)) ||
+              Number(qtyPerSku) < 1
+            }
+            onClick={handleApply}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {applying ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                Applying…
+              </>
+            ) : (
+              "Apply all SKUs"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Stockmanagement() {
@@ -97,6 +530,11 @@ export default function Stockmanagement() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkLastResult, setBulkLastResult] = useState(null);
   const bulkFileInputRef = useRef(null);
+
+  /** Per warehouse: set every listed SKU to the same warehouse quantity (delta via API) */
+  const [whUniformTarget, setWhUniformTarget] = useState({});
+  const [whUniformAllPages, setWhUniformAllPages] = useState({});
+  const [whUniformApplyingId, setWhUniformApplyingId] = useState(null);
 
   const warehouseIdsKey = useMemo(
     () => warehouses.map((w) => w.id).join(","),
@@ -541,6 +979,135 @@ export default function Stockmanagement() {
     }));
   };
 
+  const fetchAllStockRowsForWarehouse = useCallback(async (warehouseId) => {
+    const pageSize = 100;
+    const aggregated = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const res = await getWarehouseStock(warehouseId, page, pageSize, {});
+      const { list, pagination } = parseStockApiResponse(res);
+      aggregated.push(...list);
+      totalPages =
+        typeof pagination.totalPages === "number" && pagination.totalPages > 0
+          ? pagination.totalPages
+          : 1;
+      if (!list.length && page > 1) break;
+      page += 1;
+    } while (page <= totalPages);
+
+    const seen = new Set();
+    const unique = [];
+    for (const row of aggregated) {
+      const sku = String(row?.sku || row?.SKU || "").trim();
+      if (!sku || seen.has(sku)) continue;
+      seen.add(sku);
+      unique.push(row);
+    }
+    return unique;
+  }, []);
+
+  const handleUniformWarehouseQuantity = useCallback(
+    async (warehouseId) => {
+      const raw = String(whUniformTarget[warehouseId] ?? "").trim();
+      const targetInt = parseInt(raw, 10);
+      if (!Number.isInteger(targetInt) || targetInt < 0) {
+        toast.error("Enter a non-negative whole number for warehouse quantity");
+        return;
+      }
+
+      const useAllPages = Boolean(whUniformAllPages[warehouseId]);
+      let rows = [];
+
+      if (useAllPages) {
+        try {
+          rows = await fetchAllStockRowsForWarehouse(warehouseId);
+        } catch (e) {
+          toast.error(
+            (e && typeof e === "object" && e.message) ||
+              "Could not load full warehouse stock list"
+          );
+          return;
+        }
+      } else {
+        rows = stockByWarehouseId[warehouseId]?.data || [];
+      }
+
+      const bySku = new Map();
+      for (const row of rows) {
+        const sku = String(row?.sku || row?.SKU || "").trim();
+        if (!sku) continue;
+        if (!bySku.has(sku)) bySku.set(sku, row);
+      }
+      const uniqueRows = [...bySku.values()];
+      if (uniqueRows.length === 0) {
+        toast.error(
+          useAllPages
+            ? "No SKUs found in this warehouse"
+            : "No SKU lines on this page — change page or enable “entire warehouse”"
+        );
+        return;
+      }
+
+      const scopeLabel = useAllPages
+        ? `all ${uniqueRows.length} SKU line(s) in this warehouse (every page, ignoring filters)`
+        : `${uniqueRows.length} SKU line(s) on the current page/filters`;
+
+      if (
+        !window.confirm(
+          `Set warehouse stock to ${targetInt} for ${scopeLabel}?\n\n` +
+            "The app will move stock from central or back to central per SKU (same rules as single-line adjust). " +
+            "Increasing quantity needs enough central stock for each SKU; decreasing needs enough in the warehouse."
+        )
+      ) {
+        return;
+      }
+
+      setWhUniformApplyingId(warehouseId);
+      let adjusted = 0;
+      let skipped = 0;
+      let failed = 0;
+      try {
+        for (const row of uniqueRows) {
+          const sku = String(row?.sku || row?.SKU || "").trim();
+          const current = Number(row.quantity) || 0;
+          const delta = targetInt - current;
+          if (delta === 0) {
+            skipped += 1;
+            continue;
+          }
+          try {
+            await updateWarehouseStock(warehouseId, { sku, quantity: delta });
+            adjusted += 1;
+          } catch {
+            failed += 1;
+          }
+        }
+
+        if (failed === 0) {
+          toast.success(
+            `Target ${targetInt}: ${adjusted} SKU(s) adjusted, ${skipped} already at target`
+          );
+        } else {
+          toast.error(
+            `${adjusted} adjusted, ${skipped} unchanged, ${failed} failed (check central/warehouse availability)`
+          );
+        }
+        await refetchStockRow(warehouseId);
+        setStockRefreshTick((t) => t + 1);
+      } finally {
+        setWhUniformApplyingId(null);
+      }
+    },
+    [
+      whUniformTarget,
+      whUniformAllPages,
+      stockByWarehouseId,
+      fetchAllStockRowsForWarehouse,
+      refetchStockRow,
+    ]
+  );
+
   const handleBulkStockUpload = async () => {
     if (!bulkFile) {
       toast.error("Choose a file (.json, .csv, .xlsx, .xls, or .xml)");
@@ -946,6 +1513,11 @@ export default function Stockmanagement() {
                               )}
                             </button>
                           </form>
+                          <AddItemSkusToWarehousePanel
+                            warehouseId={wh.id}
+                            disabled={isUpdating || stockState.loading}
+                            onStockUpdated={() => refetchStockRow(wh.id)}
+                          />
                         </div>
 
                         <div className="px-5 py-4 sm:px-6 sm:py-5">
@@ -1046,6 +1618,83 @@ export default function Stockmanagement() {
                                     <X size={14} />
                                   </button>
                                 ) : null}
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-violet-200 bg-violet-50/70 p-3 sm:p-4">
+                              <h5 className="text-xs font-semibold text-violet-950 uppercase tracking-wide">
+                                Set all SKUs to one warehouse quantity
+                              </h5>
+                              <p className="mt-1 text-xs text-violet-900/80 max-w-3xl">
+                                Sets the <strong>warehouse</strong> quantity to the same target for many
+                                SKUs by applying the right move per line (positive pulls from central,
+                                negative returns to central — same as ± adjust). SKUs already at the
+                                target are skipped.
+                              </p>
+                              <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
+                                <label className="flex flex-col gap-1 text-xs text-violet-900 min-w-[100px]">
+                                  <span className="font-medium">Target qty in warehouse</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    placeholder="e.g. 10"
+                                    value={whUniformTarget[wh.id] ?? ""}
+                                    onChange={(e) =>
+                                      setWhUniformTarget((prev) => ({
+                                        ...prev,
+                                        [wh.id]: e.target.value,
+                                      }))
+                                    }
+                                    disabled={
+                                      whUniformApplyingId === wh.id ||
+                                      stockState.loading ||
+                                      isUpdating
+                                    }
+                                    className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-violet-900 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(whUniformAllPages[wh.id])}
+                                    onChange={(e) =>
+                                      setWhUniformAllPages((prev) => ({
+                                        ...prev,
+                                        [wh.id]: e.target.checked,
+                                      }))
+                                    }
+                                    disabled={
+                                      whUniformApplyingId === wh.id ||
+                                      stockState.loading ||
+                                      isUpdating
+                                    }
+                                    className="rounded border-violet-400 text-violet-700"
+                                  />
+                                  <span>
+                                    Entire warehouse (all pages, clears filters for fetch only)
+                                  </span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUniformWarehouseQuantity(wh.id)}
+                                  disabled={
+                                    whUniformApplyingId === wh.id ||
+                                    stockState.loading ||
+                                    isUpdating ||
+                                    String(whUniformTarget[wh.id] ?? "").trim() === ""
+                                  }
+                                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {whUniformApplyingId === wh.id ? (
+                                    <>
+                                      <Loader2 className="animate-spin" size={16} />
+                                      Applying…
+                                    </>
+                                  ) : (
+                                    "Apply to all listed SKUs"
+                                  )}
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -1181,47 +1830,68 @@ export default function Stockmanagement() {
                           ) : (
                             <div className="space-y-4">
                               {(() => {
-                                const groupKey = (row) =>
-                                  row.itemId ||
-                                  row.productName ||
-                                  row.name ||
-                                  row.sku;
                                 const groups = new Map();
                                 stockState.data.forEach((row) => {
-                                  const key = groupKey(row);
+                                  const key = stockRowGroupKey(row);
                                   if (!groups.has(key)) groups.set(key, []);
                                   groups.get(key).push(row);
                                 });
 
-                                return Array.from(groups.entries()).map(
-                                  ([groupKeyId, rows]) => {
-                                    const itemName =
-                                      rows[0]?.productName ||
-                                      rows[0]?.name ||
-                                      "Item";
+                                const sortedEntries = Array.from(
+                                  groups.entries()
+                                ).sort(([, a], [, b]) => {
+                                  const na = displayProductTitleForGroup(a);
+                                  const nb = displayProductTitleForGroup(b);
+                                  return na.localeCompare(nb, undefined, {
+                                    sensitivity: "base",
+                                  });
+                                });
 
-                                    return (
+                                return sortedEntries.map(([groupKeyId, rows]) => {
+                                  const skuSort = (x, y) =>
+                                    String(x?.sku || x?.SKU || "").localeCompare(
+                                      String(y?.sku || y?.SKU || ""),
+                                      undefined,
+                                      { numeric: true }
+                                    );
+                                  rows.sort(skuSort);
+
+                                  const productTitle =
+                                    displayProductTitleForGroup(rows);
+                                  const variantCount = rows.length;
+
+                                  return (
                                       <div
                                         key={groupKeyId}
-                                        className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                                        className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm"
                                       >
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3 pb-2 border-b border-gray-100">
+                                        <div className="px-4 py-3 bg-gray-50/80 border-b border-gray-200">
                                           <p className="text-sm font-semibold text-gray-900">
-                                            {itemName}
+                                            {productTitle}
+                                          </p>
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            {variantCount} SKU
+                                            {variantCount !== 1 ? "s" : ""} in
+                                            this warehouse — adjust each line
+                                            below
                                           </p>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-3 sm:gap-4 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">
-                                          <span className="min-w-28">SKU</span>
-                                          <span className="min-w-20">ID</span>
-                                          <span className="min-w-16">Stock</span>
-                                          <span className="min-w-20">
-                                            Central stock
-                                          </span>
-                                          <span className="ml-auto">
-                                            ± Qty adjust
-                                          </span>
+                                        <div className="px-3 sm:px-4 py-2 border-b border-gray-100 bg-white">
+                                          <div className="flex flex-wrap items-center gap-3 sm:gap-4 py-1.5 text-xs font-semibold text-gray-500">
+                                            <span className="min-w-28 pl-2 sm:pl-3">
+                                              SKU
+                                            </span>
+                                            <span className="min-w-20">ID</span>
+                                            <span className="min-w-16">Stock</span>
+                                            <span className="min-w-20">
+                                              Central stock
+                                            </span>
+                                            <span className="ml-auto">
+                                              ± Qty adjust
+                                            </span>
+                                          </div>
                                         </div>
-                                        <ul className="divide-y divide-gray-100">
+                                        <ul className="divide-y divide-gray-100 bg-gray-50/30">
                                           {rows.map((item) => {
                                             const sku =
                                               item.sku || item.SKU || "—";
@@ -1242,7 +1912,7 @@ export default function Stockmanagement() {
                                                 key={
                                                   item._id || item.id || sku
                                                 }
-                                                className="py-2.5 first:pt-0 last:pb-0"
+                                                className="py-2.5 px-2 sm:px-3 border-l-2 border-gray-200 ml-2 sm:ml-3 bg-white/80 first:pt-3 last:pb-3"
                                               >
                                                 <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                                                   <div className="flex items-center gap-1 min-w-28">
@@ -1383,9 +2053,8 @@ export default function Stockmanagement() {
                                           })}
                                         </ul>
                                       </div>
-                                    );
-                                  }
-                                );
+                                  );
+                                });
                               })()}
                             </div>
                           )}

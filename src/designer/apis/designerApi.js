@@ -3,6 +3,11 @@ import { apiConnector } from "../../admin/services/Apiconnector";
 const AUTH = "/designer/auth";
 const INVENTORY = "/designer/inventory";
 
+/**
+ * Designer inventory API. Create/update bodies are usually `FormData` with at least:
+ * `productTypeCode` (CATEGORY code from inventory meta), optional `productType` (name; server can resolve from code),
+ * `fitType`, variants, fabric, etc.
+ */
 export const designerApi = {
   login: (data) => apiConnector("POST", `${AUTH}/login`, data),
   verifyOtp: (data) => apiConnector("POST", `${AUTH}/verify-otp`, data),
@@ -24,9 +29,7 @@ export const designerApi = {
   regenerateSku: (id) => apiConnector("PATCH", `${INVENTORY}/${id}/generate-sku`),
   getInventoryCodes: (params = {}) => {
     const q = new URLSearchParams(params);
-    const url = `${INVENTORY}/meta/inventory-codes?${q.toString()}`;
-    console.log("[designerApi.getInventoryCodes] request:", { url, params });
-    return apiConnector("GET", url);
+    return apiConnector("GET", `${INVENTORY}/meta/inventory-codes?${q.toString()}`);
   },
 };
 

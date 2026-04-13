@@ -187,6 +187,17 @@ function normalizeCodeOptionsResponse(res) {
     .filter((row, idx, arr) => arr.findIndex((x) => x.value === row.value) === idx);
 }
 
+/** Match legacy rows where `productType` stored a code or a display name before `productTypeCode` existed. */
+function inferProductTypeCodeFromLegacy(productType, options) {
+  const raw = String(productType || "").trim();
+  if (!raw || !Array.isArray(options) || options.length === 0) return "";
+  const byValue = options.find((o) => o.value === raw);
+  if (byValue) return byValue.value;
+  const byLabel = options.find((o) => o.label === raw);
+  if (byLabel) return byLabel.value;
+  return "";
+}
+
 function SearchableCodeSelect({
   label,
   required,
@@ -196,6 +207,8 @@ function SearchableCodeSelect({
   loading,
   placeholder,
   allowCustom = false,
+  /** Shown on the main button when set; falls back to `value` (e.g. show "Name (CODE)" while `value` stays the code). */
+  buttonDisplay,
 }) {
   const wrapperRef = useRef(null);
   const [search, setSearch] = useState("");
@@ -243,7 +256,9 @@ function SearchableCodeSelect({
           className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-50"
           disabled={loading}
         >
-          {value || placeholder}
+          {buttonDisplay != null && String(buttonDisplay).trim() !== ""
+            ? buttonDisplay
+            : value || placeholder}
         </button>
         {open && !loading ? (
           <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
@@ -305,6 +320,7 @@ const DesignerInventoryForm = () => {
     employeeId: "",
     description: "",
     productType: "",
+    productTypeCode: "",
     fitType: "",
     gender: "men",
     defaultColor: "",
@@ -333,6 +349,8 @@ const DesignerInventoryForm = () => {
             employeeId: d.employeeId || "",
             description: d.description || "",
             productType: d.productType || "",
+            productTypeCode:
+              d.productTypeCode || d.skuCodeInputs?.productTypeCode || "",
             fitType: d.fitType || "",
             gender: d.gender || "men",
             defaultColor: d.defaultColor || "",
@@ -372,12 +390,27 @@ const DesignerInventoryForm = () => {
     })();
   }, [id, isEdit]);
 
+  /** When CATEGORY options load (and edit fetch finished), infer missing `productTypeCode` from legacy `productType` and sync display name. */
+  useEffect(() => {
+    if (productTypeOptions.length === 0 || loadItem) return;
+    setForm((s) => {
+      let code = String(s.productTypeCode || "").trim();
+      if (!code) {
+        code = inferProductTypeCodeFromLegacy(s.productType, productTypeOptions);
+      }
+      if (!code) return s;
+      const opt = productTypeOptions.find((o) => o.value === code);
+      const name = opt?.label || s.productType;
+      if (s.productTypeCode === code && s.productType === name) return s;
+      return { ...s, productTypeCode: code, productType: name };
+    });
+  }, [productTypeOptions, loadItem]);
+
   useEffect(() => {
     (async () => {
       setCodeLoading(true);
       setCodeLoadError("");
       try {
-        console.log("[DesignerInventoryForm] Loading inventory code options...");
         const [categoryRes, fitRes, colorRes] = await Promise.all([
           getDesignerInventoryCodes({ type: "CATEGORY", limit: 200 }),
           getDesignerInventoryCodes({ type: "FIT", limit: 200 }),
@@ -387,15 +420,6 @@ const DesignerInventoryForm = () => {
         const categoryOptions = normalizeCodeOptionsResponse(categoryRes);
         const fitOptions = normalizeCodeOptionsResponse(fitRes);
         const colorOptions = normalizeCodeOptionsResponse(colorRes);
-
-        console.log("[DesignerInventoryForm] Code options loaded:", {
-          categoryCount: categoryOptions.length,
-          fitCount: fitOptions.length,
-          colorCount: colorOptions.length,
-          categorySample: categoryOptions.slice(0, 5),
-          fitSample: fitOptions.slice(0, 5),
-          colorSample: colorOptions.slice(0, 5),
-        });
 
         setProductTypeOptions(categoryOptions);
         setFitTypeOptions(fitOptions);
@@ -681,7 +705,10 @@ const DesignerInventoryForm = () => {
       formData.append("designerName", form.designerName);
       formData.append("employeeId", form.employeeId);
       formData.append("description", form.description || "");
-      formData.append("productType", form.productType);
+      formData.append("productTypeCode", String(form.productTypeCode || "").trim());
+      if (String(form.productType || "").trim()) {
+        formData.append("productType", String(form.productType).trim());
+      }
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
@@ -805,7 +832,10 @@ const DesignerInventoryForm = () => {
     <div className="max-w-6xl space-y-3">
       <div>
         <h1 className="text-xl font-bold tracking-tight">{isEdit ? "Edit item" : "Create item"}</h1>
-        <p className="text-xs text-gray-500">All fields sync with designer inventory on the server.</p>
+        <p className="text-xs text-gray-500">
+          All fields sync with designer inventory on the server. Pick a category code for product type; the display
+          name is taken from inventory codes.
+        </p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm">
@@ -853,11 +883,23 @@ const DesignerInventoryForm = () => {
           <SearchableCodeSelect
             label="Product type"
             required
-            value={form.productType}
+            value={form.productTypeCode}
+            buttonDisplay={
+              form.productType && form.productTypeCode
+                ? `${form.productType} (${form.productTypeCode})`
+                : form.productType || form.productTypeCode || ""
+            }
             options={productTypeOptions}
             loading={codeLoading}
-            placeholder="Select product type"
-            onChange={(val) => setForm((s) => ({ ...s, productType: val }))}
+            placeholder="Select category code"
+            onChange={(code) => {
+              const opt = productTypeOptions.find((o) => o.value === code);
+              setForm((s) => ({
+                ...s,
+                productTypeCode: code,
+                productType: opt?.label || (code ? s.productType : ""),
+              }));
+            }}
           />
           <SearchableCodeSelect
             label="Fit type"

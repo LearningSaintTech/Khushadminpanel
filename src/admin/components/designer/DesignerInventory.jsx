@@ -392,7 +392,13 @@ const DesignerInventory = () => {
                   <div className="text-xs text-gray-500">{r.employeeId || "-"}</div>
                 </td>
                 <td className="p-2.5 text-gray-700">{r.designerName}</td>
-                <td className="p-2.5 text-gray-700">{r.productType} / {r.fitType}</td>
+                <td className="p-2.5 text-gray-700">
+                  {r.productType || "—"}
+                  {r.productTypeCode ? (
+                    <span className="text-xs text-gray-500"> [{r.productTypeCode}]</span>
+                  ) : null}{" "}
+                  / {r.fitType || "—"}
+                </td>
                 <td className="p-2.5 text-gray-700">
                   <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
                   <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
@@ -511,7 +517,12 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
               <div><span className="font-medium">Listed (catalog):</span> {selectedItem.isListed ? "Yes" : "No"}</div>
               <div><span className="font-medium">Main inventory item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
-              <div><span className="font-medium">Product Type:</span> {selectedItem.productType || "-"}</div>
+              <div>
+                <span className="font-medium">Product type:</span> {selectedItem.productType || "—"}
+                {selectedItem.productTypeCode ? (
+                  <span className="text-gray-600"> ({selectedItem.productTypeCode})</span>
+                ) : null}
+              </div>
               <div><span className="font-medium">Fit Type:</span> {selectedItem.fitType || "-"}</div>
               <div><span className="font-medium">Gender:</span> {selectedItem.gender || "-"}</div>
               <div><span className="font-medium">MRP:</span> {Number(selectedItem.mrp ?? 0)}</div>

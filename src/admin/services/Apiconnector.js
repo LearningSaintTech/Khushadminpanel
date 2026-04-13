@@ -33,10 +33,14 @@ axiosInstance.interceptors.response.use(
   (response) => response.data,
   (error) => {
     const payload = error?.response?.data;
+    const status = error?.response?.status;
     const base =
       typeof payload === "object" && payload !== null && !Array.isArray(payload)
         ? { ...payload }
         : {};
+    if (typeof status === "number") {
+      base.status = status;
+    }
     if (typeof payload === "string" && payload.trim()) {
       base.message = payload;
     }

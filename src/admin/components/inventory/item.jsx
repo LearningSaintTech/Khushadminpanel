@@ -1,11 +1,45 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { X, Loader2 } from "lucide-react";
 import {
   getItemsBySubcategory,
   bulkUploadItems,
   updateItem,
+  getSingleItem,
 } from "../../apis/itemapi";
+import {
+  getWarehouses,
+  getWarehouseStock,
+  updateWarehouseStock,
+  addWarehouseStockFromItem,
+} from "../../apis/Warehouseapi";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
+
+function collectSkuListFromItem(item) {
+  if (!item?.variants?.length) return [];
+  const set = new Set();
+  for (const v of item.variants) {
+    for (const sz of v.sizes || []) {
+      const s = sz?.sku != null ? String(sz.sku).trim() : "";
+      if (s) set.add(s);
+    }
+  }
+  return [...set];
+}
+
+function isWarehouseFromItemRouteUnavailable(err) {
+  const msg = String(err?.message || err || "");
+  if (/404|cannot post|not found|status code 404/i.test(msg)) return true;
+  if (Number(err?.status) === 404) return true;
+  return false;
+}
+
+function normalizeWarehouseRows(res) {
+  const payload = res?.data ?? {};
+  const list = payload.data ?? payload.stock ?? payload.items ?? [];
+  return Array.isArray(list) ? list : [];
+}
 
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
@@ -25,6 +59,16 @@ export default function Items() {
   const [editingPriceValue, setEditingPriceValue] = useState("");
   const [editingDiscountValue, setEditingDiscountValue] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
+
+  /** Warehouse stock modal (per product row) */
+  const [warehouseUiItem, setWarehouseUiItem] = useState(null);
+  const [warehouseListOpts, setWarehouseListOpts] = useState([]);
+  const [warehouseListLoading, setWarehouseListLoading] = useState(false);
+  const [pickWarehouseId, setPickWarehouseId] = useState("");
+  const [whQtyPerSku, setWhQtyPerSku] = useState("1");
+  const [whApplyLoading, setWhApplyLoading] = useState(false);
+  const [whPresence, setWhPresence] = useState([]);
+  const [whPresenceLoading, setWhPresenceLoading] = useState(false);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
   console.log(
@@ -99,6 +143,184 @@ export default function Items() {
     setSearchTerm("");
     setAppliedSearchTerm("");
   };
+
+  const fetchWarehousePresenceForItem = useCallback(async (item, opts) => {
+    const itemIdStr = String(item._id);
+    const nameQ = (item.name || "").trim();
+    if (!nameQ || !opts?.length) return [];
+    const rows = await Promise.all(
+      opts.map(async (wh) => {
+        try {
+          const stockRes = await getWarehouseStock(wh.id, 1, 200, {
+            itemSearch: nameQ,
+          });
+          const list = normalizeWarehouseRows(stockRes);
+          const mine = list.filter((r) => {
+            if (r.itemId && String(r.itemId) === itemIdStr) return true;
+            return String(r.productName || "").trim() === nameQ;
+          });
+          const totalQty = mine.reduce(
+            (s, r) => s + (Number(r.quantity) || 0),
+            0,
+          );
+          return {
+            id: wh.id,
+            name: wh.name,
+            code: wh.code,
+            city: wh.city,
+            skuLines: mine.length,
+            totalQty,
+          };
+        } catch {
+          return {
+            id: wh.id,
+            name: wh.name,
+            code: wh.code,
+            city: wh.city,
+            skuLines: 0,
+            totalQty: 0,
+            fetchError: true,
+          };
+        }
+      }),
+    );
+    return [...rows].sort(
+      (a, b) => b.totalQty - a.totalQty || a.name.localeCompare(b.name),
+    );
+  }, []);
+
+  const openWarehouseStockModal = useCallback(
+    async (item) => {
+      setWarehouseUiItem(item);
+      setPickWarehouseId("");
+      setWhQtyPerSku("1");
+      setWarehouseListOpts([]);
+      setWhPresence([]);
+      setWarehouseListLoading(true);
+      setWhPresenceLoading(true);
+      try {
+        const res = await getWarehouses(1, 100, "");
+        const payload = res?.data ?? {};
+        const raw = payload.data ?? payload.warehouses ?? [];
+        const opts = (raw || []).map((wh, idx) => {
+          const addr = wh.address || {};
+          return {
+            id: String(wh._id || wh.id || `tmp-${idx}`),
+            name: wh.name || "—",
+            code: wh.code || "",
+            city: addr.city || "",
+          };
+        });
+        setWarehouseListOpts(opts);
+        setPickWarehouseId(opts[0]?.id || "");
+
+        const presence = await fetchWarehousePresenceForItem(item, opts);
+        setWhPresence(presence);
+      } catch (e) {
+        toast.error(e?.message || "Could not load warehouses");
+      } finally {
+        setWarehouseListLoading(false);
+        setWhPresenceLoading(false);
+      }
+    },
+    [fetchWarehousePresenceForItem],
+  );
+
+  const refreshWarehousePresence = useCallback(async () => {
+    if (!warehouseUiItem || warehouseListOpts.length === 0) return;
+    setWhPresenceLoading(true);
+    try {
+      const rows = await fetchWarehousePresenceForItem(
+        warehouseUiItem,
+        warehouseListOpts,
+      );
+      setWhPresence(rows);
+    } catch {
+      toast.error("Could not refresh warehouse stock");
+    } finally {
+      setWhPresenceLoading(false);
+    }
+  }, [warehouseUiItem, warehouseListOpts, fetchWarehousePresenceForItem]);
+
+  const handleAddAllSkusToWarehouse = useCallback(async () => {
+    if (!warehouseUiItem || !pickWarehouseId) {
+      toast.error("Choose a warehouse");
+      return;
+    }
+    const q = Number(whQtyPerSku);
+    if (!Number.isInteger(q) || q < 1) {
+      toast.error("Enter a positive whole number (qty per SKU)");
+      return;
+    }
+    const itemId = String(warehouseUiItem._id);
+    setWhApplyLoading(true);
+    try {
+      let applied = [];
+      let failed = [];
+      try {
+        const res = await addWarehouseStockFromItem(pickWarehouseId, {
+          itemId,
+          quantity: q,
+        });
+        const data = res?.data ?? {};
+        applied = data.applied ?? [];
+        failed = data.failed ?? [];
+      } catch (bulkErr) {
+        if (!isWarehouseFromItemRouteUnavailable(bulkErr)) throw bulkErr;
+        let doc = warehouseUiItem;
+        let skus = collectSkuListFromItem(doc);
+        if (skus.length === 0) {
+          try {
+            const r = await getSingleItem(itemId);
+            const inner = r?.data ?? {};
+            const full = inner.item ?? inner;
+            if (full?.variants) doc = full;
+            skus = collectSkuListFromItem(doc);
+          } catch {
+            /* ignore */
+          }
+        }
+        if (skus.length === 0) {
+          toast.error("Could not resolve SKUs for this product");
+          return;
+        }
+        for (const sku of skus) {
+          try {
+            await updateWarehouseStock(pickWarehouseId, { sku, quantity: q });
+            applied.push(sku);
+          } catch (e) {
+            failed.push({
+              sku,
+              message:
+                (e && typeof e === "object" && e.message) ||
+                String(e || "Failed"),
+            });
+          }
+        }
+      }
+      if (failed.length === 0) {
+        toast.success(`Moved stock for ${applied.length} SKU(s)`);
+      } else {
+        toast.error(
+          `${applied.length} SKU(s) ok, ${failed.length} failed${
+            failed[0]?.message ? `: ${failed[0].message}` : ""
+          }`,
+        );
+      }
+      await refreshWarehousePresence();
+    } catch (err) {
+      toast.error(
+        typeof err === "string" ? err : err?.message || "Update failed",
+      );
+    } finally {
+      setWhApplyLoading(false);
+    }
+  }, [
+    warehouseUiItem,
+    pickWarehouseId,
+    whQtyPerSku,
+    refreshWarehousePresence,
+  ]);
 
   // Navigation
   const openCreate = () => {
@@ -577,6 +799,16 @@ export default function Items() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
+                            openWarehouseStockModal(item);
+                          }}
+                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-emerald-200 text-emerald-900 hover:bg-emerald-700 hover:text-white hover:border-emerald-700 transition-colors"
+                        >
+                          Warehouse
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             navigate(
                               `/admin/inventory/items/${item._id}?skuUids=1`,
                             );
@@ -640,6 +872,219 @@ export default function Items() {
           </div>
         )}
       </div>
+
+      {warehouseUiItem ? (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-3 sm:p-6">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close dialog"
+            onClick={() => setWarehouseUiItem(null)}
+          />
+          <div
+            className="relative w-full max-w-4xl mt-4 sm:mt-8 rounded-2xl border border-black/10 bg-white shadow-2xl max-h-[90vh] flex flex-col overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wh-modal-title"
+          >
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-black/10 shrink-0">
+              <div className="min-w-0">
+                <h2
+                  id="wh-modal-title"
+                  className="text-lg font-bold text-gray-900 truncate"
+                >
+                  Warehouse stock
+                </h2>
+                <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">
+                  {warehouseUiItem.name}
+                </p>
+                <p className="text-xs text-gray-500 mt-1 font-mono">
+                  Product ID:{" "}
+                  {warehouseUiItem.productId != null &&
+                  String(warehouseUiItem.productId).trim() !== ""
+                    ? String(warehouseUiItem.productId)
+                    : String(warehouseUiItem._id)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWarehouseUiItem(null)}
+                className="p-2 rounded-full border border-black/10 hover:bg-black hover:text-white transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-6">
+              <div className="rounded-xl border border-black/10 bg-gray-50 p-4">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Add all SKUs to a warehouse
+                </h3>
+                <p className="text-xs text-gray-600 mt-1 max-w-2xl">
+                  Moves the same quantity from <strong>central</strong> catalog
+                  stock into the chosen warehouse for every SKU on this product.
+                </p>
+                <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
+                  <label className="flex flex-col gap-1 text-xs text-gray-600 min-w-[200px] flex-1">
+                    <span className="font-medium text-gray-800">Warehouse</span>
+                    <select
+                      value={pickWarehouseId}
+                      onChange={(e) => setPickWarehouseId(e.target.value)}
+                      disabled={warehouseListLoading || whApplyLoading}
+                      className="rounded-lg border border-black/15 px-3 py-2.5 text-sm bg-white disabled:opacity-50"
+                    >
+                      {warehouseListOpts.length === 0 ? (
+                        <option value="">
+                          {warehouseListLoading ? "Loading…" : "No warehouses"}
+                        </option>
+                      ) : (
+                        warehouseListOpts.map((wh) => (
+                          <option key={wh.id} value={wh.id}>
+                            {wh.name}
+                            {wh.code ? ` (${wh.code})` : ""}
+                            {wh.city ? ` — ${wh.city}` : ""}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-gray-600 w-full sm:w-28">
+                    <span className="font-medium text-gray-800">Qty / SKU</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={whQtyPerSku}
+                      onChange={(e) => setWhQtyPerSku(e.target.value)}
+                      disabled={whApplyLoading}
+                      className="rounded-lg border border-black/15 px-3 py-2.5 text-sm disabled:opacity-50"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddAllSkusToWarehouse}
+                    disabled={
+                      whApplyLoading ||
+                      warehouseListLoading ||
+                      !pickWarehouseId ||
+                      !Number.isInteger(Number(whQtyPerSku)) ||
+                      Number(whQtyPerSku) < 1
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-black text-white px-5 py-2.5 text-sm font-medium hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {whApplyLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        Applying…
+                      </>
+                    ) : (
+                      "Add to warehouse"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Stock by warehouse
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={refreshWarehousePresence}
+                    disabled={
+                      whPresenceLoading || warehouseListOpts.length === 0
+                    }
+                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-black/15 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="rounded-xl border border-black/10 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[520px]">
+                    <thead className="bg-black text-white text-left text-xs uppercase tracking-wide">
+                      <tr>
+                        <th className="px-3 py-2.5 font-medium">Warehouse</th>
+                        <th className="px-3 py-2.5 font-medium">Code</th>
+                        <th className="px-3 py-2.5 font-medium">City</th>
+                        <th className="px-3 py-2.5 font-medium text-right">
+                          SKU lines
+                        </th>
+                        <th className="px-3 py-2.5 font-medium text-right">
+                          Total qty
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {whPresenceLoading && whPresence.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-3 py-8 text-center text-gray-500"
+                          >
+                            <span className="inline-flex items-center gap-2 justify-center">
+                              <Loader2 className="animate-spin" size={16} />
+                              Loading warehouse stock…
+                            </span>
+                          </td>
+                        </tr>
+                      ) : whPresence.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-3 py-6 text-center text-gray-500 text-sm"
+                          >
+                            No warehouses loaded, or this product has no name to
+                            match stock.
+                          </td>
+                        </tr>
+                      ) : (
+                        whPresence.map((row) => (
+                          <tr
+                            key={row.id}
+                            className={`border-t border-black/5 ${
+                              row.totalQty > 0
+                                ? "bg-emerald-50/50"
+                                : "bg-white"
+                            }`}
+                          >
+                            <td className="px-3 py-2.5 font-medium text-gray-900">
+                              {row.name}
+                              {row.fetchError ? (
+                                <span className="ml-1 text-xs text-amber-700">
+                                  (load error)
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-xs text-gray-700">
+                              {row.code || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-600">
+                              {row.city || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">
+                              {row.skuLines}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                              {row.totalQty.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-2">
+                  Rows use catalog name search per warehouse, then match this
+                  product by ID. Warehouses with no lines show 0. Highlighted rows
+                  have stock in that warehouse.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

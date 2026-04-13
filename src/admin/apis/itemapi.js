@@ -41,7 +41,7 @@ export const getAllItems = async (page = 1, limit = 10, search = "", categoryId 
  * @param {Object} query - Query parameters
  * @param {number} [query.page=1]
  * @param {number} [query.limit=10]
- * @param {string} [query.keywords]       - text search (preferred; sent to API)
+ * @param {string} [query.keywords]       - text search: name, descriptions, productId, SKU (preferred)
  * @param {string} [query.search]         - alias for keywords (normalized before request)
  * @param {string} [query.categoryId]
  * @param {string} [query.subcategoryId]
