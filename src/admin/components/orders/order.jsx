@@ -179,8 +179,9 @@ const getExchangeReason = (exchange) => {
 
 const canDownloadInvoice = (item) => {
   const status = String(item?.status || "").toUpperCase();
-  // Invoice visible for all states EXCEPT: CREATED, CONFIRMED, SHIPPED
-  return !["CREATED", "CONFIRMED", "SHIPPED"].includes(status);
+  // Show invoice for every line state except the earliest pre-fulfillment ones.
+  // (Shipped, out for delivery, delivered, exchange*, cancelled, etc. all allowed.)
+  return !["CREATED", "CONFIRMED"].includes(status);
 };
 
 const isExchangeStatus = (status) =>
@@ -619,22 +620,37 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         for (const iid of uniqueItemIds) {
           try {
             const res = await getInvoice(oid, iid);
-            // Common backend response shape:
-            // { is_invoice_created: true, invoice_url: "...pdf" }
-            const data = res?.data ?? res;
+            // apiConnector returns response.data — usually JSON:
+            // { is_invoice_created: true, invoice_url: "https://...pdf" }
+            let payload = res?.data ?? res;
+
+            if (typeof Blob !== "undefined" && payload instanceof Blob) {
+              const mime = (payload.type || "").toLowerCase();
+              const maybeJson =
+                !mime ||
+                mime.includes("json") ||
+                mime === "text/plain";
+              if (maybeJson) {
+                try {
+                  payload = JSON.parse(await payload.text());
+                } catch {
+                  lastErr = new Error("Invalid invoice response from server");
+                  continue;
+                }
+              } else {
+                openDocUrl(payload, "Failed to download invoice");
+                return;
+              }
+            }
+
             const url =
-              data?.invoice_url ||
-              data?.invoiceUrl ||
-              data?.url ||
+              payload?.invoice_url ||
+              payload?.invoiceUrl ||
+              payload?.url ||
               res?.invoice_url ||
               res?.invoiceUrl ||
               resolveDocUrl(res) ||
-              resolveDocUrl(data);
-
-            if (res instanceof Blob) {
-              openDocUrl(res, "Failed to download invoice");
-              return;
-            }
+              resolveDocUrl(payload);
 
             if (url) {
               openDocUrl(url, "Failed to download invoice");
@@ -642,7 +658,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             }
 
             lastErr = new Error(
-              data?.message ||
+              payload?.message ||
                 res?.message ||
                 "Invoice not available for this delivery line"
             );
@@ -2654,9 +2670,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           ) : (
                             <p className="text-xs text-amber-700">
                               Invoice is not available when status is{" "}
-                              <span className="font-semibold">Created</span>,{" "}
-                              <span className="font-semibold">Confirmed</span> or{" "}
-                              <span className="font-semibold">Shipped</span>.
+                              <span className="font-semibold">Created</span> or{" "}
+                              <span className="font-semibold">Confirmed</span>.
                             </p>
                           )}
                         </div>
@@ -2723,9 +2738,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               ) : (
                                 <p className="text-xs text-amber-700">
                                   Invoice is not available when status is{" "}
-                                  <span className="font-semibold">Created</span>,{" "}
-                                  <span className="font-semibold">Confirmed</span> or{" "}
-                                  <span className="font-semibold">Shipped</span>.
+                                  <span className="font-semibold">Created</span> or{" "}
+                                  <span className="font-semibold">Confirmed</span>.
                                 </p>
                               )}
 
@@ -3531,8 +3545,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                               </button>
                                             ) : (
                                               <p className="text-[10px] text-amber-700">
-                                                Invoice only when status is{" "}
-                                                <span className="font-semibold">Processing</span>.
+                                                Invoice not for{" "}
+                                                <span className="font-semibold">Created</span> /{" "}
+                                                <span className="font-semibold">Confirmed</span>.
                                               </p>
                                             )}
 
@@ -3603,10 +3618,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                     </button>
                                   ) : (
                                     <p className="text-[10px] text-amber-700">
-                                      Invoice is not available when status is{" "}
-                                      <span className="font-semibold">Created</span>,{" "}
-                                      <span className="font-semibold">Confirmed</span> or{" "}
-                                      <span className="font-semibold">Shipped</span>.
+                                      Invoice not for{" "}
+                                      <span className="font-semibold">Created</span> /{" "}
+                                      <span className="font-semibold">Confirmed</span>.
                                     </p>
                                   )}
                                   {/* <button

@@ -121,7 +121,7 @@ export default function OTP() {
 
       if (res.success) {
         const accessToken = res.data.accessToken;
-        const refreshToken = res.data.refreshToken;
+        const refreshToken = res.data.refereshToken;
 
         dispatch(setToken({ accessToken, refreshToken }));
 
