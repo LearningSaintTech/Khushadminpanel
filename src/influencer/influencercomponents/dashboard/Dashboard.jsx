@@ -55,15 +55,15 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-black tracking-tight">
-            Welcome back, Prachi  ji👋
+            Welcome back
           </h1>
           <p className="text-gray-600 mt-2 text-lg">
             Here's what's happening with your account today
           </p>
         </div>
-        <button className="px-6 py-3 bg-black hover:bg-gray-900 text-white font-medium rounded-lg shadow-md transition-all duration-300 hover:shadow-lg active:scale-95">
+        {/* <button className="px-6 py-3 bg-black hover:bg-gray-900 text-white font-medium rounded-lg shadow-md transition-all duration-300 hover:shadow-lg active:scale-95">
           Withdraw Earnings
-        </button>
+        </button> */}
       </div>
 
       {/* Stats Cards - Responsive grid */}

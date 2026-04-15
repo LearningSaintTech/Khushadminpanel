@@ -19,7 +19,7 @@ const InfluencerRoutes = () => {
         <Route element={<Layout />}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="coupon" element={<InfluencerCoupons />} />
-           <Route path="analytics" element={<InfluencerAnalytics />} /> */}
+           <Route path="analytics" element={<InfluencerAnalytics />} /> 
           {/* Add more protected routes here later */}
           {/* <Route path="coupons" element={<CouponsPage />} /> */}
           {/* <Route path="analytics" element={<AnalyticsPage />} /> */}

@@ -113,8 +113,8 @@ const getLatestExchangeId = (item) => {
   const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
   if (exchanges.length === 0) return null;
   exchanges.sort((a, b) => {
-    const aTs = new Date(a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.createdAt || 0).getTime();
+    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
     return bTs - aTs;
   });
   return exchanges[0]?._id ? String(exchanges[0]._id) : null;
@@ -124,11 +124,211 @@ const getLatestExchange = (item) => {
   const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
   if (exchanges.length === 0) return null;
   exchanges.sort((a, b) => {
-    const aTs = new Date(a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.createdAt || 0).getTime();
+    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
     return bTs - aTs;
   });
   return exchanges[0] || null;
+};
+
+/** Progress order for exchange line items — used when backend `item.status` lags Shiprocket/history. */
+const EXCHANGE_FLOW_RANK = {
+  EXCHANGE_REQUESTED: 10,
+  EXCHANGE_APPROVED: 20,
+  EXCHANGE_PICKUP_SCHEDULED: 30,
+  EXCHANGE_OUT_FOR_PICKUP: 40,
+  EXCHANGE_PICKED: 50,
+  /** Return leg in transit to hub (Shiprocket reverse) */
+  EXCHANGE_RETURN_IN_TRANSIT: 55,
+  EXCHANGE_RECEIVED: 60,
+  EXCHANGE_PROCESSING: 70,
+  EXCHANGE_SHIPPED: 80,
+  EXCHANGE_OUT_FOR_DELIVERY: 90,
+  EXCHANGE_DELIVERED: 100,
+  EXCHANGE_COMPLETED: 110,
+};
+
+const normalizeItemStatusToken = (s) =>
+  String(s || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+
+const mapExchangeDocumentStatusToItemStatus = (raw) => {
+  const k = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  const map = {
+    requested: "EXCHANGE_REQUESTED",
+    pending: "EXCHANGE_REQUESTED",
+    approved: "EXCHANGE_APPROVED",
+    rejected: "EXCHANGE_REJECTED",
+    pickupscheduled: "EXCHANGE_PICKUP_SCHEDULED",
+    outforpickup: "EXCHANGE_OUT_FOR_PICKUP",
+    pickedup: "EXCHANGE_PICKED",
+    picked: "EXCHANGE_PICKED",
+    received: "EXCHANGE_RECEIVED",
+    processing: "EXCHANGE_PROCESSING",
+    shipped: "EXCHANGE_SHIPPED",
+    outfordelivery: "EXCHANGE_OUT_FOR_DELIVERY",
+    delivered: "EXCHANGE_DELIVERED",
+    completed: "EXCHANGE_COMPLETED",
+  };
+  return map[k] ? normalizeItemStatusToken(map[k]) : null;
+};
+
+/** Shiprocket *return* shipment human status → order item status key */
+const mapShiprocketReturnStatusToItemStatus = (raw) => {
+  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (u.includes("RETURN PICKED UP") || u === "PICKED UP" || u.includes("RIDER PICKED"))
+    return "EXCHANGE_PICKED";
+  if (u.includes("RETURN IN TRANSIT") || (u.includes("IN TRANSIT") && u.includes("RETURN")))
+    return "EXCHANGE_RETURN_IN_TRANSIT";
+  if (u.includes("OUT FOR PICKUP") || u.includes("OUT_FOR_PICKUP") || u.includes("PICKUP ASSIGNED"))
+    return "EXCHANGE_OUT_FOR_PICKUP";
+  if (
+    u.includes("SCHEDULED") ||
+    u.includes("MANIFEST") ||
+    u === "NEW" ||
+    u.includes("LABEL GENERATED")
+  )
+    return "EXCHANGE_PICKUP_SCHEDULED";
+  if (u.includes("DELIVERED") && (u.includes("RETURN") || u.includes("REVERSE") || u.includes("SELLER")))
+    return "EXCHANGE_RECEIVED";
+  return null;
+};
+
+/** Shiprocket *forward* replacement shipment — takes priority once return is created / in parallel */
+const mapShiprocketForwardStatusToItemStatus = (raw) => {
+  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (u.includes("DELIVERED")) return "EXCHANGE_DELIVERED";
+  if (u.includes("OUT FOR DELIVERY") || u.includes("OUT_FOR_DELIVERY"))
+    return "EXCHANGE_OUT_FOR_DELIVERY";
+  if (
+    u.includes("SHIPPED") ||
+    u.includes("IN TRANSIT") ||
+    u.includes("PICKED UP") ||
+    u.includes("DISPATCHED")
+  )
+    return "EXCHANGE_SHIPPED";
+  if (
+    u.includes("NEW") ||
+    u.includes("PROCESSING") ||
+    u.includes("LABEL") ||
+    u.includes("MANIFEST") ||
+    u.includes("BOOKED")
+  )
+    return "EXCHANGE_PROCESSING";
+  return null;
+};
+
+const pickHighestExchangeStatus = (candidates) => {
+  let best = null;
+  let bestRank = -1;
+  for (const c of candidates) {
+    if (!c) continue;
+    const key = normalizeItemStatusToken(c);
+    if (!key.startsWith("EXCHANGE_")) continue;
+    const r = EXCHANGE_FLOW_RANK[key] ?? 0;
+    if (r > bestRank) {
+      bestRank = r;
+      best = key;
+    }
+  }
+  return bestRank >= 0 ? best : null;
+};
+
+/**
+ * Status to show in the UI for an order line. Uses the max of: `item.status`,
+ * `EXCHANGE_*` rows in `statusHistory`, and the latest `exchanges[]` sub-doc +
+ * Shiprocket return/forward statuses (backend often leaves `item.status` stale).
+ */
+const getDisplayItemStatus = (item) => {
+  const baseRaw = item?.status || "";
+  const base = normalizeItemStatusToken(baseRaw);
+  if (!item) return "";
+  if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
+  if (!isExchangeLineItem(item)) return baseRaw || "";
+
+  const candidates = [];
+
+  const add = (s) => {
+    const n = normalizeItemStatusToken(s);
+    if (n.startsWith("EXCHANGE_")) candidates.push(n);
+  };
+
+  add(baseRaw);
+  if (Array.isArray(item.statusHistory)) {
+    for (const h of item.statusHistory) add(h?.status);
+  }
+
+  const ex = getLatestExchange(item);
+  if (ex) {
+    add(mapExchangeDocumentStatusToItemStatus(ex.status));
+    add(
+      mapShiprocketReturnStatusToItemStatus(
+        ex.shiprocket?.returnOrder?.status,
+      ),
+    );
+    add(
+      mapShiprocketForwardStatusToItemStatus(
+        ex.shiprocket?.forwardOrder?.status,
+      ),
+    );
+  }
+
+  const best = pickHighestExchangeStatus(candidates);
+  return best || baseRaw || "";
+};
+
+const getDisplayOrderStatus = (order) => {
+  const base = order?.status || order?.orderStatus || "";
+  const items = order?.items;
+  if (!Array.isArray(items) || items.length === 0) return base;
+  if (items.length === 1) return getDisplayItemStatus(items[0]) || base;
+  const exchangeItems = items.filter((it) => isExchangeLineItem(it));
+  if (exchangeItems.length === 0) return base;
+  const shown = exchangeItems
+    .map((it) => getDisplayItemStatus(it))
+    .filter(Boolean);
+  if (shown.length === 0) return base;
+  const ranked = pickHighestExchangeStatus(shown);
+  return ranked || base;
+};
+
+/** Rebuild a line-like object from an admin “order item” list row for display helpers. */
+const lineItemFromOrderItemRow = (row) => {
+  if (!row || typeof row !== "object") return null;
+  const nested = row.item && typeof row.item === "object" ? row.item : {};
+  return {
+    ...nested,
+    status: row.itemStatus ?? nested.status ?? "",
+    statusHistory: nested.statusHistory,
+    exchanges: nested.exchanges,
+  };
+};
+
+/** Latest timeline entry (by createdAt) — shows previous → current transition */
+const getLatestStatusHistoryEntry = (item) => {
+  const arr = Array.isArray(item?.statusHistory) ? [...item.statusHistory] : [];
+  if (arr.length === 0) return null;
+  arr.sort(
+    (a, b) =>
+      new Date(a?.createdAt || 0).getTime() -
+      new Date(b?.createdAt || 0).getTime(),
+  );
+  return arr[arr.length - 1];
+};
+
+const formatStatusTokenForUi = (token) => {
+  if (token == null || token === "") return "—";
+  const s = String(token).trim();
+  if (!s) return "—";
+  const t = s.toUpperCase().replace(/_/g, " ");
+  return t.charAt(0) + t.slice(1).toLowerCase();
 };
 
 const getLatestExchangeForwardOrder = (item) => {
@@ -1629,6 +1829,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         text: "text-amber-800",
         Icon: Truck,
       },
+      "EXCHANGE RETURN IN TRANSIT": {
+        bg: "bg-amber-100",
+        text: "text-amber-900",
+        Icon: Truck,
+      },
       "EXCHANGE RECEIVED": {
         bg: "bg-teal-100",
         text: "text-teal-800",
@@ -1670,6 +1875,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       displayText = displayText
         .replace("Exchange ", "Ex. ")
         .replace("Pickup Scheduled", "Pickup Sch.")
+        .replace("Return In Transit", "Ret. in transit")
         .replace("Out For Delivery", "Out for Del.");
     }
     return (
@@ -1680,6 +1886,93 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         <Icon size={12} className="shrink-0" />
         <span className="truncate">{displayText}</span>
       </span>
+    );
+  };
+
+  /** Effective badge + line API / history / Shiprocket return & forward (exchange) or outbound SR */
+  const renderItemStatusBreakdown = (item, { compact = false } = {}) => {
+    const ex = getLatestExchange(item);
+    const last = getLatestStatusHistoryEntry(item);
+    const ret = ex?.shiprocket?.returnOrder;
+    const fwd = ex?.shiprocket?.forwardOrder;
+    const effective = getDisplayItemStatus(item);
+    const lineStatus = item?.status;
+    const textCls = compact ? "text-[9px]" : "text-[11px]";
+    const boxCls = compact
+      ? "rounded border border-gray-100 bg-gray-50/90 px-1 py-0.5"
+      : "rounded-lg border border-gray-200 bg-gray-50/90 px-2 py-1.5";
+
+    return (
+      <div className={`min-w-0 space-y-1 ${compact ? "max-w-[14rem]" : ""}`}>
+        <div className="flex flex-wrap items-center gap-1">
+          {getStatusBadge(effective)}
+          <span
+            className={`${compact ? "text-[8px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-gray-400`}
+          >
+            Effective
+          </span>
+        </div>
+        <div className={`${boxCls} space-y-0.5 ${textCls} leading-snug text-gray-800`}>
+          <p className="break-words">
+            <span className="text-gray-500">Line (API):</span>{" "}
+            <span className="font-semibold text-gray-900">
+              {formatStatusTokenForUi(lineStatus)}
+            </span>
+          </p>
+          {last ? (
+            <p className="break-words" title={last.notes || undefined}>
+              <span className="text-gray-500">Last change:</span>{" "}
+              <span className="font-medium">
+                {formatStatusTokenForUi(last.previousStatus)} →{" "}
+                {formatStatusTokenForUi(last.status)}
+              </span>
+              {last.createdAt ? (
+                <span className="text-gray-400">
+                  {" "}
+                  ·{" "}
+                  {new Date(last.createdAt).toLocaleString("en-IN", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  })}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          {isExchangeLineItem(item) ? (
+            <>
+              <p className="break-words">
+                <span className="text-gray-500">Return (Shiprocket):</span>{" "}
+                <span className="font-semibold text-amber-950">
+                  {ret?.status || "—"}
+                </span>
+                {ret?.awbCode ? (
+                  <span className="text-gray-500"> · AWB {ret.awbCode}</span>
+                ) : null}
+              </p>
+              <p className="break-words">
+                <span className="text-gray-500">Forward (Shiprocket):</span>{" "}
+                <span className="font-semibold text-sky-950">
+                  {fwd?.status ||
+                    (fwd?.awbCode || fwd?.shipmentId || fwd?.orderId
+                      ? "Pending / created"
+                      : "—")}
+                </span>
+                {fwd?.awbCode ? (
+                  <span className="text-gray-500"> · AWB {fwd.awbCode}</span>
+                ) : null}
+              </p>
+            </>
+          ) : isNormalDeliveryLine(item) && item?.shiprocket?.status ? (
+            <p className="break-words">
+              <span className="text-gray-500">Outbound (Shiprocket):</span>{" "}
+              <span className="font-medium">{item.shiprocket.status}</span>
+              {item.shiprocket?.awbCode ? (
+                <span className="text-gray-500"> · AWB {item.shiprocket.awbCode}</span>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+      </div>
     );
   };
 
@@ -1982,7 +2275,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           ₹{(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}
                         </td>
                         <td className="min-w-0 px-2 py-2 align-top">
-                          {getStatusBadge(order.status || order.orderStatus)}
+                          {getStatusBadge(
+                            getDisplayOrderStatus(order),
+                          )}
                         </td>
                         <td className="min-w-0 px-2 py-2 align-top">
                           {(() => {
@@ -2330,8 +2625,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               {row.item?.quantity ?? "—"}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(row.itemStatus)}
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="min-w-0 max-w-[13rem]">
+                              {renderItemStatusBreakdown(
+                                lineItemFromOrderItemRow(row) || {
+                                  status: row.itemStatus,
+                                },
+                                { compact: true },
+                              )}
+                            </div>
                             <button
                               onClick={() => {
                                 if (!row.orderId) return;
@@ -2469,7 +2771,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-4">
-                        {getStatusBadge(selectedOrder?.status)}
+                        {getStatusBadge(getDisplayOrderStatus(selectedOrder))}
                         <div className="flex items-center gap-2 flex-wrap">
                           <label className="text-sm text-gray-700 whitespace-nowrap">
                             Update all items:
@@ -2677,10 +2979,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         </div>
                       )}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Current status</p>
-                        {getStatusBadge(focusedItem.status)}
-                      </div>
+                    </div>
+                    <div className="mt-4 w-full border-t border-gray-100 pt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                        Status (line, history & Shiprocket)
+                      </p>
+                      {renderItemStatusBreakdown(focusedItem)}
                     </div>
                   </div>
                   {(() => {
@@ -3334,11 +3638,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
                       <colgroup>
                         <col className="w-[3%]" />
-                        <col className="w-[29%]" />
+                        <col className="w-[26%]" />
                         <col className="w-[5%]" />
                         <col className="w-[7%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[21%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[20%]" />
                         <col className="w-[13%]" />
                         <col className="w-[11%]" />
                       </colgroup>
@@ -3360,7 +3664,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Product</th>
                           <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Qty</th>
                           <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Price</th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Status</th>
+                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                            Status
+                          </th>
                           <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Shiprocket — normal delivery only">
                             Ship / docs
                           </th>
@@ -3510,7 +3816,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                 ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
                               </td>
                               <td className="min-w-0 px-2 py-2 align-top">
-                                {getStatusBadge(item.status)}
+                                {renderItemStatusBreakdown(item, { compact: true })}
                               </td>
                               <td className="min-w-0 px-2 py-2 align-top text-xs">
                                 <div className="space-y-1.5">

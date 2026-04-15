@@ -304,6 +304,7 @@ const DesignerInventoryForm = () => {
     designerName: "",
     employeeId: "",
     description: "",
+     shortDescription: "", 
     productType: "",
     fitType: "",
     gender: "men",
@@ -332,6 +333,7 @@ const DesignerInventoryForm = () => {
             designerName: d.designerName || "",
             employeeId: d.employeeId || "",
             description: d.description || "",
+            shortDescription: d.shortDescription || "",
             productType: d.productType || "",
             fitType: d.fitType || "",
             gender: d.gender || "men",
@@ -681,6 +683,7 @@ const DesignerInventoryForm = () => {
       formData.append("designerName", form.designerName);
       formData.append("employeeId", form.employeeId);
       formData.append("description", form.description || "");
+      formData.append("shortDescription", form.shortDescription || "");
       formData.append("productType", form.productType);
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
@@ -910,6 +913,20 @@ const DesignerInventoryForm = () => {
               onChange={(e) => setForm((s) => ({ ...s, discountPrice: e.target.value }))}
             />
           </div>
+
+          <div className="sm:col-span-2 lg:col-span-3">
+  <label className="mb-0.5 block text-xs font-medium text-gray-700">
+    Short Description
+  </label>
+  <input
+    className={fieldClass}
+    value={form.shortDescription}
+    onChange={(e) =>
+      setForm((s) => ({ ...s, shortDescription: e.target.value }))
+    }
+    placeholder="Enter short description (1-2 lines)"
+  />
+</div>
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="mb-0.5 block text-xs font-medium text-gray-700">Description</label>
             <textarea

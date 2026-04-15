@@ -44,7 +44,7 @@ export default function InfluencerLayout() {
   };
 
   const navItems = [
-    { to: "/influencer/dashboard", label: "Dashboard", icon: LayoutDashboard },
+     { to: "/influencer/dashboard", label: "Dashboard", icon: LayoutDashboard },
     {
       label: "Coupons",
       icon: Ticket,
@@ -57,7 +57,7 @@ export default function InfluencerLayout() {
       ],
     },
     // { to: "/influencer/orders", label: "Orders", icon: ShoppingBag },
-    { to: "/influencer/earnings", label: "Earnings", icon: IndianRupee },
+    // { to: "/influencer/earnings", label: "Earnings", icon: IndianRupee },
     { to: "/influencer/profile", label: "Profile", icon: UserCircle },
   ];
 
