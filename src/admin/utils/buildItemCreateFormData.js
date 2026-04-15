@@ -377,7 +377,12 @@ export function designerInventoryToItemFormState(designer) {
     skuCodeInputs: {
       styleNu: designer.StyleNumber || designer.skuCodeInputs?.styleNu || "",
       gender: designer.gender || designer.skuCodeInputs?.gender || "",
-      productType: designer.productType || designer.skuCodeInputs?.productType || "",
+      productType:
+        designer.productTypeCode ||
+        designer.skuCodeInputs?.productTypeCode ||
+        designer.skuCodeInputs?.productType ||
+        designer.productType ||
+        "",
       fitType: designer.fitType || designer.skuCodeInputs?.fitType || "",
     },
     defaultColor: (designer.defaultColor || designer.variants?.[0]?.color?.name || "Black").trim() || "Black",

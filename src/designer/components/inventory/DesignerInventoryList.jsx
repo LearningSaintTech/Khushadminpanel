@@ -7,6 +7,10 @@ import {
   regenerateDesignerSku,
 } from "../../apis/designerApi";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
+import {
+  formatProductTypeAndFit,
+  formatProductTypeAndFitDetail,
+} from "../../utils/inventoryDisplay";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { ChevronLeft, ChevronRight, Eye, Pencil, Trash2, RefreshCw, Send, Plus, Loader2, X } from "lucide-react";
 
@@ -262,7 +266,7 @@ const DesignerInventoryList = () => {
                     <div className="text-xs text-gray-500">{r.employeeId}</div>
                   </td>
                   <td className="p-2.5 text-gray-700">
-                    {r.productType} / {r.fitType}
+                    <span className="text-sm">{formatProductTypeAndFit(r)}</span>
                   </td>
                   <td className="p-2.5 text-gray-700">
                     <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
@@ -454,7 +458,8 @@ const DesignerInventoryList = () => {
                 <span className="ml-1 text-xs text-gray-400">(admin)</span>
               </div>
               <div>
-                <span className="font-medium text-gray-600">Product / fit:</span> {selected.productType} / {selected.fitType}
+                <span className="font-medium text-gray-600">Product / fit:</span>{" "}
+                {formatProductTypeAndFitDetail(selected)}
               </div>
               <div>
                 <span className="font-medium text-gray-600">MRP:</span> {Number(selected.mrp ?? 0)}

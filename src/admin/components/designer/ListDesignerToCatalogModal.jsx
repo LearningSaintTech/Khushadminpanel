@@ -67,7 +67,9 @@ function DesignerSourceDetails({ d }) {
             <span className="font-medium text-gray-700">Gender:</span> {d.gender || "—"}
           </div>
           <div>
-            <span className="font-medium text-gray-700">Product / fit:</span> {d.productType || "—"} / {d.fitType || "—"}
+            <span className="font-medium text-gray-700">Product / fit:</span>{" "}
+            {d.productType || "—"}
+            {d.productTypeCode ? ` (${d.productTypeCode})` : ""} / {d.fitType || "—"}
           </div>
           <div>
             <span className="font-medium text-gray-700">Default color:</span> {d.defaultColor || "—"}

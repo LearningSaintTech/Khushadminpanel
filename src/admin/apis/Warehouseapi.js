@@ -185,6 +185,12 @@ export const updateWarehouseStock = (warehouseId, data) => {
   });
 };
 
+/** Move the same quantity from central into the warehouse for every SKU on a catalog item. */
+export const addWarehouseStockFromItem = (warehouseId, body) => {
+  const path = `${warehouseEndpoints.UPDATE_WAREHOUSE_STOCK}/${warehouseId}/stock/from-item`;
+  return apiConnector("POST", path, body);
+};
+
 // Central + warehouse bulk stock by SKU (admin). Max 2000 rows. See KhushBackend/docs/bulk-stock-upload-format.md
 const BULK_STOCK_ADMIN_PATH = "/admin/inventory/stock/bulk";
 
