@@ -5,11 +5,13 @@ import {
   changeDesignerInventoryStatus,
   exportDesignerInventory,
   getDesignerInventory,
+  getDesignerInventoryById,
   regenerateDesignerSku,
   patchDesignerInventoryListed,
 } from "../../apis/Designerapi";
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
+import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
@@ -277,6 +279,20 @@ const DesignerInventory = () => {
     });
   };
 
+  const openInventoryDetails = async (row) => {
+    if (!row?._id) return;
+    try {
+      const res = await getDesignerInventoryById(row._id);
+      if (res?.success && res?.data) {
+        setSelectedItem(res.data);
+        return;
+      }
+    } catch {
+      // Fallback to row data if detail fetch fails.
+    }
+    setSelectedItem(row);
+  };
+
   useEffect(() => {
     if (!lightbox.open) return undefined;
     const onKeyDown = (e) => {
@@ -368,6 +384,8 @@ const DesignerInventory = () => {
               <th className="p-2.5 text-left font-semibold text-gray-700">Style</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Designer</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Product</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Short Description</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Long Description</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Price</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">SKU IDs</th>
@@ -377,7 +395,7 @@ const DesignerInventory = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={10} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={10} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
+            {loading ? <tr><td colSpan={12} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={12} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
               <tr key={r._id} className="border-t border-black/5">
                 <td className="p-2.5 text-center">
                   <input
@@ -398,6 +416,12 @@ const DesignerInventory = () => {
                     <span className="text-xs text-gray-500"> [{r.productTypeCode}]</span>
                   ) : null}{" "}
                   / {r.fitType || "—"}
+                </td>
+                <td className="p-2.5 align-top text-xs text-gray-700 whitespace-pre-wrap break-words">
+                  {r.shortDescription || "-"}
+                </td>
+                <td className="p-2.5 align-top text-xs text-gray-700 whitespace-pre-wrap break-words">
+                  {r.longDescription || "-"}
                 </td>
                 <td className="p-2.5 text-gray-700">
                   <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
@@ -436,7 +460,7 @@ const DesignerInventory = () => {
                   <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                   <button
                     className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
-                    onClick={() => setSelectedItem(r)}
+                    onClick={() => openInventoryDetails(r)}
                     title="View details"
                     aria-label="View details"
                   >
@@ -530,7 +554,9 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Total Production Qty:</span> {selectedItem.totalProductionQty ?? 0}</div>
               <div><span className="font-medium">Default Color:</span> {selectedItem.defaultColor || "-"}</div>
               <div><span className="font-medium">Top SKU ID:</span> {selectedItem?.sku?.skuId || "-"}</div>
-              <div><span className="font-medium">Description:</span> {selectedItem.description || "-"}</div>
+              <div><span className="font-medium">Long Description:</span> {selectedItem.longDescription || "-"}</div>
+               <div><span className="font-medium">Short Description:</span> {selectedItem.shortDescription || "-"}</div>
+
               <div><span className="font-medium">Created:</span> {selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString() : "-"}</div>
               <div><span className="font-medium">Updated:</span> {selectedItem.updatedAt ? new Date(selectedItem.updatedAt).toLocaleString() : "-"}</div>
             </div>
@@ -567,6 +593,50 @@ const DesignerInventory = () => {
                 showMeasureImages
                 onMeasureImageClick={(urls, idx) => openLightbox(urls, idx)}
               />
+            </div>
+
+            <div className="mt-3">
+              <h3 className="mb-2 border-l-4 border-teal-400 pl-2 font-medium text-teal-700">
+                Care
+              </h3>
+              <div className="rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm">
+                <p className="whitespace-pre-wrap break-words text-gray-800">
+                  {selectedItem.care?.description || "-"}
+                </p>
+                {Array.isArray(selectedItem.care?.instructions) &&
+                selectedItem.care.instructions.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {selectedItem.care.instructions.map((inst, idx) => (
+                      <li
+                        key={`care-${idx}`}
+                        className="rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700"
+                      >
+                        <div className="flex items-center gap-2">
+                          {resolveCareIconSrc(inst) ? (
+                            <img
+                              src={resolveCareIconSrc(inst)}
+                              alt=""
+                              className="h-8 w-8 rounded border border-gray-200 bg-white p-1 object-contain"
+                              loading="lazy"
+                            />
+                          ) : null}
+                          <div className="min-w-0">
+                            <span className="font-medium">{idx + 1}.</span>{" "}
+                            {inst?.text || "-"}
+                          </div>
+                        </div>
+                        {!resolveCareIconSrc(inst) && (inst?.iconKey || inst?.iconUrl) ? (
+                          <span className="ml-1 break-all text-gray-500">
+                            ({inst.iconKey || inst.iconUrl})
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">No care instructions.</p>
+                )}
+              </div>
             </div>
 
             <div className="mt-3">

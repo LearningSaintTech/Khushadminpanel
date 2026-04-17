@@ -10,6 +10,7 @@ import {
   designerInventoryToItemFormState,
 } from "../../utils/buildItemCreateFormData";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
+import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
 
 const fieldClass =
   "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -106,6 +107,42 @@ function DesignerSourceDetails({ d }) {
         <p className="whitespace-pre-wrap break-words text-sm text-gray-800">
           {(d.description || "").trim() || "—"}
         </p>
+      </div>
+
+      <div className={detailBox}>
+        <h3 className={sectionTitle}>Care instructions (designer)</h3>
+        <p className="mb-2 whitespace-pre-wrap break-words text-sm text-gray-800">
+          {d?.care?.description?.trim() || "—"}
+        </p>
+        {Array.isArray(d?.care?.instructions) && d.care.instructions.length > 0 ? (
+          <ul className="space-y-1 text-xs text-gray-700">
+            {d.care.instructions.map((inst, idx) => (
+              <li key={`care-${idx}`} className="rounded border border-gray-200 bg-white p-2">
+                <div className="flex items-center gap-2">
+                  {resolveCareIconSrc(inst) ? (
+                    <img
+                      src={resolveCareIconSrc(inst)}
+                      alt=""
+                      className="h-8 w-8 rounded border border-gray-200 bg-white p-1 object-contain"
+                      loading="lazy"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <span className="font-medium">{idx + 1}.</span>{" "}
+                    <span>{inst?.text || "—"}</span>
+                  </div>
+                </div>
+                {!resolveCareIconSrc(inst) && (inst?.iconKey || inst?.iconUrl) && (
+                  <span className="ml-1 break-all text-gray-500">
+                    ({inst?.iconKey || inst?.iconUrl})
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-gray-500">No care instructions.</p>
+        )}
       </div>
 
       <div className={detailBox}>
@@ -309,11 +346,19 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
     if (!subcategoryId) return "Choose a subcategory.";
     if (!form?.name?.trim()) return "Product name is required.";
     if (form.price === "" || form.price == null || Number(form.price) <= 0) return "MRP must be greater than 0.";
+    const mrpNum = Number(form.price);
+    const discRaw = form.discountedPrice;
+    if (
+      discRaw !== "" &&
+      discRaw != null &&
+      !Number.isNaN(mrpNum) &&
+      Number(discRaw) > mrpNum
+    ) {
+      return "Discounted price cannot be greater than MRP.";
+    }
     if (!form.productId?.trim()) return "Product ID is required (unique catalog id).";
     if (!form.shortDescription?.trim()) return "Short description is required.";
     if (!form.longDescription?.trim()) return "Long description is required.";
-    if (form.shortDescription.length > 70) return "Short description max 70 characters.";
-    if (form.longDescription.length > 150) return "Long description max 150 characters.";
     if (!form.skuCodeInputs?.styleNu?.trim()) return "Style number (SKU inputs) is required.";
     if (!form.skuCodeInputs?.productType?.trim()) return "Product type (SKU inputs) is required.";
     if (!form.skuCodeInputs?.fitType?.trim()) return "Fit type (SKU inputs) is required.";
@@ -391,8 +436,8 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                   Main inventory (catalog) — edit & submit
                 </h3>
                 <p className="mb-3 text-xs text-gray-600">
-                  Fields below are sent to main item inventory. Short/long descriptions are limited for the catalog;
-                  the full designer text stays in the section above.
+                  Fields below are sent to main item inventory. Descriptions are prefilled from the
+                  designer API and you can edit before publish.
                 </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="sm:col-span-2">
@@ -467,6 +512,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                   <input
                     type="number"
                     min="0"
+                    max={form.price !== "" && form.price != null ? Number(form.price) : undefined}
                     className={fieldClass}
                     value={form.discountedPrice}
                     onChange={(e) => setForm((f) => ({ ...f, discountedPrice: e.target.value }))}
@@ -494,11 +540,10 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                 </div>
                 <div className="sm:col-span-2">
                   <label className="mb-0.5 block text-xs font-medium text-gray-700">
-                    Short description * (max 70)
+                    Short description *
                   </label>
                   <input
                     className={fieldClass}
-                    maxLength={70}
                     value={form.shortDescription}
                     onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
                     required
@@ -506,15 +551,131 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                 </div>
                 <div className="sm:col-span-2">
                   <label className="mb-0.5 block text-xs font-medium text-gray-700">
-                    Long description * (max 150)
+                    Long description *
                   </label>
                   <textarea
                     className={fieldClass + " min-h-[72px]"}
-                    maxLength={150}
                     value={form.longDescription}
                     onChange={(e) => setForm((f) => ({ ...f, longDescription: e.target.value }))}
                     required
                   />
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg border border-indigo-100 bg-white/80 p-2.5">
+                  <h4 className="mb-2 text-xs font-semibold text-indigo-900">
+                    Care (will be saved to catalog item)
+                  </h4>
+                  <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                    Care description
+                  </label>
+                  <textarea
+                    className={fieldClass + " min-h-[56px]"}
+                    value={form?.care?.description || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        care: { ...(f.care || { instructions: [] }), description: e.target.value },
+                      }))
+                    }
+                    placeholder="Care description..."
+                  />
+                  <div className="mt-2 space-y-2">
+                    {(form?.care?.instructions || []).map((inst, idx) => (
+                      <div key={`care-edit-${idx}`} className="rounded border border-indigo-100 bg-white p-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
+                        <input
+                          className={fieldClass + " sm:col-span-2"}
+                          value={inst?.text || ""}
+                          onChange={(e) =>
+                            setForm((f) => {
+                              const rows = [...(f.care?.instructions || [])];
+                              rows[idx] = { ...(rows[idx] || {}), text: e.target.value };
+                              return {
+                                ...f,
+                                care: { ...(f.care || {}), instructions: rows },
+                              };
+                            })
+                          }
+                          placeholder={`Instruction ${idx + 1}`}
+                        />
+                        <input
+                          className={fieldClass}
+                          value={inst?.iconKey || inst?.iconUrl || ""}
+                          onChange={(e) =>
+                            setForm((f) => {
+                              const rows = [...(f.care?.instructions || [])];
+                              const rawValue = e.target.value;
+                              const resolved = resolveCareIconSrc({
+                                iconKey: rawValue,
+                                iconUrl: "",
+                              });
+                              rows[idx] = {
+                                ...(rows[idx] || {}),
+                                iconKey: rawValue,
+                                iconUrl:
+                                  resolved && !resolved.startsWith("blob:")
+                                    ? resolved
+                                    : rows[idx]?.iconUrl || "",
+                                iconFile: null,
+                                iconPreviewUrl: "",
+                              };
+                              return {
+                                ...f,
+                                care: { ...(f.care || {}), instructions: rows },
+                              };
+                            })
+                          }
+                          placeholder="icon key/url"
+                        />
+                        </div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          <div className="sm:col-span-2">
+                            <label className="mb-0.5 block text-[11px] font-medium text-gray-600">
+                              Or upload custom icon
+                            </label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className={fieldClass}
+                              onChange={(e) =>
+                                setForm((f) => {
+                                  const rows = [...(f.care?.instructions || [])];
+                                  const file = e.target.files?.[0] || null;
+                                  rows[idx] = {
+                                    ...(rows[idx] || {}),
+                                    iconFile: file,
+                                    iconPreviewUrl: file ? URL.createObjectURL(file) : "",
+                                    ...(file ? { iconKey: "", iconUrl: "" } : {}),
+                                  };
+                                  return {
+                                    ...f,
+                                    care: { ...(f.care || {}), instructions: rows },
+                                  };
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            {(() => {
+                              const src =
+                                inst?.iconPreviewUrl ||
+                                resolveCareIconSrc(inst);
+                              return src ? (
+                                <img
+                                  src={src}
+                                  alt=""
+                                  className="h-10 w-10 rounded border border-gray-200 bg-white p-1 object-contain"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="h-10 w-10 rounded border border-dashed border-gray-200 bg-gray-50" />
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 

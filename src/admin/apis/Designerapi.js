@@ -44,7 +44,7 @@ export const getDesignerInventory = ({
 export const getDesignerInventoryById = (id) =>
   apiConnector("GET", `${ADMIN_BASE}/inventory/${id}`);
 export const updateDesignerInventory = (id, data) =>
-  apiConnector("PUT", `${ADMIN_BASE}/inventory/${id}/update`, data);
+  apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/update`, data);
 export const changeDesignerInventoryStatus = (id, status) =>
   apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/status`, { status });
 export const patchDesignerInventoryListed = (id, body) =>
@@ -78,7 +78,7 @@ export const listDesignerItems = (params = {}) => {
 export const getDesignerItemById = (id) =>
   apiConnector("GET", `${DESIGNER_INVENTORY_BASE}/${id}`);
 export const updateDesignerItem = (id, data) =>
-  apiConnector("PUT", `${DESIGNER_INVENTORY_BASE}/${id}/update`, data);
+  apiConnector("PATCH", `${DESIGNER_INVENTORY_BASE}/${id}/update`, data);
 export const deleteDesignerItem = (id) =>
   apiConnector("DELETE", `${DESIGNER_INVENTORY_BASE}/${id}/delete`);
 export const changeDesignerItemStatus = (id, status) =>

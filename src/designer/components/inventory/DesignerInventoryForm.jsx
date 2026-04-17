@@ -13,6 +13,10 @@ import {
   inchesToCmText,
   mergeSizeChartsWithPreset,
 } from "../../../utils/sizeChartPresets.js";
+import doNotBleachIcon from "../../../assets/images/Do Not Bleach icon.svg";
+import doNotTumbleDryIcon from "../../../assets/images/Do Not Tumble Dry icon.svg";
+import doNotWashIcon from "../../../assets/images/Do Not Wash icon.svg";
+import maximumTempIcon from "../../../assets/images/maximum icon.svg";
 
 function isLocalPickedFile(img) {
   if (img == null || typeof img !== "object") return false;
@@ -60,7 +64,9 @@ function VariantImagePreview({ image }) {
   }, [image]);
 
   if (!src) {
-    return <div className="h-20 w-20 shrink-0 rounded-md border border-dashed border-amber-200 bg-white" />;
+    return (
+      <div className="h-20 w-20 shrink-0 rounded-md border border-dashed border-amber-200 bg-white" />
+    );
   }
   return (
     <img
@@ -100,6 +106,41 @@ const emptyCosts = () => ({
   stitchingCost: 0,
   finishingCost: 0,
 });
+
+const emptyCareInstruction = () => ({
+  iconUrl: "",
+  iconKey: "",
+  text: "",
+  iconFile: null,
+});
+
+const emptyCare = () => ({
+  description: "",
+  instructions: [],
+});
+
+const CARE_ICON_OPTIONS = [
+  {
+    label: "Do Not Bleach",
+    iconKey: "assets/images/Do Not Bleach icon.svg",
+    iconUrl: doNotBleachIcon,
+  },
+  {
+    label: "Do Not Tumble Dry",
+    iconKey: "assets/images/Do Not Tumble Dry icon.svg",
+    iconUrl: doNotTumbleDryIcon,
+  },
+  {
+    label: "Do Not Wash",
+    iconKey: "assets/images/Do Not Wash icon.svg",
+    iconUrl: doNotWashIcon,
+  },
+  {
+    label: "Maximum",
+    iconKey: "assets/images/maximum icon.svg",
+    iconUrl: maximumTempIcon,
+  },
+];
 
 /** One unit table (inches or cm) — matches API `sizeCharts.in` / `sizeCharts.cm`. */
 const emptyChartSide = () => ({
@@ -184,7 +225,9 @@ function normalizeCodeOptionsResponse(res) {
       label: String(row?.name || row?.code || "").trim(),
     }))
     .filter((row) => row.value.length > 0)
-    .filter((row, idx, arr) => arr.findIndex((x) => x.value === row.value) === idx);
+    .filter(
+      (row, idx, arr) => arr.findIndex((x) => x.value === row.value) === idx,
+    );
 }
 
 /** Match legacy rows where `productType` stored a code or a display name before `productTypeCode` existed. */
@@ -218,7 +261,7 @@ function SearchableCodeSelect({
     ? options.filter(
         (opt) =>
           opt.label.toLowerCase().includes(normalizedSearch) ||
-          opt.value.toLowerCase().includes(normalizedSearch)
+          opt.value.toLowerCase().includes(normalizedSearch),
       )
     : options;
 
@@ -234,7 +277,9 @@ function SearchableCodeSelect({
 
   return (
     <div ref={wrapperRef} className="relative">
-      <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
+      <label className="mb-0.5 block text-xs font-medium text-gray-700">
+        {label}
+      </label>
       <div className="space-y-1">
         <input
           className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
@@ -273,7 +318,9 @@ function SearchableCodeSelect({
               {placeholder}
             </button>
             {filtered.length === 0 ? (
-              <div className="px-2 py-2 text-xs text-gray-500">No matching options</div>
+              <div className="px-2 py-2 text-xs text-gray-500">
+                No matching options
+              </div>
             ) : (
               filtered.map((opt) => (
                 <button
@@ -318,8 +365,8 @@ const DesignerInventoryForm = () => {
     styleName: "",
     designerName: "",
     employeeId: "",
-    description: "",
-     shortDescription: "", 
+    longDescription: "",
+    shortDescription: "",
     productType: "",
     productTypeCode: "",
     fitType: "",
@@ -329,6 +376,7 @@ const DesignerInventoryForm = () => {
     discountPrice: 0,
     fabric: emptyFabric(),
     costs: emptyCosts(),
+    care: emptyCare(),
     variants: [emptyVariant()],
     sizeCharts: emptySizeCharts(),
   });
@@ -348,7 +396,7 @@ const DesignerInventoryForm = () => {
             styleName: d.styleName || "",
             designerName: d.designerName || "",
             employeeId: d.employeeId || "",
-            description: d.description || "",
+            longDescription: d.longDescription || "",
             shortDescription: d.shortDescription || "",
             productType: d.productType || "",
             productTypeCode:
@@ -360,13 +408,26 @@ const DesignerInventoryForm = () => {
             discountPrice: d.discountPrice ?? 0,
             fabric: { ...emptyFabric(), ...(d.fabric || {}) },
             costs: { ...emptyCosts(), ...(d.costs || {}) },
+            care: {
+              ...emptyCare(),
+              ...(d.care || {}),
+              instructions: Array.isArray(d.care?.instructions)
+                ? d.care.instructions.map((inst) => ({
+                    iconUrl: inst?.iconUrl || "",
+                    iconKey: inst?.iconKey || "",
+                    text: inst?.text || "",
+                    iconFile: null,
+                  }))
+                : [],
+            },
             variants:
               Array.isArray(d.variants) && d.variants.length > 0
                 ? d.variants.map((v) => ({
                     color: {
                       name: v.color?.name || "",
                       hex: v.color?.hex || "#000000",
-                      totalImages: v.images?.length ?? v.color?.totalImages ?? 0,
+                      totalImages:
+                        v.images?.length ?? v.color?.totalImages ?? 0,
                       isMultipleImages: (v.images?.length || 0) > 1,
                     },
                     sizes: (v.sizes || [emptySize()]).map((s) => ({
@@ -382,7 +443,9 @@ const DesignerInventoryForm = () => {
             sizeCharts: loadSizeChartsFromDesignerItem(d),
           });
         } else {
-          setLoadItemErrors(extractBackendMessages(res || { message: "Could not load item." }));
+          setLoadItemErrors(
+            extractBackendMessages(res || { message: "Could not load item." }),
+          );
         }
       } catch (e) {
         setLoadItemErrors(extractBackendMessages(e));
@@ -398,7 +461,10 @@ const DesignerInventoryForm = () => {
     setForm((s) => {
       let code = String(s.productTypeCode || "").trim();
       if (!code) {
-        code = inferProductTypeCodeFromLegacy(s.productType, productTypeOptions);
+        code = inferProductTypeCodeFromLegacy(
+          s.productType,
+          productTypeOptions,
+        );
       }
       if (!code) return s;
       const opt = productTypeOptions.find((o) => o.value === code);
@@ -427,9 +493,13 @@ const DesignerInventoryForm = () => {
         setFitTypeOptions(fitOptions);
         setColorCodeOptions(colorOptions);
       } catch (err) {
-        console.error("[DesignerInventoryForm] Failed to load code options:", err);
+        console.error(
+          "[DesignerInventoryForm] Failed to load code options:",
+          err,
+        );
         setCodeLoadError(
-          extractBackendMessages(err)?.[0] || "Could not load product/fit/color codes."
+          extractBackendMessages(err)?.[0] ||
+            "Could not load product/fit/color codes.",
         );
       } finally {
         setCodeLoading(false);
@@ -437,8 +507,49 @@ const DesignerInventoryForm = () => {
     })();
   }, []);
 
-  const setFabric = (k, v) => setForm((s) => ({ ...s, fabric: { ...s.fabric, [k]: v } }));
-  const setCosts = (k, v) => setForm((s) => ({ ...s, costs: { ...s.costs, [k]: v } }));
+  const setFabric = (k, v) =>
+    setForm((s) => ({ ...s, fabric: { ...s.fabric, [k]: v } }));
+  const setCosts = (k, v) =>
+    setForm((s) => ({ ...s, costs: { ...s.costs, [k]: v } }));
+  const setCareDescription = (value) =>
+    setForm((s) => ({
+      ...s,
+      care: { ...(s.care || emptyCare()), description: value },
+    }));
+
+  const addCareInstruction = () =>
+    setForm((s) => ({
+      ...s,
+      care: {
+        ...(s.care || emptyCare()),
+        instructions: [
+          ...((s.care && Array.isArray(s.care.instructions)
+            ? s.care.instructions
+            : [])),
+          emptyCareInstruction(),
+        ],
+      },
+    }));
+
+  const updateCareInstruction = (index, key, value) =>
+    setForm((s) => {
+      const current = (s.care && Array.isArray(s.care.instructions)
+        ? s.care.instructions
+        : []
+      ).slice();
+      const prev = current[index] || emptyCareInstruction();
+      current[index] = { ...prev, [key]: value };
+      return { ...s, care: { ...(s.care || emptyCare()), instructions: current } };
+    });
+
+  const removeCareInstruction = (index) =>
+    setForm((s) => ({
+      ...s,
+      care: {
+        ...(s.care || emptyCare()),
+        instructions: (s.care?.instructions || []).filter((_, i) => i !== index),
+      },
+    }));
 
   const updateVariant = (idx, fn) =>
     setForm((s) => {
@@ -447,11 +558,15 @@ const DesignerInventoryForm = () => {
       return { ...s, variants };
     });
 
-  const addVariant = () => setForm((s) => ({ ...s, variants: [...s.variants, emptyVariant()] }));
+  const addVariant = () =>
+    setForm((s) => ({ ...s, variants: [...s.variants, emptyVariant()] }));
   const removeVariant = (idx) =>
     setForm((s) => ({
       ...s,
-      variants: s.variants.length > 1 ? s.variants.filter((_, i) => i !== idx) : s.variants,
+      variants:
+        s.variants.length > 1
+          ? s.variants.filter((_, i) => i !== idx)
+          : s.variants,
     }));
 
   const addSize = (vIdx) =>
@@ -459,7 +574,8 @@ const DesignerInventoryForm = () => {
   const removeSize = (vIdx, sIdx) =>
     updateVariant(vIdx, (v) => ({
       ...v,
-      sizes: v.sizes.length > 1 ? v.sizes.filter((_, i) => i !== sIdx) : v.sizes,
+      sizes:
+        v.sizes.length > 1 ? v.sizes.filter((_, i) => i !== sIdx) : v.sizes,
     }));
 
   const addVariantImages = (vIdx, e) => {
@@ -503,7 +619,10 @@ const DesignerInventoryForm = () => {
         ...s.sizeCharts,
         [side]: {
           ...s.sizeCharts[side],
-          headers: [...(s.sizeCharts[side].headers || []), { key: "", label: "" }],
+          headers: [
+            ...(s.sizeCharts[side].headers || []),
+            { key: "", label: "" },
+          ],
         },
       },
     }));
@@ -524,7 +643,10 @@ const DesignerInventoryForm = () => {
             .replace(/[_\-]+/g, " ")
             .replace(/\s+/g, " ")
             .trim();
-          header.label = pretty.charAt(0).toUpperCase() + pretty.slice(1) + defaultLabelSuffix(side);
+          header.label =
+            pretty.charAt(0).toUpperCase() +
+            pretty.slice(1) +
+            defaultLabelSuffix(side);
         }
       } else if (field === "label") {
         header.label = value;
@@ -687,9 +809,14 @@ const DesignerInventoryForm = () => {
         })),
         images: imgs.map((img, idx) => {
           if (isLocalPickedFile(img)) return { order: idx + 1 };
-          if (typeof img === "string" && img) return { order: idx + 1, url: img };
+          if (typeof img === "string" && img)
+            return { order: idx + 1, url: img };
           if (img && typeof img === "object" && img.url) {
-            return { order: idx + 1, url: img.url, imageKey: img.imageKey || "" };
+            return {
+              order: idx + 1,
+              url: img.url,
+              imageKey: img.imageKey || "",
+            };
           }
           return { order: idx + 1 };
         }),
@@ -701,19 +828,47 @@ const DesignerInventoryForm = () => {
     setLoading(true);
     setSubmitErrors([]);
     try {
+      const careDescription = String(form.care?.description || "").trim();
+      const careInstructions = Array.isArray(form.care?.instructions)
+        ? form.care.instructions
+        : [];
+      if (!careDescription) {
+        throw new Error("Care description is required.");
+      }
+      if (careInstructions.length === 0) {
+        throw new Error("Add at least one care instruction.");
+      }
+      for (let i = 0; i < careInstructions.length; i += 1) {
+        const inst = careInstructions[i] || {};
+        if (!String(inst.text || "").trim()) {
+          throw new Error(`Care instruction ${i + 1}: text is required.`);
+        }
+        const hasIconRef = String(inst.iconKey || "").trim().length > 0;
+        const hasIconFile = isLocalPickedFile(inst.iconFile);
+        const hasIconUrl = String(inst.iconUrl || "").trim().length > 0;
+        if (!hasIconRef && !hasIconFile && !hasIconUrl) {
+          throw new Error(
+            `Care instruction ${i + 1}: icon is required (select reference icon or upload custom icon).`,
+          );
+        }
+      }
+
       const formData = new FormData();
       formData.append("StyleNumber", form.StyleNumber);
       formData.append("styleName", form.styleName || "");
       formData.append("designerName", form.designerName);
       formData.append("employeeId", form.employeeId);
-      formData.append("description", form.description || "");
+      formData.append("longDescription", form.longDescription || "");
       formData.append("shortDescription", form.shortDescription || "");
       formData.append("productType", form.productType);
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
       formData.append("mrp", String(toNumberOrZero(form.mrp)));
-      formData.append("discountPrice", String(toNumberOrZero(form.discountPrice)));
+      formData.append(
+        "discountPrice",
+        String(toNumberOrZero(form.discountPrice)),
+      );
       const normalizedFabric = {
         ...form.fabric,
         gsm: toNumberOrZero(form.fabric?.gsm),
@@ -729,19 +884,31 @@ const DesignerInventoryForm = () => {
 
       formData.append("fabric", JSON.stringify(normalizedFabric));
       formData.append("costs", JSON.stringify(normalizedCosts));
+      const payloadCareInstructions = (form.care?.instructions || []).map((inst) => ({
+        text: inst?.text || "",
+        iconKey: inst?.iconKey || "",
+        iconUrl: inst?.iconUrl || "",
+      }));
+      formData.append(
+        "care",
+        JSON.stringify({
+          description: careDescription,
+          instructions: payloadCareInstructions,
+        }),
+      );
       formData.append("variants", JSON.stringify(buildVariantsForPayload()));
 
       const buildChartPayload = (side) => {
         const chart = form.sizeCharts[side];
         const cleanedHeaders = (chart.headers || []).filter(
-          (h) => h && h.key && String(h.key).trim()
+          (h) => h && h.key && String(h.key).trim(),
         );
         const cleanedRows = (chart.rows || [])
           .filter((row) => {
             if (!row || !row.size || !String(row.size).trim()) return false;
             const measurements = row.measurements || {};
             return Object.values(measurements).some(
-              (val) => val !== "" && val !== null && val !== undefined
+              (val) => val !== "" && val !== null && val !== undefined,
             );
           })
           .map((row) => ({
@@ -783,12 +950,22 @@ const DesignerInventoryForm = () => {
         });
       });
 
+      (form.care?.instructions || []).forEach((inst, idx) => {
+        if (isLocalPickedFile(inst?.iconFile)) {
+          formData.append(`careInstructionIcons[${idx}]`, inst.iconFile);
+        }
+      });
+
       if (isEdit) await updateDesignerItem(id, formData);
       else await createDesignerItem(formData);
       navigate("/designer/inventory");
     } catch (err) {
       const msgs = extractBackendMessages(err);
-      setSubmitErrors(msgs.length ? msgs : ["Save failed. Check required fields and inventory codes."]);
+      setSubmitErrors(
+        msgs.length
+          ? msgs
+          : ["Save failed. Check required fields and inventory codes."],
+      );
     } finally {
       setLoading(false);
     }
@@ -831,17 +1008,24 @@ const DesignerInventoryForm = () => {
   return (
     <div className="max-w-6xl space-y-3">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">{isEdit ? "Edit item" : "Create item"}</h1>
+        <h1 className="text-xl font-bold tracking-tight">
+          {isEdit ? "Edit item" : "Create item"}
+        </h1>
         <p className="text-xs text-gray-500">
-          All fields sync with designer inventory on the server. Pick a category code for product type; the display
-          name is taken from inventory codes.
+          All fields sync with designer inventory on the server. Pick a category
+          code for product type; the display name is taken from inventory codes.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm">
+      <form
+        onSubmit={onSubmit}
+        className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm"
+      >
         {submitErrors.length > 0 ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-            <p className="font-semibold text-rose-950">Could not save — please fix the following:</p>
+            <p className="font-semibold text-rose-950">
+              Could not save — please fix the following:
+            </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-800">
               {submitErrors.map((msg, idx) => (
                 <li key={idx}>{msg}</li>
@@ -854,11 +1038,17 @@ const DesignerInventoryForm = () => {
             {codeLoadError} You can still type values manually.
           </div>
         ) : null}
-        <h2 className="border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-indigo-900">Core</h2>
+        <h2 className="border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-indigo-900">
+          Core
+        </h2>
         {isEdit && readOnlyListed !== null ? (
           <p className="text-xs text-gray-600">
             Catalog listing (set by admin):{" "}
-            <span className={readOnlyListed ? "font-medium text-teal-800" : "text-gray-500"}>
+            <span
+              className={
+                readOnlyListed ? "font-medium text-teal-800" : "text-gray-500"
+              }
+            >
               {readOnlyListed ? "Listed" : "Not listed"}
             </span>
           </p>
@@ -871,11 +1061,15 @@ const DesignerInventoryForm = () => {
             ["employeeId", "Employee ID", true],
           ].map(([key, label, req]) => (
             <div key={key}>
-              <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                {label}
+              </label>
               <input
                 className={fieldClass}
                 value={form[key] || ""}
-                onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, [key]: e.target.value }))
+                }
                 required={req}
               />
             </div>
@@ -920,11 +1114,15 @@ const DesignerInventoryForm = () => {
             onChange={(val) => setForm((s) => ({ ...s, defaultColor: val }))}
           />
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-gray-700">Gender</label>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              Gender
+            </label>
             <select
               className={fieldClass}
               value={form.gender}
-              onChange={(e) => setForm((s) => ({ ...s, gender: e.target.value }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, gender: e.target.value }))
+              }
             >
               <option value="men">men</option>
               <option value="women">women</option>
@@ -933,7 +1131,9 @@ const DesignerInventoryForm = () => {
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-gray-700">MRP</label>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              MRP
+            </label>
             <input
               type="number"
               min="0"
@@ -943,41 +1143,51 @@ const DesignerInventoryForm = () => {
             />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-gray-700">Discount price</label>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              Discount price
+            </label>
             <input
               type="number"
               min="0"
               className={fieldClass}
               value={form.discountPrice}
-              onChange={(e) => setForm((s) => ({ ...s, discountPrice: e.target.value }))}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, discountPrice: e.target.value }))
+              }
             />
           </div>
 
           <div className="sm:col-span-2 lg:col-span-3">
-  <label className="mb-0.5 block text-xs font-medium text-gray-700">
-    Short Description
-  </label>
-  <input
-    className={fieldClass}
-    value={form.shortDescription}
-    onChange={(e) =>
-      setForm((s) => ({ ...s, shortDescription: e.target.value }))
-    }
-    placeholder="Enter short description (1-2 lines)"
-  />
-</div>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              Short Description
+            </label>
+            <input
+              className={fieldClass}
+              value={form.shortDescription}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, shortDescription: e.target.value }))
+              }
+              placeholder="Enter short description (1-2 lines)"
+            />
+          </div>
           <div className="sm:col-span-2 lg:col-span-3">
-            <label className="mb-0.5 block text-xs font-medium text-gray-700">Description</label>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              Long Description
+            </label>
             <textarea
               className={fieldClass + " min-h-[56px]"}
               rows={2}
-              value={form.description}
-              onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
+              value={form.longDescription}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, longDescription: e.target.value }))
+              }
             />
           </div>
         </div>
 
-        <h2 className="border-l-4 border-emerald-500 pl-2 text-sm font-semibold text-emerald-900">Fabric</h2>
+        <h2 className="border-l-4 border-emerald-500 pl-2 text-sm font-semibold text-emerald-900">
+          Fabric
+        </h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
           {[
             ["name", "Name", "text"],
@@ -988,18 +1198,27 @@ const DesignerInventoryForm = () => {
             ["costPerMeter", "Cost / meter", "number"],
           ].map(([k, label, type]) => (
             <div key={k}>
-              <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                {label}
+              </label>
               <input
                 type={type}
                 className={fieldClass}
                 value={form.fabric[k]}
-                onChange={(e) => setFabric(k, type === "number" ? e.target.value : e.target.value)}
+                onChange={(e) =>
+                  setFabric(
+                    k,
+                    type === "number" ? e.target.value : e.target.value,
+                  )
+                }
               />
             </div>
           ))}
         </div>
 
-        <h2 className="border-l-4 border-violet-500 pl-2 text-sm font-semibold text-violet-900">Costs</h2>
+        <h2 className="border-l-4 border-violet-500 pl-2 text-sm font-semibold text-violet-900">
+          Costs
+        </h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
           {[
             ["trimCost", "Trim"],
@@ -1007,7 +1226,9 @@ const DesignerInventoryForm = () => {
             ["finishingCost", "Finishing"],
           ].map(([k, label]) => (
             <div key={k}>
-              <label className="mb-0.5 block text-xs font-medium text-gray-700">{label}</label>
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                {label}
+              </label>
               <input
                 type="number"
                 className={fieldClass}
@@ -1019,7 +1240,156 @@ const DesignerInventoryForm = () => {
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <h2 className="border-l-4 border-amber-500 pl-2 text-sm font-semibold text-amber-900">Variants & sizes</h2>
+          <h2 className="border-l-4 border-cyan-500 pl-2 text-sm font-semibold text-cyan-900">
+            Care
+          </h2>
+          <button
+            type="button"
+            onClick={addCareInstruction}
+            className="inline-flex items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-900 hover:bg-cyan-100"
+          >
+            <Plus size={14} /> Instruction
+          </button>
+        </div>
+        <div className="space-y-2 rounded-lg border border-cyan-100 bg-cyan-50/30 p-2">
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-gray-700">
+              Care description
+            </label>
+            <textarea
+              className={fieldClass + " min-h-[52px]"}
+              rows={2}
+              value={form.care?.description || ""}
+              onChange={(e) => setCareDescription(e.target.value)}
+              required
+              placeholder="Proper care will help maintain fabric quality and color."
+            />
+          </div>
+
+          {(form.care?.instructions || []).length === 0 ? (
+            <p className="rounded-md bg-white p-2 text-xs text-gray-500">
+              Add at least one care instruction.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {(form.care?.instructions || []).map((inst, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-md border border-cyan-100 bg-white p-2"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-cyan-900">
+                      Instruction {idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeCareInstruction(idx)}
+                      className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800"
+                    >
+                      <Trash2 size={12} /> Remove
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                        Text
+                      </label>
+                      <input
+                        className={fieldClass}
+                        value={inst?.text || ""}
+                        onChange={(e) =>
+                          updateCareInstruction(idx, "text", e.target.value)
+                        }
+                        required
+                        placeholder="Machine wash cold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                        Icon reference (optional)
+                      </label>
+                      <select
+                        className={fieldClass}
+                        value={
+                          CARE_ICON_OPTIONS.some((row) => row.iconKey === (inst?.iconKey || ""))
+                            ? inst?.iconKey || ""
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const key = e.target.value;
+                          const opt = CARE_ICON_OPTIONS.find(
+                            (row) => row.iconKey === key,
+                          );
+                          updateCareInstruction(idx, "iconKey", key);
+                          updateCareInstruction(
+                            idx,
+                            "iconUrl",
+                            opt?.iconUrl || inst?.iconUrl || "",
+                          );
+                          if (key) updateCareInstruction(idx, "iconFile", null);
+                        }}
+                        required={!inst?.iconFile && !inst?.iconUrl}
+                      >
+                        <option value="">Select icon</option>
+                        {CARE_ICON_OPTIONS.map((opt) => (
+                          <option key={opt.iconKey} value={opt.iconKey}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                        Or upload custom icon (optional)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className={fieldClass}
+                        required={!inst?.iconKey && !inst?.iconUrl}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          updateCareInstruction(idx, "iconFile", file);
+                          if (file) {
+                            updateCareInstruction(idx, "iconKey", "");
+                            updateCareInstruction(idx, "iconUrl", "");
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {(inst?.iconFile || inst?.iconUrl) && (
+                    <div className="mt-2 flex items-center gap-2 rounded border border-gray-100 bg-gray-50 px-2 py-1.5">
+                      <img
+                        src={
+                          inst?.iconFile
+                            ? URL.createObjectURL(inst.iconFile)
+                            : inst.iconUrl
+                        }
+                        alt=""
+                        className="h-8 w-8 rounded border border-gray-200 bg-white p-1 object-contain"
+                      />
+                      <span className="truncate text-xs text-gray-600">
+                        {inst?.iconFile?.name ||
+                          inst?.iconKey ||
+                          "Selected icon"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="border-l-4 border-amber-500 pl-2 text-sm font-semibold text-amber-900">
+            Variants & sizes
+          </h2>
           <button
             type="button"
             onClick={addVariant}
@@ -1033,217 +1403,256 @@ const DesignerInventoryForm = () => {
           {form.variants.map((variant, vIdx) => {
             const displayImages = variantImagesForDisplay(variant);
             return (
-            <div
-              key={vIdx}
-              className="rounded-lg border border-amber-100 bg-amber-50/30 p-2"
-            >
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-amber-900">Variant {vIdx + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => removeVariant(vIdx)}
-                  className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800"
-                >
-                  <Trash2 size={12} /> Remove
-                </button>
-              </div>
-              <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <div>
-                  {colorCodeOptions.length > 0 ? (
-                    <SearchableCodeSelect
-                      label="Color name"
-                      required
-                      value={variant.color.name}
-                      options={colorCodeOptions}
-                      loading={codeLoading}
-                      placeholder="Select color code"
-                      onChange={(val) =>
-                        updateVariant(vIdx, (v) => ({
-                          ...v,
-                          color: { ...v.color, name: val },
-                        }))
-                      }
-                    />
-                  ) : (
-                    <>
-                      <label className="mb-0.5 block text-xs text-gray-600">Color name</label>
-                      <input
-                        className={fieldClass}
-                        value={variant.color.name}
-                        onChange={(e) =>
-                          updateVariant(vIdx, (v) => ({
-                            ...v,
-                            color: { ...v.color, name: e.target.value },
-                          }))
-                        }
-                        required
-                      />
-                    </>
-                  )}
-                </div>
-                <div>
-                  <label className="mb-0.5 block text-xs text-gray-600">Hex</label>
-                  <input
-                    className={fieldClass}
-                    value={variant.color.hex}
-                    onChange={(e) =>
-                      updateVariant(vIdx, (v) => ({
-                        ...v,
-                        color: { ...v.color, hex: e.target.value.toUpperCase() },
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="mb-2 rounded-md border border-amber-200/80 bg-white/60 p-2">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-gray-700">Variant images</span>
-                  <label className="relative inline-flex cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
-                    <ImagePlus size={14} className="pointer-events-none shrink-0" />
-                    <span className="pointer-events-none">Add</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      onChange={(e) => addVariantImages(vIdx, e)}
-                    />
-                  </label>
-                </div>
-                {displayImages.length === 0 ? (
-                  <p className="text-xs text-gray-500">No images yet — add photos for this color (same flow as main inventory).</p>
-                ) : (
-                  <div className="max-h-80 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
-                    <ul className="flex flex-wrap gap-2">
-                      {displayImages.map(({ img, originalIndex }) => (
-                        <li key={previewKeyForImage(img, originalIndex)} className="relative shrink-0">
-                          <VariantImagePreview image={img} />
-                          <button
-                            type="button"
-                            onClick={() => removeVariantImage(vIdx, originalIndex)}
-                            className="absolute -right-1 -top-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700"
-                            aria-label="Remove image"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-700">Sizes</span>
+              <div
+                key={vIdx}
+                className="rounded-lg border border-amber-100 bg-amber-50/30 p-2"
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-amber-900">
+                    Variant {vIdx + 1}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => addSize(vIdx)}
-                    className="text-xs font-medium text-indigo-700 hover:underline"
+                    onClick={() => removeVariant(vIdx)}
+                    className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs text-rose-800"
                   >
-                    + Size
+                    <Trash2 size={12} /> Remove
                   </button>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[520px] text-xs">
-                    <thead>
-                      <tr className="bg-gray-100 text-left text-gray-700">
-                        <th className="p-1.5">Size</th>
-                        <th className="p-1.5">SKU</th>
-                        <th className="p-1.5">Barcode</th>
-                        <th className="p-1.5">Planned</th>
-                        <th className="p-1.5">Produced</th>
-                        <th className="p-1.5 w-8" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {variant.sizes.map((sz, sIdx) => (
-                        <tr key={sIdx} className="border-t border-gray-200">
-                          <td className="p-1">
-                            <input
-                              className={fieldClass + " py-1"}
-                              value={sz.size}
-                              onChange={(e) =>
-                                updateVariant(vIdx, (v) => {
-                                  const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], size: e.target.value.toUpperCase() };
-                                  return { ...v, sizes };
-                                })
-                              }
-                              required
-                            />
-                          </td>
-                          <td className="p-1">
-                            <input
-                              className={fieldClass + " py-1"}
-                              value={sz.sku}
-                              onChange={(e) =>
-                                updateVariant(vIdx, (v) => {
-                                  const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], sku: e.target.value };
-                                  return { ...v, sizes };
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="p-1">
-                            <input
-                              className={fieldClass + " py-1"}
-                              value={sz.barcode || ""}
-                              onChange={(e) =>
-                                updateVariant(vIdx, (v) => {
-                                  const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], barcode: e.target.value };
-                                  return { ...v, sizes };
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="p-1">
-                            <input
-                              type="number"
-                              className={fieldClass + " py-1"}
-                              value={sz.plannedQty}
-                              onChange={(e) =>
-                                updateVariant(vIdx, (v) => {
-                                  const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], plannedQty: e.target.value };
-                                  return { ...v, sizes };
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="p-1">
-                            <input
-                              type="number"
-                              className={fieldClass + " py-1"}
-                              value={sz.producedQty}
-                              onChange={(e) =>
-                                updateVariant(vIdx, (v) => {
-                                  const sizes = [...v.sizes];
-                                  sizes[sIdx] = { ...sizes[sIdx], producedQty: e.target.value };
-                                  return { ...v, sizes };
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="p-1">
+                <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <div>
+                    {colorCodeOptions.length > 0 ? (
+                      <SearchableCodeSelect
+                        label="Color name"
+                        required
+                        value={variant.color.name}
+                        options={colorCodeOptions}
+                        loading={codeLoading}
+                        placeholder="Select color code"
+                        onChange={(val) =>
+                          updateVariant(vIdx, (v) => ({
+                            ...v,
+                            color: { ...v.color, name: val },
+                          }))
+                        }
+                      />
+                    ) : (
+                      <>
+                        <label className="mb-0.5 block text-xs text-gray-600">
+                          Color name
+                        </label>
+                        <input
+                          className={fieldClass}
+                          value={variant.color.name}
+                          onChange={(e) =>
+                            updateVariant(vIdx, (v) => ({
+                              ...v,
+                              color: { ...v.color, name: e.target.value },
+                            }))
+                          }
+                          required
+                        />
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-xs text-gray-600">
+                      Hex
+                    </label>
+                    <input
+                      className={fieldClass}
+                      value={variant.color.hex}
+                      onChange={(e) =>
+                        updateVariant(vIdx, (v) => ({
+                          ...v,
+                          color: {
+                            ...v.color,
+                            hex: e.target.value.toUpperCase(),
+                          },
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="mb-2 rounded-md border border-amber-200/80 bg-white/60 p-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-gray-700">
+                      Variant images
+                    </span>
+                    <label className="relative inline-flex cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
+                      <ImagePlus
+                        size={14}
+                        className="pointer-events-none shrink-0"
+                      />
+                      <span className="pointer-events-none">Add</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        onChange={(e) => addVariantImages(vIdx, e)}
+                      />
+                    </label>
+                  </div>
+                  {displayImages.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      No images yet — add photos for this color (same flow as
+                      main inventory).
+                    </p>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
+                      <ul className="flex flex-wrap gap-2">
+                        {displayImages.map(({ img, originalIndex }) => (
+                          <li
+                            key={previewKeyForImage(img, originalIndex)}
+                            className="relative shrink-0"
+                          >
+                            <VariantImagePreview image={img} />
                             <button
                               type="button"
-                              onClick={() => removeSize(vIdx, sIdx)}
-                              className="rounded p-1 text-rose-600 hover:bg-rose-50"
-                              aria-label="Remove size"
+                              onClick={() =>
+                                removeVariantImage(vIdx, originalIndex)
+                              }
+                              className="absolute -right-1 -top-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700"
+                              aria-label="Remove image"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={10} />
                             </button>
-                          </td>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-700">
+                      Sizes
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => addSize(vIdx)}
+                      className="text-xs font-medium text-indigo-700 hover:underline"
+                    >
+                      + Size
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-xs">
+                      <thead>
+                        <tr className="bg-gray-100 text-left text-gray-700">
+                          <th className="p-1.5">Size</th>
+                          <th className="p-1.5">SKU</th>
+                          <th className="p-1.5">Barcode</th>
+                          <th className="p-1.5">Planned</th>
+                          <th className="p-1.5">Produced</th>
+                          <th className="p-1.5 w-8" />
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {variant.sizes.map((sz, sIdx) => (
+                          <tr key={sIdx} className="border-t border-gray-200">
+                            <td className="p-1">
+                              <input
+                                className={fieldClass + " py-1"}
+                                value={sz.size}
+                                onChange={(e) =>
+                                  updateVariant(vIdx, (v) => {
+                                    const sizes = [...v.sizes];
+                                    sizes[sIdx] = {
+                                      ...sizes[sIdx],
+                                      size: e.target.value.toUpperCase(),
+                                    };
+                                    return { ...v, sizes };
+                                  })
+                                }
+                                required
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input
+                                className={fieldClass + " py-1"}
+                                value={sz.sku}
+                                onChange={(e) =>
+                                  updateVariant(vIdx, (v) => {
+                                    const sizes = [...v.sizes];
+                                    sizes[sIdx] = {
+                                      ...sizes[sIdx],
+                                      sku: e.target.value,
+                                    };
+                                    return { ...v, sizes };
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input
+                                className={fieldClass + " py-1"}
+                                value={sz.barcode || ""}
+                                onChange={(e) =>
+                                  updateVariant(vIdx, (v) => {
+                                    const sizes = [...v.sizes];
+                                    sizes[sIdx] = {
+                                      ...sizes[sIdx],
+                                      barcode: e.target.value,
+                                    };
+                                    return { ...v, sizes };
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input
+                                type="number"
+                                className={fieldClass + " py-1"}
+                                value={sz.plannedQty}
+                                onChange={(e) =>
+                                  updateVariant(vIdx, (v) => {
+                                    const sizes = [...v.sizes];
+                                    sizes[sIdx] = {
+                                      ...sizes[sIdx],
+                                      plannedQty: e.target.value,
+                                    };
+                                    return { ...v, sizes };
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input
+                                type="number"
+                                className={fieldClass + " py-1"}
+                                value={sz.producedQty}
+                                onChange={(e) =>
+                                  updateVariant(vIdx, (v) => {
+                                    const sizes = [...v.sizes];
+                                    sizes[sIdx] = {
+                                      ...sizes[sIdx],
+                                      producedQty: e.target.value,
+                                    };
+                                    return { ...v, sizes };
+                                  })
+                                }
+                              />
+                            </td>
+                            <td className="p-1">
+                              <button
+                                type="button"
+                                onClick={() => removeSize(vIdx, sIdx)}
+                                className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                                aria-label="Remove size"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
             );
           })}
         </div>
@@ -1254,7 +1663,9 @@ const DesignerInventoryForm = () => {
 
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
-              <label className="mb-0.5 block text-xs font-medium text-gray-700">Units</label>
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                Units
+              </label>
               <input
                 className={fieldClass + " bg-gray-50 text-gray-700"}
                 value="Both (in & cm)"
@@ -1289,14 +1700,21 @@ const DesignerInventoryForm = () => {
             <p className="mb-2 text-xs font-medium text-gray-700">
               Template preview ({form.gender} - {sizeChartCategory})
             </p>
-            <p className="mb-1 text-[11px] font-semibold text-gray-700">Inches (in)</p>
+            <p className="mb-1 text-[11px] font-semibold text-gray-700">
+              Inches (in)
+            </p>
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
               <table className="w-full min-w-[640px] text-xs">
                 <thead>
                   <tr className="bg-gray-100 text-left">
-                    <th className="p-2 font-semibold text-gray-700">Measurement</th>
+                    <th className="p-2 font-semibold text-gray-700">
+                      Measurement
+                    </th>
                     {(activePreset.sizes || []).map((sz) => (
-                      <th key={sz} className="p-2 text-center font-semibold text-gray-700">
+                      <th
+                        key={sz}
+                        className="p-2 text-center font-semibold text-gray-700"
+                      >
                         {sz}
                       </th>
                     ))}
@@ -1304,13 +1722,21 @@ const DesignerInventoryForm = () => {
                 </thead>
                 <tbody>
                   {(activePreset.headers || []).map((h, rowIdx) => (
-                    <tr key={`${h.key}-${rowIdx}`} className="border-t border-gray-100">
-                      <td className="p-2 font-medium text-gray-800">{h.label || h.key}</td>
+                    <tr
+                      key={`${h.key}-${rowIdx}`}
+                      className="border-t border-gray-100"
+                    >
+                      <td className="p-2 font-medium text-gray-800">
+                        {h.label || h.key}
+                      </td>
                       {(activePreset.sizes || []).map((sz, colIdx) => {
                         const values = activePreset.sampleValues?.[h.key] || [];
                         const cell = values[colIdx] ?? "—";
                         return (
-                          <td key={`${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-gray-700">
+                          <td
+                            key={`${h.key}-${sz}-${colIdx}`}
+                            className="p-2 text-center text-gray-700"
+                          >
                             {cell}
                           </td>
                         );
@@ -1321,14 +1747,21 @@ const DesignerInventoryForm = () => {
               </table>
             </div>
 
-            <p className="mt-3 mb-1 text-[11px] font-semibold text-gray-700">Centimeters (cm)</p>
+            <p className="mt-3 mb-1 text-[11px] font-semibold text-gray-700">
+              Centimeters (cm)
+            </p>
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
               <table className="w-full min-w-[640px] text-xs">
                 <thead>
                   <tr className="bg-gray-100 text-left">
-                    <th className="p-2 font-semibold text-gray-700">Measurement</th>
+                    <th className="p-2 font-semibold text-gray-700">
+                      Measurement
+                    </th>
                     {(activePreset.sizes || []).map((sz) => (
-                      <th key={`cm-${sz}`} className="p-2 text-center font-semibold text-gray-700">
+                      <th
+                        key={`cm-${sz}`}
+                        className="p-2 text-center font-semibold text-gray-700"
+                      >
                         {sz}
                       </th>
                     ))}
@@ -1336,7 +1769,10 @@ const DesignerInventoryForm = () => {
                 </thead>
                 <tbody>
                   {(activePreset.headers || []).map((h, rowIdx) => (
-                    <tr key={`cm-${h.key}-${rowIdx}`} className="border-t border-gray-100">
+                    <tr
+                      key={`cm-${h.key}-${rowIdx}`}
+                      className="border-t border-gray-100"
+                    >
                       <td className="p-2 font-medium text-gray-800">
                         {String(h.label || h.key || "")
                           .replace("(in/cm)", "(cm)")
@@ -1347,7 +1783,10 @@ const DesignerInventoryForm = () => {
                         const cell = values[colIdx] ?? "";
                         const cmCell = cell ? inchesToCmText(cell) : "—";
                         return (
-                          <td key={`cm-${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-gray-700">
+                          <td
+                            key={`cm-${h.key}-${sz}-${colIdx}`}
+                            className="p-2 text-center text-gray-700"
+                          >
                             {cmCell}
                           </td>
                         );
@@ -1359,18 +1798,23 @@ const DesignerInventoryForm = () => {
             </div>
           </div>
 
-          {(["in", "cm"]).map((side) => {
+          {["in", "cm"].map((side) => {
             const chart = form.sizeCharts[side];
-            const sideTitle = side === "in" ? "Inches (in)" : "Centimeters (cm)";
+            const sideTitle =
+              side === "in" ? "Inches (in)" : "Centimeters (cm)";
             const labelPh =
-              side === "in" ? "Label (e.g. Chest (in))" : "Label (e.g. Chest (cm))";
+              side === "in"
+                ? "Label (e.g. Chest (in))"
+                : "Label (e.g. Chest (cm))";
             return (
               <div
                 key={side}
                 className="mt-4 rounded-lg border border-indigo-200/80 bg-white/70 p-3 shadow-sm"
               >
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-indigo-950">{sideTitle}</h3>
+                  <h3 className="text-sm font-semibold text-indigo-950">
+                    {sideTitle}
+                  </h3>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -1404,13 +1848,27 @@ const DesignerInventoryForm = () => {
                           className={fieldClass}
                           value={header.key}
                           placeholder="Key (e.g. chest, length)"
-                          onChange={(e) => updateSizeChartHeader(side, idx, "key", e.target.value)}
+                          onChange={(e) =>
+                            updateSizeChartHeader(
+                              side,
+                              idx,
+                              "key",
+                              e.target.value,
+                            )
+                          }
                         />
                         <input
                           className={fieldClass}
                           value={header.label}
                           placeholder={labelPh}
-                          onChange={(e) => updateSizeChartHeader(side, idx, "label", e.target.value)}
+                          onChange={(e) =>
+                            updateSizeChartHeader(
+                              side,
+                              idx,
+                              "label",
+                              e.target.value,
+                            )
+                          }
                         />
                         <button
                           type="button"
@@ -1441,7 +1899,12 @@ const DesignerInventoryForm = () => {
                             value={row.size}
                             placeholder="Size (e.g. S, M, L)"
                             onChange={(e) =>
-                              updateSizeChartRow(side, rowIndex, "size", e.target.value)
+                              updateSizeChartRow(
+                                side,
+                                rowIndex,
+                                "size",
+                                e.target.value,
+                              )
                             }
                           />
                           <button
@@ -1462,7 +1925,12 @@ const DesignerInventoryForm = () => {
                               value={row.measurements?.[h.key] ?? ""}
                               placeholder={h.label || h.key}
                               onChange={(e) =>
-                                updateSizeChartRow(side, rowIndex, h.key, e.target.value)
+                                updateSizeChartRow(
+                                  side,
+                                  rowIndex,
+                                  h.key,
+                                  e.target.value,
+                                )
                               }
                             />
                           ))}
@@ -1475,7 +1943,8 @@ const DesignerInventoryForm = () => {
                 <div className="mt-3">
                   <div className="mb-2 flex items-center justify-between">
                     <h4 className="text-xs font-semibold text-gray-700">
-                      Measurement images ({side === "in" ? "measureImagesIn" : "measureImagesCm"})
+                      Measurement images (
+                      {side === "in" ? "measureImagesIn" : "measureImagesCm"})
                     </h4>
                     <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
                       + Add
@@ -1484,7 +1953,9 @@ const DesignerInventoryForm = () => {
                         accept="image/*"
                         multiple
                         className="hidden"
-                        onChange={(e) => addSizeChartImages(side, e.target.files)}
+                        onChange={(e) =>
+                          addSizeChartImages(side, e.target.files)
+                        }
                       />
                     </label>
                   </div>
@@ -1539,4 +2010,3 @@ const DesignerInventoryForm = () => {
 };
 
 export default DesignerInventoryForm;
-

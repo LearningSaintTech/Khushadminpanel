@@ -311,25 +311,12 @@ function variantImageSrc(img) {
 export function designerInventoryToItemFormState(designer) {
   const desc = (designer.description || "").trim();
   const styleLabel = (designer.styleName || designer.StyleNumber || "Product").trim();
-  const shortDescription = (desc.slice(0, 70) || styleLabel.slice(0, 70)).slice(0, 70);
-  let longDescription = desc.slice(0, 150);
-  if (longDescription.length < 10) {
-    longDescription = shortDescription.slice(0, 150);
-  }
-
-  const metaLines = [];
-  if (designer.fabric?.name || designer.fabric?.gsm) {
-    metaLines.push(
-      `Fabric: ${[designer.fabric?.name, designer.fabric?.gsm ? `${designer.fabric.gsm} GSM` : ""].filter(Boolean).join(", ")}`
-    );
-  }
-  if (designer.costs && typeof designer.costs.totalCost === "number") {
-    metaLines.push(`Designer cost total: ${designer.costs.totalCost}`);
-  }
-  if (metaLines.length) {
-    const extra = metaLines.join(". ").slice(0, 80);
-    longDescription = `${longDescription} ${extra}`.trim().slice(0, 150);
-  }
+  const shortDescription = String(
+    designer.shortDescription || desc || styleLabel || ""
+  ).trim();
+  const longDescription = String(
+    designer.longDescription || desc || shortDescription || styleLabel || ""
+  ).trim();
 
   const variants = (designer.variants || [])
     .filter((v) => v?.color?.name)
@@ -367,12 +354,24 @@ export function designerInventoryToItemFormState(designer) {
     })
     .filter((v) => v.sizes.length > 0);
 
+  const careInstructions = Array.isArray(designer?.care?.instructions)
+    ? designer.care.instructions.map((inst) => ({
+        iconUrl: inst?.iconUrl || "",
+        iconKey: inst?.iconKey || "",
+        text: inst?.text || "",
+        iconFile: null,
+      }))
+    : [];
+
+  const mrp = designer.mrp;
+  const disc = designer.discountPrice;
   return {
-    name: styleLabel.slice(0, 120),
+    name: styleLabel,
     shortDescription,
     longDescription,
-    price: "",
-    discountedPrice: "",
+    price: mrp !== undefined && mrp !== null && mrp !== "" ? String(mrp) : "",
+    discountedPrice:
+      disc !== undefined && disc !== null && disc !== "" ? String(disc) : "",
     productId: "",
     skuCodeInputs: {
       styleNu: designer.StyleNumber || designer.skuCodeInputs?.styleNu || "",
@@ -399,8 +398,8 @@ export function designerInventoryToItemFormState(designer) {
         ],
     filters: [],
     care: {
-      description: "",
-      instructions: [],
+      description: designer?.care?.description || "",
+      instructions: careInstructions,
     },
     sizeCharts: designerItemToFormSizeCharts(designer),
     shipping: {

@@ -71,6 +71,8 @@ import SkuFormulaFormPage from "../admin/components/inventory/SkuFormulaFormPage
 import DesignerList from "../admin/components/designer/DesignerList";
 import DesignerForm from "../admin/components/designer/DesignerForm";
 import DesignerInventory from "../admin/components/designer/DesignerInventory";
+import RewardForm from "../admin/components/reward/RewardForm";
+import Reward from "../admin/components/reward/Reward";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -122,6 +124,10 @@ export const adminPanelChildRoutes = [
   <Route key="pin" path="pincode" element={<PincodePage />} />,
   <Route key="pin-cr" path="pincode/create" element={<PincodeForm />} />,
   <Route key="pin-ed" path="pincode/edit/:pincode" element={<PincodeForm />} />,
+  <Route key="rewards" path="rewards" element={<Reward/>}/>,
+  <Route key="rewards-cr" path="rewards/create" element={<RewardForm/>}/>,
+    <Route key="rewards-ed" path="rewards/edit/:id" element={<RewardForm/>}/>,
+
   <Route key="splash" path="splash" element={<SplashPage />} />,
   <Route key="splash-f" path="banner-form" element={<SplashForm />} />,
   <Route key="splash-f-id" path="banner-form/:id" element={<SplashForm />} />,
