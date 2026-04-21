@@ -6,6 +6,7 @@ import {
   getSubcategoryCount, 
   getCouponAnalytics,
   getOrdersCount,
+  getActiveUsers,
 } from "../../apis/Dashboardapi";
 import { FiZoomIn, FiX } from "react-icons/fi";     // cleaner zoom icons
 import { 
@@ -14,6 +15,7 @@ import {
   FiTag, 
   FiGift,
   FiShoppingCart,
+  FiUsers,
 } from "react-icons/fi";   // subtle icons for cards
 
 export default function Dashboard() {
@@ -30,12 +32,14 @@ export default function Dashboard() {
           subcategoriesRes,
           couponsRes,
           ordersRes,
+          activeUsersRes,
         ] = await Promise.all([
           getItemsCount(),
           getCategoryCount(),
           getSubcategoryCount(),
           getCouponAnalytics(),
           getOrdersCount(),
+          getActiveUsers({ page: 1, limit: 20 }),
         ]);
 
         setCounts({
@@ -73,6 +77,15 @@ export default function Dashboard() {
             inactive: ordersRes?.data?.orders?.inactive ?? 0,
             path: "/admin/orders",
             icon: <FiShoppingCart className="w-6 h-6 text-gray-500" />
+          },
+          ActiveUsers: {
+            total: activeUsersRes?.data?.totalUsers ?? 0,
+            active: activeUsersRes?.data?.totalActiveUsers ?? 0,
+            inactive:
+              (activeUsersRes?.data?.totalUsers ?? 0) -
+              (activeUsersRes?.data?.totalActiveUsers ?? 0),
+            path: "/admin/active-users",
+            icon: <FiUsers className="w-6 h-6 text-gray-500" />,
           },
         });
       } catch (err) {

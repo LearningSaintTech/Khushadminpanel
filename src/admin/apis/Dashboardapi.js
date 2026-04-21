@@ -5,7 +5,8 @@ export const dashboardEndpoints = {
   CATEGORY_COUNT: "/admin/dashboard/counts?type=category",
   SUBCATEGORY_COUNT: "/admin/dashboard/counts?type=subcategory",
   ORDERS_COUNT: "/admin/dashboard/counts?type=orders",
-  ANALYTICS: "/coupons/analytics", 
+  ANALYTICS: "/coupons/analytics",
+  ACTIVE_USERS: "/admin/users/active",
 };
 
 // ✅ Fetch Items Count
@@ -29,4 +30,8 @@ export const getCouponAnalytics = () => {
 
 export const getOrdersCount = () => {
   return apiConnector("GET", dashboardEndpoints.ORDERS_COUNT);
+};
+
+export const getActiveUsers = (params = {}) => {
+  return apiConnector("GET", dashboardEndpoints.ACTIVE_USERS, null, {}, params);
 };

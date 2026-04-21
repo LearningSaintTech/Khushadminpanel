@@ -73,10 +73,12 @@ import DesignerForm from "../admin/components/designer/DesignerForm";
 import DesignerInventory from "../admin/components/designer/DesignerInventory";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
+import ActiveUsers from "../admin/components/users/ActiveUsers";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
   <Route key="dashboard" path="dashboard" element={<Dashboard />} />,
+  <Route key="active-users" path="active-users" element={<ActiveUsers />} />,
   <Route key="inv-cat" path="inventory/categories" element={<Categories />} />,
   <Route key="inv-cat-cr" path="inventory/categories/create" element={<CategoryForm />} />,
   <Route key="inv-cat-ed" path="inventory/categories/edit/:id" element={<CategoryForm />} />,
