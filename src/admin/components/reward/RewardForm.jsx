@@ -15,14 +15,14 @@ const RewardForm = () => {
   const [form, setForm] = useState({
     earning_rules: {
       type: "SLAB_BASED",
-      slabs: [{ min_price: "", max_price: "", points: "" }],
+      slabs: [{ min_price: "", max_price: "", points: "", points_percentage: "" }],
     },
     redemption_rules: {
       min_points_required: "",
       point_value_in_currency: "",
     },
     recharge_bonus_rules: [
-      { min_amount: "", max_amount: "", cashToAdd: "" },
+      { min_amount: "", max_amount: "", cashToAdd: "", bonus_percentage: "" },
     ],
     expiry_rules: {
       expiry_days: "",
@@ -61,6 +61,7 @@ const RewardForm = () => {
           min_price: toNumber(s.min_price),
           max_price: toNumber(s.max_price),
           points: toNumber(s.points),
+          points_percentage: toNumber(s.points_percentage),
         })),
       },
       redemption_rules: {
@@ -71,6 +72,7 @@ const RewardForm = () => {
         min_amount: toNumber(r.min_amount),
         max_amount: toNumber(r.max_amount),
         cashToAdd: toNumber(r.cashToAdd),
+        bonus_percentage: toNumber(r.bonus_percentage),
       })),
       expiry_rules: {
         expiry_days: toNumber(form.expiry_rules.expiry_days),
@@ -146,7 +148,7 @@ const RewardForm = () => {
         ...prev.earning_rules,
         slabs: [
           ...prev.earning_rules.slabs,
-          { min_price: "", max_price: "", points: "" },
+          { min_price: "", max_price: "", points: "", points_percentage: "" },
         ],
       },
     }));
@@ -168,7 +170,7 @@ const RewardForm = () => {
       ...prev,
       recharge_bonus_rules: [
         ...prev.recharge_bonus_rules,
-        { min_amount: "", max_amount: "", cashToAdd: "" },
+        { min_amount: "", max_amount: "", cashToAdd: "", bonus_percentage: "" },
       ],
     }));
   };
@@ -292,7 +294,7 @@ const RewardForm = () => {
 
             <div className="space-y-4">
               {form.earning_rules.slabs.map((slab, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
                   <div>
                     <label className={labelClass}>Min Price (₹)</label>
                     <input
@@ -313,12 +315,22 @@ const RewardForm = () => {
                   </div>
                   <div>
                     <label className={labelClass}>Points Awarded</label>
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={slab.points || ""}
+                      onChange={(e) => updateArrayItem("earning_rules.slabs", index, "points", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Points (%)</label>
                     <div className="flex gap-2">
                       <input
                         type="number"
+                        step="0.01"
                         className={inputClass}
-                        value={slab.points || ""}
-                        onChange={(e) => updateArrayItem("earning_rules.slabs", index, "points", e.target.value)}
+                        value={slab.points_percentage || ""}
+                        onChange={(e) => updateArrayItem("earning_rules.slabs", index, "points_percentage", e.target.value)}
                       />
                       {form.earning_rules.slabs.length > 1 && (
                         <button
@@ -351,7 +363,7 @@ const RewardForm = () => {
 
             <div className="space-y-4">
               {form.recharge_bonus_rules.map((bonus, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
                   <div>
                     <label className={labelClass}>Min Amount (₹)</label>
                     <input
@@ -372,12 +384,22 @@ const RewardForm = () => {
                   </div>
                   <div>
                     <label className={labelClass}>Cash Bonus (₹)</label>
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={bonus.cashToAdd || ""}
+                      onChange={(e) => updateArrayItem("recharge_bonus_rules", index, "cashToAdd", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Bonus (%)</label>
                     <div className="flex gap-2">
                       <input
                         type="number"
+                        step="0.01"
                         className={inputClass}
-                        value={bonus.cashToAdd || ""}
-                        onChange={(e) => updateArrayItem("recharge_bonus_rules", index, "cashToAdd", e.target.value)}
+                        value={bonus.bonus_percentage || ""}
+                        onChange={(e) => updateArrayItem("recharge_bonus_rules", index, "bonus_percentage", e.target.value)}
                       />
                       {form.recharge_bonus_rules.length > 1 && (
                         <button

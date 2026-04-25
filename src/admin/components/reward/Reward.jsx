@@ -55,6 +55,22 @@ const RewardRules = () => {
     });
   };
 
+  const formatEarningValue = (slab) => {
+    const pointsPercentage = Number(slab?.points_percentage ?? 0);
+    if (pointsPercentage > 0) {
+      return `${pointsPercentage}% Points`;
+    }
+    return `${Number(slab?.points ?? 0)} Points`;
+  };
+
+  const formatRechargeBonusValue = (bonus) => {
+    const bonusPercentage = Number(bonus?.bonus_percentage ?? 0);
+    if (bonusPercentage > 0) {
+      return `+ ${bonusPercentage}% Cash Bonus`;
+    }
+    return `+ ₹${Number(bonus?.cashToAdd ?? 0)} Cash Bonus`;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-5xl mx-auto px-6">
@@ -195,7 +211,7 @@ const RewardRules = () => {
                         </div>
                         <div className="text-right">
                           <span className="text-blue-600 font-semibold text-xl">
-                            {slab.points} Points
+                            {formatEarningValue(slab)}
                           </span>
                         </div>
                       </div>
@@ -224,7 +240,7 @@ const RewardRules = () => {
                           </span>
                         </div>
                         <div className="text-emerald-600 font-semibold text-xl">
-                          + ₹{bonus.cashToAdd} Cash Bonus
+                          {formatRechargeBonusValue(bonus)}
                         </div>
                       </div>
                     ))
