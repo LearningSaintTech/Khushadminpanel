@@ -43,7 +43,14 @@ const RewardForm = () => {
     }
   }, [editData]);
 
-  const toNumber = (val) => (val === "" ? null : Number(val));
+  /** Empty string / undefined only — omit from payload so server does not get null. */
+  const toOptionalNumber = (val) => {
+    if (val === "" || val === undefined || val === null) return undefined;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const toNumber = (val) => (val === "" || val === null || val === undefined ? null : Number(val));
 
   const inputClass =
     "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm";
@@ -57,23 +64,35 @@ const RewardForm = () => {
     const payload = {
       earning_rules: {
         type: "SLAB_BASED",
-        slabs: form.earning_rules.slabs.map((s) => ({
-          min_price: toNumber(s.min_price),
-          max_price: toNumber(s.max_price),
-          points: toNumber(s.points),
-          points_percentage: toNumber(s.points_percentage),
-        })),
+        slabs: form.earning_rules.slabs.map((s) => {
+          const min_price = toNumber(s.min_price);
+          const max_price = toNumber(s.max_price);
+          const points = toOptionalNumber(s.points);
+          const points_percentage = toOptionalNumber(s.points_percentage);
+          return {
+            min_price,
+            max_price,
+            ...(points !== undefined && { points }),
+            ...(points_percentage !== undefined && { points_percentage }),
+          };
+        }),
       },
       redemption_rules: {
         min_points_required: toNumber(form.redemption_rules.min_points_required),
         point_value_in_currency: toNumber(form.redemption_rules.point_value_in_currency),
       },
-      recharge_bonus_rules: form.recharge_bonus_rules.map((r) => ({
-        min_amount: toNumber(r.min_amount),
-        max_amount: toNumber(r.max_amount),
-        cashToAdd: toNumber(r.cashToAdd),
-        bonus_percentage: toNumber(r.bonus_percentage),
-      })),
+      recharge_bonus_rules: form.recharge_bonus_rules.map((r) => {
+        const min_amount = toNumber(r.min_amount);
+        const max_amount = toNumber(r.max_amount);
+        const cashToAdd = toOptionalNumber(r.cashToAdd);
+        const bonus_percentage = toOptionalNumber(r.bonus_percentage);
+        return {
+          min_amount,
+          max_amount,
+          ...(cashToAdd !== undefined && { cashToAdd }),
+          ...(bonus_percentage !== undefined && { bonus_percentage }),
+        };
+      }),
       expiry_rules: {
         expiry_days: toNumber(form.expiry_rules.expiry_days),
         expiry_strategy: form.expiry_rules.expiry_strategy,
