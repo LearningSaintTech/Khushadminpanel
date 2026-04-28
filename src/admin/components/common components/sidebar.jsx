@@ -4,6 +4,7 @@ import Khush from "../../../assets/images/khushh.svg";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useNotification } from "../../../context/NotificationContext";
 import {
+  Activity,
   LayoutDashboard,
   Bell,
   FileText,
@@ -45,6 +46,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const [isBellOpen, setIsBellOpen] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isCouponOpen, setIsCouponOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
@@ -89,6 +91,9 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const isActive = (path) => location.pathname === path || location.pathname.replace(/\/+/g, "/") === path;
   const isNotificationSectionActive = () => location.pathname.startsWith(ap("notifications"));
   const isDesignerSectionActive = () => location.pathname.startsWith(ap("designer"));
+  const isAnalyticsSectionActive = () =>
+    location.pathname.startsWith(ap("analytics")) ||
+    location.pathname.startsWith(ap("coupon-analytics"));
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -112,6 +117,12 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   useEffect(() => {
     if (isDesignerSectionActive()) {
       setIsDesignerOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (isAnalyticsSectionActive()) {
+      setIsAnalyticsOpen(true);
     }
   }, [location.pathname]);
 
@@ -504,16 +515,52 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                   >
                     Coupon List
                   </Link>
-
-                  <Link
-                    to={ap("coupon-analytics")}
-                    className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
-                  >
-                    Coupon Analytics
-                  </Link>
                 </div>
               </div>
             </div>
+            )}
+
+            {(canUse(["admin"]) || canUse(["coupons"])) && (
+              <div>
+                <button
+                  onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isAnalyticsSectionActive() ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Activity
+                      size={20}
+                      className="text-gray-400 group-hover:text-black"
+                    />
+                    <span>Analytics</span>
+                  </div>
+                  {isAnalyticsOpen ? (
+                    <ChevronDown size={18} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={18} className="text-gray-400" />
+                  )}
+                </button>
+
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${
+                    isAnalyticsOpen ? "max-h-40 opacity-100 mt-1" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="pl-10 pr-4 py-2 space-y-1">
+                    <Link
+                      to={ap("analytics/events")}
+                      className={`block px-4 py-2 text-sm hover:bg-white hover:text-black ${
+                        isActive(ap("analytics/events")) || isActive(ap("coupon-analytics"))
+                          ? "bg-white/10 text-white"
+                          : "text-gray-400"
+                      }`}
+                    >
+                      Analytics Workspace
+                    </Link>
+                  </div>
+                </div>
+              </div>
             )}
 
             {canUse(["sections"]) && (

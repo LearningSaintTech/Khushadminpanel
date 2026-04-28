@@ -118,6 +118,7 @@ export const adminPanelChildRoutes = [
   <Route key="coupons" path="coupons" element={<CouponPage />} />,
   <Route key="coupons-cr" path="coupons/create" element={<CouponForm />} />,
   <Route key="coupons-ed" path="coupons/edit/:id" element={<CouponForm />} />,
+  <Route key="analytics-events" path="analytics/events" element={<CouponAnalytics />} />,
   <Route key="coupon-an" path="coupon-analytics" element={<CouponAnalytics />} />,
   <Route key="coupon-an-d" path="coupon-analytics/:id" element={<CouponAnalyticsDetail />} />,
   <Route key="cart" path="cart-charges" element={<CartChargesPage />} />,
