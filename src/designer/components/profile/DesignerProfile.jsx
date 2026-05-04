@@ -108,6 +108,13 @@ const DesignerProfile = () => {
       {/* Read-only identity */}
       <div className="grid grid-cols-1 gap-2 rounded-xl border border-blue-100 bg-linear-to-br from-white to-blue-50/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex items-start gap-2 text-sm">
+          <Hash className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+          <div>
+            <p className="text-xs font-medium text-violet-800">Employee ID</p>
+            <p className="text-gray-900">{profile?.employeeId || "—"}</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-2 text-sm">
           <User className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
           <div>
             <p className="text-xs font-medium text-blue-800">Phone</p>

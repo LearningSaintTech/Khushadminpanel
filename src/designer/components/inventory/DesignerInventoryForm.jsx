@@ -3,8 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Trash2, Loader2, ImagePlus } from "lucide-react";
 import {
   createDesignerItem,
+  designerApi,
+  getDesignerListingTemplateById,
+  getDesignerSizeChartById,
   getDesignerInventoryCodes,
   getDesignerItemById,
+  listDesignerListingTemplates,
+  listDesignerSizeCharts,
   updateDesignerItem,
 } from "../../apis/designerApi";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
@@ -13,10 +18,7 @@ import {
   inchesToCmText,
   mergeSizeChartsWithPreset,
 } from "../../../utils/sizeChartPresets.js";
-import doNotBleachIcon from "../../../assets/images/Do Not Bleach icon.svg";
-import doNotTumbleDryIcon from "../../../assets/images/Do Not Tumble Dry icon.svg";
-import doNotWashIcon from "../../../assets/images/Do Not Wash icon.svg";
-import maximumTempIcon from "../../../assets/images/maximum icon.svg";
+import { CARE_ICON_OPTIONS } from "../../../utils/designerCareIconOptions.js";
 
 function isLocalPickedFile(img) {
   if (img == null || typeof img !== "object") return false;
@@ -119,29 +121,6 @@ const emptyCare = () => ({
   instructions: [],
 });
 
-const CARE_ICON_OPTIONS = [
-  {
-    label: "Do Not Bleach",
-    iconKey: "assets/images/Do Not Bleach icon.svg",
-    iconUrl: doNotBleachIcon,
-  },
-  {
-    label: "Do Not Tumble Dry",
-    iconKey: "assets/images/Do Not Tumble Dry icon.svg",
-    iconUrl: doNotTumbleDryIcon,
-  },
-  {
-    label: "Do Not Wash",
-    iconKey: "assets/images/Do Not Wash icon.svg",
-    iconUrl: doNotWashIcon,
-  },
-  {
-    label: "Maximum",
-    iconKey: "assets/images/maximum icon.svg",
-    iconUrl: maximumTempIcon,
-  },
-];
-
 /** One unit table (inches or cm) — matches API `sizeCharts.in` / `sizeCharts.cm`. */
 const emptyChartSide = () => ({
   headers: [],
@@ -170,7 +149,18 @@ function mapApiRowsToForm(rows) {
 
 function mapApiMeasureImagesToForm(measureImage) {
   if (!Array.isArray(measureImage)) return [];
-  return measureImage.map((img) => img?.url || img);
+  return measureImage
+    .map((img) => {
+      if (!img) return null;
+      if (typeof img === "string") return img;
+      if (typeof img === "object") {
+        const url = String(img.url || "").trim();
+        const imageKey = String(img.imageKey || "").trim();
+        if (url || imageKey) return { url, imageKey };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function loadSizeChartsFromDesignerItem(d) {
@@ -200,10 +190,96 @@ function loadSizeChartsFromDesignerItem(d) {
   return next;
 }
 
+/** Same as `mapDesignerItemToForm` but clears generated IDs so a new item can be saved. */
+function mapImportedDesignerItemToForm(d) {
+  const base = mapDesignerItemToForm(d);
+  return {
+    ...base,
+    variants: (base.variants || []).map((v) => ({
+      ...v,
+      sizes: (v.sizes || []).map((s) => ({
+        ...s,
+        sku: "",
+        barcode: "",
+      })),
+    })),
+  };
+}
+
+function mapDesignerItemToForm(d) {
+  return {
+    StyleNumber: d.StyleNumber || "",
+    styleName: d.styleName || "",
+    designerName: d.designerName || "",
+    employeeId: d.employeeId || "",
+    longDescription: d.longDescription || "",
+    shortDescription: d.shortDescription || "",
+    productType: d.productType || "",
+    productTypeCode: d.productTypeCode || d.skuCodeInputs?.productTypeCode || "",
+    fitType: d.fitType || "",
+    gender: d.gender || "men",
+    defaultColor: d.defaultColor || "",
+    mrp: d.mrp ?? 0,
+    discountPrice: d.discountPrice ?? 0,
+    fabric: { ...emptyFabric(), ...(d.fabric || {}) },
+    costs: { ...emptyCosts(), ...(d.costs || {}) },
+    care: {
+      ...emptyCare(),
+      ...(d.care || {}),
+      instructions: Array.isArray(d.care?.instructions)
+        ? d.care.instructions.map((inst) => ({
+            iconUrl: inst?.iconUrl || "",
+            iconKey: inst?.iconKey || "",
+            text: inst?.text || "",
+            iconFile: null,
+          }))
+        : [],
+    },
+    variants:
+      Array.isArray(d.variants) && d.variants.length > 0
+        ? d.variants.map((v) => ({
+            color: {
+              name: v.color?.name || "",
+              hex: v.color?.hex || "#000000",
+              totalImages: v.images?.length ?? v.color?.totalImages ?? 0,
+              isMultipleImages: (v.images?.length || 0) > 1,
+            },
+            sizes: (v.sizes || [emptySize()]).map((s) => ({
+              sku: s.sku || "",
+              size: s.size || "M",
+              plannedQty: s.plannedQty ?? 0,
+              producedQty: s.producedQty ?? 0,
+              barcode: s.barcode || "",
+            })),
+            images: Array.isArray(v.images) ? v.images : [],
+          }))
+        : [emptyVariant()],
+    sizeCharts: loadSizeChartsFromDesignerItem(d),
+  };
+}
+
 const toNumberOrZero = (value) => {
   if (value === "" || value == null) return 0;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+};
+
+const chartMeetsRequirement = (body) => {
+  const headers = Array.isArray(body?.headers) ? body.headers : [];
+  const rows = Array.isArray(body?.rows) ? body.rows : [];
+  const images = Array.isArray(body?.measureImage) ? body.measureImage : [];
+  if (headers.length === 0 || rows.length === 0) return false;
+  const keys = headers.map((h) => String(h?.key || "").trim()).filter(Boolean);
+  if (keys.length === 0) return false;
+  const hasImage = images.some(
+    (img) =>
+      img &&
+      (String(img.url || "").trim() || String(img.imageKey || "").trim()),
+  );
+  if (!hasImage) return false;
+  return rows.every((row) =>
+    keys.every((key) => Number.isFinite(Number(row?.measurements?.[key]))),
+  );
 };
 
 function normalizeCodeOptionsResponse(res) {
@@ -357,9 +433,23 @@ const DesignerInventoryForm = () => {
   const [productTypeOptions, setProductTypeOptions] = useState([]);
   const [fitTypeOptions, setFitTypeOptions] = useState([]);
   const [colorCodeOptions, setColorCodeOptions] = useState([]);
+  const [sizeChartTemplates, setSizeChartTemplates] = useState([]);
+  const [selectedSizeChartTemplateId, setSelectedSizeChartTemplateId] = useState("");
+  const [sizeChartTemplateLoading, setSizeChartTemplateLoading] = useState(false);
+  const [sizeChartTemplateError, setSizeChartTemplateError] = useState("");
+  const [listingTemplates, setListingTemplates] = useState([]);
+  const [selectedDescListingTemplateId, setSelectedDescListingTemplateId] = useState("");
+  const [selectedCareListingTemplateId, setSelectedCareListingTemplateId] = useState("");
+  const [listingTemplateLoading, setListingTemplateLoading] = useState(false);
+  const [listingTemplateError, setListingTemplateError] = useState("");
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeLoadError, setCodeLoadError] = useState("");
+  const [currentStep, setCurrentStep] = useState(1);
   const [sizeChartCategory, setSizeChartCategory] = useState("upper");
+  const [createMode, setCreateMode] = useState("scratch");
+  const [importItems, setImportItems] = useState([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [selectedImportItemId, setSelectedImportItemId] = useState("");
   const [form, setForm] = useState({
     StyleNumber: "",
     styleName: "",
@@ -391,57 +481,7 @@ const DesignerInventoryForm = () => {
         if (res?.success && res.data) {
           const d = res.data;
           setReadOnlyListed(Boolean(d.isListed));
-          setForm({
-            StyleNumber: d.StyleNumber || "",
-            styleName: d.styleName || "",
-            designerName: d.designerName || "",
-            employeeId: d.employeeId || "",
-            longDescription: d.longDescription || "",
-            shortDescription: d.shortDescription || "",
-            productType: d.productType || "",
-            productTypeCode:
-              d.productTypeCode || d.skuCodeInputs?.productTypeCode || "",
-            fitType: d.fitType || "",
-            gender: d.gender || "men",
-            defaultColor: d.defaultColor || "",
-            mrp: d.mrp ?? 0,
-            discountPrice: d.discountPrice ?? 0,
-            fabric: { ...emptyFabric(), ...(d.fabric || {}) },
-            costs: { ...emptyCosts(), ...(d.costs || {}) },
-            care: {
-              ...emptyCare(),
-              ...(d.care || {}),
-              instructions: Array.isArray(d.care?.instructions)
-                ? d.care.instructions.map((inst) => ({
-                    iconUrl: inst?.iconUrl || "",
-                    iconKey: inst?.iconKey || "",
-                    text: inst?.text || "",
-                    iconFile: null,
-                  }))
-                : [],
-            },
-            variants:
-              Array.isArray(d.variants) && d.variants.length > 0
-                ? d.variants.map((v) => ({
-                    color: {
-                      name: v.color?.name || "",
-                      hex: v.color?.hex || "#000000",
-                      totalImages:
-                        v.images?.length ?? v.color?.totalImages ?? 0,
-                      isMultipleImages: (v.images?.length || 0) > 1,
-                    },
-                    sizes: (v.sizes || [emptySize()]).map((s) => ({
-                      sku: s.sku || "",
-                      size: s.size || "M",
-                      plannedQty: s.plannedQty ?? 0,
-                      producedQty: s.producedQty ?? 0,
-                      barcode: s.barcode || "",
-                    })),
-                    images: Array.isArray(v.images) ? v.images : [],
-                  }))
-                : [emptyVariant()],
-            sizeCharts: loadSizeChartsFromDesignerItem(d),
-          });
+          setForm(mapDesignerItemToForm(d));
         } else {
           setLoadItemErrors(
             extractBackendMessages(res || { message: "Could not load item." }),
@@ -454,6 +494,73 @@ const DesignerInventoryForm = () => {
       }
     })();
   }, [id, isEdit]);
+
+  /** Prefill designer-facing fields from auth profile when creating a new item. */
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await designerApi.getProfile();
+        if (cancelled || !res?.success) return;
+        const d = res.data;
+        if (!d || typeof d !== "object") return;
+        setForm((s) => ({
+          ...s,
+          designerName: d.name || s.designerName,
+          employeeId: d.employeeId || s.employeeId,
+        }));
+      } catch {
+        /* not logged in as designer or profile unavailable */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit]);
+
+  useEffect(() => {
+    if (isEdit || createMode !== "import") return;
+    (async () => {
+      setImportLoading(true);
+      try {
+        const res = await designerApi.listInventory({
+          page: 1,
+          limit: 100,
+        });
+        const payload = res?.data ?? {};
+        const items = Array.isArray(payload.items)
+          ? payload.items
+          : Array.isArray(payload.inventory)
+            ? payload.inventory
+            : [];
+        setImportItems(items);
+      } catch (err) {
+        setSubmitErrors(extractBackendMessages(err));
+      } finally {
+        setImportLoading(false);
+      }
+    })();
+  }, [isEdit, createMode]);
+
+  const importSelectedItem = async () => {
+    if (!selectedImportItemId) {
+      setSubmitErrors(["Select an item to import first."]);
+      return;
+    }
+    setLoading(true);
+    setSubmitErrors([]);
+    try {
+      const res = await getDesignerItemById(selectedImportItemId);
+      const d = res?.data;
+      if (!d) throw new Error("Could not load selected item.");
+      setForm(mapImportedDesignerItemToForm(d));
+    } catch (err) {
+      setSubmitErrors(extractBackendMessages(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /** When CATEGORY options load (and edit fetch finished), infer missing `productTypeCode` from legacy `productType` and sync display name. */
   useEffect(() => {
@@ -503,6 +610,44 @@ const DesignerInventoryForm = () => {
         );
       } finally {
         setCodeLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setSizeChartTemplateLoading(true);
+      setSizeChartTemplateError("");
+      try {
+        const res = await listDesignerSizeCharts({ page: 1, limit: 100, isActive: true });
+        if (res?.success) {
+          setSizeChartTemplates(res?.data?.items || []);
+        } else {
+          setSizeChartTemplateError("Could not load size chart templates.");
+        }
+      } catch {
+        setSizeChartTemplateError("Could not load size chart templates.");
+      } finally {
+        setSizeChartTemplateLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setListingTemplateLoading(true);
+      setListingTemplateError("");
+      try {
+        const res = await listDesignerListingTemplates({ page: 1, limit: 100, isActive: true });
+        if (res?.success) {
+          setListingTemplates(res?.data?.items || []);
+        } else {
+          setListingTemplateError("Could not load listing templates.");
+        }
+      } catch {
+        setListingTemplateError("Could not load listing templates.");
+      } finally {
+        setListingTemplateLoading(false);
       }
     })();
   }, []);
@@ -793,6 +938,84 @@ const DesignerInventoryForm = () => {
     }));
   };
 
+  const applyExistingSizeChartTemplate = async () => {
+    if (!selectedSizeChartTemplateId) return;
+    setLoading(true);
+    setSubmitErrors([]);
+    try {
+      const res = await getDesignerSizeChartById(selectedSizeChartTemplateId);
+      const row = res?.data || res?.template || null;
+      if (!row) throw new Error("Template data not found.");
+      setForm((s) => ({
+        ...s,
+        sizeCharts: loadSizeChartsFromDesignerItem(row),
+      }));
+    } catch (err) {
+      setSubmitErrors(extractBackendMessages(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyListingTemplateDescriptions = async () => {
+    if (!selectedDescListingTemplateId) return;
+    setLoading(true);
+    setSubmitErrors([]);
+    try {
+      const res = await getDesignerListingTemplateById(selectedDescListingTemplateId);
+      const row = res?.data;
+      if (!row) throw new Error("Template not found.");
+      setForm((s) => ({
+        ...s,
+        shortDescription: row.shortDescription ?? s.shortDescription,
+        longDescription: row.longDescription ?? s.longDescription,
+      }));
+    } catch (err) {
+      setSubmitErrors(extractBackendMessages(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyListingTemplateCare = async () => {
+    if (!selectedCareListingTemplateId) return;
+    setLoading(true);
+    setSubmitErrors([]);
+    try {
+      const res = await getDesignerListingTemplateById(selectedCareListingTemplateId);
+      const row = res?.data;
+      if (!row) throw new Error("Template not found.");
+      const care = row.care && typeof row.care === "object" ? row.care : {};
+      const instructions = Array.isArray(care.instructions)
+        ? care.instructions.map((inst) => {
+            let iconKey = inst?.iconKey || "";
+            let iconUrl = String(inst?.iconUrl || "").trim();
+            if (iconKey && !iconUrl) {
+              const opt = CARE_ICON_OPTIONS.find((o) => o.iconKey === iconKey);
+              if (opt) iconUrl = String(opt.iconUrl || "");
+            }
+            return {
+              iconUrl,
+              iconKey,
+              text: inst?.text || "",
+              iconFile: null,
+            };
+          })
+        : [];
+      setForm((s) => ({
+        ...s,
+        care: {
+          description: care.description || "",
+          instructions,
+        },
+      }));
+    } catch (err) {
+      setSubmitErrors(extractBackendMessages(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const buildVariantsForPayload = () =>
     form.variants.map((variant) => {
       const imgs = Array.isArray(variant.images) ? variant.images : [];
@@ -853,14 +1076,26 @@ const DesignerInventoryForm = () => {
         }
       }
 
+      const employeeId = String(form.employeeId || "").trim();
+      if (!employeeId) {
+        throw new Error("Employee ID is required.");
+      }
+
       const formData = new FormData();
       formData.append("StyleNumber", form.StyleNumber);
       formData.append("styleName", form.styleName || "");
       formData.append("designerName", form.designerName);
-      formData.append("employeeId", form.employeeId);
+      formData.append("employeeId", employeeId);
       formData.append("longDescription", form.longDescription || "");
       formData.append("shortDescription", form.shortDescription || "");
       formData.append("productType", form.productType);
+      const productTypeCode = String(form.productTypeCode || "").trim().toUpperCase();
+      if (!productTypeCode) {
+        throw new Error(
+          "Product type code is required. Select a category from the list or enter the CATEGORY code if the list is empty.",
+        );
+      }
+      formData.append("productTypeCode", productTypeCode);
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
@@ -903,24 +1138,49 @@ const DesignerInventoryForm = () => {
         const cleanedHeaders = (chart.headers || []).filter(
           (h) => h && h.key && String(h.key).trim(),
         );
+        const headerKeys = cleanedHeaders.map((h) => String(h.key).trim());
         const cleanedRows = (chart.rows || [])
           .filter((row) => {
             if (!row || !row.size || !String(row.size).trim()) return false;
             const measurements = row.measurements || {};
-            return Object.values(measurements).some(
-              (val) => val !== "" && val !== null && val !== undefined,
+            return headerKeys.every((key) =>
+              Number.isFinite(Number(measurements[key])),
             );
           })
           .map((row) => ({
-            size: row.size,
-            measurements: row.measurements || {},
+            size: String(row.size).trim(),
+            measurements: headerKeys.reduce((acc, key) => {
+              acc[key] = Number(row.measurements?.[key]);
+              return acc;
+            }, {}),
           }));
+        const cleanedMeasureImage = (chart.measureImages || [])
+          .map((img, idx) => {
+            if (isLocalPickedFile(img)) {
+              return {
+                imageKey: `${side === "in" ? "measureImagesIn" : "measureImagesCm"}/${idx}`,
+              };
+            }
+            if (typeof img === "string" && String(img).trim()) {
+              return { url: String(img).trim() };
+            }
+            if (img && typeof img === "object") {
+              const url = String(img.url || "").trim();
+              const imageKey = String(img.imageKey || "").trim();
+              const isUploadSlotPlaceholder =
+                imageKey.startsWith("measureImagesIn/") ||
+                imageKey.startsWith("measureImagesCm/");
+              if (url || (imageKey && !isUploadSlotPlaceholder)) {
+                return { url, imageKey };
+              }
+            }
+            return null;
+          })
+          .filter(Boolean);
         return {
           headers: cleanedHeaders,
           rows: cleanedRows,
-          measureImage: (chart.measureImages || []).map((_, idx) => ({
-            imageKey: `${side === "in" ? "measureImagesIn" : "measureImagesCm"}/${idx}`,
-          })),
+          measureImage: cleanedMeasureImage,
         };
       };
 
@@ -928,7 +1188,18 @@ const DesignerInventoryForm = () => {
         in: buildChartPayload("in"),
         cm: buildChartPayload("cm"),
       };
+      if (
+        !chartMeetsRequirement(sizeChartsPayload.in) &&
+        !chartMeetsRequirement(sizeChartsPayload.cm)
+      ) {
+        throw new Error(
+          "Size chart must have headers, at least one complete row (all measurement columns numeric), and at least one measure image in IN or CM.",
+        );
+      }
       formData.append("sizeCharts", JSON.stringify(sizeChartsPayload));
+      if (selectedSizeChartTemplateId) {
+        formData.append("sizeChartTemplateId", selectedSizeChartTemplateId);
+      }
 
       (form.sizeCharts.in.measureImages || []).forEach((img) => {
         if (isLocalPickedFile(img)) formData.append("measureImagesIn", img);
@@ -1004,6 +1275,165 @@ const DesignerInventoryForm = () => {
   const activePreset =
     SIZE_CHART_PRESETS[form.gender]?.[sizeChartCategory] ||
     SIZE_CHART_PRESETS.unisex?.[sizeChartCategory];
+  const chartStatus = (() => {
+    const normalizePreview = (side) => {
+      const chart = form.sizeCharts?.[side] || {};
+      const headers = (chart.headers || []).filter(
+        (h) => h && String(h.key || "").trim(),
+      );
+      const keys = headers.map((h) => String(h.key).trim());
+      const rows = (chart.rows || [])
+        .filter((row) => row && String(row.size || "").trim())
+        .map((row) => ({
+          size: String(row.size || "").trim(),
+          measurements: keys.reduce((acc, key) => {
+            acc[key] = Number(row.measurements?.[key]);
+            return acc;
+          }, {}),
+        }));
+      const measureImage = (chart.measureImages || [])
+        .map((img) => {
+          if (isLocalPickedFile(img)) return { imageKey: "local-upload" };
+          if (typeof img === "string" && String(img).trim()) {
+            return { url: String(img).trim() };
+          }
+          if (img && typeof img === "object") {
+            const url = String(img.url || "").trim();
+            const imageKey = String(img.imageKey || "").trim();
+            const isUploadSlotPlaceholder =
+              imageKey.startsWith("measureImagesIn/") ||
+              imageKey.startsWith("measureImagesCm/");
+            if (url || (imageKey && !isUploadSlotPlaceholder)) {
+              return { url, imageKey };
+            }
+          }
+          return null;
+        })
+        .filter(Boolean);
+      return { headers, rows, measureImage };
+    };
+    const inValid = chartMeetsRequirement(normalizePreview("in"));
+    const cmValid = chartMeetsRequirement(normalizePreview("cm"));
+    return { inValid, cmValid, anyValid: inValid || cmValid };
+  })();
+  const steps = [
+    { id: 1, label: "Core" },
+    { id: 2, label: "Fabric & Costs" },
+    { id: 3, label: "Care" },
+    { id: 4, label: "Variants" },
+    { id: 5, label: "Size Chart & Save" },
+  ];
+  const validateStep = (step) => {
+    if (step === 1) {
+      const errors = [];
+      if (!String(form.StyleNumber || "").trim()) errors.push("Style number is required.");
+      if (!String(form.styleName || "").trim()) errors.push("Style name is required.");
+      if (!String(form.designerName || "").trim()) errors.push("Designer name is required.");
+      if (!String(form.employeeId || "").trim()) errors.push("Employee ID is required.");
+      if (!String(form.productTypeCode || "").trim()) {
+        errors.push("Product type code is required.");
+      }
+      if (!String(form.fitType || "").trim()) errors.push("Fit type is required.");
+      if (!String(form.shortDescription || "").trim()) {
+        errors.push("Short description is required.");
+      }
+      if (!String(form.longDescription || "").trim()) {
+        errors.push("Long description is required.");
+      }
+      return errors;
+    }
+    if (step === 2) return [];
+    if (step === 3) {
+      const errors = [];
+      if (!String(form.care?.description || "").trim()) {
+        errors.push("Care description is required.");
+      }
+      const instructions = Array.isArray(form.care?.instructions)
+        ? form.care.instructions
+        : [];
+      if (instructions.length === 0) {
+        errors.push("Add at least one care instruction.");
+      }
+      instructions.forEach((inst, idx) => {
+        if (!String(inst?.text || "").trim()) {
+          errors.push(`Care instruction ${idx + 1}: text is required.`);
+        }
+        const hasIconRef = String(inst?.iconKey || "").trim().length > 0;
+        const hasIconFile = isLocalPickedFile(inst?.iconFile);
+        const hasIconUrl = String(inst?.iconUrl || "").trim().length > 0;
+        if (!hasIconRef && !hasIconFile && !hasIconUrl) {
+          errors.push(`Care instruction ${idx + 1}: icon is required.`);
+        }
+      });
+      return errors;
+    }
+    if (step === 4) {
+      const errors = [];
+      const variants = Array.isArray(form.variants) ? form.variants : [];
+      if (variants.length === 0) errors.push("Add at least one variant.");
+      variants.forEach((variant, idx) => {
+        if (!String(variant?.color?.name || "").trim()) {
+          errors.push(`Variant ${idx + 1}: color name is required.`);
+        }
+        if (!String(variant?.color?.hex || "").trim()) {
+          errors.push(`Variant ${idx + 1}: color hex is required.`);
+        }
+        const sizes = Array.isArray(variant?.sizes) ? variant.sizes : [];
+        if (sizes.length === 0) {
+          errors.push(`Variant ${idx + 1}: add at least one size.`);
+        }
+        sizes.forEach((s, sIdx) => {
+          if (!String(s?.size || "").trim()) {
+            errors.push(`Variant ${idx + 1} size ${sIdx + 1}: size is required.`);
+          }
+        });
+      });
+      return errors;
+    }
+    if (step === 5) {
+      return chartStatus.anyValid
+        ? []
+        : [
+            "Size chart must be valid in IN or CM (headers, complete numeric rows, and at least one image).",
+          ];
+    }
+    return [];
+  };
+  const canMoveToStep = (targetStep) => {
+    if (targetStep <= currentStep) return true;
+    for (let s = 1; s < targetStep; s += 1) {
+      const errors = validateStep(s);
+      if (errors.length > 0) {
+        setSubmitErrors(errors);
+        setCurrentStep(s);
+        return false;
+      }
+    }
+    return true;
+  };
+  const goToStep = (targetStep) => {
+    setSubmitErrors([]);
+    if (canMoveToStep(targetStep)) {
+      setCurrentStep(targetStep);
+    }
+  };
+  const goNextStep = () => {
+    const errors = validateStep(currentStep);
+    if (errors.length > 0) {
+      setSubmitErrors(errors);
+      return;
+    }
+    setSubmitErrors([]);
+    setCurrentStep((s) => Math.min(steps.length, s + 1));
+  };
+  const stepErrors = {
+    1: validateStep(1),
+    2: validateStep(2),
+    3: validateStep(3),
+    4: validateStep(4),
+    5: validateStep(5),
+  };
+  const isStepComplete = (stepId) => (stepErrors[stepId] || []).length === 0;
 
   return (
     <div className="max-w-6xl space-y-3">
@@ -1038,6 +1468,113 @@ const DesignerInventoryForm = () => {
             {codeLoadError} You can still type values manually.
           </div>
         ) : null}
+        <div className="rounded-lg border border-indigo-100 bg-white p-2">
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-xs font-semibold text-indigo-900">
+              Step {currentStep} of {steps.length}
+            </p>
+            <p className="text-xs text-gray-600">{steps[currentStep - 1]?.label}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+            {steps.map((step) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => goToStep(step.id)}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+                  currentStep === step.id
+                    ? "bg-indigo-600 text-white"
+                    : isStepComplete(step.id)
+                      ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                <span className="inline-flex items-center gap-1">
+                  {step.label}
+                  {isStepComplete(step.id) ? (
+                    <span
+                      className={`text-[10px] ${
+                        currentStep === step.id ? "text-emerald-100" : "text-emerald-700"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      ✓
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {!isEdit && currentStep === 1 ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+            <p className="mb-2 text-xs font-semibold text-slate-800">
+              Create mode
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateMode("scratch")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                  createMode === "scratch"
+                    ? "border-indigo-300 bg-indigo-100 text-indigo-900"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Create from scratch
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateMode("import")}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                  createMode === "import"
+                    ? "border-indigo-300 bg-indigo-100 text-indigo-900"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Import existing
+              </button>
+            </div>
+            {createMode === "import" ? (
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm"
+                  value={selectedImportItemId}
+                  onChange={(e) => setSelectedImportItemId(e.target.value)}
+                  disabled={importLoading}
+                >
+                  <option value="">
+                    {importLoading
+                      ? "Loading items..."
+                      : "Select an existing item"}
+                  </option>
+                  {importItems.map((item) => (
+                    <option key={item._id} value={item._id}>
+                      {item.StyleNumber} - {item.styleName || "Untitled"} (
+                      {item.productType || "No product type"})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={importSelectedItem}
+                  disabled={loading || importLoading || !selectedImportItemId}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Import to form
+                </button>
+              </div>
+            ) : null}
+            {createMode === "import" ? (
+              <p className="mt-1.5 text-[11px] leading-snug text-slate-600">
+                Import copies short/long descriptions, fabric, costs, care, variants, and size
+                charts. Per-size SKU and barcode are cleared so the server can assign new values.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {currentStep === 1 ? (
+          <>
         <h2 className="border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-indigo-900">
           Core
         </h2>
@@ -1067,34 +1604,61 @@ const DesignerInventoryForm = () => {
               <input
                 className={fieldClass}
                 value={form[key] || ""}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, [key]: e.target.value }))
-                }
+                onChange={(e) => {
+                  const value =
+                    key === "employeeId"
+                      ? e.target.value.replace(/\s+/g, "")
+                      : e.target.value;
+                  setForm((s) => ({ ...s, [key]: value }));
+                }}
                 required={req}
               />
             </div>
           ))}
-          <SearchableCodeSelect
-            label="Product type"
-            required
-            value={form.productTypeCode}
-            buttonDisplay={
-              form.productType && form.productTypeCode
-                ? `${form.productType} (${form.productTypeCode})`
-                : form.productType || form.productTypeCode || ""
-            }
-            options={productTypeOptions}
-            loading={codeLoading}
-            placeholder="Select category code"
-            onChange={(code) => {
-              const opt = productTypeOptions.find((o) => o.value === code);
-              setForm((s) => ({
-                ...s,
-                productTypeCode: code,
-                productType: opt?.label || (code ? s.productType : ""),
-              }));
-            }}
-          />
+          {productTypeOptions.length === 0 && !codeLoading ? (
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                Product type code (CATEGORY)
+              </label>
+              <input
+                className={fieldClass}
+                value={form.productTypeCode}
+                onChange={(e) =>
+                  setForm((s) => ({
+                    ...s,
+                    productTypeCode: e.target.value.trim().toUpperCase(),
+                  }))
+                }
+                required
+                placeholder="e.g. SHIRT (must match active inventory CATEGORY code)"
+              />
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                No category list loaded — enter the code from admin inventory codes. Display name is set by the server from this code.
+              </p>
+            </div>
+          ) : (
+            <SearchableCodeSelect
+              label="Product type"
+              required
+              value={form.productTypeCode}
+              buttonDisplay={
+                form.productType && form.productTypeCode
+                  ? `${form.productType} (${form.productTypeCode})`
+                  : form.productType || form.productTypeCode || ""
+              }
+              options={productTypeOptions}
+              loading={codeLoading}
+              placeholder="Select category code"
+              onChange={(code) => {
+                const opt = productTypeOptions.find((o) => o.value === code);
+                setForm((s) => ({
+                  ...s,
+                  productTypeCode: code,
+                  productType: opt?.label || (code ? s.productType : ""),
+                }));
+              }}
+            />
+          )}
           <SearchableCodeSelect
             label="Fit type"
             required
@@ -1183,8 +1747,54 @@ const DesignerInventoryForm = () => {
               }
             />
           </div>
+          <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-violet-100 bg-violet-50/50 p-2">
+            <p className="mb-1 text-xs font-semibold text-violet-900">
+              Listing template — descriptions
+            </p>
+            <p className="mb-2 text-[11px] text-violet-800/90">
+              Create and edit saved snippets in the sidebar under{" "}
+              <span className="font-medium">Listing templates</span> (same pattern as size chart templates).
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <label className="mb-0.5 block text-[11px] font-medium text-gray-700">
+                  Use saved template
+                </label>
+                <select
+                  className={fieldClass}
+                  value={selectedDescListingTemplateId}
+                  onChange={(e) => setSelectedDescListingTemplateId(e.target.value)}
+                  disabled={listingTemplateLoading}
+                >
+                  <option value="">
+                    {listingTemplateLoading ? "Loading…" : "Select template"}
+                  </option>
+                  {listingTemplates.map((tpl) => (
+                    <option key={tpl._id} value={tpl._id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={applyListingTemplateDescriptions}
+                disabled={!selectedDescListingTemplateId || listingTemplateLoading || loading}
+                className="rounded-lg border border-violet-300 bg-violet-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                Apply to descriptions
+              </button>
+            </div>
+            {listingTemplateError ? (
+              <p className="mt-1 text-[11px] text-rose-700">{listingTemplateError}</p>
+            ) : null}
+          </div>
         </div>
+          </>
+        ) : null}
 
+        {currentStep === 2 ? (
+          <>
         <h2 className="border-l-4 border-emerald-500 pl-2 text-sm font-semibold text-emerald-900">
           Fabric
         </h2>
@@ -1238,7 +1848,44 @@ const DesignerInventoryForm = () => {
             </div>
           ))}
         </div>
+          </>
+        ) : null}
 
+        {currentStep === 3 ? (
+          <>
+        <div className="rounded-lg border border-cyan-200 bg-cyan-50/40 p-2">
+          <p className="mb-1 text-xs font-semibold text-cyan-900">Listing template — care</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label className="mb-0.5 block text-[11px] font-medium text-gray-700">
+                Use saved template
+              </label>
+              <select
+                className={fieldClass}
+                value={selectedCareListingTemplateId}
+                onChange={(e) => setSelectedCareListingTemplateId(e.target.value)}
+                disabled={listingTemplateLoading}
+              >
+                <option value="">
+                  {listingTemplateLoading ? "Loading…" : "Select template"}
+                </option>
+                {listingTemplates.map((tpl) => (
+                  <option key={tpl._id} value={tpl._id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={applyListingTemplateCare}
+              disabled={!selectedCareListingTemplateId || listingTemplateLoading || loading}
+              className="rounded-lg border border-cyan-400 bg-cyan-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              Apply to care
+            </button>
+          </div>
+        </div>
         <div className="flex items-center justify-between gap-2">
           <h2 className="border-l-4 border-cyan-500 pl-2 text-sm font-semibold text-cyan-900">
             Care
@@ -1385,7 +2032,11 @@ const DesignerInventoryForm = () => {
             </div>
           )}
         </div>
+          </>
+        ) : null}
 
+        {currentStep === 4 ? (
+          <>
         <div className="flex items-center justify-between gap-2">
           <h2 className="border-l-4 border-amber-500 pl-2 text-sm font-semibold text-amber-900">
             Variants & sizes
@@ -1656,10 +2307,41 @@ const DesignerInventoryForm = () => {
             );
           })}
         </div>
+          </>
+        ) : null}
 
         {/* Size Chart */}
+        {currentStep === 5 ? (
         <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3">
-          <h2 className="text-sm font-semibold text-indigo-900">Size Chart</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-indigo-900">Size Chart</h2>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span
+                className={`rounded-full px-2 py-0.5 font-semibold ${
+                  chartStatus.inValid
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                IN {chartStatus.inValid ? "valid" : "missing"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 font-semibold ${
+                  chartStatus.cmValid
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                CM {chartStatus.cmValid ? "valid" : "missing"}
+              </span>
+            </div>
+          </div>
+          {!chartStatus.anyValid ? (
+            <p className="mt-1 text-xs text-amber-800">
+              Add complete chart data on IN or CM: headers, numeric values for each
+              measurement column, and at least one measure image.
+            </p>
+          ) : null}
 
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
@@ -1694,6 +2376,44 @@ const DesignerInventoryForm = () => {
                 Apply preset (fills in + cm tables)
               </button>
             </div>
+          </div>
+
+          <div className="mt-2 rounded-lg border border-indigo-200 bg-white p-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <div>
+                <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                  Use existing size chart template
+                </label>
+                <select
+                  className={fieldClass}
+                  value={selectedSizeChartTemplateId}
+                  onChange={(e) => setSelectedSizeChartTemplateId(e.target.value)}
+                  disabled={sizeChartTemplateLoading}
+                >
+                  <option value="">
+                    {sizeChartTemplateLoading ? "Loading templates..." : "Select template"}
+                  </option>
+                  {sizeChartTemplates.map((tpl) => (
+                    <option key={tpl._id} value={tpl._id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={applyExistingSizeChartTemplate}
+                  disabled={!selectedSizeChartTemplateId || sizeChartTemplateLoading || loading}
+                  className="rounded-lg border border-indigo-300 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Apply template
+                </button>
+              </div>
+            </div>
+            {sizeChartTemplateError ? (
+              <p className="mt-1 text-xs text-rose-700">{sizeChartTemplateError}</p>
+            ) : null}
           </div>
 
           <div className="mt-3 rounded-lg border border-indigo-100 bg-white/90 p-2">
@@ -1995,15 +2715,37 @@ const DesignerInventoryForm = () => {
             );
           })}
         </div>
+        ) : null}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {loading ? "Saving…" : "Save"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentStep((s) => Math.max(1, s - 1))}
+            disabled={currentStep === 1 || loading}
+            className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Back
+          </button>
+          {currentStep < steps.length ? (
+            <button
+              type="button"
+              onClick={goNextStep}
+              disabled={loading}
+              className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading ? "Saving…" : "Save"}
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

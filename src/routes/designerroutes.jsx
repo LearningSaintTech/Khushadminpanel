@@ -7,6 +7,8 @@ import DesignerDashboard from "../designer/components/dashboard/Dashboard";
 import DesignerInventoryList from "../designer/components/inventory/DesignerInventoryList";
 import DesignerInventoryForm from "../designer/components/inventory/DesignerInventoryForm";
 import DesignerProfile from "../designer/components/profile/DesignerProfile";
+import DesignerSizeChartManager from "../designer/components/sizechart/DesignerSizeChartManager";
+import DesignerListingTemplateManager from "../designer/components/listingTemplate/DesignerListingTemplateManager";
 
 const DesignerRoutes = () => {
   return (
@@ -25,6 +27,8 @@ const DesignerRoutes = () => {
         <Route path="inventory" element={<DesignerInventoryList />} />
         <Route path="inventory/create" element={<DesignerInventoryForm />} />
         <Route path="inventory/edit/:id" element={<DesignerInventoryForm />} />
+        <Route path="size-chart" element={<DesignerSizeChartManager />} />
+        <Route path="listing-template" element={<DesignerListingTemplateManager />} />
         <Route path="profile" element={<DesignerProfile />} />
       </Route>
 

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import {
+  approveDesignerCatalogSync,
+  dismissDesignerCatalogPending,
   changeDesignerInventoryStatus,
   exportDesignerInventory,
   getDesignerInventory,
@@ -20,6 +22,7 @@ const DesignerInventory = () => {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [listedFilter, setListedFilter] = useState("");
+  const [catalogSyncFilter, setCatalogSyncFilter] = useState("");
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({ totalPages: 1 });
   const [loading, setLoading] = useState(false);
@@ -27,6 +30,8 @@ const DesignerInventory = () => {
   const [error, setError] = useState("");
   const [busyStatusId, setBusyStatusId] = useState("");
   const [busyListedId, setBusyListedId] = useState("");
+  const [busyApproveCatalogId, setBusyApproveCatalogId] = useState("");
+  const [busyDismissCatalogId, setBusyDismissCatalogId] = useState("");
   const [regeneratingAll, setRegeneratingAll] = useState(false);
   const [regeneratingSelected, setRegeneratingSelected] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
@@ -86,6 +91,7 @@ const DesignerInventory = () => {
         status,
         designerId: presetDesignerId,
         isListed: listedFilter,
+        catalogUpdateStatus: catalogSyncFilter,
       });
       if (res?.success) {
         setRows(res.data?.items || []);
@@ -100,11 +106,11 @@ const DesignerInventory = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [page, status, listedFilter, search, presetDesignerId]);
+  }, [page, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
 
   useEffect(() => {
     setSelectedRowIds([]);
-  }, [page, status, listedFilter, search, presetDesignerId]);
+  }, [page, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
 
   const onChangeStatus = async (id, nextStatus) => {
     setBusyStatusId(id);
@@ -147,6 +153,48 @@ const DesignerInventory = () => {
     }
   };
 
+  const handleApproveCatalogSync = async (r) => {
+    if (!r?._id) return;
+    const ok = window.confirm(
+      "Apply this designer row to the linked main catalog item? Overlapping catalog fields will be updated from the designer copy. Variant colors and SKUs must already match the catalog item (extra designer SKUs are allowed)."
+    );
+    if (!ok) return;
+    setBusyApproveCatalogId(r._id);
+    setError("");
+    try {
+      const res = await approveDesignerCatalogSync(r._id);
+      if (res?.success && selectedItem?._id === r._id) {
+        setSelectedItem(res.data);
+      }
+      await fetchRows();
+    } catch (err) {
+      setError(err?.message || "Failed to apply catalog update.");
+    } finally {
+      setBusyApproveCatalogId("");
+    }
+  };
+
+  const handleDismissCatalogPending = async (r) => {
+    if (!r?._id) return;
+    const ok = window.confirm(
+      "Clear the pending flag without updating the main catalog item? The designer row will show as up to date; their saved edits stay on the designer copy only."
+    );
+    if (!ok) return;
+    setBusyDismissCatalogId(r._id);
+    setError("");
+    try {
+      const res = await dismissDesignerCatalogPending(r._id);
+      if (res?.success && selectedItem?._id === r._id) {
+        setSelectedItem(res.data);
+      }
+      await fetchRows();
+    } catch (err) {
+      setError(err?.message || "Failed to dismiss pending catalog update.");
+    } finally {
+      setBusyDismissCatalogId("");
+    }
+  };
+
   const onExport = async (type) => {
     setExportingType(type);
     setError("");
@@ -155,6 +203,7 @@ const DesignerInventory = () => {
         search,
         status,
         ...(listedFilter ? { isListed: listedFilter } : {}),
+        ...(catalogSyncFilter ? { catalogUpdateStatus: catalogSyncFilter } : {}),
         ...(presetDesignerId ? { designerId: presetDesignerId } : {}),
       });
       const url = window.URL.createObjectURL(res);
@@ -193,6 +242,7 @@ const DesignerInventory = () => {
           status,
           designerId: presetDesignerId,
           isListed: listedFilter,
+          catalogUpdateStatus: catalogSyncFilter,
         });
 
         const items = res?.data?.items || [];
@@ -362,6 +412,10 @@ const DesignerInventory = () => {
           <option value="true">Listed</option>
           <option value="false">Not listed</option>
         </select>
+        <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[200px]" value={catalogSyncFilter} onChange={(e) => { setPage(1); setCatalogSyncFilter(e.target.value); }}>
+          <option value="">All catalog sync</option>
+          <option value="pending">Pending main-item sync</option>
+        </select>
       </div>
       {error ? (
         <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -390,12 +444,13 @@ const DesignerInventory = () => {
               <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">SKU IDs</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">Catalog sync</th>
               <th className="p-2.5 text-left font-semibold text-gray-700">Listed</th>
               <th className="p-2.5 text-right font-semibold text-gray-700">Action</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={12} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={12} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
+            {loading ? <tr><td colSpan={13} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={13} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
               <tr key={r._id} className="border-t border-black/5">
                 <td className="p-2.5 text-center">
                   <input
@@ -444,6 +499,43 @@ const DesignerInventory = () => {
                   <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusClasses(r.status)}`}>
                     {r.status}
                   </span>
+                </td>
+                <td className="p-2.5 align-top">
+                  <div className="flex min-w-[120px] flex-col gap-1">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                        r.catalogUpdateStatus === "pending"
+                          ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
+                          : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
+                      }`}
+                    >
+                      {r.catalogItemId
+                        ? r.catalogUpdateStatus === "pending"
+                          ? "Pending"
+                          : "Up to date"
+                        : "—"}
+                    </span>
+                    {r.catalogItemId && r.catalogUpdateStatus === "pending" ? (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                          disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
+                          onClick={() => handleApproveCatalogSync(r)}
+                        >
+                          {busyApproveCatalogId === r._id ? "Applying…" : "Apply to catalog"}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
+                          onClick={() => handleDismissCatalogPending(r)}
+                        >
+                          {busyDismissCatalogId === r._id ? "Clearing…" : "Dismiss pending"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="p-2.5">
                   <select
@@ -541,6 +633,44 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
               <div><span className="font-medium">Listed (catalog):</span> {selectedItem.isListed ? "Yes" : "No"}</div>
               <div><span className="font-medium">Main inventory item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
+              <div>
+                <span className="font-medium">Main catalog update:</span>{" "}
+                {selectedItem.catalogItemId
+                  ? selectedItem.catalogUpdateStatus === "pending"
+                    ? "Pending admin approval"
+                    : "Up to date"
+                  : "—"}
+              </div>
+              {selectedItem.catalogItemId && selectedItem.catalogUpdateStatus === "pending" ? (
+                <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                    disabled={
+                      busyApproveCatalogId === selectedItem._id ||
+                      busyDismissCatalogId === selectedItem._id
+                    }
+                    onClick={() => handleApproveCatalogSync(selectedItem)}
+                  >
+                    {busyApproveCatalogId === selectedItem._id
+                      ? "Applying…"
+                      : "Apply designer changes to catalog item"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                    disabled={
+                      busyApproveCatalogId === selectedItem._id ||
+                      busyDismissCatalogId === selectedItem._id
+                    }
+                    onClick={() => handleDismissCatalogPending(selectedItem)}
+                  >
+                    {busyDismissCatalogId === selectedItem._id
+                      ? "Clearing…"
+                      : "Dismiss pending (no catalog change)"}
+                  </button>
+                </div>
+              ) : null}
               <div>
                 <span className="font-medium">Product type:</span> {selectedItem.productType || "—"}
                 {selectedItem.productTypeCode ? (

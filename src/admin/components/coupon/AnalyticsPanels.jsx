@@ -33,13 +33,13 @@ export function OverviewPanel({
     const normalizePlatform = (ev) => {
       const source = String(ev?.sourcePlatform || "").toLowerCase();
       if (source === "android") return "android";
-      if (source === "iphone" || source === "ios") return "iphone";
+      if (source === "iphone" || source === "ios") return "ios";
       return "other";
     };
 
     const baseRows = events.filter((ev) => isInstallEvent(ev));
     const androidRows = baseRows.filter((ev) => normalizePlatform(ev) === "android");
-    const iphoneRows = baseRows.filter((ev) => normalizePlatform(ev) === "iphone");
+    const iosRows = baseRows.filter((ev) => normalizePlatform(ev) === "ios");
 
     const inRange = (ev, from, to) => {
       const t = new Date(ev?.timestamp || ev?.createdAt || 0);
@@ -48,9 +48,9 @@ export function OverviewPanel({
 
     return {
       androidTodayRows: androidRows.filter((ev) => inRange(ev, startOfToday, now)),
-      iphoneTodayRows: iphoneRows.filter((ev) => inRange(ev, startOfToday, now)),
+      iosTodayRows: iosRows.filter((ev) => inRange(ev, startOfToday, now)),
       androidLast7Rows: androidRows.filter((ev) => inRange(ev, startOfLast7, now)),
-      iphoneLast7Rows: iphoneRows.filter((ev) => inRange(ev, startOfLast7, now)),
+      iosLast7Rows: iosRows.filter((ev) => inRange(ev, startOfLast7, now)),
     };
   }, [events]);
 
@@ -88,7 +88,7 @@ export function OverviewPanel({
   const appRows = useMemo(
     () =>
       events
-        .filter((ev) => ev?.channel === "app")
+        .filter((ev) => ["android", "ios"].includes(String(ev?.channel || "").toLowerCase()))
         .slice(0, 25)
         .map((ev) => ({
           eventType: ev?.eventType || "-",
@@ -148,7 +148,7 @@ export function OverviewPanel({
                 path: ev?.path || "-",
                 timestamp: ev?.timestamp || ev?.createdAt || "",
               }))
-          : selectedKpi === "iphone_events"
+            : selectedKpi === "iphone_events"
             ? events
                 .filter((ev) => ["iphone", "ios"].includes(String(ev?.sourcePlatform || "").toLowerCase()))
                 .slice(0, 25)
@@ -161,11 +161,11 @@ export function OverviewPanel({
             : selectedKpi === "android_installs_today"
               ? installsByPlatform.androidTodayRows.slice(0, 25).map(toRow)
               : selectedKpi === "iphone_installs_today"
-                ? installsByPlatform.iphoneTodayRows.slice(0, 25).map(toRow)
+                ? installsByPlatform.iosTodayRows.slice(0, 25).map(toRow)
                 : selectedKpi === "android_installs_7d"
                   ? installsByPlatform.androidLast7Rows.slice(0, 25).map(toRow)
                   : selectedKpi === "iphone_installs_7d"
-                    ? installsByPlatform.iphoneLast7Rows.slice(0, 25).map(toRow)
+                    ? installsByPlatform.iosLast7Rows.slice(0, 25).map(toRow)
           : appRows;
 
   return (
@@ -206,7 +206,7 @@ export function OverviewPanel({
         <KpiTile
           icon={<Smartphone className="h-5 w-5 text-amber-600" />}
           title="iPhone events"
-          value={platformCounts.iphone.toLocaleString()}
+          value={platformCounts.ios.toLocaleString()}
           subtitle="Current page"
           onClick={() => setSelectedKpi("iphone_events")}
           active={selectedKpi === "iphone_events"}
@@ -225,7 +225,7 @@ export function OverviewPanel({
         <KpiTile
           icon={<Smartphone className="h-5 w-5 text-violet-600" />}
           title="iPhone installs (today)"
-          value={installsByPlatform.iphoneTodayRows.length.toLocaleString()}
+          value={installsByPlatform.iosTodayRows.length.toLocaleString()}
           subtitle="Install events in current page"
           onClick={() => setSelectedKpi("iphone_installs_today")}
           active={selectedKpi === "iphone_installs_today"}
@@ -241,7 +241,7 @@ export function OverviewPanel({
         <KpiTile
           icon={<Smartphone className="h-5 w-5 text-violet-600" />}
           title="iPhone installs (7d)"
-          value={installsByPlatform.iphoneLast7Rows.length.toLocaleString()}
+          value={installsByPlatform.iosLast7Rows.length.toLocaleString()}
           subtitle="Install events in current page"
           onClick={() => setSelectedKpi("iphone_installs_7d")}
           active={selectedKpi === "iphone_installs_7d"}

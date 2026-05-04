@@ -16,8 +16,8 @@ import { FilterField, SegmentedTabs } from "./AnalyticsUiParts";
 
 const PAGE_SIZE = 25;
 
-const SOURCE_OPTIONS = ["all", "website", "android", "iphone", "app"];
-const PLATFORM_OPTIONS = ["all", "website", "android", "iphone", "app"];
+const SOURCE_OPTIONS = ["all", "website", "android", "ios", "app"];
+const PLATFORM_OPTIONS = ["all", "website", "android", "ios"];
 const SUMMARY_MODULE_OPTIONS = [
   { id: "all", label: "All modules" },
   { id: "users", label: "Users" },
@@ -173,8 +173,10 @@ const EventAnalyticsTab = () => {
 
   const buildEventQueryParams = (page = 1, limit = pageSize) => {
     const params = { page, limit };
+    // Raw event query accepts channel: website/android/ios.
+    // Treat "app" as aggregate only (summary mode), so do not send it to events query.
     if (filters.platform !== "all") params.channel = filters.platform;
-    else if (filters.channel !== "all") params.channel = filters.channel;
+    else if (filters.channel !== "all" && filters.channel !== "app") params.channel = filters.channel;
     if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
     if (filters.from) params.from = new Date(filters.from).toISOString();
     if (filters.to) params.to = new Date(filters.to).toISOString();
@@ -203,7 +205,7 @@ const EventAnalyticsTab = () => {
   const buildActiveFilterParams = () => {
     const params = {};
     if (filters.platform !== "all") params.channel = filters.platform;
-    else if (filters.channel !== "all") params.channel = filters.channel;
+    else if (filters.channel !== "all" && filters.channel !== "app") params.channel = filters.channel;
     if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
     if (filters.from) params.from = new Date(filters.from).toISOString();
     if (filters.to) params.to = new Date(filters.to).toISOString();
@@ -347,7 +349,7 @@ const EventAnalyticsTab = () => {
         // Primary source: analytics add_to_cart events
       const baseParams = { limit: 200 };
       if (filters.platform !== "all") baseParams.channel = filters.platform;
-      else if (filters.channel !== "all") baseParams.channel = filters.channel;
+      else if (filters.channel !== "all" && filters.channel !== "app") baseParams.channel = filters.channel;
         if (filters.from) baseParams.from = new Date(filters.from).toISOString();
         if (filters.to) baseParams.to = new Date(filters.to).toISOString();
 
@@ -553,7 +555,7 @@ const EventAnalyticsTab = () => {
         limit: 200,
       };
       if (filters.platform !== "all") baseParams.channel = filters.platform;
-      else if (filters.channel !== "all") baseParams.channel = filters.channel;
+      else if (filters.channel !== "all" && filters.channel !== "app") baseParams.channel = filters.channel;
       if (filters.from) baseParams.from = new Date(filters.from).toISOString();
       if (filters.to) baseParams.to = new Date(filters.to).toISOString();
 
@@ -711,11 +713,10 @@ const EventAnalyticsTab = () => {
         const channel = String(ev?.channel || "").toLowerCase();
         if (source === "website" || channel === "website") acc.website += 1;
         else if (source === "android") acc.android += 1;
-        else if (source === "iphone" || source === "ios") acc.iphone += 1;
-        else if (channel === "app") acc.app += 1;
+        else if (source === "iphone" || source === "ios" || channel === "ios") acc.ios += 1;
         return acc;
       },
-      { website: 0, android: 0, iphone: 0, app: 0 }
+      { website: 0, android: 0, ios: 0 }
     );
   }, [events]);
 
@@ -794,7 +795,7 @@ const EventAnalyticsTab = () => {
                 onChange={(e) => setFilters((p) => ({ ...p, channel: e.target.value }))}
                 className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
               >
-                {SOURCE_OPTIONS.map((opt) => (
+                {(isPhase1SummaryMode ? SOURCE_OPTIONS : SOURCE_OPTIONS.filter((opt) => opt !== "app")).map((opt) => (
                   <option key={opt} value={opt}>
                     {opt === "all" ? "All sources" : opt}
                   </option>

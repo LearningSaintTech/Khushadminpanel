@@ -28,6 +28,7 @@ export const getDesignerInventory = ({
   status = "",
   designerId = "",
   isListed = "",
+  catalogUpdateStatus = "",
 } = {}) => {
   const q = new URLSearchParams({
     page: String(page),
@@ -38,17 +39,22 @@ export const getDesignerInventory = ({
     ...(isListed !== "" && isListed !== undefined && isListed !== null
       ? { isListed: String(isListed) }
       : {}),
+    ...(catalogUpdateStatus ? { catalogUpdateStatus: String(catalogUpdateStatus) } : {}),
   });
   return apiConnector("GET", `${ADMIN_BASE}/inventory/list?${q.toString()}`);
 };
 export const getDesignerInventoryById = (id) =>
   apiConnector("GET", `${ADMIN_BASE}/inventory/${id}`);
 export const updateDesignerInventory = (id, data) =>
-  apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/update`, data);
+  apiConnector("PUT", `${ADMIN_BASE}/inventory/${id}/update`, data);
 export const changeDesignerInventoryStatus = (id, status) =>
   apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/status`, { status });
 export const patchDesignerInventoryListed = (id, body) =>
   apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/listed`, body);
+export const approveDesignerCatalogSync = (id) =>
+  apiConnector("POST", `${ADMIN_BASE}/inventory/${id}/approve-catalog-sync`, {});
+export const dismissDesignerCatalogPending = (id) =>
+  apiConnector("POST", `${ADMIN_BASE}/inventory/${id}/dismiss-catalog-pending`, {});
 export const exportDesignerInventory = (type = "csv", params = {}) =>
   apiConnector(
     "GET",

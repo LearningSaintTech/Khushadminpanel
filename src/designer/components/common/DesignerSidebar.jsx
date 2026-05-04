@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Package, User, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Ruler, FileText, User, LogOut } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { logout } from "../../../redux/GlobalSlice";
 import { designerApi } from "../../apis/designerApi";
@@ -40,6 +40,12 @@ const DesignerSidebar = () => {
           <Link className={itemClass("/designer/inventory")} to="/designer/inventory">
             <Package size={18} className="shrink-0 text-emerald-300" /> Inventory
           </Link>
+          <Link className={itemClass("/designer/size-chart")} to="/designer/size-chart">
+            <Ruler size={18} className="shrink-0 text-cyan-300" /> Size chart
+          </Link>
+          <Link className={itemClass("/designer/listing-template")} to="/designer/listing-template">
+            <FileText size={18} className="shrink-0 text-amber-200" /> Listing templates
+          </Link>
           <Link className={itemClass("/designer/profile")} to="/designer/profile">
             <User size={18} className="shrink-0 text-violet-300" /> Profile
           </Link>
@@ -61,6 +67,12 @@ const DesignerSidebar = () => {
           </Link>
           <Link to="/designer/inventory" className="rounded-md bg-emerald-600/80 px-2 py-1 text-xs">
             Stock
+          </Link>
+          <Link to="/designer/size-chart" className="rounded-md bg-cyan-600/80 px-2 py-1 text-xs">
+            Charts
+          </Link>
+          <Link to="/designer/listing-template" className="rounded-md bg-amber-600/80 px-2 py-1 text-xs">
+            Text
           </Link>
           <Link to="/designer/profile" className="rounded-md bg-violet-600/80 px-2 py-1 text-xs">
             Me

@@ -263,7 +263,7 @@ const DesignerInventoryList = () => {
                   <td className="p-2.5">
                     <div className="font-medium text-gray-900">{r.StyleNumber}</div>
                     <div className="text-xs text-gray-500">{r.styleName || "-"}</div>
-                    <div className="text-xs text-gray-500">{r.employeeId}</div>
+                    <div className="text-xs text-gray-500">{r.employeeId || "—"}</div>
                   </td>
                   <td className="p-2.5 text-gray-700">
                     <span className="text-sm">{formatProductTypeAndFit(r)}</span>
@@ -297,6 +297,22 @@ const DesignerInventoryList = () => {
                     >
                       {r.isListed ? "Yes" : "No"}
                     </span>
+                    {r.catalogItemId ? (
+                      <div className="mt-1 max-w-[140px] text-[10px] leading-snug text-gray-600" title="Main catalog item linked by admin">
+                        Store:{" "}
+                        <span
+                          className={
+                            r.catalogUpdateStatus === "pending"
+                              ? "font-semibold text-amber-700"
+                              : "text-gray-700"
+                          }
+                        >
+                          {r.catalogUpdateStatus === "pending"
+                            ? "Update pending admin approval"
+                            : "Up to date"}
+                        </span>
+                      </div>
+                    ) : null}
                   </td>
                   <td className="p-2.5">
                     <div className="flex items-center justify-end gap-1 whitespace-nowrap">
@@ -438,7 +454,7 @@ const DesignerInventoryList = () => {
                 <span className="font-medium text-gray-600">Designer:</span> {selected.designerName}
               </div>
               <div>
-                <span className="font-medium text-gray-600">Employee:</span> {selected.employeeId}
+                <span className="font-medium text-gray-600">Employee:</span> {selected.employeeId || "—"}
               </div>
               <div>
                 <span className="font-medium text-gray-600">Status:</span>{" "}
