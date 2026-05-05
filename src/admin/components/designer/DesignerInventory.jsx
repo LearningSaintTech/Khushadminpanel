@@ -11,6 +11,12 @@ import {
   regenerateDesignerSku,
   patchDesignerInventoryListed,
 } from "../../apis/Designerapi";
+import { getSingleItem } from "../../apis/itemapi";
+import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import {
+  catalogSkusMissingOnDesigner,
+  summarizeMissingCatalogSkus,
+} from "../../utils/catalogDesignerSyncPreflight.js";
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
@@ -153,22 +159,74 @@ const DesignerInventory = () => {
     }
   };
 
+  const parseCatalogItemResponse = (res) => {
+    if (!res || typeof res !== "object") return null;
+    const d = res.data;
+    if (d && typeof d === "object") {
+      if (d.data) return d.data;
+      if (d.item) return d.item;
+      if (d.product) return d.product;
+      if (d.variants || d.productId || d.name) return d;
+    }
+    if (res.variants || res.productId || res.name) return res;
+    return null;
+  };
+
   const handleApproveCatalogSync = async (r) => {
     if (!r?._id) return;
+    if (!r.catalogItemId) {
+      setError("This designer row has no linked catalog item id.");
+      return;
+    }
     const ok = window.confirm(
-      "Apply this designer row to the linked main catalog item? Overlapping catalog fields will be updated from the designer copy. Variant colors and SKUs must already match the catalog item (extra designer SKUs are allowed)."
+      "Apply this designer row to the linked main catalog item? Every SKU that still exists on the catalog item must also exist on this designer row (same SKU string). Extra rows on the designer copy are ignored for this check. Continue?"
     );
     if (!ok) return;
     setBusyApproveCatalogId(r._id);
     setError("");
     try {
+      const [invRes, catRes] = await Promise.all([
+        getDesignerInventoryById(r._id),
+        getSingleItem(String(r.catalogItemId)),
+      ]);
+      if (!invRes?.success || !invRes.data) {
+        setError(invRes?.message || "Could not load designer inventory row.");
+        return;
+      }
+      const designerDoc = invRes.data;
+      const catalogDoc = parseCatalogItemResponse(catRes);
+
+      if (!catalogDoc) {
+        setError(
+          catRes?.message ||
+            "Could not load the linked catalog item. Check listing / catalog item id."
+        );
+        return;
+      }
+
+      const missing = catalogSkusMissingOnDesigner(designerDoc, catalogDoc);
+      if (missing.length) {
+        const detail = summarizeMissingCatalogSkus(missing);
+        setError(
+          [
+            `The designer row is missing ${missing.length} catalog SKU(s). Add these sizes/SKUs on the designer inventory (same SKU strings as main inventory), or remove them from the catalog item first.`,
+            "",
+            detail,
+            "",
+            `Catalog item id: ${String(r.catalogItemId)}`,
+          ].join("\n")
+        );
+        return;
+      }
+
       const res = await approveDesignerCatalogSync(r._id);
       if (res?.success && selectedItem?._id === r._id) {
         setSelectedItem(res.data);
       }
       await fetchRows();
     } catch (err) {
-      setError(err?.message || "Failed to apply catalog update.");
+      const msgs = extractBackendMessages(err);
+      setError(msgs.length ? msgs.join("\n") : err?.message || "Failed to apply catalog update.");
     } finally {
       setBusyApproveCatalogId("");
     }
@@ -189,7 +247,8 @@ const DesignerInventory = () => {
       }
       await fetchRows();
     } catch (err) {
-      setError(err?.message || "Failed to dismiss pending catalog update.");
+      const msgs = extractBackendMessages(err);
+      setError(msgs.length ? msgs.join("\n") : err?.message || "Failed to dismiss pending catalog update.");
     } finally {
       setBusyDismissCatalogId("");
     }
@@ -418,7 +477,7 @@ const DesignerInventory = () => {
         </select>
       </div>
       {error ? (
-        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mb-3 whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </div>
       ) : null}

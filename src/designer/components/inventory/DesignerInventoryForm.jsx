@@ -1426,6 +1426,17 @@ const DesignerInventoryForm = () => {
     setSubmitErrors([]);
     setCurrentStep((s) => Math.min(steps.length, s + 1));
   };
+  const handleFormKeyDown = (e) => {
+    // Prevent accidental submit via Enter while user is still filling earlier steps.
+    if (
+      e.key === "Enter" &&
+      currentStep < steps.length &&
+      e.target &&
+      e.target.tagName !== "TEXTAREA"
+    ) {
+      e.preventDefault();
+    }
+  };
   const stepErrors = {
     1: validateStep(1),
     2: validateStep(2),
@@ -1449,6 +1460,7 @@ const DesignerInventoryForm = () => {
 
       <form
         onSubmit={onSubmit}
+        onKeyDown={handleFormKeyDown}
         className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm"
       >
         {submitErrors.length > 0 ? (
@@ -2745,6 +2757,16 @@ const DesignerInventoryForm = () => {
               {loading ? "Saving…" : "Save"}
             </button>
           )}
+          {currentStep < steps.length ? (
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading ? "Saving…" : "Save"}
+            </button>
+          ) : null}
         </div>
       </form>
     </div>
