@@ -1,4 +1,9 @@
 import { designerItemToFormSizeCharts } from "../../utils/designerSizeChartDisplay.js";
+import {
+  inferVariantMediaType,
+  isVariantVideoMedia,
+  variantMediaUrl,
+} from "../../utils/variantMedia.js";
 
 /**
  * Builds multipart FormData for POST /items/create (same field layout as ItemForm.jsx handleSave, create path).
@@ -43,15 +48,26 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
         },
         images: variantImages.map((img, idx) => {
           if (img instanceof File) {
-            return { order: idx + 1 };
+            return { order: idx + 1, type: inferVariantMediaType(img), thumbnail: "" };
           }
           if (typeof img === "string" && img.length > 0) {
-            return { order: idx + 1, url: img };
+            return {
+              order: idx + 1,
+              url: img,
+              type: inferVariantMediaType(img),
+              thumbnail: "",
+            };
           }
-          if (img && typeof img === "object" && img.url) {
-            return { order: idx + 1, url: img.url };
+          if (img && typeof img === "object" && (img.url || img.imageKey || img.key)) {
+            return {
+              order: idx + 1,
+              url: String(img.url || "").trim(),
+              imageKey: img.imageKey || img.key || "",
+              type: img.type || inferVariantMediaType(img),
+              thumbnail: img.thumbnail != null ? String(img.thumbnail) : "",
+            };
           }
-          return { order: idx + 1 };
+          return { order: idx + 1, type: "image", thumbnail: "" };
         }),
         sizes: variantSizes
           .filter((s) => s && s.size && s.stock !== "" && s.stock !== null && s.stock !== undefined)
@@ -298,13 +314,6 @@ function orderedVariantImages(variant) {
   return [...raw].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0));
 }
 
-function variantImageSrc(img) {
-  if (!img) return "";
-  if (typeof img === "string") return img.trim();
-  if (typeof img?.url === "string") return img.url.trim();
-  return "";
-}
-
 /**
  * Map a designer inventory document (API shape) into ItemForm-like state for catalog create.
  */
@@ -322,7 +331,21 @@ export function designerInventoryToItemFormState(designer) {
     .filter((v) => v?.color?.name)
     .map((v) => {
       const imgs = orderedVariantImages(v)
-        .map((im) => variantImageSrc(im))
+        .map((im) => {
+          const url = variantMediaUrl(im);
+          if (!url) return null;
+          if (typeof im === "object" && im != null && (im.url || im.type || im.imageKey || im.key)) {
+            return {
+              url,
+              imageKey: im.imageKey || im.key || "",
+              type: im.type || (isVariantVideoMedia(im) ? "video" : "image"),
+              thumbnail: im.thumbnail != null ? String(im.thumbnail) : "",
+            };
+          }
+          return inferVariantMediaType(im) === "video"
+            ? { url, type: "video", imageKey: "", thumbnail: "" }
+            : url;
+        })
         .filter(Boolean);
       const sizes = (v.sizes || [])
         .filter((s) => s && s.size)

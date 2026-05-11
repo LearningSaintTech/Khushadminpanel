@@ -71,7 +71,9 @@ const toFormSizeCharts = (row) => {
   if (row?.sizeChart && typeof row.sizeChart === "object") {
     const side = row.sizeChart.unit === "cm" ? "cm" : "in";
     next[side] = {
-      headers: Array.isArray(row.sizeChart.headers) ? row.sizeChart.headers : [],
+      headers: Array.isArray(row.sizeChart.headers)
+        ? row.sizeChart.headers
+        : [],
       rows: mapRowsFromApi(row.sizeChart.rows),
       measureImages: Array.isArray(row.sizeChart.measureImage)
         ? row.sizeChart.measureImage.map((m) => m?.url || "").filter(Boolean)
@@ -123,7 +125,11 @@ const DesignerSizeChartManager = () => {
         setRows(res?.data?.items || []);
         setPagination(res?.data?.pagination || { totalPages: 1, total: 0 });
       } else {
-        setErrors(extractBackendMessages(res || { message: "Could not load size charts." }));
+        setErrors(
+          extractBackendMessages(
+            res || { message: "Could not load size charts." },
+          ),
+        );
       }
     } catch (e) {
       setErrors(extractBackendMessages(e));
@@ -172,7 +178,10 @@ const DesignerSizeChartManager = () => {
         ...s.sizeCharts,
         [side]: {
           ...s.sizeCharts[side],
-          headers: [...(s.sizeCharts[side].headers || []), { key: "", label: "" }],
+          headers: [
+            ...(s.sizeCharts[side].headers || []),
+            { key: "", label: "" },
+          ],
         },
       },
     }));
@@ -197,7 +206,10 @@ const DesignerSizeChartManager = () => {
         ...s,
         sizeCharts: {
           ...s.sizeCharts,
-          [side]: { ...chart, headers: (chart.headers || []).filter((_, i) => i !== index) },
+          [side]: {
+            ...chart,
+            headers: (chart.headers || []).filter((_, i) => i !== index),
+          },
         },
       };
     });
@@ -214,7 +226,10 @@ const DesignerSizeChartManager = () => {
         ...s,
         sizeCharts: {
           ...s.sizeCharts,
-          [side]: { ...chart, rows: [...(chart.rows || []), { size: "", measurements }] },
+          [side]: {
+            ...chart,
+            rows: [...(chart.rows || []), { size: "", measurements }],
+          },
         },
       };
     });
@@ -225,7 +240,11 @@ const DesignerSizeChartManager = () => {
       const rows = [...(chart.rows || [])];
       const current = { ...(rows[rowIndex] || {}) };
       if (field === "size") current.size = value;
-      else current.measurements = { ...(current.measurements || {}), [field]: value };
+      else
+        current.measurements = {
+          ...(current.measurements || {}),
+          [field]: value,
+        };
       rows[rowIndex] = current;
       return {
         ...s,
@@ -240,7 +259,10 @@ const DesignerSizeChartManager = () => {
         ...s,
         sizeCharts: {
           ...s.sizeCharts,
-          [side]: { ...chart, rows: (chart.rows || []).filter((_, i) => i !== rowIndex) },
+          [side]: {
+            ...chart,
+            rows: (chart.rows || []).filter((_, i) => i !== rowIndex),
+          },
         },
       };
     });
@@ -252,7 +274,10 @@ const DesignerSizeChartManager = () => {
         ...s,
         sizeCharts: {
           ...s.sizeCharts,
-          [side]: { ...chart, measureImages: [...(chart.measureImages || []), ""] },
+          [side]: {
+            ...chart,
+            measureImages: [...(chart.measureImages || []), ""],
+          },
         },
       };
     });
@@ -266,7 +291,10 @@ const DesignerSizeChartManager = () => {
         ...s,
         sizeCharts: {
           ...s.sizeCharts,
-          [side]: { ...chart, measureImages: [...(chart.measureImages || []), ...next] },
+          [side]: {
+            ...chart,
+            measureImages: [...(chart.measureImages || []), ...next],
+          },
         },
       };
     });
@@ -279,7 +307,10 @@ const DesignerSizeChartManager = () => {
       list[index] = value;
       return {
         ...s,
-        sizeCharts: { ...s.sizeCharts, [side]: { ...chart, measureImages: list } },
+        sizeCharts: {
+          ...s.sizeCharts,
+          [side]: { ...chart, measureImages: list },
+        },
       };
     });
 
@@ -292,7 +323,9 @@ const DesignerSizeChartManager = () => {
           ...s.sizeCharts,
           [side]: {
             ...chart,
-            measureImages: (chart.measureImages || []).filter((_, i) => i !== index),
+            measureImages: (chart.measureImages || []).filter(
+              (_, i) => i !== index,
+            ),
           },
         },
       };
@@ -317,14 +350,17 @@ const DesignerSizeChartManager = () => {
       const buildChartPayload = (side) => {
         const chart = form.sizeCharts[side];
         const headers = (chart.headers || []).filter(
-          (h) => String(h?.key || "").trim() && String(h?.label || "").trim()
+          (h) => String(h?.key || "").trim() && String(h?.label || "").trim(),
         );
         const rows = (chart.rows || [])
           .filter((r) => String(r?.size || "").trim())
           .map((r) => ({
             size: String(r.size || "").trim(),
             measurements: Object.fromEntries(
-              Object.entries(r.measurements || {}).map(([k, v]) => [k, v === "" ? null : Number(v)])
+              Object.entries(r.measurements || {}).map(([k, v]) => [
+                k,
+                v === "" ? null : Number(v),
+              ]),
             ),
           }));
         const measureImage = (chart.measureImages || [])
@@ -348,7 +384,9 @@ const DesignerSizeChartManager = () => {
       };
 
       const useLegacyUnit =
-        (sizeCharts.in.rows.length || sizeCharts.in.headers.length || sizeCharts.in.measureImage.length) > 0
+        (sizeCharts.in.rows.length ||
+          sizeCharts.in.headers.length ||
+          sizeCharts.in.measureImage.length) > 0
           ? "in"
           : "cm";
       const sizeChart = {
@@ -420,8 +458,12 @@ const DesignerSizeChartManager = () => {
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Size chart templates</h1>
-          <p className="text-xs text-gray-500">Create reusable templates for item creation.</p>
+          <h1 className="text-xl font-bold tracking-tight">
+            Size chart templates
+          </h1>
+          <p className="text-xs text-gray-500">
+            Create reusable templates for item creation.
+          </p>
         </div>
         <button
           type="button"
@@ -455,15 +497,26 @@ const DesignerSizeChartManager = () => {
         </div>
       ) : null}
 
-      <div className="hidden overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm md:block">
-        <table className="w-full min-w-[760px] text-sm">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="w-full table-auto lg:min-w-full text-sm">
+          {" "}
           <thead className="bg-gray-50/90">
             <tr>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Name</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Description</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Updated</th>
-              <th className="p-2.5 text-right font-semibold text-gray-700">Actions</th>
+              <th className="p-1.5 text-left font-semibold text-gray-700">
+                Name
+              </th>
+              <th className="p-1.5 text-left font-semibold text-gray-700">
+                Description
+              </th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">
+                Status
+              </th>
+              <th className="p-2.5 text-left font-semibold text-gray-700">
+                Updated
+              </th>
+              <th className="p-2.5 text-right font-semibold text-gray-700">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -482,8 +535,12 @@ const DesignerSizeChartManager = () => {
             ) : (
               rows.map((row) => (
                 <tr key={row._id} className="border-t border-gray-100">
-                  <td className="p-2.5 font-medium text-gray-900">{row.name}</td>
-                  <td className="p-2.5 text-gray-700">{row.description || "-"}</td>
+                  <td className="p-2.5 font-medium text-gray-900">
+                    {row.name}
+                  </td>
+                  <td className="p-2.5 text-gray-700">
+                    {row.description || "-"}
+                  </td>
                   <td className="p-2.5">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -496,7 +553,9 @@ const DesignerSizeChartManager = () => {
                     </span>
                   </td>
                   <td className="p-2.5 text-gray-600">
-                    {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "-"}
+                    {row.updatedAt
+                      ? new Date(row.updatedAt).toLocaleString()
+                      : "-"}
                   </td>
                   <td className="p-2.5">
                     <div className="flex items-center justify-end gap-2">
@@ -535,11 +594,18 @@ const DesignerSizeChartManager = () => {
           </div>
         ) : (
           rows.map((row) => (
-            <div key={row._id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div
+              key={row._id}
+              className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{row.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">{row.description || "-"}</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {row.name}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {row.description || "-"}
+                  </p>
                 </div>
                 <span
                   className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -552,7 +618,8 @@ const DesignerSizeChartManager = () => {
                 </span>
               </div>
               <p className="mt-2 text-[11px] text-gray-500">
-                Updated: {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "-"}
+                Updated:{" "}
+                {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "-"}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
@@ -577,7 +644,9 @@ const DesignerSizeChartManager = () => {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
-        <span className="text-xs text-gray-500">Total: {pagination.total || 0}</span>
+        <span className="text-xs text-gray-500">
+          Total: {pagination.total || 0}
+        </span>
         <button
           type="button"
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -600,11 +669,13 @@ const DesignerSizeChartManager = () => {
       </div>
 
       {showForm ? (
-        <div className="fixed inset-0 z-50 bg-black/40 p-0">
-          <div className="h-screen w-screen overflow-hidden bg-white">
-            <div className="sticky top-0 z-10 mb-3 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="overflow-hidden">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-white px-4 py-3">
               <h2 className="text-lg font-semibold text-gray-900">
-                {isEditing ? "Edit size chart template" : "Create size chart template"}
+                {isEditing
+                  ? "Edit size chart template"
+                  : "Create size chart template"}
               </h2>
               <button
                 type="button"
@@ -614,25 +685,37 @@ const DesignerSizeChartManager = () => {
                 Close
               </button>
             </div>
-            <form onSubmit={onSave} className="h-[calc(100vh-68px)] space-y-3 overflow-y-auto px-4 pb-6">
+            <form
+              onSubmit={onSave}
+              className="space-y-3 overflow-x-hidden px-3 pb-6 sm:px-4"
+            >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">Name</label>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Name
+                  </label>
                   <input
                     value={form.name}
-                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm"
                     required
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-700">Status</label>
+                  <label className="mb-1 block text-xs font-semibold text-gray-700">
+                    Status
+                  </label>
                   <select
                     value={form.isActive ? "true" : "false"}
                     onChange={(e) =>
-                      setForm((prev) => ({ ...prev, isActive: e.target.value === "true" }))
+                      setForm((prev) => ({
+                        ...prev,
+                        isActive: e.target.value === "true",
+                      }))
                     }
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm"
                   >
                     <option value="true">Active</option>
                     <option value="false">Inactive</option>
@@ -641,10 +724,17 @@ const DesignerSizeChartManager = () => {
               </div>
 
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Description</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                  Description
+                </label>
                 <textarea
                   value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
                   rows={2}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                 />
@@ -653,11 +743,15 @@ const DesignerSizeChartManager = () => {
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <div>
-                    <label className="mb-0.5 block text-xs font-medium text-gray-700">Gender preset</label>
+                    <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                      Gender preset
+                    </label>
                     <select
                       className={fieldClass}
                       value={form.gender}
-                      onChange={(e) => setForm((s) => ({ ...s, gender: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((s) => ({ ...s, gender: e.target.value }))
+                      }
                     >
                       <option value="men">men</option>
                       <option value="women">women</option>
@@ -666,11 +760,15 @@ const DesignerSizeChartManager = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-xs font-medium text-gray-700">Garment type</label>
+                    <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                      Garment type
+                    </label>
                     <select
                       className={fieldClass}
                       value={form.category}
-                      onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((s) => ({ ...s, category: e.target.value }))
+                      }
                     >
                       <option value="upper">Upper</option>
                       <option value="lower">Lower</option>
@@ -687,7 +785,7 @@ const DesignerSizeChartManager = () => {
                   </div>
                 </div>
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {["in", "cm"].map((side) => (
                     <button
                       key={side}
@@ -728,71 +826,111 @@ const DesignerSizeChartManager = () => {
                   </div>
 
                   <div className="space-y-2">
-                    {(form.sizeCharts[activeSide].headers || []).map((header, idx) => (
-                      <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                        <input
-                          className={fieldClass}
-                          placeholder="Key (e.g. chest)"
-                          value={header.key || ""}
-                          onChange={(e) => updateHeader(activeSide, idx, "key", e.target.value)}
-                        />
-                        <input
-                          className={fieldClass}
-                          placeholder="Label (e.g. Chest (in))"
-                          value={header.label || ""}
-                          onChange={(e) => updateHeader(activeSide, idx, "label", e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeHeader(activeSide, idx)}
-                          className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700"
+                    {(form.sizeCharts[activeSide].headers || []).map(
+                      (header, idx) => (
+                        <div
+                          key={idx}
+                          className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]"
                         >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-3 space-y-2">
-                    {(form.sizeCharts[activeSide].rows || []).map((row, rowIdx) => (
-                      <div key={rowIdx} className="rounded-lg border border-gray-200 bg-white p-2">
-                        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                           <input
                             className={fieldClass}
-                            placeholder="Size (e.g. S, M)"
-                            value={row.size || ""}
-                            onChange={(e) => updateRow(activeSide, rowIdx, "size", e.target.value)}
+                            placeholder="Key (e.g. chest)"
+                            value={header.key || ""}
+                            onChange={(e) =>
+                              updateHeader(
+                                activeSide,
+                                idx,
+                                "key",
+                                e.target.value,
+                              )
+                            }
+                          />
+                          <input
+                            className={fieldClass}
+                            placeholder="Label (e.g. Chest (in))"
+                            value={header.label || ""}
+                            onChange={(e) =>
+                              updateHeader(
+                                activeSide,
+                                idx,
+                                "label",
+                                e.target.value,
+                              )
+                            }
                           />
                           <button
                             type="button"
-                            onClick={() => removeRow(activeSide, rowIdx)}
+                            onClick={() => removeHeader(activeSide, idx)}
                             className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700"
                           >
-                            Remove row
+                            Remove
                           </button>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {(form.sizeCharts[activeSide].headers || []).map((h) => (
+                      ),
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {(form.sizeCharts[activeSide].rows || []).map(
+                      (row, rowIdx) => (
+                        <div
+                          key={rowIdx}
+                          className="rounded-lg border border-gray-200 bg-white p-2"
+                        >
+                          <div className="mb-2 grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
                             <input
-                              key={h.key}
-                              type="number"
-                              step="any"
                               className={fieldClass}
-                              placeholder={h.label || h.key}
-                              value={row.measurements?.[h.key] ?? ""}
+                              placeholder="Size (e.g. S, M)"
+                              value={row.size || ""}
                               onChange={(e) =>
-                                updateRow(activeSide, rowIdx, h.key, e.target.value)
+                                updateRow(
+                                  activeSide,
+                                  rowIdx,
+                                  "size",
+                                  e.target.value,
+                                )
                               }
                             />
-                          ))}
+                            <button
+                              type="button"
+                              onClick={() => removeRow(activeSide, rowIdx)}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700"
+                            >
+                              Remove row
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {(form.sizeCharts[activeSide].headers || []).map(
+                              (h) => (
+                                <input
+                                  key={h.key}
+                                  type="number"
+                                  step="any"
+                                  className={fieldClass}
+                                  placeholder={h.label || h.key}
+                                  value={row.measurements?.[h.key] ?? ""}
+                                  onChange={(e) =>
+                                    updateRow(
+                                      activeSide,
+                                      rowIdx,
+                                      h.key,
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              ),
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </div>
 
                   <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50/40 p-2">
                     <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-amber-900">Measurement image URLs</p>
+                      <p className="text-xs font-semibold text-amber-900">
+                        Measurement image URLs
+                      </p>
                       <button
                         type="button"
                         onClick={() => addMeasureImageUrl(activeSide)}
@@ -802,31 +940,42 @@ const DesignerSizeChartManager = () => {
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {(form.sizeCharts[activeSide].measureImages || []).map((url, idx) => (
-                        <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                          {isLocalPickedFile(url) ? (
-                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700">
-                              <span className="truncate">{url.name}</span>
-                            </div>
-                          ) : (
-                            <input
-                              className={fieldClass}
-                              placeholder="https://..."
-                              value={url || ""}
-                              onChange={(e) =>
-                                updateMeasureImageUrl(activeSide, idx, e.target.value)
-                              }
-                            />
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeMeasureImageUrl(activeSide, idx)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700"
+                      {(form.sizeCharts[activeSide].measureImages || []).map(
+                        (url, idx) => (
+                          <div
+                            key={idx}
+                            className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]"
                           >
-                            <Trash2 size={12} /> Remove
-                          </button>
-                        </div>
-                      ))}
+                            {isLocalPickedFile(url) ? (
+                              <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700">
+                                <span className="truncate">{url.name}</span>
+                              </div>
+                            ) : (
+                              <input
+                                className={fieldClass}
+                                placeholder="https://..."
+                                value={url || ""}
+                                onChange={(e) =>
+                                  updateMeasureImageUrl(
+                                    activeSide,
+                                    idx,
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeMeasureImageUrl(activeSide, idx)
+                              }
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700"
+                            >
+                              <Trash2 size={12} /> Remove
+                            </button>
+                          </div>
+                        ),
+                      )}
                     </div>
                     <div className="mt-2">
                       <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-indigo-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-indigo-800">
@@ -836,7 +985,9 @@ const DesignerSizeChartManager = () => {
                           accept="image/*"
                           multiple
                           className="hidden"
-                          onChange={(e) => addMeasureImageFiles(activeSide, e.target.files)}
+                          onChange={(e) =>
+                            addMeasureImageFiles(activeSide, e.target.files)
+                          }
                         />
                       </label>
                     </div>
@@ -844,18 +995,18 @@ const DesignerSizeChartManager = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col-reverse justify-end gap-2 pt-1 sm:flex-row">
+              <div className="flex flex-col-reverse items-center justify-center gap-2 pt-1 sm:flex-row">
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 sm:w-auto"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 sm:w-36"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 sm:w-auto"
+                  className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 sm:w-36"
                 >
                   {saving ? "Saving..." : isEditing ? "Update" : "Create"}
                 </button>

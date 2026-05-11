@@ -74,6 +74,7 @@ import DesignerInventory from "../admin/components/designer/DesignerInventory";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
 import ActiveUsers from "../admin/components/users/ActiveUsers";
+import Referral from "../admin/components/Refferal/Refferal";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -170,6 +171,7 @@ export const adminPanelChildRoutes = [
   <Route key="inf-cp-ed" path="influencer/coupons/edit/:id" element={<InfluencerCouponsForm />} />,
   <Route key="inf-cp-m" path="influencer/:id/coupons" element={<InfluencerCouponManage />} />,
   <Route key="rev" path="reviews" element={<Reviews />} />,
+  <Route key="ref" path="referral" element={<Referral/>}/>,
   <Route key="prof" path="profile" element={<Profile />} />,
   <Route key="contact" path="contact-us" element={<ContactUs />} />,
   <Route key="notif" path="notifications" element={<AdminNotificationsPage />} />,

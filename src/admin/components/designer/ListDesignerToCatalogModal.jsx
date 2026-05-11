@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Video } from "lucide-react";
 import toast from "react-hot-toast";
 import { createItem } from "../../apis/itemapi";
 import { getAllCategories } from "../../apis/categoryapi";
@@ -11,6 +12,7 @@ import {
 } from "../../utils/buildItemCreateFormData";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
+import { isVariantVideoMedia, variantMediaUrl } from "../../../utils/variantMedia.js";
 
 const fieldClass =
   "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -19,11 +21,13 @@ const sectionTitle = "mb-2 border-l-4 border-indigo-500 pl-2 text-sm font-semibo
 const detailGrid = "grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3";
 const detailBox = "rounded-xl border border-gray-200 bg-gray-50/90 p-3";
 
-function variantImageSrc(img) {
-  if (!img) return "";
-  if (typeof img === "string") return img.trim();
-  if (typeof img?.url === "string") return img.url.trim();
-  return "";
+function variantFormImageLabel(im) {
+  if (typeof im === "string") return im;
+  if (im && typeof im === "object" && im.url) {
+    const tag = im.type ? `[${im.type}] ` : "";
+    return `${tag}${im.url}`;
+  }
+  return variantMediaUrl(im);
 }
 
 function orderedVariantImages(variant) {
@@ -201,11 +205,19 @@ function DesignerSourceDetails({ d }) {
       </div>
 
       <div className={detailBox}>
-        <h3 className={sectionTitle}>Variants, images & sizes</h3>
+        <h3 className={`${sectionTitle} flex flex-wrap items-center gap-1.5`}>
+          <Video className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden />
+          Variants, images &amp; video · sizes
+        </h3>
         <div className="space-y-4">
           {(d.variants || []).map((variant, idx) => {
             const imgs = orderedVariantImages(variant);
-            const withUrl = imgs.map((im) => variantImageSrc(im)).filter(Boolean);
+            const withMedia = imgs
+              .map((im) => {
+                const src = variantMediaUrl(im);
+                return src ? { im, src } : null;
+              })
+              .filter(Boolean);
             return (
               <div
                 key={`${variant?.color?.name || "v"}-${idx}`}
@@ -219,27 +231,39 @@ function DesignerSourceDetails({ d }) {
                   Multiple images: {variant?.color?.isMultipleImages ? "Yes" : "No"} · Declared total images:{" "}
                   {variant?.color?.totalImages ?? "—"}
                 </div>
-                {withUrl.length > 0 ? (
+                {withMedia.length > 0 ? (
                   <div className="mt-2">
-                    <p className="mb-1 text-xs font-medium text-gray-600">Images ({withUrl.length})</p>
+                    <p className="mb-1 text-xs font-medium text-gray-600">Media ({withMedia.length})</p>
                     <div className="flex flex-wrap gap-2">
-                      {withUrl.map((src, i) => (
+                      {withMedia.map(({ im, src }, i) => (
                         <a
                           key={`${src}-${i}`}
                           href={src}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block shrink-0 overflow-hidden rounded-lg border border-gray-200"
+                          className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-200"
                           title={src}
                         >
-                          <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                          {isVariantVideoMedia(im) ? (
+                            <video
+                              src={src}
+                              className="h-20 w-20 object-cover"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                          ) : (
+                            <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                          )}
                         </a>
                       ))}
                     </div>
-                    <p className="mt-1 break-all text-[11px] text-gray-500">{withUrl.join(" · ")}</p>
+                    <p className="mt-1 break-all text-[11px] text-gray-500">
+                      {withMedia.map((x) => x.src).join(" · ")}
+                    </p>
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-400">No image URLs on this variant.</p>
+                  <p className="mt-2 text-xs text-gray-400">No media URLs on this variant.</p>
                 )}
                 <div className="mt-3 overflow-x-auto">
                   <table className="w-full min-w-[520px] border-collapse text-xs">
@@ -720,15 +744,41 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                         {v.color?.name} <span className="font-normal text-gray-500">({v.color?.hex})</span>
                       </div>
                       <div className="mt-1 text-gray-600">
-                        Images in payload: {v.images?.length || 0}
-                        {Array.isArray(v.images) && v.images.length
-                          ? (
-                              <span className="ml-1 break-all text-[10px] text-gray-500">
-                                {v.images.slice(0, 2).join(" · ")}
-                                {v.images.length > 2 ? " …" : ""}
-                              </span>
-                            )
-                          : null}
+                        Media in payload: {v.images?.length || 0}
+                        {Array.isArray(v.images) && v.images.length ? (
+                          <span className="mt-1 flex flex-wrap items-start gap-1.5">
+                            {v.images.slice(0, 4).map((im, k) => {
+                              const u = variantMediaUrl(im);
+                              if (!u) return null;
+                              return isVariantVideoMedia(im) ? (
+                                <video
+                                  key={`pv-${k}`}
+                                  src={u}
+                                  className="h-9 w-9 shrink-0 rounded border border-amber-200/80 object-cover bg-black"
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                />
+                              ) : (
+                                <img
+                                  key={`pi-${k}`}
+                                  src={u}
+                                  alt=""
+                                  className="h-9 w-9 shrink-0 rounded border border-amber-200/80 object-cover"
+                                  loading="lazy"
+                                />
+                              );
+                            })}
+                            <span className="min-w-0 break-all text-[10px] text-gray-500">
+                              {v.images
+                                .slice(0, 2)
+                                .map((im) => variantFormImageLabel(im))
+                                .filter(Boolean)
+                                .join(" · ")}
+                              {v.images.length > 2 ? " …" : ""}
+                            </span>
+                          </span>
+                        ) : null}
                       </div>
                       <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-gray-700">
                         {(v.sizes || []).map((s, j) => (

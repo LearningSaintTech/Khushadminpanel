@@ -20,6 +20,11 @@ import {
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
+import {
+  inferVariantMediaTypeFromUrl,
+  isVariantVideoMedia,
+  variantMediaUrl,
+} from "../../../utils/variantMedia.js";
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
@@ -44,7 +49,7 @@ const DesignerInventory = () => {
   const [selectedRegenProgress, setSelectedRegenProgress] = useState({ done: 0, total: 0 });
   const [selectedItem, setSelectedItem] = useState(null);
   const [listModalDesigner, setListModalDesigner] = useState(null);
-  const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+  const [lightbox, setLightbox] = useState({ open: false, slides: [], index: 0 });
 
   const getSkuIds = (item) => {
     const skus = [];
@@ -56,12 +61,7 @@ const DesignerInventory = () => {
     return [...new Set(skus)];
   };
 
-  const variantImageSrc = (img) => {
-    if (!img) return "";
-    if (typeof img === "string") return img.trim();
-    if (typeof img?.url === "string") return img.url.trim();
-    return "";
-  };
+  const variantMediaSrc = (img) => variantMediaUrl(img);
 
   const orderedVariantImages = (variant) => {
     const raw = Array.isArray(variant?.images) ? variant.images : [];
@@ -371,18 +371,41 @@ const DesignerInventory = () => {
     }
   };
 
-  const openLightbox = (images, index = 0) => {
-    if (!Array.isArray(images) || images.length === 0) return;
-    const safeIndex = Math.min(Math.max(index, 0), images.length - 1);
-    setLightbox({ open: true, images, index: safeIndex });
+  const toLightboxSlides = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item) => {
+        if (typeof item === "string") {
+          const src = item.trim();
+          return src
+            ? { src, isVideo: inferVariantMediaTypeFromUrl(src) === "video" }
+            : null;
+        }
+        if (item && typeof item === "object" && typeof item.src === "string") {
+          const src = item.src.trim();
+          return src
+            ? { src, isVideo: Boolean(item.isVideo) }
+            : null;
+        }
+        const src = variantMediaUrl(item);
+        return src ? { src, isVideo: isVariantVideoMedia(item) } : null;
+      })
+      .filter(Boolean);
   };
 
-  const closeLightbox = () => setLightbox({ open: false, images: [], index: 0 });
+  const openLightbox = (items, index = 0) => {
+    const slides = toLightboxSlides(items);
+    if (!slides.length) return;
+    const safeIndex = Math.min(Math.max(index, 0), slides.length - 1);
+    setLightbox({ open: true, slides, index: safeIndex });
+  };
+
+  const closeLightbox = () => setLightbox({ open: false, slides: [], index: 0 });
 
   const moveLightbox = (dir) => {
     setLightbox((prev) => {
-      if (!prev.open || prev.images.length === 0) return prev;
-      const n = prev.images.length;
+      if (!prev.open || prev.slides.length === 0) return prev;
+      const n = prev.slides.length;
       const next = (prev.index + dir + n) % n;
       return { ...prev, index: next };
     });
@@ -656,11 +679,20 @@ const DesignerInventory = () => {
           >
             <ChevronLeft size={22} />
           </button>
-          <img
-            src={lightbox.images[lightbox.index]}
-            alt=""
-            className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain"
-          />
+          {lightbox.slides[lightbox.index]?.isVideo ? (
+            <video
+              src={lightbox.slides[lightbox.index].src}
+              controls
+              playsInline
+              className="max-h-[88vh] max-w-[92vw] rounded-xl bg-black object-contain"
+            />
+          ) : (
+            <img
+              src={lightbox.slides[lightbox.index]?.src}
+              alt=""
+              className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain"
+            />
+          )}
           <button
             type="button"
             className="absolute right-2 rounded-full bg-white/15 p-2 text-white hover:bg-white/25 sm:right-4"
@@ -670,7 +702,7 @@ const DesignerInventory = () => {
             <ChevronRight size={22} />
           </button>
           <div className="absolute bottom-3 rounded-full bg-black/45 px-3 py-1 text-xs text-white">
-            {lightbox.index + 1} / {lightbox.images.length}
+            {lightbox.index + 1} / {lightbox.slides.length}
           </div>
         </div>
       ) : null}
@@ -840,42 +872,58 @@ const DesignerInventory = () => {
               <div className="space-y-1.5">
                 {(selectedItem.variants || []).map((variant, idx) => {
                   const imgs = orderedVariantImages(variant);
-                  const withUrl = imgs.filter((im) => variantImageSrc(im));
+                  const withMedia = imgs.filter((im) => variantMediaSrc(im));
                   return (
                     <div key={`${variant?.color?.name || "variant"}-${idx}`} className="rounded-xl border border-black/10 p-2.5">
                       <div className="text-sm font-medium">
                         Variant {idx + 1}: {variant?.color?.name || "-"} ({variant?.color?.hex || "-"})
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
-                        Images: {imgs.length}
-                        {withUrl.length ? ` · ${withUrl.length} with URL` : ""}
+                        Media: {imgs.length}
+                        {withMedia.length ? ` · ${withMedia.length} with URL` : ""}
                       </div>
-                      {withUrl.length ? (
+                      {withMedia.length ? (
                         <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-black/5 bg-white/80 p-2">
                           <div className="flex flex-wrap gap-2">
-                            {withUrl.map((im, i) => {
-                              const src = variantImageSrc(im);
+                            {withMedia.map((im, i) => {
+                              const src = variantMediaSrc(im);
+                              const isVideo = isVariantVideoMedia(im);
                               return (
                                 <button
                                   key={`${src}-${i}`}
                                   type="button"
-                                  onClick={() => openLightbox(withUrl.map(variantImageSrc), i)}
-                                  className="shrink-0 rounded-lg border border-black/10 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
-                                  title="Open image viewer"
+                                  onClick={() => openLightbox(withMedia, i)}
+                                  className="relative shrink-0 rounded-lg border border-black/10 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
+                                  title={isVideo ? "Open video viewer" : "Open image viewer"}
                                 >
-                                  <img
-                                    src={src}
-                                    alt=""
-                                    className="h-24 w-24 rounded-lg object-cover hover:opacity-90"
-                                    loading="lazy"
-                                  />
+                                  {isVideo ? (
+                                    <>
+                                      <video
+                                        src={src}
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                        className="h-24 w-24 rounded-lg object-cover hover:opacity-90"
+                                      />
+                                      <span className="pointer-events-none absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[9px] font-medium text-white">
+                                        Video
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <img
+                                      src={src}
+                                      alt=""
+                                      className="h-24 w-24 rounded-lg object-cover hover:opacity-90"
+                                      loading="lazy"
+                                    />
+                                  )}
                                 </button>
                               );
                             })}
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-2 text-xs text-gray-400">No image URLs for this variant.</p>
+                        <p className="mt-2 text-xs text-gray-400">No media URLs for this variant.</p>
                       )}
                       <div className="mt-2 text-sm text-gray-700">
                         {(variant?.sizes || []).map((s, sIdx) => (
