@@ -9,6 +9,12 @@ import {
   buildItemCreateFormData,
   designerInventoryToItemFormState,
 } from "../../utils/buildItemCreateFormData";
+import {
+  SIZE_CHART_PRESETS,
+  garmentPresetCategoryLabel,
+  mergeSizeChartsWithPreset,
+  presetGenderKeyFromSkuGender,
+} from "../../../utils/sizeChartPresets.js";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
 
@@ -29,6 +35,83 @@ function variantImageSrc(img) {
 function orderedVariantImages(variant) {
   const raw = Array.isArray(variant?.images) ? variant.images : [];
   return [...raw].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0));
+}
+
+function toFormMeasureImages(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((img) => {
+      if (!img) return null;
+      if (typeof img === "string") return img.trim() || null;
+      const url = typeof img?.url === "string" ? img.url.trim() : "";
+      const imageKey = typeof img?.imageKey === "string" ? img.imageKey.trim() : "";
+      if (!url && !imageKey) return null;
+      // Keep both URL + key (or key-only) so payload builder can preserve entries.
+      return { ...(url ? { url } : {}), ...(imageKey ? { imageKey } : {}) };
+    })
+    .filter(Boolean);
+}
+
+function sourceDesignerChartsToFormSizeCharts(sourceDesigner) {
+  const empty = { headers: [], rows: [], measureImages: [] };
+  const sc = sourceDesigner?.sizeCharts;
+  if (sc && (sc.in || sc.cm)) {
+    return {
+      in: {
+        headers: Array.isArray(sc?.in?.headers) ? sc.in.headers : [],
+        rows: Array.isArray(sc?.in?.rows) ? sc.in.rows : [],
+        measureImages: toFormMeasureImages(sc?.in?.measureImage),
+      },
+      cm: {
+        headers: Array.isArray(sc?.cm?.headers) ? sc.cm.headers : [],
+        rows: Array.isArray(sc?.cm?.rows) ? sc.cm.rows : [],
+        measureImages: toFormMeasureImages(sc?.cm?.measureImage),
+      },
+    };
+  }
+  const leg = sourceDesigner?.sizeChart;
+  const unit = leg?.unit === "cm" ? "cm" : "in";
+  const one = {
+    headers: Array.isArray(leg?.headers) ? leg.headers : [],
+    rows: Array.isArray(leg?.rows) ? leg.rows : [],
+    measureImages: toFormMeasureImages(leg?.measureImage),
+  };
+  return {
+    in: unit === "in" ? one : empty,
+    cm: unit === "cm" ? one : empty,
+  };
+}
+
+function sideHasMeasureImages(side) {
+  const imgs = Array.isArray(side?.measureImages) ? side.measureImages : [];
+  return imgs.some((img) => {
+    if (!img) return false;
+    if (typeof img === "string") return Boolean(img.trim());
+    if (typeof img === "object") {
+      const url = typeof img.url === "string" ? img.url.trim() : "";
+      const imageKey = typeof img.imageKey === "string" ? img.imageKey.trim() : "";
+      return Boolean(url || imageKey);
+    }
+    return false;
+  });
+}
+
+function ensureSizeChartMeasureImagesFromSource(form, sourceDesigner) {
+  const fromSource = sourceDesignerChartsToFormSizeCharts(sourceDesigner);
+  const next = {
+    ...(form || {}),
+    sizeCharts: {
+      in: { ...(form?.sizeCharts?.in || {}), measureImages: form?.sizeCharts?.in?.measureImages || [] },
+      cm: { ...(form?.sizeCharts?.cm || {}), measureImages: form?.sizeCharts?.cm?.measureImages || [] },
+    },
+  };
+  if (!sideHasMeasureImages(next.sizeCharts.in) && sideHasMeasureImages(fromSource.in)) {
+    next.sizeCharts.in.measureImages = fromSource.in.measureImages;
+  }
+  if (!sideHasMeasureImages(next.sizeCharts.cm) && sideHasMeasureImages(fromSource.cm)) {
+    next.sizeCharts.cm.measureImages = fromSource.cm.measureImages;
+  }
+  return next;
 }
 
 function allSkusFromDesigner(d) {
@@ -107,6 +190,28 @@ function DesignerSourceDetails({ d }) {
         <p className="whitespace-pre-wrap break-words text-sm text-gray-800">
           {(d.description || "").trim() || "—"}
         </p>
+      </div>
+
+      <div className={detailBox}>
+        <h3 className={sectionTitle}>SEO (designer)</h3>
+        <div className={detailGrid}>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <span className="font-medium text-gray-700">Meta title:</span>{" "}
+            <span className="text-gray-800">{String(d.metaTitle || "").trim() || "—"}</span>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <span className="font-medium text-gray-700">Meta description:</span>
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-800">
+              {String(d.metaDescription || "").trim() || "—"}
+            </p>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <span className="font-medium text-gray-700">Tags:</span>{" "}
+            <span className="break-all text-gray-800">
+              {Array.isArray(d.metaTags) && d.metaTags.length > 0 ? d.metaTags.join(", ") : "—"}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className={detailBox}>
@@ -288,6 +393,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [loadErr, setLoadErr] = useState("");
+  const [sizeChartCategory, setSizeChartCategory] = useState("upper");
 
   useEffect(() => {
     if (!open) return;
@@ -298,6 +404,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
       setSourceDesigner(null);
       setCategoryId("");
       setSubcategoryId("");
+      setSizeChartCategory("upper");
       try {
         const [catRes, invRes] = await Promise.all([
           getAllCategories(1, 80, ""),
@@ -376,7 +483,8 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
     }
     setSaving(true);
     try {
-      const fd = buildItemCreateFormData(form, categoryId, subcategoryId);
+      const formForSubmit = ensureSizeChartMeasureImagesFromSource(form, sourceDesigner);
+      const fd = buildItemCreateFormData(formForSubmit, categoryId, subcategoryId);
       const res = await createItem(fd);
       const created = res?.data;
       const catalogItemId = created?._id;
@@ -559,6 +667,96 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                     onChange={(e) => setForm((f) => ({ ...f, longDescription: e.target.value }))}
                     required
                   />
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50/90 p-3">
+                  <h4 className="mb-2 text-xs font-semibold text-slate-900">SEO (catalog)</h4>
+                  <p className="mb-2 text-[11px] text-gray-600">
+                    Prefilled from designer when present. Sent with the new catalog item.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">Meta title</label>
+                      <input
+                        className={fieldClass}
+                        value={form.metaTitle ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, metaTitle: e.target.value }))}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">Meta description</label>
+                      <textarea
+                        className={fieldClass + " min-h-[56px]"}
+                        value={form.metaDescription ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, metaDescription: e.target.value }))}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">Tags</label>
+                      <input
+                        className={fieldClass}
+                        value={form.metaTagsStr ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, metaTagsStr: e.target.value }))}
+                        placeholder="Comma or semicolon separated"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg border border-indigo-100 bg-white/80 p-2.5">
+                  <h4 className="mb-2 text-xs font-semibold text-indigo-900">
+                    Size chart preset (catalog payload)
+                  </h4>
+                  <p className="mb-2 text-[11px] text-gray-600">
+                    Fills in both in and cm measurement tables on the catalog item. Preset group follows the{" "}
+                    <span className="font-medium">Gender token</span> under SKU generation below. Existing measure
+                    image slots are merged like main inventory ItemForm.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="min-w-[160px] flex-1">
+                      <label className="mb-0.5 block text-xs font-medium text-gray-700">Garment type</label>
+                      <select
+                        className={fieldClass}
+                        value={sizeChartCategory}
+                        onChange={(e) => setSizeChartCategory(e.target.value)}
+                      >
+                        <option value="upper">Upper</option>
+                        <option value="lower">Lower</option>
+                        <option value="upper_lower">Upper + lower</option>
+                      </select>
+                    </div>
+                    <p className="text-[11px] text-gray-500 sm:mb-2 sm:flex-1">
+                      Group: {presetGenderKeyFromSkuGender(form?.skuCodeInputs?.gender)} ·{" "}
+                      {garmentPresetCategoryLabel(sizeChartCategory)}
+                    </p>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
+                      onClick={() => {
+                        const g = presetGenderKeyFromSkuGender(form?.skuCodeInputs?.gender);
+                        const genderKey = SIZE_CHART_PRESETS[g] ? g : "unisex";
+                        const preset =
+                          SIZE_CHART_PRESETS[genderKey]?.[sizeChartCategory] ||
+                          SIZE_CHART_PRESETS.unisex?.[sizeChartCategory];
+                        if (!preset) {
+                          toast.error("No preset for this combination.");
+                          return;
+                        }
+                        setForm((f) => ({
+                          ...f,
+                          sizeCharts: mergeSizeChartsWithPreset(
+                            f.sizeCharts || { in: {}, cm: {} },
+                            preset,
+                          ),
+                        }));
+                        toast.success("Size chart preset applied to catalog payload.");
+                      }}
+                    >
+                      Apply preset
+                    </button>
+                  </div>
                 </div>
 
                 <div className="sm:col-span-2 rounded-lg border border-indigo-100 bg-white/80 p-2.5">

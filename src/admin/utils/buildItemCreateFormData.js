@@ -7,6 +7,19 @@ import { designerItemToFormSizeCharts } from "../../utils/designerSizeChartDispl
  * @param {string} subcategoryId
  * @param {{ isEdit?: boolean, id?: string }} options - Pass isEdit true + id only for update flows (variant file slot names).
  */
+function metaTagsStrFromApi(tags) {
+  if (!Array.isArray(tags)) return "";
+  return tags.map((t) => String(t ?? "").trim()).filter(Boolean).join(", ");
+}
+
+function metaTagsToJsonPayload(str) {
+  const arr = String(str || "")
+    .split(/[,;]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return JSON.stringify(arr);
+}
+
 export function buildItemCreateFormData(form, categoryId, subcategoryId, options = {}) {
   const { isEdit = false, id = null } = options;
   const formData = new FormData();
@@ -14,6 +27,9 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
   formData.append("name", form.name);
   formData.append("shortDescription", form.shortDescription);
   formData.append("longDescription", form.longDescription || "");
+  formData.append("metaTitle", String(form.metaTitle ?? "").trim());
+  formData.append("metaDescription", String(form.metaDescription ?? "").trim());
+  formData.append("metaTags", metaTagsToJsonPayload(form.metaTagsStr));
   formData.append("price", form.price);
   formData.append("discountedPrice", form.discountedPrice || "");
   formData.append("productId", form.productId || "");
@@ -163,8 +179,15 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
       if (typeof img === "string" && img.trim()) {
         return { url: img.trim(), imageKey: `existing-${idx}` };
       }
-      if (img && typeof img === "object" && img.url) {
-        return { url: img.url, imageKey: img.imageKey || `existing-${idx}` };
+      if (img && typeof img === "object") {
+        const url = typeof img.url === "string" ? img.url.trim() : "";
+        const imageKey = typeof img.imageKey === "string" ? img.imageKey.trim() : "";
+        if (url || imageKey) {
+          return {
+            ...(url ? { url } : {}),
+            imageKey: imageKey || `existing-${idx}`,
+          };
+        }
       }
       return { imageKey: `slot-${idx}` };
     });
@@ -369,6 +392,9 @@ export function designerInventoryToItemFormState(designer) {
     name: styleLabel,
     shortDescription,
     longDescription,
+    metaTitle: String(designer.metaTitle ?? "").trim(),
+    metaDescription: String(designer.metaDescription ?? "").trim(),
+    metaTagsStr: metaTagsStrFromApi(designer.metaTags),
     price: mrp !== undefined && mrp !== null && mrp !== "" ? String(mrp) : "",
     discountedPrice:
       disc !== undefined && disc !== null && disc !== "" ? String(disc) : "",

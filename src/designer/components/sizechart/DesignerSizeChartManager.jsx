@@ -674,6 +674,7 @@ const DesignerSizeChartManager = () => {
                     >
                       <option value="upper">Upper</option>
                       <option value="lower">Lower</option>
+                      <option value="upper_lower">Upper + lower</option>
                     </select>
                   </div>
                   <div className="flex items-end">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Info, X } from "lucide-react";
 import {
   approveDesignerCatalogSync,
   dismissDesignerCatalogPending,
@@ -14,6 +14,134 @@ import {
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
+
+/** Table/list cell: clamp text + info opens full copy in modal. */
+const ADMIN_TABLE_SHORT_PEEK = 100;
+const ADMIN_TABLE_LONG_PEEK = 140;
+
+/** Detail drawer: same thresholds as designer self-service list. */
+const DETAIL_SHORT_PREVIEW_LEN = 160;
+const DETAIL_LONG_PREVIEW_LEN = 320;
+
+function InventoryTableTextPeek({ text, modalTitle, previewLen, onOpenFull }) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return <span className="text-gray-400">-</span>;
+  const needs = raw.length > previewLen;
+  return (
+    <div className="flex min-w-0 max-w-[9.5rem] flex-col gap-1 xl:max-w-[11rem]">
+      <p
+        className={`text-xs leading-snug text-gray-700 break-words ${needs ? "line-clamp-3" : "whitespace-pre-wrap"}`}
+      >
+        {needs ? (
+          <>
+            {raw.slice(0, previewLen)}
+            <span className="text-gray-400">…</span>
+          </>
+        ) : (
+          raw
+        )}
+      </p>
+      {needs ? (
+        <button
+          type="button"
+          onClick={() => onOpenFull({ title: modalTitle, body: raw })}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+          title="View full text"
+          aria-label={`View full ${modalTitle}`}
+        >
+          <Info className="h-3.5 w-3.5" strokeWidth={2.25} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function CatalogSyncControls({
+  row: r,
+  busyApproveCatalogId,
+  busyDismissCatalogId,
+  onApprove,
+  onDismiss,
+}) {
+  return (
+    <div className="flex min-w-0 max-w-[9rem] flex-col gap-1 sm:min-w-[118px] sm:max-w-none">
+      <span
+        className={`inline-flex w-fit rounded-full px-2 py-1 text-xs font-medium ${
+          r.catalogUpdateStatus === "pending"
+            ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
+            : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
+        }`}
+      >
+        {r.catalogItemId
+          ? r.catalogUpdateStatus === "pending"
+            ? "Pending"
+            : "Up to date"
+          : "—"}
+      </span>
+      {r.catalogItemId && r.catalogUpdateStatus === "pending" ? (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-left text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+            disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
+            onClick={() => onApprove(r)}
+          >
+            {busyApproveCatalogId === r._id ? "Applying…" : "Apply to catalog"}
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
+            onClick={() => onDismiss(r)}
+          >
+            {busyDismissCatalogId === r._id ? "Clearing…" : "Dismiss pending"}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DescriptionWithInfo({ label, value, previewLen, onOpenFull }) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return (
+      <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+        <span className="font-medium text-gray-700">{label}</span>{" "}
+        <span className="text-gray-800">—</span>
+      </div>
+    );
+  }
+  const needsInfo = raw.length > previewLen;
+  return (
+    <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="font-medium text-gray-700">{label}</span>
+        {needsInfo ? (
+          <button
+            type="button"
+            onClick={() => onOpenFull({ title: label.replace(":", "").trim(), body: raw })}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            title="View full text"
+            aria-label={`View full ${label.replace(":", "").trim()}`}
+          >
+            <Info className="h-4 w-4" strokeWidth={2.25} />
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 break-words text-gray-800">
+        {needsInfo ? (
+          <>
+            {raw.slice(0, previewLen)}
+            <span className="text-gray-400">…</span>
+          </>
+        ) : (
+          <span className="whitespace-pre-wrap">{raw}</span>
+        )}
+      </p>
+    </div>
+  );
+}
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
@@ -39,6 +167,7 @@ const DesignerInventory = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
+  const [fullTextModal, setFullTextModal] = useState(null);
 
   const getSkuIds = (item) => {
     const skus = [];
@@ -365,8 +494,20 @@ const DesignerInventory = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lightbox.open]);
 
+  useEffect(() => {
+    if (!fullTextModal) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setFullTextModal(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullTextModal]);
+
   return (
-    <div className="bg-white text-black p-3 sm:p-4">
+    <div className="min-w-0 bg-white p-3 text-black sm:p-4 lg:mx-auto lg:max-w-[min(100vw-1rem,90rem)]">
       <div className="mb-3 sm:mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Designer Inventory</h1>
@@ -398,7 +539,7 @@ const DesignerInventory = () => {
       </div>
 
       <div className="mb-3 sm:mb-4 flex flex-col gap-2 sm:flex-row">
-        <input className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by designer, style number, SKU ID" />
+        <input className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by designer, style, SKU, meta title, tags…" />
         <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[170px]" value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
           <option value="">All status</option>
           <option value="draft">draft</option>
@@ -423,154 +564,372 @@ const DesignerInventory = () => {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-black/10 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50/80">
-            <tr>
-              <th className="p-2.5 text-center font-semibold text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={toggleSelectAllVisible}
-                  aria-label="Select all visible items"
-                />
-              </th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Style</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Designer</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Product</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Short Description</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Long Description</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Price</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Gender</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">SKU IDs</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Status</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Catalog sync</th>
-              <th className="p-2.5 text-left font-semibold text-gray-700">Listed</th>
-              <th className="p-2.5 text-right font-semibold text-gray-700">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? <tr><td colSpan={13} className="p-4 text-gray-500">Loading...</td></tr> : rows.length === 0 ? <tr><td colSpan={13} className="p-4 text-gray-500">No records.</td></tr> : rows.map((r) => (
-              <tr key={r._id} className="border-t border-black/5">
-                <td className="p-2.5 text-center">
+      {/* Card layout: small / split viewports (incl. narrow MacBook) */}
+      <div className="space-y-3 lg:hidden">
+        {loading ? (
+          <div className="flex justify-center rounded-xl border border-black/10 bg-white py-10 text-gray-500">
+            Loading...
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-xl border border-black/10 bg-white py-10 text-center text-sm text-gray-500">
+            No records.
+          </div>
+        ) : (
+          rows.map((r) => (
+            <div
+              key={r._id}
+              className="min-w-0 rounded-xl border border-black/10 bg-white p-4 shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-black/5 pb-3">
+                <label className="flex min-w-0 cursor-pointer items-start gap-2">
                   <input
                     type="checkbox"
+                    className="mt-1 shrink-0"
                     checked={selectedRowIds.includes(r._id)}
                     onChange={() => toggleSelectRow(r._id)}
                     aria-label={`Select item ${r.StyleNumber || r._id}`}
                   />
-                </td>
-                <td className="p-2.5">
-                  <div className="font-medium">{r.StyleNumber || "-"}</div>
-                  <div className="text-xs text-gray-500">{r.employeeId || "-"}</div>
-                </td>
-                <td className="p-2.5 text-gray-700">{r.designerName}</td>
-                <td className="p-2.5 text-gray-700">
-                  {r.productType || "—"}
-                  {r.productTypeCode ? (
-                    <span className="text-xs text-gray-500"> [{r.productTypeCode}]</span>
-                  ) : null}{" "}
-                  / {r.fitType || "—"}
-                </td>
-                <td className="p-2.5 align-top text-xs text-gray-700 whitespace-pre-wrap break-words">
-                  {r.shortDescription || "-"}
-                </td>
-                <td className="p-2.5 align-top text-xs text-gray-700 whitespace-pre-wrap break-words">
-                  {r.longDescription || "-"}
-                </td>
-                <td className="p-2.5 text-gray-700">
-                  <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
-                  <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
-                </td>
-                <td className="p-2.5">
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}>
-                    {r.gender || "-"}
-                  </span>
-                </td>
-                <td className="p-2.5">
-                  <div className="max-w-[320px] truncate text-xs text-gray-700">
-                    {getSkuIds(r).slice(0, 3).join(", ") || "-"}
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{r.StyleNumber || "-"}</div>
+                    <div className="truncate text-xs text-gray-500">{r.employeeId || "-"}</div>
                   </div>
-                  {getSkuIds(r).length > 3 ? (
-                    <div className="text-[11px] text-gray-500">+{getSkuIds(r).length - 3} more</div>
-                  ) : null}
-                </td>
-                <td className="p-2.5">
-                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusClasses(r.status)}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td className="p-2.5 align-top">
-                  <div className="flex min-w-[120px] flex-col gap-1">
+                </label>
+                <span
+                  className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusClasses(r.status)}`}
+                >
+                  {r.status}
+                </span>
+              </div>
+              <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-800 sm:grid-cols-2">
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Designer</dt>
+                  <dd className="mt-0.5 break-words">{r.designerName || "—"}</dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Product</dt>
+                  <dd className="mt-0.5 break-words text-gray-700">
+                    {r.productType || "—"}
+                    {r.productTypeCode ? (
+                      <span className="text-gray-500"> [{r.productTypeCode}]</span>
+                    ) : null}{" "}
+                    / {r.fitType || "—"}
+                  </dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Short description</dt>
+                  <dd className="mt-0.5">
+                    <InventoryTableTextPeek
+                      text={r.shortDescription}
+                      modalTitle="Short description"
+                      previewLen={ADMIN_TABLE_SHORT_PEEK}
+                      onOpenFull={setFullTextModal}
+                    />
+                  </dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Long description</dt>
+                  <dd className="mt-0.5">
+                    <InventoryTableTextPeek
+                      text={r.longDescription}
+                      modalTitle="Long description"
+                      previewLen={ADMIN_TABLE_LONG_PEEK}
+                      onOpenFull={setFullTextModal}
+                    />
+                  </dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">SEO</dt>
+                  <dd className="mt-0.5 min-w-0">
+                    <div className="truncate font-medium text-gray-900">
+                      {String(r.metaTitle || "").trim() || "—"}
+                    </div>
+                    <div className="mt-0.5 line-clamp-2 break-words text-[11px] text-gray-500">
+                      {Array.isArray(r.metaTags) && r.metaTags.length > 0 ? r.metaTags.join(", ") : ""}
+                    </div>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-gray-500">MRP / Disc</dt>
+                  <dd className="mt-0.5">
+                    {Number(r.mrp ?? 0)} / {Number(r.discountPrice ?? 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-gray-500">Gender</dt>
+                  <dd className="mt-0.5">
                     <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                        r.catalogUpdateStatus === "pending"
-                          ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
-                          : "bg-gray-100 text-gray-600 ring-1 ring-gray-200"
-                      }`}
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}
                     >
-                      {r.catalogItemId
-                        ? r.catalogUpdateStatus === "pending"
-                          ? "Pending"
-                          : "Up to date"
-                        : "—"}
+                      {r.gender || "—"}
                     </span>
-                    {r.catalogItemId && r.catalogUpdateStatus === "pending" ? (
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-                          disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
-                          onClick={() => handleApproveCatalogSync(r)}
-                        >
-                          {busyApproveCatalogId === r._id ? "Applying…" : "Apply to catalog"}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                          disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
-                          onClick={() => handleDismissCatalogPending(r)}
-                        >
-                          {busyDismissCatalogId === r._id ? "Clearing…" : "Dismiss pending"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="p-2.5">
-                  <select
-                    className="max-w-[140px] rounded-lg border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-medium text-teal-800 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={busyListedId === r._id}
-                    value={listedSelectValue(r)}
-                    onChange={(e) => handleListedSelect(r, e)}
-                  >
-                    <option value="false">Not listed</option>
-                    <option value="true">Listed</option>
-                  </select>
-                </td>
-                <td className="p-2.5">
-                  <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                  <button
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
-                    onClick={() => openInventoryDetails(r)}
-                    title="View details"
-                    aria-label="View details"
-                  >
-                    <Eye size={14} />
-                  </button>
-                  <select className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed" disabled={busyStatusId === r._id} value={r.status} onChange={(e) => onChangeStatus(r._id, e.target.value)}>
-                    <option value="draft">draft</option>
-                    <option value="submitted">submitted</option>
-                    <option value="approved">approved</option>
-                    <option value="rejected">rejected</option>
-                    <option value="archived">archived</option>
-                  </select>
-                  </div>
-                </td>
+                  </dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">SKU IDs</dt>
+                  <dd className="mt-0.5 break-all text-[11px] text-gray-700">
+                    {getSkuIds(r).length ? getSkuIds(r).join(", ") : "—"}
+                  </dd>
+                </div>
+                <div className="min-w-0 sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Catalog sync</dt>
+                  <dd className="mt-0.5">
+                    <CatalogSyncControls
+                      row={r}
+                      busyApproveCatalogId={busyApproveCatalogId}
+                      busyDismissCatalogId={busyDismissCatalogId}
+                      onApprove={handleApproveCatalogSync}
+                      onDismiss={handleDismissCatalogPending}
+                    />
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="font-medium text-gray-500">Listed</dt>
+                  <dd className="mt-0.5">
+                    <select
+                      className="w-full max-w-xs rounded-lg border border-teal-200 bg-teal-50 px-2 py-1.5 text-xs font-medium text-teal-800 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={busyListedId === r._id}
+                      value={listedSelectValue(r)}
+                      onChange={(e) => handleListedSelect(r, e)}
+                    >
+                      <option value="false">Not listed</option>
+                      <option value="true">Listed</option>
+                    </select>
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-black/5 pt-3">
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
+                  onClick={() => openInventoryDetails(r)}
+                  title="View details"
+                  aria-label="View details"
+                >
+                  <Eye size={14} />
+                </button>
+                <select
+                  className="min-w-0 flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed sm:max-w-[200px] sm:flex-none"
+                  disabled={busyStatusId === r._id}
+                  value={r.status}
+                  onChange={(e) => onChangeStatus(r._id, e.target.value)}
+                >
+                  <option value="draft">draft</option>
+                  <option value="submitted">submitted</option>
+                  <option value="approved">approved</option>
+                  <option value="rejected">rejected</option>
+                  <option value="archived">archived</option>
+                </select>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Wide table: lg+ (full-width laptop / desktop) */}
+      <div className="hidden min-w-0 lg:block">
+        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-black/10 bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
+          <table className="w-full min-w-[72rem] table-fixed text-sm xl:min-w-0 xl:table-auto">
+            <thead className="bg-gray-50/80">
+              <tr>
+                <th className="w-10 p-2 text-center font-semibold text-gray-700 xl:w-auto xl:p-2.5">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    aria-label="Select all visible items"
+                  />
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Style
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Designer
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Product
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Short Description
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Long Description
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  SEO
+                </th>
+                <th className="w-[5.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Price
+                </th>
+                <th className="w-[4.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Gender
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  SKU IDs
+                </th>
+                <th className="w-[5.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Status
+                </th>
+                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Catalog sync
+                </th>
+                <th className="w-[6.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Listed
+                </th>
+                <th className="w-[7.5rem] p-2 text-right text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
+                  Action
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={14} className="p-4 text-gray-500">
+                    Loading...
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="p-4 text-gray-500">
+                    No records.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r._id} className="border-t border-black/5">
+                    <td className="p-2 align-top text-center xl:p-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedRowIds.includes(r._id)}
+                        onChange={() => toggleSelectRow(r._id)}
+                        aria-label={`Select item ${r.StyleNumber || r._id}`}
+                      />
+                    </td>
+                    <td className="min-w-0 p-2 align-top xl:p-2.5">
+                      <div className="truncate font-medium">{r.StyleNumber || "-"}</div>
+                      <div className="truncate text-xs text-gray-500">{r.employeeId || "-"}</div>
+                    </td>
+                    <td className="min-w-0 p-2 align-top text-gray-700 xl:p-2.5">
+                      <span className="line-clamp-2 break-words text-xs">{r.designerName}</span>
+                    </td>
+                    <td className="min-w-0 p-2 align-top text-gray-700 xl:p-2.5">
+                      <span className="line-clamp-3 break-words text-xs">
+                        {r.productType || "—"}
+                        {r.productTypeCode ? (
+                          <span className="text-gray-500"> [{r.productTypeCode}]</span>
+                        ) : null}{" "}
+                        / {r.fitType || "—"}
+                      </span>
+                    </td>
+                    <td className="min-w-0 p-2 align-top xl:p-2.5">
+                      <InventoryTableTextPeek
+                        text={r.shortDescription}
+                        modalTitle="Short description"
+                        previewLen={ADMIN_TABLE_SHORT_PEEK}
+                        onOpenFull={setFullTextModal}
+                      />
+                    </td>
+                    <td className="min-w-0 p-2 align-top xl:p-2.5">
+                      <InventoryTableTextPeek
+                        text={r.longDescription}
+                        modalTitle="Long description"
+                        previewLen={ADMIN_TABLE_LONG_PEEK}
+                        onOpenFull={setFullTextModal}
+                      />
+                    </td>
+                    <td
+                      className="min-w-0 max-w-[9rem] p-2 align-top text-xs text-gray-700 xl:max-w-none xl:p-2.5"
+                      title={[
+                        r.metaTitle && `Title: ${r.metaTitle}`,
+                        r.metaDescription && `Meta: ${r.metaDescription}`,
+                        Array.isArray(r.metaTags) && r.metaTags.length && `Tags: ${r.metaTags.join(", ")}`,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                    >
+                      <div className="font-medium text-gray-900 line-clamp-1">
+                        {String(r.metaTitle || "").trim() || "—"}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-gray-500 line-clamp-2 break-words">
+                        {Array.isArray(r.metaTags) && r.metaTags.length > 0 ? r.metaTags.join(", ") : ""}
+                      </div>
+                    </td>
+                    <td className="p-2 align-top text-gray-700 xl:p-2.5">
+                      <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
+                      <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
+                    </td>
+                    <td className="p-2 align-top xl:p-2.5">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}
+                      >
+                        {r.gender || "-"}
+                      </span>
+                    </td>
+                    <td className="min-w-0 p-2 align-top xl:p-2.5">
+                      <div className="truncate text-xs text-gray-700 xl:max-w-[14rem] xl:whitespace-normal xl:break-words">
+                        {getSkuIds(r).slice(0, 3).join(", ") || "-"}
+                      </div>
+                      {getSkuIds(r).length > 3 ? (
+                        <div className="text-[11px] text-gray-500">+{getSkuIds(r).length - 3} more</div>
+                      ) : null}
+                    </td>
+                    <td className="p-2 align-top xl:p-2.5">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusClasses(r.status)}`}
+                      >
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="min-w-0 p-2 align-top xl:p-2.5">
+                      <CatalogSyncControls
+                        row={r}
+                        busyApproveCatalogId={busyApproveCatalogId}
+                        busyDismissCatalogId={busyDismissCatalogId}
+                        onApprove={handleApproveCatalogSync}
+                        onDismiss={handleDismissCatalogPending}
+                      />
+                    </td>
+                    <td className="p-2 align-top xl:p-2.5">
+                      <select
+                        className="w-full max-w-[7.5rem] rounded-lg border border-teal-200 bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed xl:max-w-[9rem] xl:px-2 xl:py-1.5 xl:text-xs"
+                        disabled={busyListedId === r._id}
+                        value={listedSelectValue(r)}
+                        onChange={(e) => handleListedSelect(r, e)}
+                      >
+                        <option value="false">Not listed</option>
+                        <option value="true">Listed</option>
+                      </select>
+                    </td>
+                    <td className="p-2 align-top text-right xl:p-2.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
+                          onClick={() => openInventoryDetails(r)}
+                          title="View details"
+                          aria-label="View details"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <select
+                          className="min-w-0 max-w-[5.5rem] flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-1 py-1 text-[11px] font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed xl:max-w-[7rem] xl:px-2 xl:py-1.5 xl:text-xs"
+                          disabled={busyStatusId === r._id}
+                          value={r.status}
+                          onChange={(e) => onChangeStatus(r._id, e.target.value)}
+                        >
+                          <option value="draft">draft</option>
+                          <option value="submitted">submitted</option>
+                          <option value="approved">approved</option>
+                          <option value="rejected">rejected</option>
+                          <option value="archived">archived</option>
+                        </select>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
@@ -618,7 +977,7 @@ const DesignerInventory = () => {
 
       {selectedItem ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 sm:p-4 shadow-xl">
+          <div className="max-h-[88vh] w-full min-w-0 max-w-5xl overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 sm:p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xl font-semibold">Inventory Details</h2>
               <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-black hover:text-white transition-colors" onClick={() => setSelectedItem(null)}>
@@ -684,8 +1043,42 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Total Production Qty:</span> {selectedItem.totalProductionQty ?? 0}</div>
               <div><span className="font-medium">Default Color:</span> {selectedItem.defaultColor || "-"}</div>
               <div><span className="font-medium">Top SKU ID:</span> {selectedItem?.sku?.skuId || "-"}</div>
-              <div><span className="font-medium">Long Description:</span> {selectedItem.longDescription || "-"}</div>
-               <div><span className="font-medium">Short Description:</span> {selectedItem.shortDescription || "-"}</div>
+              <DescriptionWithInfo
+                label="Short description:"
+                value={selectedItem.shortDescription}
+                previewLen={DETAIL_SHORT_PREVIEW_LEN}
+                onOpenFull={setFullTextModal}
+              />
+              <DescriptionWithInfo
+                label="Long description:"
+                value={selectedItem.longDescription}
+                previewLen={DETAIL_LONG_PREVIEW_LEN}
+                onOpenFull={setFullTextModal}
+              />
+
+              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-slate-200 bg-slate-50/90 p-3">
+                <h4 className="mb-2 text-xs font-semibold text-slate-900">SEO</h4>
+                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-700">Meta title:</span>{" "}
+                    <span className="text-gray-900">{String(selectedItem.metaTitle || "").trim() || "—"}</span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-700">Meta description:</span>
+                    <p className="mt-0.5 whitespace-pre-wrap break-words text-gray-800">
+                      {String(selectedItem.metaDescription || "").trim() || "—"}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-700">Tags:</span>{" "}
+                    <span className="break-all text-gray-800">
+                      {Array.isArray(selectedItem.metaTags) && selectedItem.metaTags.length > 0
+                        ? selectedItem.metaTags.join(", ")
+                        : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
               <div><span className="font-medium">Created:</span> {selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString() : "-"}</div>
               <div><span className="font-medium">Updated:</span> {selectedItem.updatedAt ? new Date(selectedItem.updatedAt).toLocaleString() : "-"}</div>
@@ -829,6 +1222,40 @@ const DesignerInventory = () => {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {fullTextModal ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-3 sm:items-center sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-inv-fulltext-title"
+          onClick={() => setFullTextModal(null)}
+        >
+          <div
+            className="max-h-[min(90vh,40rem)] w-full max-w-2xl min-w-0 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
+              <h2
+                id="admin-inv-fulltext-title"
+                className="min-w-0 truncate text-base font-semibold text-gray-900"
+              >
+                {fullTextModal.title}
+              </h2>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-black hover:text-white transition-colors"
+                onClick={() => setFullTextModal(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-[min(75vh,36rem)] overflow-y-auto px-4 py-4 text-sm leading-relaxed text-gray-800">
+              <p className="whitespace-pre-wrap break-words">{fullTextModal.body}</p>
             </div>
           </div>
         </div>

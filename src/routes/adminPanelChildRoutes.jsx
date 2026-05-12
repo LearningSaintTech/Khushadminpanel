@@ -74,6 +74,8 @@ import DesignerInventory from "../admin/components/designer/DesignerInventory";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
 import ActiveUsers from "../admin/components/users/ActiveUsers";
+import AppPopup from "../admin/components/AppPopup/AppPopup";
+import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -103,6 +105,9 @@ export const adminPanelChildRoutes = [
   <Route key="banners" path="banners" element={<Banner />} />,
   <Route key="banners-cr" path="banners/create" element={<BannerForm />} />,
   <Route key="banners-ed" path="banners/edit/:id" element={<BannerForm />} />,
+  <Route key="app-popup" path="app-popup" element={<AppPopup />} />,
+  <Route key="app-popup-cr" path="app-popup/create" element={<AppPopupForm />} />,
+  <Route key="app-popup-ed" path="app-popup/edit/:id" element={<AppPopupForm />} />,
   <Route key="brands" path="brands" element={<Brand />} />,
   <Route key="brands-cr" path="brands/create" element={<BrandForm />} />,
   <Route key="brands-ed" path="brands/edit/:id" element={<BrandForm />} />,
