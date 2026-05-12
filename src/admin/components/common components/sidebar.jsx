@@ -26,6 +26,7 @@ import {
   Truck,
   Building2,
   ShieldCheck,
+   Gift,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 import { useDispatch, useSelector } from "react-redux";
@@ -681,20 +682,35 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
               <span>Brands</span>
             </Link>
             )}
-             {canUse(["rewards"]) && (
-            <Link
-              to={ap("rewards")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("wallet")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <FileText
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Rewards</span>
-            </Link>
-            )}
+           {canUse(["rewards"]) && (
+  <Link
+    to={ap("rewards")}
+    className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+      isActive(ap("wallet")) ? "bg-white/10 text-white" : ""
+    }`}
+  >
+    <FileText
+      size={20}
+      className="text-gray-400 group-hover:text-black"
+    />
+    <span>Rewards</span>
+  </Link>
+)}
+
+{canUse(["referral"]) && (
+  <Link
+    to={ap("referral")}
+    className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+      isActive(ap("referral")) ? "bg-white/10 text-white" : ""
+    }`}
+  >
+    <Gift
+      size={20}
+      className="text-gray-400 group-hover:text-black"
+    />
+    <span>Referral</span>
+  </Link>
+)}
 
 
             {canUse(["features"]) && (

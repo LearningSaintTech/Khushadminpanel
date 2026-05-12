@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2, Loader2, ImagePlus } from "lucide-react";
+import { Plus, Trash2, Loader2, ImagePlus, Video } from "lucide-react";
 import {
   createDesignerItem,
   designerApi,
@@ -28,6 +28,36 @@ function isLocalPickedFile(img) {
   return false;
 }
 
+const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i;
+
+/** Resolve `"image"` | `"video"` from API fields, MIME type, URL, key extension, or picked files. */
+function inferVariantMediaType(media) {
+  if (media == null) return "image";
+  if (isLocalPickedFile(media)) {
+    const t = String(media.type || "");
+    if (t.startsWith("video/")) return "video";
+    if (t.startsWith("image/")) return "image";
+    return VIDEO_EXT_RE.test(String(media.name || "")) ? "video" : "image";
+  }
+  if (typeof media === "string") {
+    const s = String(media).trim();
+    return s && VIDEO_EXT_RE.test(s) ? "video" : "image";
+  }
+  if (media && typeof media === "object") {
+    const explicit = String(media.type || "").toLowerCase();
+    if (explicit === "video" || explicit === "image") return explicit;
+    const url = String(media.url || "").trim();
+    if (url) return VIDEO_EXT_RE.test(url) ? "video" : "image";
+    const key = String(media.imageKey || media.key || "").trim();
+    if (key) return VIDEO_EXT_RE.test(key) ? "video" : "image";
+  }
+  return "image";
+}
+
+function isVariantMediaVideo(media) {
+  return inferVariantMediaType(media) === "video";
+}
+
 function previewKeyForImage(img, idx) {
   if (isLocalPickedFile(img)) {
     return `f-${img.name}-${img.size}-${img.lastModified}-${idx}`;
@@ -45,8 +75,9 @@ function variantImagesForDisplay(variant) {
 }
 
 /** useLayoutEffect so blob previews paint in the same frame as the new file list (useEffect can look “stuck”). */
-function VariantImagePreview({ image }) {
+function VariantMediaPreview({ image }) {
   const [src, setSrc] = useState("");
+  const isVideo = isVariantMediaVideo(image);
 
   useLayoutEffect(() => {
     if (!image) {
@@ -66,19 +97,28 @@ function VariantImagePreview({ image }) {
     return undefined;
   }, [image]);
 
+  const frameClass =
+    "h-20 w-20 shrink-0 rounded-md border border-amber-100 object-cover";
+
   if (!src) {
     return (
       <div className="h-20 w-20 shrink-0 rounded-md border border-dashed border-amber-200 bg-white" />
     );
   }
-  return (
-    <img
-      key={src}
-      src={src}
-      alt=""
-      className="h-20 w-20 shrink-0 rounded-md border border-amber-100 object-cover"
-    />
-  );
+  if (isVideo) {
+    return (
+      <video
+        key={src}
+        src={src}
+        controls
+        muted
+        playsInline
+        preload="metadata"
+        className={frameClass}
+      />
+    );
+  }
+  return <img key={src} src={src} alt="" className={frameClass} />;
 }
 
 const emptySize = () => ({
@@ -257,7 +297,37 @@ function mapDesignerItemToForm(d) {
               producedQty: s.producedQty ?? 0,
               barcode: s.barcode || "",
             })),
-            images: Array.isArray(v.images) ? v.images : [],
+            images: Array.isArray(v.images)
+              ? v.images.map((im, orderIdx) => {
+                  if (im == null) return im;
+                  if (typeof im === "string") {
+                    const url = String(im).trim();
+                    if (!url) return im;
+                    return {
+                      url,
+                      imageKey: "",
+                      order: orderIdx + 1,
+                      type: inferVariantMediaType(im),
+                      thumbnail: "",
+                    };
+                  }
+                  if (typeof im !== "object") return im;
+                  const url = String(im.url || "").trim();
+                  const imageKey = String(im.imageKey ?? im.key ?? "").trim();
+                  const orderRaw = im.order;
+                  const order =
+                    orderRaw != null && orderRaw !== "" && !Number.isNaN(Number(orderRaw))
+                      ? Number(orderRaw)
+                      : orderIdx + 1;
+                  const explicit = String(im.type || "").toLowerCase();
+                  const type =
+                    explicit === "video" || explicit === "image"
+                      ? explicit
+                      : inferVariantMediaType(im);
+                  const thumbnail = im.thumbnail != null ? String(im.thumbnail) : "";
+                  return { ...im, url, imageKey, order, type, thumbnail };
+                })
+              : [],
           }))
         : [emptyVariant()],
     sizeCharts: loadSizeChartsFromDesignerItem(d),
@@ -1046,17 +1116,28 @@ const DesignerInventoryForm = () => {
           producedQty: toNumberOrZero(s.producedQty),
         })),
         images: imgs.map((img, idx) => {
-          if (isLocalPickedFile(img)) return { order: idx + 1 };
-          if (typeof img === "string" && img)
-            return { order: idx + 1, url: img };
-          if (img && typeof img === "object" && img.url) {
+          const mediaType = inferVariantMediaType(img);
+          if (isLocalPickedFile(img)) {
+            return { order: idx + 1, type: mediaType, thumbnail: "" };
+          }
+          if (typeof img === "string" && img) {
             return {
               order: idx + 1,
-              url: img.url,
-              imageKey: img.imageKey || "",
+              url: img,
+              type: mediaType,
+              thumbnail: "",
             };
           }
-          return { order: idx + 1 };
+          if (img && typeof img === "object" && (img.url || img.imageKey || img.key)) {
+            return {
+              order: idx + 1,
+              url: String(img.url || "").trim(),
+              imageKey: String(img.imageKey || img.key || "").trim(),
+              type: mediaType,
+              thumbnail: img.thumbnail != null ? String(img.thumbnail) : "",
+            };
+          }
+          return { order: idx + 1, type: "image", thumbnail: "" };
         }),
       };
     });
@@ -1444,6 +1525,17 @@ const DesignerInventoryForm = () => {
     setSubmitErrors([]);
     setCurrentStep((s) => Math.min(steps.length, s + 1));
   };
+  const handleFormKeyDown = (e) => {
+    // Prevent accidental submit via Enter while user is still filling earlier steps.
+    if (
+      e.key === "Enter" &&
+      currentStep < steps.length &&
+      e.target &&
+      e.target.tagName !== "TEXTAREA"
+    ) {
+      e.preventDefault();
+    }
+  };
   const stepErrors = {
     1: validateStep(1),
     2: validateStep(2),
@@ -1467,6 +1559,7 @@ const DesignerInventoryForm = () => {
 
       <form
         onSubmit={onSubmit}
+        onKeyDown={handleFormKeyDown}
         className="space-y-3 rounded-xl border border-indigo-100 bg-linear-to-br from-white to-indigo-50/25 p-3 shadow-sm"
       >
         {submitErrors.length > 0 ? (
@@ -2187,8 +2280,9 @@ const DesignerInventoryForm = () => {
                 </div>
                 <div className="mb-2 rounded-md border border-amber-200/80 bg-white/60 p-2">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-gray-700">
-                      Variant images
+                    <span className="flex items-center gap-1 text-xs font-medium text-gray-700">
+                      <Video size={14} className="shrink-0 text-amber-800" aria-hidden />
+                      Variant images &amp; video
                     </span>
                     <label className="relative inline-flex cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-100">
                       <ImagePlus
@@ -2198,7 +2292,7 @@ const DesignerInventoryForm = () => {
                       <span className="pointer-events-none">Add</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/*"
                         multiple
                         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         onChange={(e) => addVariantImages(vIdx, e)}
@@ -2207,8 +2301,7 @@ const DesignerInventoryForm = () => {
                   </div>
                   {displayImages.length === 0 ? (
                     <p className="text-xs text-gray-500">
-                      No images yet — add photos for this color (same flow as
-                      main inventory).
+                      No media yet — add images or short videos (MP4, WebM, MOV, etc.) for this color.
                     </p>
                   ) : (
                     <div className="max-h-80 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
@@ -2218,14 +2311,14 @@ const DesignerInventoryForm = () => {
                             key={previewKeyForImage(img, originalIndex)}
                             className="relative shrink-0"
                           >
-                            <VariantImagePreview image={img} />
+                            <VariantMediaPreview image={img} />
                             <button
                               type="button"
                               onClick={() =>
                                 removeVariantImage(vIdx, originalIndex)
                               }
                               className="absolute -right-1 -top-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700"
-                              aria-label="Remove image"
+                              aria-label="Remove media"
                             >
                               <Trash2 size={10} />
                             </button>
@@ -2806,6 +2899,16 @@ const DesignerInventoryForm = () => {
               {loading ? "Saving…" : "Save"}
             </button>
           )}
+          {currentStep < steps.length ? (
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading ? "Saving…" : "Save"}
+            </button>
+          ) : null}
         </div>
       </form>
     </div>

@@ -4,6 +4,12 @@ import { getSingleItem } from "../../apis/itemapi";
 import SkuUidsModal from "./SkuUidsModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
+import {
+  firstCatalogHeroImageUrl,
+  inferVariantMediaType,
+  isVariantVideoMedia,
+  variantMediaUrl,
+} from "../../../utils/variantMedia.js";
 
 export default function ItemDetails() {
   const { itemId } = useParams();
@@ -14,7 +20,7 @@ export default function ItemDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("general");
-  const [zoomVariantUrl, setZoomVariantUrl] = useState(null);
+  const [zoomVariant, setZoomVariant] = useState(null);
   const [skuUidModalOpen, setSkuUidModalOpen] = useState(false);
 
   const fetchItem = async () => {
@@ -162,6 +168,18 @@ export default function ItemDetails() {
     );
   }
 
+  const heroSrc =
+    firstCatalogHeroImageUrl(item) ||
+    "https://via.placeholder.com/500?text=No+Image";
+  const heroIsVideo = inferVariantMediaType(heroSrc) === "video";
+
+  const openVariantZoom = (url, isVideo) => {
+    if (!url) return;
+    setZoomVariant({ url, isVideo: !!isVideo });
+  };
+
+  const closeVariantZoom = () => setZoomVariant(null);
+
   return (
     <div className="w-full min-h-screen bg-gray-50/40">
       <SkuUidsModal
@@ -208,15 +226,21 @@ export default function ItemDetails() {
               {/* Product Image */}
               <div className="w-full md:w-72 lg:w-80 xl:w-96 flex-shrink-0 mx-auto md:mx-0">
                 <div className="aspect-square w-full max-w-full">
-                  <img
-                    src={
-                      item?.variants?.[0]?.images?.[0]?.url ||
-                      item?.thumbnail ||
-                      "https://via.placeholder.com/500?text=No+Image"
-                    }
-                    alt={item.name || "Product"}
-                    className="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100"
-                  />
+                  {heroIsVideo ? (
+                    <video
+                      src={heroSrc}
+                      controls
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100 bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={heroSrc}
+                      alt={item.name || "Product"}
+                      className="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -369,20 +393,44 @@ export default function ItemDetails() {
                       {variant.images?.length > 0 && (
                         <div className="flex gap-2 sm:gap-3 mb-4 sm:mb-6 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin">
                           {variant.images.map((img, imgIdx) => {
-                            const src =
-                              img?.url ||
-                              (typeof img === "string" ? img : "") ||
-                              "";
+                            const src = variantMediaUrl(img);
+                            const isVideo = isVariantVideoMedia(img);
+                            const tileClass =
+                              "relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 flex-shrink-0 snap-center rounded-lg border border-gray-200 shadow-sm overflow-hidden";
+                            if (isVideo && src) {
+                              return (
+                                <div
+                                  key={img?._id || src || imgIdx}
+                                  className={`${tileClass} bg-black`}
+                                  title="Variant video — double-click for fullscreen"
+                                  onDoubleClick={() => openVariantZoom(src, true)}
+                                >
+                                  <video
+                                    src={src}
+                                    controls
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    className="h-full w-full max-h-28 rounded-lg object-cover"
+                                  />
+                                </div>
+                              );
+                            }
                             return (
                               <button
                                 key={img?._id || src || imgIdx}
                                 type="button"
-                                onClick={() => src && setZoomVariantUrl(src)}
-                                className="relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 flex-shrink-0 snap-center rounded-lg border border-gray-200 shadow-sm overflow-hidden focus:outline-none focus:ring-2 focus:ring-black/30 cursor-zoom-in"
+                                onClick={() =>
+                                  src && openVariantZoom(src, isVideo)
+                                }
+                                className={`${tileClass} focus:outline-none focus:ring-2 focus:ring-black/30 cursor-zoom-in`}
                                 title="Click to zoom"
                               >
                                 <img
-                                  src={src || "https://via.placeholder.com/112?text=No+image"}
+                                  src={
+                                    src ||
+                                    "https://via.placeholder.com/112?text=No+image"
+                                  }
                                   className="h-full w-full object-cover"
                                   alt="Variant"
                                 />
@@ -482,7 +530,9 @@ export default function ItemDetails() {
                   showMeasureImages
                   onMeasureImageClick={(urls, idx) => {
                     const u = urls?.[idx];
-                    if (u) setZoomVariantUrl(u);
+                    if (u) {
+                      openVariantZoom(u, inferVariantMediaType(u) === "video");
+                    }
                   }}
                 />
               </div>
@@ -704,28 +754,42 @@ export default function ItemDetails() {
         </div>
       </div>
 
-      {zoomVariantUrl && (
+      {zoomVariant && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Zoomed variant image"
-          onClick={() => setZoomVariantUrl(null)}
+          aria-label={
+            zoomVariant.isVideo ? "Variant video" : "Zoomed variant image"
+          }
+          onClick={closeVariantZoom}
         >
           <button
             type="button"
-            onClick={() => setZoomVariantUrl(null)}
+            onClick={closeVariantZoom}
             className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20"
             aria-label="Close"
           >
             ×
           </button>
-          <img
-            src={zoomVariantUrl}
-            alt="Variant zoom"
-            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {zoomVariant.isVideo ? (
+            <video
+              key={zoomVariant.url}
+              src={zoomVariant.url}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-[90vh] max-w-full rounded-lg bg-black shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={zoomVariant.url}
+              alt="Variant zoom"
+              className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
       )}
     </div>
