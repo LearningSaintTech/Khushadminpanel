@@ -13,7 +13,6 @@ import {
 } from "../../utils/inventoryDisplay";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import {
-<<<<<<< HEAD
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -72,13 +71,6 @@ function DescriptionWithInfo({ label, value, previewLen, onOpenFull }) {
     </div>
   );
 }
-=======
-  inferVariantMediaTypeFromUrl,
-  isVariantVideoMedia,
-  variantMediaUrl,
-} from "../../../utils/variantMedia.js";
-import { ChevronLeft, ChevronRight, Eye, Pencil, Trash2, RefreshCw, Send, Plus, Loader2, X } from "lucide-react";
->>>>>>> 1509c5c7d78804e4fcff3c64963e54b8823b289a
 
 const getStatusClasses = (value) => {
   const s = String(value || "").toLowerCase();
@@ -188,7 +180,6 @@ const DesignerInventoryList = () => {
     }
   };
 
-<<<<<<< HEAD
   const renderRowActions = (r) => (
     <div className="flex flex-wrap items-center justify-end gap-1 sm:whitespace-nowrap">
       <button
@@ -239,39 +230,13 @@ const DesignerInventoryList = () => {
     </div>
   );
 
+
+
+
   const openLightbox = (images, index = 0) => {
     if (!Array.isArray(images) || images.length === 0) return;
     const safeIndex = Math.min(Math.max(index, 0), images.length - 1);
     setLightbox({ open: true, images, index: safeIndex });
-=======
-  const toLightboxSlides = (items) => {
-    if (!Array.isArray(items)) return [];
-    return items
-      .map((item) => {
-        if (typeof item === "string") {
-          const src = item.trim();
-          return src
-            ? { src, isVideo: inferVariantMediaTypeFromUrl(src) === "video" }
-            : null;
-        }
-        if (item && typeof item === "object" && typeof item.src === "string") {
-          const src = item.src.trim();
-          return src
-            ? { src, isVideo: Boolean(item.isVideo) }
-            : null;
-        }
-        const src = variantMediaUrl(item);
-        return src ? { src, isVideo: isVariantVideoMedia(item) } : null;
-      })
-      .filter(Boolean);
->>>>>>> 1509c5c7d78804e4fcff3c64963e54b8823b289a
-  };
-
-  const openLightbox = (items, index = 0) => {
-    const slides = toLightboxSlides(items);
-    if (!slides.length) return;
-    const safeIndex = Math.min(Math.max(index, 0), slides.length - 1);
-    setLightbox({ open: true, slides, index: safeIndex });
   };
 
   const closeLightbox = () => setLightbox({ open: false, slides: [], index: 0 });

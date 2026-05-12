@@ -177,12 +177,8 @@ const DesignerInventory = () => {
   const [selectedRegenProgress, setSelectedRegenProgress] = useState({ done: 0, total: 0 });
   const [selectedItem, setSelectedItem] = useState(null);
   const [listModalDesigner, setListModalDesigner] = useState(null);
-<<<<<<< HEAD
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
   const [fullTextModal, setFullTextModal] = useState(null);
-=======
-  const [lightbox, setLightbox] = useState({ open: false, slides: [], index: 0 });
->>>>>>> 1509c5c7d78804e4fcff3c64963e54b8823b289a
 
   const getSkuIds = (item) => {
     const skus = [];
