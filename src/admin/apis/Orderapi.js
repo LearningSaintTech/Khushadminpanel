@@ -51,9 +51,15 @@ const orderEndpoints = {
     return url;
   },
 
+  /** POST: filters + allPages (default true) = all matching lines; maxExportRows (≤15000); or allPages false + page + limit */
+  MANUFACTURING_SHEET_PDF: `/admin/orders/items/manufacturing-sheet`,
+
   // Get Single Order (with item pagination)
   GET_SINGLE_ORDER: (orderId, itemPage = 1, itemLimit = 10) =>
     `/admin/orders/${orderId}?itemPage=${itemPage}&itemLimit=${itemLimit}`,
+
+  /** Append optional staff note (text + server timestamp); multiple notes allowed */
+  APPEND_ORDER_NOTE: (orderId) => `/admin/orders/${orderId}/notes`,
 
   // Update Single Item Status inside Order
   UPDATE_ITEM_STATUS: (orderId, itemId) =>
@@ -111,6 +117,18 @@ export const downloadManifest = (shipmentIds) => {
     {}
   );
 };
+
+/** Manufacturing / fulfilment PDF (blob). Long timeout — full export + many images can exceed 1–2 minutes. */
+export const downloadManufacturingSheetPdf = (body = {}) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.MANUFACTURING_SHEET_PDF,
+    body,
+    {},
+    {},
+    { responseType: "blob", timeout: 300000 }
+  );
+};
 // ✅ Get All Orders
 export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType) => {
   return apiConnector(
@@ -132,6 +150,15 @@ export const getSingleOrder = (orderId, itemPage, itemLimit) => {
   return apiConnector(
     "GET",
     orderEndpoints.GET_SINGLE_ORDER(orderId, itemPage, itemLimit)
+  );
+};
+
+// ✅ Append order note (optional text; saved with date/time on server)
+export const appendOrderNote = (orderId, body) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.APPEND_ORDER_NOTE(orderId),
+    body
   );
 };
 
