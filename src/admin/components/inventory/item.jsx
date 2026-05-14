@@ -610,6 +610,7 @@ export default function Items() {
                 <th className="px-4 py-3 text-left font-medium">Image</th>
                 <th className="px-4 py-3 text-left font-medium">Name</th>
                 <th className="px-4 py-3 text-left font-medium">Description</th>
+                <th className="px-4 py-3 text-left font-medium min-w-[120px]">SEO</th>
                 <th className="px-4 py-3 text-center font-medium">Size chart</th>
                 <th className="px-4 py-3 text-right font-medium">Price</th>
                 <th className="px-4 py-3 text-right font-medium">Discounted</th>
@@ -622,7 +623,7 @@ export default function Items() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-gray-500 text-sm"
                   >
                     Loading products...
@@ -631,7 +632,7 @@ export default function Items() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-gray-500 text-sm"
                   >
                     No products found
@@ -673,6 +674,28 @@ export default function Items() {
 
                     <td className="px-4 py-3 align-middle text-xs sm:text-sm text-gray-600 max-w-xs truncate">
                       {item.shortDescription || "—"}
+                    </td>
+
+                    <td
+                      className="px-4 py-3 align-middle text-xs text-gray-600 max-w-[140px]"
+                      title={[
+                        item.metaTitle && `Title: ${item.metaTitle}`,
+                        Array.isArray(item.metaTags) &&
+                          item.metaTags.length &&
+                          `Tags: ${item.metaTags.join(", ")}`,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="font-medium text-gray-800 line-clamp-1">
+                        {String(item.metaTitle || "").trim() || "—"}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                        {Array.isArray(item.metaTags) && item.metaTags.length > 0
+                          ? item.metaTags.join(", ")
+                          : ""}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3 align-middle text-center text-xs text-gray-600">

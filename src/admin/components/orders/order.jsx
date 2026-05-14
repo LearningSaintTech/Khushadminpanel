@@ -16,6 +16,8 @@ import {
   getInvoice,
   downloadShippingLabel,
   downloadManifest,
+  downloadManufacturingSheetPdf,
+  appendOrderNote,
 } from "../../apis/Orderapi";
 import toast from "react-hot-toast";
 import {
@@ -38,6 +40,9 @@ import {
   UserMinus,
   UserPlus,
   ExternalLink,
+  FileDown,
+  Info,
+  StickyNote,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
@@ -310,6 +315,289 @@ const lineItemFromOrderItemRow = (row) => {
     exchanges: nested.exchanges,
   };
 };
+
+const STORE_PUBLIC_ORIGIN =
+  typeof import.meta !== "undefined" && import.meta.env?.VITE_PUBLIC_STORE_URL
+    ? String(import.meta.env.VITE_PUBLIC_STORE_URL).trim().replace(/\/$/, "")
+    : "https://khushpehno.com";
+
+function slugifyForStoreProduct(name) {
+  if (!name) return "";
+  return String(name)
+    .toLowerCase()
+    .replace(/['".,!?()[\]{}:;@#$%^&*+=~`|\\/<>]/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function getStorefrontProductUrl(itemId, itemLike) {
+  const idStr = itemId != null ? String(itemId) : "";
+  if (!idStr) return STORE_PUBLIC_ORIGIN;
+  const label = itemLike?.name || itemLike?.sku || "";
+  const slug = slugifyForStoreProduct(label);
+  const path = slug ? `/product/${slug}/${idStr}` : `/product/${idStr}`;
+  return `${STORE_PUBLIC_ORIGIN}${path}`;
+}
+
+function collectItemLikeImageUrls(itemLike) {
+  const urls = [];
+  const push = (u) => {
+    if (typeof u !== "string") return;
+    const t = u.trim();
+    if (t && !urls.includes(t)) urls.push(t);
+  };
+  if (!itemLike || typeof itemLike !== "object") return urls;
+  push(itemLike.variant?.imageUrl);
+  if (Array.isArray(itemLike.variant?.images)) {
+    itemLike.variant.images.forEach((x) => {
+      if (typeof x === "string") push(x);
+      else if (x?.url) push(x.url);
+    });
+  }
+  if (Array.isArray(itemLike.images)) {
+    itemLike.images.forEach((x) => {
+      if (typeof x === "string") push(x);
+      else if (x?.url) push(x.url);
+    });
+  }
+  if (Array.isArray(itemLike.variants)) {
+    itemLike.variants.forEach((v) => {
+      push(v?.imageUrl);
+      if (Array.isArray(v?.images)) {
+        v.images.forEach((img) => {
+          if (typeof img === "string") push(img);
+          else if (img?.url) push(img.url);
+        });
+      }
+    });
+  }
+  return urls;
+}
+
+function StoreItemInfoTrigger({ itemId, itemLike, quantity, onOpenDetails }) {
+  const url = getStorefrontProductUrl(itemId, itemLike);
+  const qtyLabel =
+    quantity != null && quantity !== "" ? String(quantity) : "—";
+  return (
+    <div className="relative flex shrink-0 self-start pt-0.5 group">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetails?.();
+        }}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+        aria-label="Store product link and images"
+      >
+        <Info className="h-4 w-4" strokeWidth={2} />
+      </button>
+      <div
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-0 top-full z-[80] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-2.5 text-left opacity-0 shadow-lg transition-opacity duration-150 group-hover:visible group-hover:opacity-100"
+      >
+        <p className="text-[11px] font-semibold text-gray-900">
+          Quantity: {qtyLabel}
+        </p>
+        <p className="mt-1 break-all font-mono text-[10px] leading-snug text-indigo-800">
+          {url}
+        </p>
+        <p className="mt-1 text-[10px] text-gray-500">Click icon for images</p>
+      </div>
+    </div>
+  );
+}
+
+function StoreOrderInfoTrigger({ order, onOpenDetails }) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const totalQty = items.reduce((s, it) => s + Number(it?.quantity ?? 0), 0);
+  const single = items.length === 1;
+  const first = single ? items[0] : null;
+  const url = first ? getStorefrontProductUrl(first.itemId, first) : null;
+  return (
+    <div className="relative flex shrink-0 justify-center group">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetails?.();
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+        aria-label="Store links and images for order lines"
+      >
+        <Info className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+      <div
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-1/2 top-full z-[80] mt-1 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-2.5 text-left opacity-0 shadow-lg transition-opacity duration-150 group-hover:visible group-hover:opacity-100"
+      >
+        <p className="text-[11px] font-semibold text-gray-900">
+          {items.length} line{items.length === 1 ? "" : "s"} · Qty total:{" "}
+          {totalQty || "—"}
+        </p>
+        {single && url ? (
+          <p className="mt-1 break-all font-mono text-[10px] leading-snug text-indigo-800">
+            {url}
+          </p>
+        ) : (
+          <p className="mt-1 text-[10px] text-gray-600">
+            Multiple products — click for links and images
+          </p>
+        )}
+        <p className="mt-1 text-[10px] text-gray-500">Click icon for gallery</p>
+      </div>
+    </div>
+  );
+}
+
+/** Same idea as manufacturing PDF (Asia/Kolkata, en-IN). */
+function formatManufacturingModalDate(d) {
+  if (d == null || d === "") return "—";
+  try {
+    return new Date(d).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return String(d);
+  }
+}
+
+function manufacturingPaymentLabel(payment) {
+  if (!payment || typeof payment !== "object") return "—";
+  const mode = payment.mode != null ? String(payment.mode) : "";
+  const status = payment.status != null ? String(payment.status) : "";
+  if (mode && status) return `${mode} / ${status}`;
+  if (mode) return mode;
+  if (status) return status;
+  return "—";
+}
+
+function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
+  const item = line.itemLike && typeof line.itemLike === "object" ? line.itemLike : {};
+  const variant = item.variant && typeof item.variant === "object" ? item.variant : {};
+  const ctx = line.ctx && typeof line.ctx === "object" ? line.ctx : {};
+  const u = getStorefrontProductUrl(line.itemId, item);
+  const imgs = collectItemLikeImageUrls(item);
+  const qtyStr =
+    line.quantity != null && line.quantity !== ""
+      ? String(line.quantity)
+      : item.quantity != null
+        ? String(item.quantity)
+        : "—";
+  const custName = ctx.user?.name || ctx.address?.name || "—";
+  const phone =
+    [ctx.user?.countryCode, ctx.user?.phoneNumber].filter(Boolean).join("") ||
+    (ctx.address?.phone ? String(ctx.address.phone) : "") ||
+    "—";
+  const pay = manufacturingPaymentLabel(ctx.payment);
+
+  const field = (label, value, colClass = "") => (
+    <div className={`min-w-0 ${colClass}`}>
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words text-xs font-medium leading-snug text-gray-900">
+        {value != null && value !== "" ? String(value) : "—"}
+      </dd>
+    </div>
+  );
+
+  return (
+    <div
+      className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 ${lineIndex > 0 ? "mt-4" : ""}`}
+    >
+      {totalLines > 1 ? (
+        <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+          Line {lineIndex + 1} of {totalLines}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+        <div className="mx-auto flex w-full max-w-[10rem] shrink-0 flex-col items-center lg:mx-0">
+          {imgs[0] ? (
+            <button
+              type="button"
+              onClick={() => onPickImage?.(imgs[0])}
+              className="h-36 w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-sm lg:h-40"
+            >
+              <img
+                src={imgs[0]}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </button>
+          ) : (
+            <div className="flex h-36 w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-center text-[10px] text-gray-400 lg:h-40">
+              No image
+            </div>
+          )}
+        </div>
+        <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-2.5 text-left sm:gap-x-5 lg:grid-cols-3">
+          {field("Order ID", ctx.orderId)}
+          {field("Order date", formatManufacturingModalDate(ctx.orderCreatedAt))}
+          {field("Quantity", qtyStr)}
+          {field("Dress / product name", item.name, "col-span-2 lg:col-span-3")}
+          {field("Catalog product ID", item.productId)}
+          {field("Line SKU", item.sku)}
+          {field("Variant SKU", variant.sku)}
+          {field("Size", variant.size)}
+          {field("Color", variant.color)}
+          {field("Payment (order)", pay, "col-span-2 lg:col-span-3")}
+          {field("Ship-to pincode", ctx.address?.pincode)}
+          {field("Customer name", custName)}
+          {field("Customer phone", phone)}
+          <div className="col-span-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 lg:col-span-3">
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-indigo-900">
+              Store link
+            </dt>
+            <dd className="mt-1">
+              <a
+                href={u}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-start gap-1 break-all text-xs font-medium text-indigo-700 hover:text-indigo-900"
+              >
+                <span className="min-w-0 flex-1">{u}</span>
+                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </div>
+      {imgs.length > 1 ? (
+        <div className="mt-4 border-t border-gray-100 pt-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            More images
+          </p>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6">
+            {imgs.slice(1).map((src) => (
+              <button
+                key={src}
+                type="button"
+                onClick={() => onPickImage?.(src)}
+                className="overflow-hidden rounded-md border border-gray-200 bg-white"
+              >
+                <img
+                  src={src}
+                  alt=""
+                  className="aspect-square w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** Latest timeline entry (by createdAt) — shows previous → current transition */
 const getLatestStatusHistoryEntry = (item) => {
@@ -714,11 +1002,19 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [docDownloadLoading, setDocDownloadLoading] = useState(false);
   const [docActionType, setDocActionType] = useState(null); // "label" | "manifest" | "invoice" | "forward"
   const [zoomImageUrl, setZoomImageUrl] = useState(null);
+  const [storeInfoModal, setStoreInfoModal] = useState(null);
   const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
     () => new Set(),
   );
+  const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
+  const [orderNotesModalOpen, setOrderNotesModalOpen] = useState(false);
+  const [orderNotesModalOrderId, setOrderNotesModalOrderId] = useState(null);
+  const [orderNotesModalLoading, setOrderNotesModalLoading] = useState(false);
+  const [orderNotesModalNotes, setOrderNotesModalNotes] = useState([]);
+  const [orderNotesModalDraft, setOrderNotesModalDraft] = useState("");
+  const [orderNotesModalSaving, setOrderNotesModalSaving] = useState(false);
 
   useEffect(() => {
     if (exchangeOnly && viewMode !== VIEW_ORDER) {
@@ -1169,8 +1465,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         itemSearch,
         "",
         itemStatusFilter,
-        "",
-        "",
+        dateFrom || undefined,
+        dateTo || undefined,
         deliveryTypeFilter || undefined
       );
       dbgOrders("getOrderItems:response", res);
@@ -1196,11 +1492,64 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, exchangeOnly]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, exchangeOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
   }, [viewMode, fetchOrderItems]);
+
+  const handleDownloadManufacturingPdf = async () => {
+    try {
+      setManufacturingPdfLoading(true);
+      const searchVal =
+        viewMode === VIEW_ORDER
+          ? search?.trim() || undefined
+          : itemSearch?.trim() || undefined;
+      const body = {
+        search: searchVal,
+        itemStatus: itemStatusFilter || undefined,
+        deliveryType: deliveryTypeFilter || undefined,
+        startDate: dateFrom || undefined,
+        endDate: dateTo || undefined,
+        allPages: true,
+        maxExportRows: 8000,
+        ...(exchangeOnly ? { exchangeOnly: true } : {}),
+      };
+      const blob = await downloadManufacturingSheetPdf(body);
+      if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
+        const text = await blob.text();
+        let msg = "Could not generate manufacturing PDF";
+        try {
+          const j = JSON.parse(text);
+          if (j?.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const nameParts = [
+        "full",
+        dateFrom ? `from${dateFrom}` : null,
+        dateTo ? `to${dateTo}` : null,
+      ].filter(Boolean);
+      a.download = `manufacturing-sheet-${nameParts.join("-")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Manufacturing PDF downloaded");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        getBackendErrorMessages(err, "Could not generate manufacturing PDF"),
+      );
+    } finally {
+      setManufacturingPdfLoading(false);
+    }
+  };
 
   const fetchSingleOrder = async (orderId) => {
     if (!orderId) return;
@@ -1236,6 +1585,62 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       setOrderError(apiErrMessage(err, "Could not load order details."));
     } finally {
       setOrderLoading(false);
+    }
+  };
+
+  const openOrderNotesModal = async (orderId) => {
+    if (!orderId) return;
+    setOrderNotesModalOpen(true);
+    setOrderNotesModalOrderId(orderId);
+    setOrderNotesModalDraft("");
+    setOrderNotesModalNotes([]);
+    setOrderNotesModalLoading(true);
+    try {
+      const res = await getSingleOrder(orderId, 1, itemLimit);
+      const o = res?.data ?? res;
+      setOrderNotesModalNotes(Array.isArray(o?.orderNotes) ? o.orderNotes : []);
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Could not load order notes");
+      setOrderNotesModalOpen(false);
+      setOrderNotesModalOrderId(null);
+    } finally {
+      setOrderNotesModalLoading(false);
+    }
+  };
+
+  const closeOrderNotesModal = () => {
+    setOrderNotesModalOpen(false);
+    setOrderNotesModalOrderId(null);
+    setOrderNotesModalNotes([]);
+    setOrderNotesModalDraft("");
+    setOrderNotesModalLoading(false);
+    setOrderNotesModalSaving(false);
+  };
+
+  const handleSaveOrderNoteFromModal = async () => {
+    const oid = orderNotesModalOrderId;
+    const text = String(orderNotesModalDraft || "").trim();
+    if (!oid || !text) return;
+    setOrderNotesModalSaving(true);
+    try {
+      const res = await appendOrderNote(oid, { text });
+      const payload = res?.data ?? res;
+      let notes = payload?.orderNotes;
+      if (!Array.isArray(notes)) {
+        const r2 = await getSingleOrder(oid, 1, itemLimit);
+        const o2 = r2?.data ?? r2;
+        notes = Array.isArray(o2?.orderNotes) ? o2.orderNotes : [];
+      }
+      setOrderNotesModalNotes(notes);
+      setOrderNotesModalDraft("");
+      setSelectedOrder((prev) =>
+        prev?.orderId === oid ? { ...prev, orderNotes: notes } : prev,
+      );
+      toast.success("Note saved");
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Could not save note");
+    } finally {
+      setOrderNotesModalSaving(false);
     }
   };
 
@@ -2091,6 +2496,49 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           </div>
         </div>
 
+        {!selectedOrder && (
+          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-indigo-950">
+                Manufacturing & fulfilment PDF
+              </p>
+              <p className="text-xs text-indigo-900/80 mt-1 max-w-xl">
+                Exports <span className="font-medium">every line</span> that matches your current filters (up to 8,000
+                lines per file — the PDF header says if the export was capped). Uses{" "}
+                <span className="font-medium">order date range</span>, <span className="font-medium">delivery type</span>
+                , search
+                {exchangeOnly ? (
+                  <>, and <span className="font-medium">exchange</span> lines only.</>
+                ) : viewMode === VIEW_ITEM ? (
+                  <>
+                    , plus <span className="font-medium">line status</span> from the By item tab. The table below is
+                    paginated for browsing; the PDF still includes all matching lines.
+                  </>
+                ) : (
+                  <>
+                    . Open <span className="font-medium">By item</span> to set line status for the export; dates and
+                    delivery apply from here too.
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={manufacturingPdfLoading}
+              onClick={handleDownloadManufacturingPdf}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-indigo-300 bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+              title="Downloads one PDF with all order lines matching your filters (max 8,000 per download). Large exports may take a minute."
+            >
+              {manufacturingPdfLoading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <FileDown className="h-4 w-4" aria-hidden />
+              )}
+              Download manufacturing PDF
+            </button>
+          </div>
+        )}
+
         {error && viewMode === VIEW_ORDER && (
           <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
             <AlertCircle size={20} />
@@ -2205,18 +2653,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
               <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
                 <colgroup>
+                  <col className="w-[3rem]" />
                   <col className="w-[9%]" />
                   <col className="w-[15%]" />
                   <col className="w-[11%]" />
                   <col className="w-[5%]" />
                   <col className="w-[8%]" />
                   <col className="w-[14%]" />
-                  <col className="w-[20%]" />
+                  <col className="w-[18%]" />
                   <col className="w-[9%]" />
                   <col className="w-[9%]" />
                 </colgroup>
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-1 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Store link">
+                      Info
+                    </th>
                     <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Order</th>
                     <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Customer</th>
                     <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Phone</th>
@@ -2227,25 +2679,51 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       Courier / SR
                     </th>
                     <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Date</th>
-                    <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">View</th>
+                    <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                      Details / notes
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className="py-16 text-center text-gray-500">
+                      <td colSpan={10} className="py-16 text-center text-gray-500">
                         Loading orders…
                       </td>
                     </tr>
                   ) : orders.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-16 text-center text-gray-500">
+                      <td colSpan={10} className="py-16 text-center text-gray-500">
                         No orders found
                       </td>
                     </tr>
                   ) : (
                     orders.map((order) => (
                       <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-1 py-2 align-middle text-center">
+                          <StoreOrderInfoTrigger
+                            order={order}
+                            onOpenDetails={() =>
+                              setStoreInfoModal({
+                                title: `Order #${order.orderId || order._id?.slice(-8) || ""}`,
+                                lines: (Array.isArray(order.items) ? order.items : []).map(
+                                  (it) => ({
+                                    itemId: it.itemId,
+                                    itemLike: it,
+                                    quantity: it.quantity,
+                                    ctx: {
+                                      orderId: order.orderId,
+                                      orderCreatedAt: order.createdAt,
+                                      payment: order.payment,
+                                      address: order.address,
+                                      user: order.user,
+                                    },
+                                  }),
+                                ),
+                              })
+                            }
+                          />
+                        </td>
                         <td className="min-w-0 px-2 py-2 align-top font-medium text-indigo-600">
                           <span className="block truncate text-xs" title={`#${order.orderId || order._id}`}>
                             #{order.orderId || order._id?.slice(-8).toUpperCase()}
@@ -2367,6 +2845,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           })}
                         </td>
                         <td className="px-1 py-2 align-middle text-center">
+                          <div className="flex flex-col items-center gap-1">
                           <button
                           onClick={() => {
                             const customOrderId = order.orderId;
@@ -2384,6 +2863,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           >
                             Details
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => openOrderNotesModal(order.orderId)}
+                            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100 border border-gray-200 transition"
+                            title="Order notes"
+                          >
+                            Notes
+                          </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2416,40 +2904,84 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             </>
           ) : (
             <>
-              {/* Item-based filters */}
-              <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-700">
-                    Filter by status
-                  </span>
-                  <select
-                    value={itemStatusFilter}
-                    onChange={(e) => {
-                      setItemStatusFilter(e.target.value);
-                      setItemPagination((p) => ({ ...p, page: 1 }));
-                    }}
-                    className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-colors min-w-[200px]"
-                  >
-                    <option value="">All statuses</option>
-                    {filteredStatusOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+              {/* Item-based filters: order date range + status (PDF uses same page as list) */}
+              <div className="mb-6 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-gray-500">From (order date)</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-gray-500">To (order date)</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-gray-500">Line status</span>
+                    <select
+                      value={itemStatusFilter}
+                      onChange={(e) => {
+                        setItemStatusFilter(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-colors min-w-[200px]"
+                    >
+                      <option value="">All statuses</option>
+                      {filteredStatusOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {itemStatusFilter ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemStatusFilter("");
+                          setItemPagination((p) => ({ ...p, page: 1 }));
+                        }}
+                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                      >
+                        Clear status
+                      </button>
+                    ) : null}
+                    {(dateFrom || dateTo) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                          setItemPagination((p) => ({ ...p, page: 1 }));
+                        }}
+                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                      >
+                        Clear dates
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {itemStatusFilter && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setItemStatusFilter("");
-                      setItemPagination((p) => ({ ...p, page: 1 }));
-                    }}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                  >
-                    Clear filter
-                  </button>
-                )}
+                <p className="text-xs text-gray-500">
+                  The list is paginated for speed. <span className="font-medium">Download manufacturing PDF</span>{" "}
+                  above exports <span className="font-medium">all</span> lines matching dates, delivery, status, and
+                  search (not only this page).
+                </p>
               </div>
               {itemLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
@@ -2476,6 +3008,30 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-indigo-200 hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
                       <div className="p-5 flex flex-wrap items-center gap-4 sm:gap-6">
+                        <StoreItemInfoTrigger
+                          itemId={row.itemId}
+                          itemLike={row.item}
+                          quantity={row.item?.quantity}
+                          onOpenDetails={() =>
+                            setStoreInfoModal({
+                              title: `Order #${row.orderId || ""}`,
+                              lines: [
+                                {
+                                  itemId: row.itemId,
+                                  itemLike: row.item,
+                                  quantity: row.item?.quantity,
+                                  ctx: {
+                                    orderId: row.orderId,
+                                    orderCreatedAt: row.orderCreatedAt,
+                                    payment: row.payment,
+                                    address: row.address,
+                                    user: row.user,
+                                  },
+                                },
+                              ],
+                            })
+                          }
+                        />
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
@@ -2671,31 +3227,52 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={itemPagination.page <= 1 || itemLoading}
-                      onClick={() => {
-                        setItemPagination((p) => ({
-                          ...p,
-                          page: Math.max(1, p.page - 1),
-                        }));
-                      }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                    >
-                      <ChevronLeft size={16} /> Prev
-                    </button>
-                    <button
-                      disabled={
-                        itemPagination.page >= itemPagination.totalPages ||
-                        itemLoading
-                      }
-                      onClick={() => {
-                        setItemPagination((p) => ({ ...p, page: p.page + 1 }));
-                      }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                    >
-                      Next <ChevronRight size={16} />
-                    </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-sm text-gray-600 whitespace-nowrap">Rows per page</label>
+                      <select
+                        value={itemPagination.limit}
+                        disabled={itemLoading}
+                        onChange={(e) => {
+                          const lim = Math.min(100, Math.max(10, Number(e.target.value) || 20));
+                          setItemPagination((p) => ({ ...p, limit: lim, page: 1 }));
+                        }}
+                        className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={itemPagination.page <= 1 || itemLoading}
+                        onClick={() => {
+                          setItemPagination((p) => ({
+                            ...p,
+                            page: Math.max(1, p.page - 1),
+                          }));
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                      >
+                        <ChevronLeft size={16} /> Prev
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          itemPagination.page >= itemPagination.totalPages ||
+                          itemLoading
+                        }
+                        onClick={() => {
+                          setItemPagination((p) => ({ ...p, page: p.page + 1 }));
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                      >
+                        Next <ChevronRight size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4021,31 +4598,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             </div>
             ) : null}
 
-        {zoomImageUrl && (
-          <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"
-            onClick={() => setZoomImageUrl(null)}
-          >
-            <div
-              className="relative max-h-[90vh] max-w-[90vw]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                className="absolute -top-10 right-0 rounded bg-white/90 px-3 py-1 text-xs font-medium text-gray-800 hover:bg-white"
-                onClick={() => setZoomImageUrl(null)}
-              >
-                Close
-              </button>
-              <img
-                src={zoomImageUrl}
-                alt="Zoomed exchange upload"
-                className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
-              />
-            </div>
-          </div>
-        )}
-
         {/* Assignment Modal */}
         {assignmentModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -4194,6 +4746,183 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               </div>
             );
           })()
+        )}
+
+        {orderNotesModalOpen && orderNotesModalOrderId && (
+          <div
+            className="fixed inset-0 z-[76] flex items-center justify-center bg-black/50 p-4 sm:p-6"
+            onClick={closeOrderNotesModal}
+            role="presentation"
+          >
+            <div
+              className="mx-auto flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="order-notes-modal-title"
+            >
+              <div className="border-b border-gray-100 bg-slate-50 px-5 py-3">
+                <h3
+                  id="order-notes-modal-title"
+                  className="text-sm font-semibold text-gray-900 flex items-center gap-2"
+                >
+                  <StickyNote size={16} className="text-indigo-600 shrink-0" />
+                  Order notes
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-600 truncate" title={orderNotesModalOrderId}>
+                  #{orderNotesModalOrderId}
+                </p>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="max-h-[38vh] min-h-[120px] overflow-y-auto border-b border-gray-100 px-4 py-3">
+                  {orderNotesModalLoading ? (
+                    <p className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
+                      <RefreshCw size={16} className="animate-spin" />
+                      Loading notes…
+                    </p>
+                  ) : orderNotesModalNotes.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-gray-500">No notes yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {[...orderNotesModalNotes].map((n, idx) => (
+                        <li
+                          key={n._id ?? `modal-note-${idx}`}
+                          className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm"
+                        >
+                          <p className="whitespace-pre-wrap text-gray-800 wrap-break-word">{n.text}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                            <span className="tabular-nums">
+                              {n.createdAt
+                                ? new Date(n.createdAt).toLocaleString("en-IN", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })
+                                : "—"}
+                            </span>
+                            {n.authorRole ? (
+                              <span className="rounded border border-gray-200 bg-white px-1.5 py-0.5 capitalize">
+                                {n.authorRole}
+                              </span>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="shrink-0 space-y-2 px-4 py-3 bg-white">
+                  <label className="text-xs font-medium text-gray-600">Add a note</label>
+                  <textarea
+                    value={orderNotesModalDraft}
+                    onChange={(e) => setOrderNotesModalDraft(e.target.value)}
+                    placeholder="e.g. Order moved to processed…"
+                    rows={3}
+                    maxLength={5000}
+                    disabled={orderNotesModalSaving || orderNotesModalLoading}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
+                  />
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={closeOrderNotesModal}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveOrderNoteFromModal}
+                      disabled={
+                        orderNotesModalSaving ||
+                        orderNotesModalLoading ||
+                        !String(orderNotesModalDraft || "").trim()
+                      }
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {orderNotesModalSaving ? "Saving…" : "Save note"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {storeInfoModal && Array.isArray(storeInfoModal.lines) && (
+          <div
+            className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 p-4 sm:p-6"
+            onClick={() => setStoreInfoModal(null)}
+            role="presentation"
+          >
+            <div
+              className="mx-auto max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="store-info-modal-title"
+            >
+              <div className="border-b border-gray-100 bg-slate-50 px-5 py-3 text-center">
+                <h3
+                  id="store-info-modal-title"
+                  className="text-sm font-semibold text-gray-900"
+                >
+                  Manufacturing summary
+                </h3>
+                {storeInfoModal.title ? (
+                  <p className="mt-0.5 text-xs text-gray-600">{storeInfoModal.title}</p>
+                ) : null}
+              </div>
+              <div className="max-h-[calc(90vh-7.5rem)] overflow-y-auto bg-slate-100/60 px-4 py-4 sm:px-6 sm:py-5">
+                {storeInfoModal.lines.length === 0 ? (
+                  <p className="text-center text-sm text-gray-500">No line items.</p>
+                ) : (
+                  storeInfoModal.lines.map((line, idx) => (
+                    <ManufacturingLineCard
+                      key={`${String(line.itemId)}-${idx}`}
+                      line={line}
+                      lineIndex={idx}
+                      totalLines={storeInfoModal.lines.length}
+                      onPickImage={(src) => setZoomImageUrl(src)}
+                    />
+                  ))
+                )}
+              </div>
+              <div className="border-t border-gray-100 bg-white px-4 py-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setStoreInfoModal(null)}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {zoomImageUrl && (
+          <div
+            className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <div
+              className="relative max-h-[90vh] max-w-[90vw]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="absolute -top-10 right-0 rounded bg-white/90 px-3 py-1 text-xs font-medium text-gray-800 hover:bg-white"
+                onClick={() => setZoomImageUrl(null)}
+              >
+                Close
+              </button>
+              <img
+                src={zoomImageUrl}
+                alt="Zoomed exchange upload"
+                className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

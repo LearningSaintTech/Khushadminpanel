@@ -8,7 +8,7 @@ const LISTING_TEMPLATE = "/designer/listing-template";
 /**
  * Designer inventory API. Create/update bodies are usually `FormData` with at least:
  * `productTypeCode` (CATEGORY code from inventory meta), optional `productType` (name; server can resolve from code),
- * `fitType`, variants, fabric, etc.
+ * `fitType`, variants, fabric, optional `metaTitle`, `metaDescription`, `metaTags` (string or JSON array string), etc.
  */
 export const designerApi = {
   login: (data) => apiConnector("POST", `${AUTH}/login`, data),

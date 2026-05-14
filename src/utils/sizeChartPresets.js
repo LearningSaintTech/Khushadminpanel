@@ -2,6 +2,47 @@
  * Shared size-chart templates for designer inventory and catalog ItemForm (in + cm tables).
  */
 
+/**
+ * Combine upper + lower preset definitions into one table (shared row count = max of both).
+ * Measurement columns stack left-to-right; sample values pad with the last known value per column.
+ */
+export function mergeUpperLowerPresets(upper, lower) {
+  if (!upper?.headers?.length) return lower;
+  if (!lower?.headers?.length) return upper;
+  const us = Array.isArray(upper.sizes) ? upper.sizes : [];
+  const ls = Array.isArray(lower.sizes) ? lower.sizes : [];
+  const rowCount = Math.max(us.length, ls.length);
+  const sizes = Array.from({ length: rowCount }, (_, i) => {
+    const cell = us[i] ?? ls[i];
+    return cell != null && String(cell).trim() !== "" ? String(cell).trim() : `Row ${i + 1}`;
+  });
+  const headers = [...upper.headers, ...lower.headers];
+  const upperSV = upper.sampleValues || {};
+  const lowerSV = lower.sampleValues || {};
+  const fillCol = (sv, key) => {
+    const arr = Array.isArray(sv[key]) ? sv[key] : [];
+    return Array.from({ length: rowCount }, (_, i) => {
+      if (i < arr.length) return arr[i];
+      if (arr.length > 0) return arr[arr.length - 1];
+      return "";
+    });
+  };
+  const sampleValues = {};
+  upper.headers.forEach((h) => {
+    sampleValues[h.key] = fillCol(upperSV, h.key);
+  });
+  lower.headers.forEach((h) => {
+    sampleValues[h.key] = fillCol(lowerSV, h.key);
+  });
+  return {
+    title: [upper.title, lower.title].filter(Boolean).join(" + "),
+    unit: upper.unit || lower.unit || "in",
+    sizes,
+    headers,
+    sampleValues,
+  };
+}
+
 export const SIZE_CHART_PRESETS = {
   men: {
     upper: {
@@ -35,6 +76,9 @@ export const SIZE_CHART_PRESETS = {
         inseam: ["31", "30.5", "30", "29.5", "29", "28.5"],
         outseam: ["42", "42", "42", "42", "42", "42"],
       },
+    },
+    get upper_lower() {
+      return mergeUpperLowerPresets(this.upper, this.lower);
     },
   },
   women: {
@@ -74,6 +118,9 @@ export const SIZE_CHART_PRESETS = {
         inseam: ["29", "28.5", "28", "27.5", "27", "26.5"],
       },
     },
+    get upper_lower() {
+      return mergeUpperLowerPresets(this.upper, this.lower);
+    },
   },
   unisex: {
     upper: {
@@ -95,6 +142,9 @@ export const SIZE_CHART_PRESETS = {
         { key: "hip", label: "Hip (in)" },
         { key: "inseam", label: "Inseam (in)" },
       ],
+    },
+    get upper_lower() {
+      return mergeUpperLowerPresets(this.upper, this.lower);
     },
   },
   kids: {
@@ -118,10 +168,27 @@ export const SIZE_CHART_PRESETS = {
         { key: "outseam", label: "Outseam (in)" },
       ],
     },
+    get upper_lower() {
+      return mergeUpperLowerPresets(this.upper, this.lower);
+    },
   },
 };
 
 /** Map catalog SKU gender code / label → preset group (matches designer `gender` keys). */
+/** Human label for garment preset keys (UI only). */
+export function garmentPresetCategoryLabel(category) {
+  switch (String(category || "")) {
+    case "upper":
+      return "Upper";
+    case "lower":
+      return "Lower";
+    case "upper_lower":
+      return "Upper + lower";
+    default:
+      return String(category || "");
+  }
+}
+
 export function presetGenderKeyFromSkuGender(g) {
   const s = String(g ?? "")
     .trim()

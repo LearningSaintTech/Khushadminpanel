@@ -1394,6 +1394,7 @@ const ShowItems = () => {
                   <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Product ID</th>
                   <th className="px-4 py-3 text-left">Description</th>
+                  <th className="px-4 py-3 text-left min-w-[120px]">SEO</th>
                   <th className="px-4 py-3 text-center">Size chart</th>
                   <th className="px-4 py-3 text-left min-w-[140px]">Warehouses</th>
                   <th className="px-4 py-3 text-right">Price</th>
@@ -1406,7 +1407,7 @@ const ShowItems = () => {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-4 py-12 text-center text-gray-500"
                     >
                       Loading items...
@@ -1415,7 +1416,7 @@ const ShowItems = () => {
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-4 py-12 text-center text-gray-500"
                     >
                       No items found
@@ -1459,6 +1460,27 @@ const ShowItems = () => {
                         title={item.shortDescription || item.description}
                       >
                         {item.shortDescription || item.description || "—"}
+                      </td>
+                      <td
+                        className="px-4 py-4 text-xs text-gray-600 max-w-[160px]"
+                        title={[
+                          item.metaTitle && `Title: ${item.metaTitle}`,
+                          item.metaDescription && `Desc: ${item.metaDescription}`,
+                          Array.isArray(item.metaTags) &&
+                            item.metaTags.length &&
+                            `Tags: ${item.metaTags.join(", ")}`,
+                        ]
+                          .filter(Boolean)
+                          .join("\n")}
+                      >
+                        <div className="font-medium text-gray-800 line-clamp-1">
+                          {String(item.metaTitle || "").trim() || "—"}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">
+                          {Array.isArray(item.metaTags) && item.metaTags.length > 0
+                            ? item.metaTags.join(", ")
+                            : ""}
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-center text-sm text-gray-600">
                         {itemHasSizeChartContent(item) ? (

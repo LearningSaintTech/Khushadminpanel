@@ -653,6 +653,21 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
             </Link>
             )}
 
+            {canUse(["banner"]) && (
+            <Link
+              to={ap("app-popup")}
+              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                isActive(ap("app-popup")) ? "bg-white/10 text-white" : ""
+              }`}
+            >
+              <Megaphone
+                size={20}
+                className="text-gray-400 group-hover:text-black"
+              />
+              <span>App Popups</span>
+            </Link>
+            )}
+
             {canUse(["brands"]) && (
             <Link
               to={ap("brands")}

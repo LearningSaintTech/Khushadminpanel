@@ -8,11 +8,17 @@ import {
   updateItem,
   getSingleItem,
 } from "../../apis/itemapi";
+import { getAllInventoryCodes } from "../../apis/inventoryCodeApi";
+import {
+  normalizeInventoryCodeOptionsResponse,
+  SearchableInventoryCodeSelect,
+} from "../../../components/inventory/SearchableInventoryCodeSelect.jsx";
 import SkuUidsModal from "./SkuUidsModal.jsx";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
 import { designerItemToFormSizeCharts } from "../../../utils/designerSizeChartDisplay.js";
 import {
   SIZE_CHART_PRESETS,
+  garmentPresetCategoryLabel,
   inchesToCmText,
   mergeSizeChartsWithPreset,
   presetGenderKeyFromSkuGender,
@@ -116,6 +122,27 @@ function variantImageToPayloadEntry(img, idx) {
   return base;
 }
 
+function metaTagsStrFromApi(tags) {
+  if (!Array.isArray(tags)) return "";
+  return tags.map((t) => String(t ?? "").trim()).filter(Boolean).join(", ");
+}
+
+function metaTagsToJsonPayload(str) {
+  const arr = String(str || "")
+    .split(/[,;]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return JSON.stringify(arr);
+}
+
+/** Closed-picker label: `Name (CODE)` when value matches an option, else raw value. */
+function inventoryCodeButtonDisplay(options, value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const opt = options.find((o) => o.value === v || o.label === v);
+  return opt ? `${opt.label} (${opt.value})` : v;
+}
+
 const DEFAULT_SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL"];
 const createDefaultSizes = () =>
   DEFAULT_SIZE_ORDER.map((size) => ({
@@ -139,6 +166,12 @@ const ItemForm = () => {
   /** { src, revoke? } for variant image lightbox */
   const [zoomVariantImage, setZoomVariantImage] = useState(null);
   const fileInputRefs = useRef({}); // Track file inputs to prevent double-firing
+
+  const [productTypeOptions, setProductTypeOptions] = useState([]);
+  const [fitTypeOptions, setFitTypeOptions] = useState([]);
+  const [colorCodeOptions, setColorCodeOptions] = useState([]);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeLoadError, setCodeLoadError] = useState("");
 
   const closeVariantZoom = () => {
     if (zoomVariantImage?.revoke) zoomVariantImage.revoke();
@@ -165,6 +198,9 @@ const ItemForm = () => {
     name: "",
     shortDescription: "",
     longDescription: "",
+    metaTitle: "",
+    metaDescription: "",
+    metaTagsStr: "",
     price: "",
     discountedPrice: "",
     productId: "",
@@ -291,6 +327,63 @@ const ItemForm = () => {
     );
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCodeLoading(true);
+      setCodeLoadError("");
+      try {
+        const [categoryRes, fitRes, colorRes] = await Promise.all([
+          getAllInventoryCodes({ type: "CATEGORY", limit: 200, isActive: true }),
+          getAllInventoryCodes({ type: "FIT", limit: 200, isActive: true }),
+          getAllInventoryCodes({ type: "COLOR", limit: 200, isActive: true }),
+        ]);
+        if (cancelled) return;
+        setProductTypeOptions(normalizeInventoryCodeOptionsResponse(categoryRes));
+        setFitTypeOptions(normalizeInventoryCodeOptionsResponse(fitRes));
+        setColorCodeOptions(normalizeInventoryCodeOptionsResponse(colorRes));
+      } catch (e) {
+        if (!cancelled) {
+          setCodeLoadError(
+            extractBackendMessages(e).join("; ") || "Failed to load inventory codes.",
+          );
+        }
+      } finally {
+        if (!cancelled) setCodeLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Map legacy rows where `productType` / `fitType` stored a display name instead of code. */
+  useEffect(() => {
+    if (codeLoading) return;
+    if (productTypeOptions.length === 0 && fitTypeOptions.length === 0) return;
+    setForm((prev) => {
+      const nextSku = { ...(prev.skuCodeInputs || {}) };
+      let changed = false;
+
+      const syncField = (field, options) => {
+        const raw = String(nextSku[field] || "").trim();
+        if (!raw || !options.length) return;
+        const byValue = options.find((o) => o.value === raw);
+        if (byValue) return;
+        const byLabel = options.find((o) => o.label === raw);
+        if (byLabel && byLabel.value !== raw) {
+          nextSku[field] = byLabel.value;
+          changed = true;
+        }
+      };
+
+      syncField("productType", productTypeOptions);
+      syncField("fitType", fitTypeOptions);
+
+      return changed ? { ...prev, skuCodeInputs: nextSku } : prev;
+    });
+  }, [codeLoading, productTypeOptions, fitTypeOptions, loading]);
+
   // Load item data if editing
   useEffect(() => {
   if (isEdit && id) {
@@ -316,6 +409,9 @@ const ItemForm = () => {
             name: itemData.name || "",
             shortDescription: itemData.shortDescription || "",
             longDescription: itemData.longDescription || "",
+            metaTitle: itemData.metaTitle || "",
+            metaDescription: itemData.metaDescription || "",
+            metaTagsStr: metaTagsStrFromApi(itemData.metaTags),
             price: itemData.price || "",
             discountedPrice: itemData.discountedPrice || "",
             productId: itemData.productId || "",
@@ -849,6 +945,9 @@ const ItemForm = () => {
       formData.append("name", form.name);
       formData.append("shortDescription", form.shortDescription);
       formData.append("longDescription", form.longDescription || "");
+      formData.append("metaTitle", String(form.metaTitle || "").trim());
+      formData.append("metaDescription", String(form.metaDescription || "").trim());
+      formData.append("metaTags", metaTagsToJsonPayload(form.metaTagsStr));
       formData.append("price", form.price);
       formData.append("discountedPrice", form.discountedPrice || "");
       formData.append("productId", form.productId || "");
@@ -1239,6 +1338,13 @@ const ItemForm = () => {
             {/* Tab 1 – Basic */}
             {activeTab === 1 && (
               <div className="space-y-6">
+                {codeLoadError ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {codeLoadError} You can still enter SKU segment codes manually if a list is
+                    empty.
+                  </div>
+                ) : null}
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Product Name <span className="text-red-500">*</span>
@@ -1310,42 +1416,108 @@ const ItemForm = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Product Type
-                    </label>
-                    <input
-                      value={form.skuCodeInputs?.productType || ""}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          skuCodeInputs: {
-                            ...(prev.skuCodeInputs || {}),
-                            productType: e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder="e.g. SHRT or TW-TS"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                    />
+                    {productTypeOptions.length === 0 && !codeLoading ? (
+                      <>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Product type (CATEGORY) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          value={form.skuCodeInputs?.productType || ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              skuCodeInputs: {
+                                ...(prev.skuCodeInputs || {}),
+                                productType: e.target.value.trim().toUpperCase(),
+                              },
+                            }))
+                          }
+                          placeholder="e.g. SHRT (must match active inventory CATEGORY code)"
+                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                          required
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          No category list loaded — enter the code from admin inventory codes.
+                        </p>
+                      </>
+                    ) : (
+                      <SearchableInventoryCodeSelect
+                        label="Product type"
+                        required
+                        value={form.skuCodeInputs?.productType || ""}
+                        buttonDisplay={inventoryCodeButtonDisplay(
+                          productTypeOptions,
+                          form.skuCodeInputs?.productType,
+                        )}
+                        options={productTypeOptions}
+                        loading={codeLoading}
+                        placeholder="Select category code"
+                        onChange={(code) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            skuCodeInputs: {
+                              ...(prev.skuCodeInputs || {}),
+                              productType: code,
+                            },
+                          }))
+                        }
+                      />
+                    )}
+                    {fieldErrors.productType && (
+                      <p className="mt-1 text-xs text-red-600">{fieldErrors.productType}</p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Fit Type
-                    </label>
-                    <input
-                      value={form.skuCodeInputs?.fitType || ""}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          skuCodeInputs: {
-                            ...(prev.skuCodeInputs || {}),
-                            fitType: e.target.value,
-                          },
-                        }))
-                      }
-                      placeholder="e.g. SL / RF / OV"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                    />
+                    {fitTypeOptions.length === 0 && !codeLoading ? (
+                      <>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Fit type <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          value={form.skuCodeInputs?.fitType || ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              skuCodeInputs: {
+                                ...(prev.skuCodeInputs || {}),
+                                fitType: e.target.value.trim(),
+                              },
+                            }))
+                          }
+                          placeholder="e.g. SL / RF / OV (must match active inventory FIT code)"
+                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                          required
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          No fit list loaded — enter the code from admin inventory codes.
+                        </p>
+                      </>
+                    ) : (
+                      <SearchableInventoryCodeSelect
+                        label="Fit type"
+                        required
+                        value={form.skuCodeInputs?.fitType || ""}
+                        buttonDisplay={inventoryCodeButtonDisplay(
+                          fitTypeOptions,
+                          form.skuCodeInputs?.fitType,
+                        )}
+                        options={fitTypeOptions}
+                        loading={codeLoading}
+                        placeholder="Select fit code"
+                        onChange={(code) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            skuCodeInputs: {
+                              ...(prev.skuCodeInputs || {}),
+                              fitType: code,
+                            },
+                          }))
+                        }
+                      />
+                    )}
+                    {fieldErrors.fitType && (
+                      <p className="mt-1 text-xs text-red-600">{fieldErrors.fitType}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1379,6 +1551,46 @@ const ItemForm = () => {
                   {fieldErrors.longDescription && (
                     <p className="mt-1 text-xs text-red-600">{fieldErrors.longDescription}</p>
                   )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
+                  <p className="text-sm font-semibold text-slate-800">SEO (optional)</p>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Meta title
+                    </label>
+                    <input
+                      type="text"
+                      value={form.metaTitle}
+                      onChange={(e) => setForm({ ...form, metaTitle: e.target.value })}
+                      placeholder="Page title for storefront / search"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Meta description
+                    </label>
+                    <textarea
+                      value={form.metaDescription}
+                      onChange={(e) => setForm({ ...form, metaDescription: e.target.value })}
+                      placeholder="Meta description"
+                      rows={3}
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-y min-h-[4.5rem]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Tags
+                    </label>
+                    <input
+                      type="text"
+                      value={form.metaTagsStr}
+                      onChange={(e) => setForm({ ...form, metaTagsStr: e.target.value })}
+                      placeholder="Comma or semicolon separated (e.g. cotton, summer)"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1431,16 +1643,37 @@ const ItemForm = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Default Color
-                  </label>
-                  <input
-                    type="text"
-                    value={form.defaultColor}
-                    onChange={(e) => setForm({ ...form, defaultColor: e.target.value })}
-                    placeholder="e.g. Black, White, Red"
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                  />
+                  {colorCodeOptions.length === 0 && !codeLoading ? (
+                    <>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Default color
+                      </label>
+                      <input
+                        type="text"
+                        value={form.defaultColor}
+                        onChange={(e) => setForm({ ...form, defaultColor: e.target.value })}
+                        placeholder="e.g. Black, BLK, or another catalog default"
+                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      />
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        No colour list loaded — free text or colour code from inventory codes.
+                      </p>
+                    </>
+                  ) : (
+                    <SearchableInventoryCodeSelect
+                      label="Default color"
+                      required={false}
+                      value={form.defaultColor || ""}
+                      buttonDisplay={inventoryCodeButtonDisplay(
+                        colorCodeOptions,
+                        form.defaultColor,
+                      )}
+                      options={colorCodeOptions}
+                      loading={codeLoading}
+                      placeholder="Select colour code (optional)"
+                      onChange={(code) => setForm((prev) => ({ ...prev, defaultColor: code }))}
+                    />
+                  )}
                 </div>
 
                 <div className="flex justify-end pt-4">
@@ -1508,29 +1741,66 @@ const ItemForm = () => {
                           title="Pick Color"
                         />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">
-                          Colour:
-                        </label>
-                        <input
-                          type="text"
-                          value={variant?.skuCodeInputs?.colour || ""}
-                          onChange={(e) =>
-                            setForm((prev) => {
-                              const newVariants = [...prev.variants];
-                              newVariants[vIdx] = {
-                                ...newVariants[vIdx],
-                                skuCodeInputs: {
-                                  ...(newVariants[vIdx].skuCodeInputs || {}),
-                                  colour: e.target.value,
-                                },
-                              };
-                              return { ...prev, variants: newVariants };
-                            })
-                          }
-                          placeholder="e.g. BLK / RED / BLU"
-                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                        />
+                      <div className="min-w-0 flex-1">
+                        {colorCodeOptions.length === 0 && !codeLoading ? (
+                          <div className="flex items-center gap-3">
+                            <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                              Colour (SKU segment):
+                            </label>
+                            <input
+                              type="text"
+                              value={variant?.skuCodeInputs?.colour || ""}
+                              onChange={(e) =>
+                                setForm((prev) => {
+                                  const newVariants = [...prev.variants];
+                                  newVariants[vIdx] = {
+                                    ...newVariants[vIdx],
+                                    skuCodeInputs: {
+                                      ...(newVariants[vIdx].skuCodeInputs || {}),
+                                      colour: e.target.value,
+                                    },
+                                  };
+                                  return { ...prev, variants: newVariants };
+                                })
+                              }
+                              placeholder="e.g. BLK / RED / BLU"
+                              className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            />
+                          </div>
+                        ) : (
+                          <SearchableInventoryCodeSelect
+                            label="Colour code (SKU segment)"
+                            required={false}
+                            value={variant?.skuCodeInputs?.colour || ""}
+                            buttonDisplay={inventoryCodeButtonDisplay(
+                              colorCodeOptions,
+                              variant?.skuCodeInputs?.colour,
+                            )}
+                            options={colorCodeOptions}
+                            loading={codeLoading}
+                            placeholder="Select colour code"
+                            onChange={(code) =>
+                              setForm((prev) => {
+                                const newVariants = [...prev.variants];
+                                const opt = colorCodeOptions.find((o) => o.value === code);
+                                newVariants[vIdx] = {
+                                  ...newVariants[vIdx],
+                                  skuCodeInputs: {
+                                    ...(newVariants[vIdx].skuCodeInputs || {}),
+                                    colour: code,
+                                  },
+                                  color: {
+                                    ...newVariants[vIdx].color,
+                                    ...(code && opt?.label
+                                      ? { name: opt.label }
+                                      : {}),
+                                  },
+                                };
+                                return { ...prev, variants: newVariants };
+                              })
+                            }
+                          />
+                        )}
                       </div>
                       {/* Color presets */}
                       <div className="space-y-2">
@@ -1938,6 +2208,7 @@ const ItemForm = () => {
                       >
                         <option value="upper">Upper</option>
                         <option value="lower">Lower</option>
+                        <option value="upper_lower">Upper + lower</option>
                       </select>
                     </div>
                     <div className="flex items-end">
@@ -1953,7 +2224,8 @@ const ItemForm = () => {
 
                   <div className="rounded-xl border border-indigo-100 bg-white/90 p-3">
                     <p className="mb-2 text-xs font-medium text-gray-700">
-                      Template preview ({sizeChartPresetGender} · {sizeChartCategory})
+                      Template preview ({sizeChartPresetGender} ·{" "}
+                      {garmentPresetCategoryLabel(sizeChartCategory)})
                     </p>
                     <p className="mb-1 text-[11px] font-semibold text-gray-700">Inches (in)</p>
                     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white mb-4">

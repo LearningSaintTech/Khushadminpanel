@@ -21,9 +21,23 @@ const buildInitialForm = () => ({
   isActive: true,
   shortDescription: "",
   longDescription: "",
+  metaTitle: "",
+  metaDescription: "",
+  metaTagsStr: "",
   careDescription: "",
   instructions: [],
 });
+
+const metaTagsToInputStr = (tags) =>
+  Array.isArray(tags)
+    ? tags.map((t) => String(t || "").trim()).filter(Boolean).join(", ")
+    : "";
+
+const parseMetaTagsStr = (str) =>
+  String(str || "")
+    .split(/[,;]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 
 const mapCareToForm = (row) => {
   const care = row?.care && typeof row.care === "object" ? row.care : {};
@@ -119,6 +133,9 @@ const DesignerListingTemplateManager = () => {
       isActive: row?.isActive !== false,
       shortDescription: row?.shortDescription || "",
       longDescription: row?.longDescription || "",
+      metaTitle: row?.metaTitle || "",
+      metaDescription: row?.metaDescription || "",
+      metaTagsStr: metaTagsToInputStr(row?.metaTags),
       careDescription: care.careDescription,
       instructions: care.instructions.length ? care.instructions : [emptyInstruction()],
     });
@@ -164,6 +181,9 @@ const DesignerListingTemplateManager = () => {
         isActive: form.isActive,
         shortDescription: form.shortDescription.trim(),
         longDescription: form.longDescription.trim(),
+        metaTitle: String(form.metaTitle || "").trim(),
+        metaDescription: String(form.metaDescription || "").trim(),
+        metaTags: parseMetaTagsStr(form.metaTagsStr),
         care,
       };
       if (isEditing) {
@@ -203,8 +223,8 @@ const DesignerListingTemplateManager = () => {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Listing copy templates</h1>
           <p className="text-xs text-gray-500">
-            Reusable short/long descriptions and care instructions. Apply them when creating inventory
-            items (same idea as size chart templates).
+            Reusable short/long descriptions, optional SEO meta fields and tags, and care instructions. Apply
+            them when creating inventory items (same idea as size chart templates).
           </p>
         </div>
         <button
@@ -241,11 +261,12 @@ const DesignerListingTemplateManager = () => {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full min-w-[520px] text-left text-sm">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-600">
             <tr>
               <th className="p-2.5">Name</th>
               <th className="p-2.5">Short preview</th>
+              <th className="p-2.5">Meta title</th>
               <th className="p-2.5">Care lines</th>
               <th className="p-2.5">Active</th>
               <th className="p-2.5 text-right">Actions</th>
@@ -254,13 +275,13 @@ const DesignerListingTemplateManager = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="p-4 text-center text-gray-500">
+                <td colSpan={6} className="p-4 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-4 text-center text-gray-500">
+                <td colSpan={6} className="p-4 text-center text-gray-500">
                   No templates yet.
                 </td>
               </tr>
@@ -270,6 +291,9 @@ const DesignerListingTemplateManager = () => {
                   <td className="p-2.5 font-medium text-gray-900">{r.name}</td>
                   <td className="p-2.5 text-xs text-gray-600 line-clamp-2">
                     {r.shortDescription || "—"}
+                  </td>
+                  <td className="p-2.5 text-xs text-gray-600 line-clamp-2">
+                    {r.metaTitle || "—"}
                   </td>
                   <td className="p-2.5 text-xs text-gray-600">
                     {Array.isArray(r.care?.instructions) ? r.care.instructions.length : 0}
@@ -406,6 +430,40 @@ const DesignerListingTemplateManager = () => {
                     value={form.careDescription}
                     onChange={(e) => setForm((s) => ({ ...s, careDescription: e.target.value }))}
                   />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <p className="mb-2 text-xs font-semibold text-slate-800">SEO (optional)</p>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <div className="lg:col-span-1">
+                    <label className="mb-0.5 block text-xs font-medium text-gray-700">Meta title</label>
+                    <input
+                      className={fieldClass}
+                      value={form.metaTitle}
+                      onChange={(e) => setForm((s) => ({ ...s, metaTitle: e.target.value }))}
+                      placeholder="Storefront / search title"
+                    />
+                  </div>
+                  <div className="lg:col-span-1">
+                    <label className="mb-0.5 block text-xs font-medium text-gray-700">Tags</label>
+                    <input
+                      className={fieldClass}
+                      value={form.metaTagsStr}
+                      onChange={(e) => setForm((s) => ({ ...s, metaTagsStr: e.target.value }))}
+                      placeholder="Comma or semicolon separated"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="mb-0.5 block text-xs font-medium text-gray-700">Meta description</label>
+                    <textarea
+                      className={`${fieldClass} min-h-[72px] w-full`}
+                      rows={3}
+                      value={form.metaDescription}
+                      onChange={(e) => setForm((s) => ({ ...s, metaDescription: e.target.value }))}
+                      placeholder="Optional meta description"
+                    />
+                  </div>
                 </div>
               </div>
 

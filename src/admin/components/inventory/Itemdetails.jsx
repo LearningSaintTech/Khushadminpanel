@@ -249,6 +249,11 @@ export default function ItemDetails() {
                 <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold text-gray-900 mb-2 sm:mb-3 break-words">
                   {item.name || "Unnamed Product"}
                 </h1>
+                {String(item.metaTitle || "").trim() ? (
+                  <p className="text-xs sm:text-sm text-indigo-700 font-medium mb-2">
+                    Meta title: {String(item.metaTitle).trim()}
+                  </p>
+                ) : null}
 
                 <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 leading-relaxed">
                   {item.shortDescription || "No short description available"}
@@ -334,6 +339,32 @@ export default function ItemDetails() {
                     {item.longDescription ||
                       "No detailed description available."}
                   </dd>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-4 sm:p-5">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3">SEO</h3>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-gray-500 font-medium">Meta title</dt>
+                      <dd className="mt-1 text-sm font-medium text-gray-900 break-words">
+                        {String(item.metaTitle || "").trim() || "—"}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-gray-500 font-medium">Meta description</dt>
+                      <dd className="mt-1 text-sm whitespace-pre-line text-gray-800">
+                        {String(item.metaDescription || "").trim() || "—"}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs text-gray-500 font-medium">Tags</dt>
+                      <dd className="mt-1 text-sm text-gray-800 break-words">
+                        {Array.isArray(item.metaTags) && item.metaTags.length > 0
+                          ? item.metaTags.join(", ")
+                          : "—"}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
               </div>
             )}
