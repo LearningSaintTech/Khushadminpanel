@@ -108,6 +108,8 @@ const getSkuIds = (item) => {
   return [...new Set(skus)];
 };
 
+// const variantMediaSrc = (img) => variantMediaUrl(img);
+
 const orderedVariantImages = (variant) => {
   const raw = Array.isArray(variant?.images) ? variant.images : [];
   return [...raw].sort((a, b) => (Number(a?.order) || 0) - (Number(b?.order) || 0));
@@ -611,7 +613,7 @@ const DesignerInventoryList = () => {
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-3 sm:p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-4">
           <div className="mx-auto mt-4 w-full min-w-0 max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-xl sm:mt-8">
             <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-t-2xl border-b border-gray-100 bg-white px-4 py-3">
               <h2 className="text-lg font-semibold text-gray-900">Item details</h2>
