@@ -1142,8 +1142,14 @@ const DesignerInventoryForm = () => {
       };
     });
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
+  const handleSave = async (e) => {
+    e?.preventDefault?.();
+    if (!isEdit && currentStep < 5) {
+      setSubmitErrors([
+        "Use Next to continue to the size chart step before saving.",
+      ]);
+      return;
+    }
     setLoading(true);
     setSubmitErrors([]);
     try {
@@ -1341,6 +1347,11 @@ const DesignerInventoryForm = () => {
     }
   };
 
+  const onSubmit = (e) => {
+    e.preventDefault();
+    handleSave(e);
+  };
+
   if (loadItem) {
     return (
       <div className="flex items-center gap-2 text-sm text-indigo-800">
@@ -1523,7 +1534,9 @@ const DesignerInventoryForm = () => {
       return;
     }
     setSubmitErrors([]);
-    setCurrentStep((s) => Math.min(steps.length, s + 1));
+    const nextStep = Math.min(steps.length, currentStep + 1);
+    // Defer so the footer does not swap Next → Save under the same click.
+    window.setTimeout(() => setCurrentStep(nextStep), 0);
   };
   const handleFormKeyDown = (e) => {
     // Prevent accidental submit via Enter while user is still filling earlier steps.
@@ -2889,21 +2902,13 @@ const DesignerInventoryForm = () => {
             >
               Next
             </button>
-          ) : (
+          ) : null}
+          {isEdit || currentStep === steps.length ? (
             <button
-              type="submit"
+              type="button"
+              onClick={handleSave}
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {loading ? "Saving…" : "Save"}
-            </button>
-          )}
-          {currentStep < steps.length ? (
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {loading ? "Saving…" : "Save"}

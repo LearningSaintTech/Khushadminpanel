@@ -12,6 +12,7 @@ import {
   formatProductTypeAndFitDetail,
 } from "../../utils/inventoryDisplay";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
+import { isVariantVideoMedia, variantMediaUrl } from "../../../utils/variantMedia.js";
 import {
   ChevronLeft,
   ChevronRight,
@@ -30,7 +31,7 @@ import {
 const SHORT_DESC_PREVIEW_LEN = 160;
 const LONG_DESC_PREVIEW_LEN = 320;
 const MAIN_DESC_PREVIEW_LEN = 200;
-
+const variantMediaSrc = (img) => variantMediaUrl(img);
 function DescriptionWithInfo({ label, value, previewLen, onOpenFull }) {
   const raw = String(value ?? "").trim();
   if (!raw) {
@@ -106,8 +107,6 @@ const getSkuIds = (item) => {
   }
   return [...new Set(skus)];
 };
-
-const variantMediaSrc = (img) => variantMediaUrl(img);
 
 const orderedVariantImages = (variant) => {
   const raw = Array.isArray(variant?.images) ? variant.images : [];
