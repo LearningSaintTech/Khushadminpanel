@@ -51,6 +51,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
+  const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -92,6 +93,9 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const isActive = (path) => location.pathname === path || location.pathname.replace(/\/+/g, "/") === path;
   const isNotificationSectionActive = () => location.pathname.startsWith(ap("notifications"));
   const isDesignerSectionActive = () => location.pathname.startsWith(ap("designer"));
+  const isUsersSectionActive = () =>
+    location.pathname.startsWith(ap("users")) ||
+    location.pathname.startsWith(ap("active-users"));
   const isAnalyticsSectionActive = () =>
     location.pathname.startsWith(ap("analytics")) ||
     location.pathname.startsWith(ap("coupon-analytics"));
@@ -118,6 +122,12 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   useEffect(() => {
     if (isDesignerSectionActive()) {
       setIsDesignerOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (isUsersSectionActive()) {
+      setIsUsersOpen(true);
     }
   }, [location.pathname]);
 
@@ -277,6 +287,61 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                 />
                 <span>Dashboard</span>
               </Link>
+            )}
+
+            {/* Users dropdown */}
+            {canUse(["admin"]) && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIsUsersOpen(!isUsersOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isUsersSectionActive() ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users
+                      size={20}
+                      className="text-gray-400 group-hover:text-black"
+                    />
+                    <span>Users</span>
+                  </div>
+                  {isUsersOpen ? (
+                    <ChevronDown size={18} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={18} className="text-gray-400" />
+                  )}
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ${
+                    isUsersOpen ? "max-h-40 opacity-100 mt-1" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="pl-10 pr-4 py-2 space-y-1">
+                    <Link
+                      to={ap("users/real")}
+                      className={`block px-4 py-2 text-sm rounded ${
+                        location.pathname.includes(ap("users/real")) ||
+                        location.pathname.includes(ap("active-users"))
+                          ? "bg-white/10 text-white"
+                          : "text-gray-400 hover:bg-white hover:text-black"
+                      }`}
+                    >
+                      User
+                    </Link>
+                    <Link
+                      to={ap("users/fake")}
+                      className={`block px-4 py-2 text-sm rounded ${
+                        location.pathname.includes(ap("users/fake"))
+                          ? "bg-white/10 text-white"
+                          : "text-gray-400 hover:bg-white hover:text-black"
+                      }`}
+                    >
+                      Fake Users
+                    </Link>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Notifications dropdown */}

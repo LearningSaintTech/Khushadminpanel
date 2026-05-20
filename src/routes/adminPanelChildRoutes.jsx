@@ -1,4 +1,4 @@
-import { Route } from "react-router-dom";
+import { Route, Navigate } from "react-router-dom";
 import Dashboard from "../admin/components/Dashboard/Dashboard";
 import Categories from "../admin/components/inventory/category";
 import Subcategories from "../admin/components/inventory/Subcategory";
@@ -73,7 +73,9 @@ import DesignerForm from "../admin/components/designer/DesignerForm";
 import DesignerInventory from "../admin/components/designer/DesignerInventory";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
-import ActiveUsers from "../admin/components/users/ActiveUsers";
+import UsersLayout from "../admin/components/users/UsersLayout";
+import RealUsersManage from "../admin/components/users/RealUsersManage";
+import FakeUsersManage from "../admin/components/users/FakeUsersManage";
 import Referral from "../admin/components/Refferal/Refferal";
 import AppPopup from "../admin/components/AppPopup/AppPopup";
 import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
@@ -81,7 +83,12 @@ import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
   <Route key="dashboard" path="dashboard" element={<Dashboard />} />,
-  <Route key="active-users" path="active-users" element={<ActiveUsers />} />,
+  <Route key="active-users-redirect" path="active-users" element={<Navigate to="users/real" replace />} />,
+  <Route key="users" path="users" element={<UsersLayout />}>
+    <Route index element={<Navigate to="real" replace />} />
+    <Route path="real" element={<RealUsersManage />} />
+    <Route path="fake" element={<FakeUsersManage />} />
+  </Route>,
   <Route key="inv-cat" path="inventory/categories" element={<Categories />} />,
   <Route key="inv-cat-cr" path="inventory/categories/create" element={<CategoryForm />} />,
   <Route key="inv-cat-ed" path="inventory/categories/edit/:id" element={<CategoryForm />} />,

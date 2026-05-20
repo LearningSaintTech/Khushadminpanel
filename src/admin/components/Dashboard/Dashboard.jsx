@@ -94,7 +94,7 @@ export default function Dashboard() {
             inactive:
               (activeUsersRes?.data?.totalUsers ?? 0) -
               (activeUsersRes?.data?.totalActiveUsers ?? 0),
-            path: "/admin/active-users",
+            path: "/admin/users/real",
             icon: <FiUsers className="w-6 h-6 text-gray-500" />,
           },
         });

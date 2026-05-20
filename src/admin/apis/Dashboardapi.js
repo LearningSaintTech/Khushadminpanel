@@ -32,6 +32,4 @@ export const getOrdersCount = () => {
   return apiConnector("GET", dashboardEndpoints.ORDERS_COUNT);
 };
 
-export const getActiveUsers = (params = {}) => {
-  return apiConnector("GET", dashboardEndpoints.ACTIVE_USERS, null, {}, params);
-};
+export { getActiveUsers } from "./userApi.js";
