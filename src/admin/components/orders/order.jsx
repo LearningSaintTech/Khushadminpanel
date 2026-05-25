@@ -1,5 +1,5 @@
 // src/pages/admin/Orders.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getOrders,
   getOrderItems,
@@ -17,6 +17,9 @@ import {
   downloadShippingLabel,
   downloadManifest,
   downloadManufacturingSheetPdf,
+  getStaleOrders,
+  downloadStaleOrdersPdf,
+  runStaleOrderAlertEmail,
   appendOrderNote,
 } from "../../apis/Orderapi";
 import toast from "react-hot-toast";
@@ -43,6 +46,10 @@ import {
   FileDown,
   Info,
   StickyNote,
+  AlertTriangle,
+  Mail,
+  Columns3,
+  ChevronDown,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
@@ -376,6 +383,56 @@ function collectItemLikeImageUrls(itemLike) {
   return urls;
 }
 
+function firstOrderLineItem(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  return items[0] || null;
+}
+
+function itemLikeFromListRow(row) {
+  return row?.item && typeof row.item === "object" ? row.item : {};
+}
+
+function TableItemImageThumb({ itemLike, onPickImage, sizeClass = "h-10 w-10" }) {
+  const imgs = collectItemLikeImageUrls(itemLike);
+  if (!imgs[0]) {
+    return (
+      <div
+        className={`flex ${sizeClass} items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[9px] text-gray-400`}
+      >
+        —
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onPickImage?.(imgs[0])}
+      className={`${sizeClass} shrink-0 overflow-hidden rounded border border-gray-200 bg-gray-50`}
+      title="View image"
+    >
+      <img src={imgs[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+    </button>
+  );
+}
+
+function TableStoreLink({ itemId, itemLike }) {
+  const url = getStorefrontProductUrl(itemId, itemLike);
+  if (!itemId) return <span className="text-xs text-gray-400">—</span>;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-0.5 text-xs font-medium text-indigo-700 hover:text-indigo-900"
+      title={url}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <ExternalLink size={12} className="shrink-0" />
+      Store
+    </a>
+  );
+}
+
 function StoreItemInfoTrigger({ itemId, itemLike, quantity, onOpenDetails }) {
   const url = getStorefrontProductUrl(itemId, itemLike);
   const qtyLabel =
@@ -467,6 +524,395 @@ function formatManufacturingModalDate(d) {
   } catch {
     return String(d);
   }
+}
+
+const STALE_COLUMNS_STORAGE_KEY = "khush_admin_stale_order_visible_columns";
+
+function staleVariantLabel(variant) {
+  const v = variant || {};
+  const parts = [v.size, v.color].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "—";
+}
+
+/** Configurable stale-order table columns (admin picks visible fields). */
+const STALE_ORDER_TABLE_COLUMNS = [
+  {
+    key: "orderId",
+    label: "Order ID",
+    defaultVisible: true,
+    alwaysVisible: true,
+    headerClass: "",
+    cellClass: "font-medium text-gray-900 tabular-nums",
+    render: (row) => row.orderId || "—",
+  },
+  {
+    key: "orderStatus",
+    label: "Order status",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-600",
+    render: (row) => row.orderStatus || "—",
+  },
+  {
+    key: "confirmedAt",
+    label: "Confirmed at",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-gray-600 whitespace-nowrap text-xs",
+    render: (row) => formatManufacturingModalDate(row.confirmedAt || row.staleSince),
+  },
+  {
+    key: "orderCreatedAt",
+    label: "Order placed",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-600 whitespace-nowrap text-xs",
+    render: (row) => formatManufacturingModalDate(row.orderCreatedAt),
+  },
+  {
+    key: "hoursStale",
+    label: "Hours stale",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-amber-800 font-semibold tabular-nums",
+    render: (row) => (row.hoursStale != null ? Math.floor(row.hoursStale) : "—"),
+  },
+  {
+    key: "sku",
+    label: "SKU",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-gray-700 max-w-[140px] truncate",
+    render: (row) => row.sku || "—",
+  },
+  {
+    key: "variant",
+    label: "Size / color",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700",
+    render: (row) => staleVariantLabel(row.variant),
+  },
+  {
+    key: "quantity",
+    label: "Qty",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700 tabular-nums",
+    render: (row) => (row.quantity != null ? String(row.quantity) : "—"),
+  },
+  {
+    key: "customerName",
+    label: "Customer",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-gray-700 max-w-[160px] truncate",
+    render: (row) => row.customerName || "—",
+  },
+  {
+    key: "phone",
+    label: "Phone",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-gray-600 tabular-nums",
+    render: (row) => row.phone || "—",
+  },
+  {
+    key: "city",
+    label: "City",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700",
+    render: (row) => row.city || "—",
+  },
+  {
+    key: "deliveryType",
+    label: "Delivery",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-gray-600",
+    render: (row) => row.deliveryType || "—",
+  },
+  {
+    key: "finalPayable",
+    label: "Order amount",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-800 tabular-nums font-medium",
+    render: (row) =>
+      row.finalPayable != null && row.finalPayable !== ""
+        ? `₹${row.finalPayable}`
+        : "—",
+  },
+  {
+    key: "paymentMode",
+    label: "Payment mode",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-600",
+    render: (row) => row.paymentMode || "—",
+  },
+  {
+    key: "paymentStatus",
+    label: "Payment status",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-600",
+    render: (row) => row.paymentStatus || "—",
+  },
+  {
+    key: "image",
+    label: "Image",
+    defaultVisible: true,
+    headerClass: "",
+    cellClass: "text-center",
+    render: (row) => {
+      const url = row.variant?.imageUrl;
+      if (!url) return <span className="text-xs text-gray-400">—</span>;
+      return (
+        <img src={url} alt="" className="mx-auto h-10 w-10 rounded object-cover border border-gray-200" loading="lazy" />
+      );
+    },
+  },
+  {
+    key: "variantSku",
+    label: "Variant SKU",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700 max-w-[140px] truncate font-mono text-xs",
+    render: (row) => row.variant?.sku || "—",
+  },
+  {
+    key: "size",
+    label: "Size",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700",
+    render: (row) => row.variant?.size || "—",
+  },
+  {
+    key: "color",
+    label: "Color",
+    defaultVisible: false,
+    headerClass: "",
+    cellClass: "text-gray-700",
+    render: (row) => row.variant?.color || "—",
+  },
+];
+
+function defaultStaleVisibleColumnKeys() {
+  return STALE_ORDER_TABLE_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
+}
+
+function loadStaleVisibleColumnsFromStorage() {
+  const fallback = defaultStaleVisibleColumnKeys();
+  try {
+    const raw = localStorage.getItem(STALE_COLUMNS_STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const validKeys = new Set(STALE_ORDER_TABLE_COLUMNS.map((c) => c.key));
+    const keys = [...new Set(parsed.filter((k) => validKeys.has(k)))];
+    STALE_ORDER_TABLE_COLUMNS.filter((c) => c.alwaysVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.unshift(c.key);
+    });
+    STALE_ORDER_TABLE_COLUMNS.filter((c) => c.defaultVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.push(c.key);
+    });
+    return keys.length ? keys : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistStaleVisibleColumns(keys) {
+  try {
+    localStorage.setItem(STALE_COLUMNS_STORAGE_KEY, JSON.stringify(keys));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+const ORDER_LIST_COLUMNS_STORAGE_KEY = "khush_admin_order_list_visible_columns";
+const ITEM_LIST_COLUMNS_STORAGE_KEY = "khush_admin_item_list_visible_columns";
+const ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY = "khush_admin_order_detail_item_visible_columns";
+
+/** By order — main table column config (render fns added inside Orders). */
+const ORDER_LIST_TABLE_COLUMNS = [
+  { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
+  { key: "image", label: "Image", defaultVisible: true },
+  { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
+  { key: "date", label: "Order date", defaultVisible: true },
+  { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
+  { key: "customer", label: "Customer name", defaultVisible: true },
+  { key: "phone", label: "Customer phone", defaultVisible: true },
+  { key: "email", label: "Email", defaultVisible: false },
+  { key: "qty", label: "Quantity", defaultVisible: true },
+  { key: "productName", label: "Dress / product name", defaultVisible: false },
+  { key: "productId", label: "Catalog product ID", defaultVisible: false },
+  { key: "lineSku", label: "Line SKU", defaultVisible: false },
+  { key: "variantSku", label: "Variant SKU", defaultVisible: false },
+  { key: "size", label: "Size", defaultVisible: false },
+  { key: "color", label: "Color", defaultVisible: false },
+  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
+  { key: "storeLink", label: "Store link", defaultVisible: false },
+  { key: "total", label: "Order amount", defaultVisible: true },
+  { key: "payment", label: "Payment (order)", defaultVisible: false },
+  { key: "status", label: "Status", defaultVisible: true },
+  { key: "courier", label: "Courier / Shiprocket", defaultVisible: true },
+  { key: "city", label: "City", defaultVisible: false },
+];
+
+/** By item — table view column config. */
+const ITEM_LIST_TABLE_COLUMNS = [
+  { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
+  { key: "image", label: "Image", defaultVisible: true },
+  { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
+  { key: "date", label: "Order date", defaultVisible: true },
+  { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
+  { key: "customer", label: "Customer name", defaultVisible: true },
+  { key: "phone", label: "Customer phone", defaultVisible: true },
+  { key: "product", label: "Dress / product name", defaultVisible: true },
+  { key: "productId", label: "Catalog product ID", defaultVisible: false },
+  { key: "itemId", label: "Item ID", defaultVisible: false },
+  { key: "sku", label: "Line SKU", defaultVisible: true },
+  { key: "variantSku", label: "Variant SKU", defaultVisible: false },
+  { key: "size", label: "Size", defaultVisible: true },
+  { key: "color", label: "Color", defaultVisible: true },
+  { key: "variant", label: "Size / color (combined)", defaultVisible: false },
+  { key: "qty", label: "Quantity", defaultVisible: true },
+  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
+  { key: "storeLink", label: "Store link", defaultVisible: false },
+  { key: "payment", label: "Payment (order)", defaultVisible: false },
+  { key: "status", label: "Line status", defaultVisible: true },
+  { key: "delivery", label: "Delivery", defaultVisible: true },
+  { key: "shiprocket", label: "Shiprocket", defaultVisible: false },
+];
+
+/** Order detail — line items table (data columns; status/ship/driver/update stay fixed). */
+const ORDER_DETAIL_ITEM_DATA_COLUMNS = [
+  { key: "image", label: "Image", defaultVisible: true },
+  { key: "productName", label: "Dress / product name", defaultVisible: true },
+  { key: "productId", label: "Catalog product ID", defaultVisible: false },
+  { key: "itemId", label: "Item ID", defaultVisible: false },
+  { key: "lineSku", label: "Line SKU", defaultVisible: true },
+  { key: "variantSku", label: "Variant SKU", defaultVisible: true },
+  { key: "size", label: "Size", defaultVisible: true },
+  { key: "color", label: "Color", defaultVisible: true },
+  { key: "qty", label: "Quantity", defaultVisible: true },
+  { key: "price", label: "Price", defaultVisible: true },
+  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
+  { key: "payment", label: "Payment (order)", defaultVisible: false },
+  { key: "customerName", label: "Customer name", defaultVisible: false },
+  { key: "customerPhone", label: "Customer phone", defaultVisible: false },
+  { key: "storeLink", label: "Store link", defaultVisible: false },
+];
+
+function defaultVisibleKeysFor(columns) {
+  return columns.filter((c) => c.defaultVisible).map((c) => c.key);
+}
+
+function loadVisibleColumnsFromStorage(storageKey, columns) {
+  const fallback = defaultVisibleKeysFor(columns);
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const validKeys = new Set(columns.map((c) => c.key));
+    const keys = [...new Set(parsed.filter((k) => validKeys.has(k)))];
+    columns.filter((c) => c.alwaysVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.unshift(c.key);
+    });
+    columns.filter((c) => c.defaultVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.push(c.key);
+    });
+    return keys.length ? keys : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistVisibleColumns(storageKey, keys) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(keys));
+  } catch {
+    /* ignore */
+  }
+}
+
+function ColumnPickerDropdown({
+  columns,
+  visibleKeys,
+  onToggle,
+  onReset,
+  onSelectAll,
+  open,
+  onOpenChange,
+  badgeClass = "bg-indigo-100 text-indigo-900",
+}) {
+  const activeCount = columns.filter((c) => visibleKeys.includes(c.key)).length;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        aria-expanded={open}
+      >
+        <Columns3 className="h-4 w-4" />
+        Columns
+        <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
+          {activeCount}
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-[min(100vw-2rem,22rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-lg ring-1 ring-black/5">
+          <p className="text-xs font-semibold text-gray-700 mb-2">Choose columns to show</p>
+          <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+            {columns.map((col) => {
+              const checked = visibleKeys.includes(col.key);
+              const locked = !!col.alwaysVisible;
+              return (
+                <label
+                  key={col.key}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                    locked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={locked}
+                    onChange={() => onToggle(col.key)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-gray-800">{col.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex gap-2 border-t border-gray-100 pt-2">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              Show all
+            </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs font-medium text-gray-600 hover:text-gray-800"
+            >
+              Reset default
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function manufacturingPaymentLabel(payment) {
@@ -1007,6 +1453,51 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     () => new Set(),
   );
   const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
+  const [staleModalOpen, setStaleModalOpen] = useState(false);
+  const [staleOrders, setStaleOrders] = useState([]);
+  const [staleMeta, setStaleMeta] = useState({
+    totalMatched: 0,
+    truncated: false,
+    olderThanHours: 24,
+  });
+  const [staleLoading, setStaleLoading] = useState(false);
+  const [stalePdfLoading, setStalePdfLoading] = useState(false);
+  const [staleEmailLoading, setStaleEmailLoading] = useState(false);
+  const [staleHours, setStaleHours] = useState(24);
+  const [staleSearch, setStaleSearch] = useState("");
+  const [staleVisibleColumns, setStaleVisibleColumns] = useState(
+    loadStaleVisibleColumnsFromStorage,
+  );
+  const [staleColumnsOpen, setStaleColumnsOpen] = useState(false);
+
+  const [orderListVisibleColumns, setOrderListVisibleColumns] = useState(() =>
+    loadVisibleColumnsFromStorage(ORDER_LIST_COLUMNS_STORAGE_KEY, ORDER_LIST_TABLE_COLUMNS),
+  );
+  const [orderListColumnsOpen, setOrderListColumnsOpen] = useState(false);
+  const [itemListVisibleColumns, setItemListVisibleColumns] = useState(() =>
+    loadVisibleColumnsFromStorage(ITEM_LIST_COLUMNS_STORAGE_KEY, ITEM_LIST_TABLE_COLUMNS),
+  );
+  const [itemListColumnsOpen, setItemListColumnsOpen] = useState(false);
+  const [itemListViewMode, setItemListViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("khush_admin_item_list_view_mode") === "cards" ? "cards" : "table";
+    } catch {
+      return "table";
+    }
+  });
+  const [orderDetailItemVisibleColumns, setOrderDetailItemVisibleColumns] = useState(() =>
+    loadVisibleColumnsFromStorage(
+      ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY,
+      ORDER_DETAIL_ITEM_DATA_COLUMNS,
+    ),
+  );
+  const [orderDetailColumnsOpen, setOrderDetailColumnsOpen] = useState(false);
+
+  const staleActiveColumns = useMemo(
+    () =>
+      STALE_ORDER_TABLE_COLUMNS.filter((col) => staleVisibleColumns.includes(col.key)),
+    [staleVisibleColumns],
+  );
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
   const [orderNotesModalOpen, setOrderNotesModalOpen] = useState(false);
@@ -1548,6 +2039,198 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       );
     } finally {
       setManufacturingPdfLoading(false);
+    }
+  };
+
+  const fetchStaleOrdersList = useCallback(async (hours = staleHours) => {
+    try {
+      setStaleLoading(true);
+      const res = await getStaleOrders(hours);
+      const payload = res?.data ?? res;
+      setStaleOrders(Array.isArray(payload?.rows) ? payload.rows : []);
+      setStaleMeta({
+        totalMatched: payload?.totalMatched ?? 0,
+        truncated: !!payload?.truncated,
+        olderThanHours: payload?.olderThanHours ?? hours,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error(getBackendErrorMessages(err, "Failed to load stale orders"));
+      setStaleOrders([]);
+    } finally {
+      setStaleLoading(false);
+    }
+  }, [staleHours]);
+
+  const openStaleOrdersModal = () => {
+    setStaleModalOpen(true);
+    setStaleSearch("");
+    fetchStaleOrdersList(staleHours);
+  };
+
+  const closeStaleOrdersModal = () => {
+    setStaleModalOpen(false);
+    setStaleSearch("");
+    setStaleColumnsOpen(false);
+  };
+
+  const handleDownloadStalePdf = async () => {
+    try {
+      setStalePdfLoading(true);
+      const blob = await downloadStaleOrdersPdf(staleHours);
+      if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
+        const text = await blob.text();
+        let msg = "Could not generate stale orders PDF";
+        try {
+          const j = JSON.parse(text);
+          if (j?.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stale-orders-${staleHours}h.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Stale orders PDF downloaded");
+    } catch (err) {
+      console.error(err);
+      toast.error(getBackendErrorMessages(err, "Could not download stale orders PDF"));
+    } finally {
+      setStalePdfLoading(false);
+    }
+  };
+
+  const handleSendStaleAlertEmail = async () => {
+    try {
+      setStaleEmailLoading(true);
+      const res = await runStaleOrderAlertEmail(staleHours);
+      const data = res?.data ?? res;
+      if (data?.emailSent) {
+        toast.success(`Alert email sent (${data.rowCount ?? 0} lines)`);
+      } else if (data?.skippedReason === "no_stale_orders") {
+        toast.success("No stale orders — email not sent");
+      } else if (data?.skippedReason === "no_recipients") {
+        toast.error(data?.emailError || "Set STALE_ORDER_ALERT_EMAIL_TO on the server");
+      } else {
+        toast.success(res?.message || "Report processed");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(getBackendErrorMessages(err, "Could not send stale order alert email"));
+    } finally {
+      setStaleEmailLoading(false);
+    }
+  };
+
+  const handleOpenStaleOrder = async (orderId) => {
+    if (!orderId) return;
+    closeStaleOrdersModal();
+    setViewMode(VIEW_ORDER);
+    await fetchSingleOrder(orderId);
+  };
+
+  const filteredStaleOrders = staleSearch.trim()
+    ? staleOrders.filter((row) => {
+        const q = staleSearch.trim().toLowerCase();
+        return (
+          String(row.orderId || "").toLowerCase().includes(q) ||
+          String(row.sku || "").toLowerCase().includes(q) ||
+          String(row.customerName || "").toLowerCase().includes(q) ||
+          String(row.phone || "").toLowerCase().includes(q) ||
+          String(row.city || "").toLowerCase().includes(q) ||
+          String(row.deliveryType || "").toLowerCase().includes(q)
+        );
+      })
+    : staleOrders;
+
+  const toggleStaleColumn = (key) => {
+    const def = STALE_ORDER_TABLE_COLUMNS.find((c) => c.key === key);
+    if (def?.alwaysVisible) return;
+    setStaleVisibleColumns((prev) => {
+      const has = prev.includes(key);
+      const without = has ? prev.filter((k) => k !== key) : [...prev, key];
+      const always = STALE_ORDER_TABLE_COLUMNS.filter((c) => c.alwaysVisible).map(
+        (c) => c.key,
+      );
+      const next = [...new Set([...always, ...without])];
+      if (next.length <= always.length && has) return prev;
+      persistStaleVisibleColumns(next);
+      return next;
+    });
+  };
+
+  const resetStaleColumns = () => {
+    const next = defaultStaleVisibleColumnKeys();
+    setStaleVisibleColumns(next);
+    persistStaleVisibleColumns(next);
+  };
+
+  const selectAllStaleColumns = () => {
+    const next = STALE_ORDER_TABLE_COLUMNS.map((c) => c.key);
+    setStaleVisibleColumns(next);
+    persistStaleVisibleColumns(next);
+  };
+
+  const orderListActiveColumns = useMemo(
+    () => ORDER_LIST_TABLE_COLUMNS.filter((c) => orderListVisibleColumns.includes(c.key)),
+    [orderListVisibleColumns],
+  );
+
+  const itemListActiveColumns = useMemo(
+    () => ITEM_LIST_TABLE_COLUMNS.filter((c) => itemListVisibleColumns.includes(c.key)),
+    [itemListVisibleColumns],
+  );
+
+  const orderDetailItemActiveColumns = useMemo(
+    () =>
+      ORDER_DETAIL_ITEM_DATA_COLUMNS.filter((c) =>
+        orderDetailItemVisibleColumns.includes(c.key),
+      ),
+    [orderDetailItemVisibleColumns],
+  );
+
+  const makeColumnToggle = (columns, storageKey, setter) => (key) => {
+    const def = columns.find((c) => c.key === key);
+    if (def?.alwaysVisible) return;
+    setter((prev) => {
+      const has = prev.includes(key);
+      const without = has ? prev.filter((k) => k !== key) : [...prev, key];
+      const always = columns.filter((c) => c.alwaysVisible).map((c) => c.key);
+      const next = [...new Set([...always, ...without])];
+      if (next.length <= always.length && has) return prev;
+      persistVisibleColumns(storageKey, next);
+      return next;
+    });
+  };
+
+  const toggleOrderListColumn = makeColumnToggle(
+    ORDER_LIST_TABLE_COLUMNS,
+    ORDER_LIST_COLUMNS_STORAGE_KEY,
+    setOrderListVisibleColumns,
+  );
+  const toggleItemListColumn = makeColumnToggle(
+    ITEM_LIST_TABLE_COLUMNS,
+    ITEM_LIST_COLUMNS_STORAGE_KEY,
+    setItemListVisibleColumns,
+  );
+  const toggleOrderDetailItemColumn = makeColumnToggle(
+    ORDER_DETAIL_ITEM_DATA_COLUMNS,
+    ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY,
+    setOrderDetailItemVisibleColumns,
+  );
+
+  const setItemListView = (mode) => {
+    setItemListViewMode(mode);
+    try {
+      localStorage.setItem("khush_admin_item_list_view_mode", mode);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -2406,6 +3089,530 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     ? statusOptions.filter((opt) => isExchangeStatus(opt.value))
     : statusOptions;
 
+  const renderOrderListCell = (key, order) => {
+    switch (key) {
+      case "info":
+        return (
+          <StoreOrderInfoTrigger
+            order={order}
+            onOpenDetails={() =>
+              setStoreInfoModal({
+                title: `Order #${order.orderId || order._id?.slice(-8) || ""}`,
+                lines: (Array.isArray(order.items) ? order.items : []).map((it) => ({
+                  itemId: it.itemId,
+                  itemLike: it,
+                  quantity: it.quantity,
+                  ctx: {
+                    orderId: order.orderId,
+                    orderCreatedAt: order.createdAt,
+                    payment: order.payment,
+                    address: order.address,
+                    user: order.user,
+                  },
+                })),
+              })
+            }
+          />
+        );
+      case "image": {
+        const first = firstOrderLineItem(order);
+        return (
+          <TableItemImageThumb itemLike={first} onPickImage={setZoomImageUrl} />
+        );
+      }
+      case "orderId":
+        return (
+          <span className="block truncate text-xs font-medium text-indigo-600" title={order.orderId || order._id}>
+            {order.orderId || order._id?.slice(-8).toUpperCase() || "—"}
+          </span>
+        );
+      case "customer":
+        return (
+          <div className="truncate text-xs font-medium text-gray-900" title={order.user?.name || order.address?.name || "—"}>
+            {order.user?.name || order.address?.name || "—"}
+          </div>
+        );
+      case "phone":
+        return (
+          <span
+            className="block truncate text-xs"
+            title={`${order.user?.countryCode || ""}${order.user?.phoneNumber || order.address?.phone || "—"}`}
+          >
+            {order.user?.countryCode || ""}
+            {order.user?.phoneNumber || order.address?.phone || "—"}
+          </span>
+        );
+      case "qty":
+        return order.totalItems || order.totalQuantity || order.items?.length || "?";
+      case "total":
+        return `₹${(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}`;
+      case "status":
+        return getStatusBadge(getDisplayOrderStatus(order));
+      case "courier": {
+        const prev = getOrderShiprocketPreview(order);
+        if (!prev) {
+          return (
+            <div className="space-y-1">
+              <span className="text-xs text-gray-400">—</span>
+              {hasNormalDeliveryInOrder(order) && (
+                <>
+                  <button
+                    type="button"
+                    disabled={docDownloadLoading}
+                    onClick={() => handleLabelForOrder(order)}
+                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                  >
+                    {docDownloadLoading && docActionType === "label" ? (
+                      <RefreshCw size={11} className="shrink-0 animate-spin" />
+                    ) : (
+                      <Truck size={11} className="shrink-0" />
+                    )}
+                    {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={docDownloadLoading}
+                    onClick={() => handleManifestForOrder(order)}
+                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                  >
+                    {docDownloadLoading && docActionType === "manifest" ? (
+                      <RefreshCw size={11} className="shrink-0 animate-spin" />
+                    ) : (
+                      <Package size={11} className="shrink-0" />
+                    )}
+                    {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div className="space-y-1">
+            <ShiprocketDetails sr={prev.primary} compact />
+            {prev.count > 1 && (
+              <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
+            )}
+            {hasNormalDeliveryInOrder(order) && (
+              <>
+                <button
+                  type="button"
+                  disabled={docDownloadLoading}
+                  onClick={() => handleLabelForOrder(order)}
+                  className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                >
+                  {docDownloadLoading && docActionType === "label" ? (
+                    <RefreshCw size={11} className="shrink-0 animate-spin" />
+                  ) : (
+                    <Truck size={11} className="shrink-0" />
+                  )}
+                  {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
+                </button>
+                <button
+                  type="button"
+                  disabled={docDownloadLoading}
+                  onClick={() => handleManifestForOrder(order)}
+                  className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                >
+                  {docDownloadLoading && docActionType === "manifest" ? (
+                    <RefreshCw size={11} className="shrink-0 animate-spin" />
+                  ) : (
+                    <Package size={11} className="shrink-0" />
+                  )}
+                  {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
+      case "date":
+        return order.createdAt
+          ? new Date(order.createdAt).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "2-digit",
+            })
+          : "—";
+      case "orderDateTime":
+        return formatManufacturingModalDate(order.createdAt);
+      case "email":
+        return order.user?.email || order.userId?.email || "—";
+      case "productName": {
+        const first = firstOrderLineItem(order);
+        const n = first?.name;
+        const count = order.items?.length || 0;
+        if (!n && count > 1) return `${count} items`;
+        return n || (count > 1 ? `${count} items` : "—");
+      }
+      case "productId":
+        return firstOrderLineItem(order)?.productId || "—";
+      case "lineSku":
+        return firstOrderLineItem(order)?.sku || "—";
+      case "variantSku":
+        return firstOrderLineItem(order)?.variant?.sku || "—";
+      case "size":
+        return firstOrderLineItem(order)?.variant?.size || "—";
+      case "color":
+        return firstOrderLineItem(order)?.variant?.color || "—";
+      case "pincode":
+        return order.address?.pincode || "—";
+      case "storeLink": {
+        const first = firstOrderLineItem(order);
+        return first ? (
+          <TableStoreLink itemId={first.itemId || first._id} itemLike={first} />
+        ) : (
+          "—"
+        );
+      }
+      case "payment":
+        return manufacturingPaymentLabel(order.payment);
+      case "city":
+        return order.address?.city || "—";
+      default:
+        return "—";
+    }
+  };
+
+  const renderItemListCell = (key, row) => {
+    const item = itemLikeFromListRow(row);
+    const itemId = row.itemId ?? item.itemId ?? item._id;
+    switch (key) {
+      case "image":
+        return <TableItemImageThumb itemLike={item} onPickImage={setZoomImageUrl} />;
+      case "info":
+        return (
+          <StoreItemInfoTrigger
+            itemId={row.itemId}
+            itemLike={row.item}
+            quantity={row.item?.quantity}
+            onOpenDetails={() =>
+              setStoreInfoModal({
+                title: `Order #${row.orderId || ""}`,
+                lines: [
+                  {
+                    itemId: row.itemId,
+                    itemLike: row.item,
+                    quantity: row.item?.quantity,
+                    ctx: {
+                      orderId: row.orderId,
+                      orderCreatedAt: row.orderCreatedAt,
+                      payment: row.payment,
+                      address: row.address,
+                      user: row.user,
+                    },
+                  },
+                ],
+              })
+            }
+          />
+        );
+      case "orderId":
+        return (
+          <span className="font-medium text-indigo-600 truncate block" title={row.orderId}>
+            {row.orderId || "—"}
+          </span>
+        );
+      case "customer":
+        return row.user?.name || row.address?.name || "—";
+      case "phone":
+        return `${row.user?.countryCode || ""}${row.user?.phoneNumber || "—"}`;
+      case "product":
+        return (
+          <span className="font-medium text-gray-900 truncate block max-w-[200px]" title={row.item?.name}>
+            {row.item?.name || row.item?.sku || "—"}
+          </span>
+        );
+      case "productId":
+        return item.productId || "—";
+      case "itemId":
+        return String(itemId || "—");
+      case "sku":
+        return item.sku ?? itemId ?? "—";
+      case "variantSku":
+        return item.variant?.sku || "—";
+      case "size":
+        return item.variant?.size || "—";
+      case "color":
+        return item.variant?.color || "—";
+      case "variant": {
+        const v = item.variant || {};
+        return [v.size, v.color].filter(Boolean).join(" / ") || "—";
+      }
+      case "pincode":
+        return row.address?.pincode || "—";
+      case "storeLink":
+        return <TableStoreLink itemId={itemId} itemLike={item} />;
+      case "orderDateTime":
+        return formatManufacturingModalDate(row.orderCreatedAt);
+      case "qty":
+        return row.item?.quantity ?? "—";
+      case "status":
+        return renderItemStatusBreakdown(
+          lineItemFromOrderItemRow(row) || { status: row.itemStatus },
+          { compact: true },
+        );
+      case "delivery":
+        return (
+          DELIVERY_TYPE_TABS.find((t) => t.value === row.deliveryType)?.label ??
+          String(row.deliveryType || "—").replace(/_/g, " ")
+        );
+      case "date":
+        return row.orderCreatedAt
+          ? new Date(row.orderCreatedAt).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })
+          : "—";
+      case "shiprocket": {
+        if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") return "—";
+        const sr = shiprocketFromItemRow(row);
+        return sr ? <ShiprocketDetails sr={sr} compact /> : <span className="text-xs text-amber-700">No AWB yet</span>;
+      }
+      case "payment":
+        return manufacturingPaymentLabel(row.payment);
+      default:
+        return "—";
+    }
+  };
+
+  const orderListColSpan = orderListActiveColumns.length + 1;
+  const itemListColSpan = itemListActiveColumns.length + 1;
+
+  const orderListCellTdClass = (key) => {
+    switch (key) {
+      case "info":
+      case "image":
+        return "px-1 py-2 align-middle text-center";
+      case "orderId":
+        return "min-w-0 px-2 py-2 align-top font-medium text-indigo-600";
+      case "qty":
+        return "px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums";
+      case "total":
+        return "min-w-0 px-2 py-2 align-top text-xs font-medium text-gray-900 tabular-nums";
+      case "date":
+        return "min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500";
+      case "courier":
+        return "min-w-0 px-2 py-2 align-top";
+      default:
+        return "min-w-0 px-2 py-2 align-top text-xs text-gray-700";
+    }
+  };
+
+  const itemListCellTdClass = (key) => {
+    switch (key) {
+      case "info":
+      case "image":
+        return "px-2 py-2 align-middle text-center";
+      case "orderId":
+        return "px-2 py-2 align-top text-xs";
+      case "product":
+        return "px-2 py-2 align-top max-w-[220px]";
+      case "qty":
+        return "px-2 py-2 align-top text-center text-xs tabular-nums";
+      case "status":
+        return "px-2 py-2 align-top min-w-[10rem]";
+      default:
+        return "px-2 py-2 align-top text-xs text-gray-700";
+    }
+  };
+
+  const renderOrderListActions = (order) => (
+    <div className="flex flex-col items-center gap-1">
+      <button
+        onClick={() => {
+          const customOrderId = order.orderId;
+          if (!customOrderId) {
+            setError("Order is missing valid orderId");
+            return;
+          }
+          setSelectedItemIdFromListView(null);
+          setItemPage(1);
+          fetchSingleOrder(customOrderId);
+        }}
+        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
+        title="View order details"
+        type="button"
+      >
+        Details
+      </button>
+      <button
+        type="button"
+        onClick={() => openOrderNotesModal(order.orderId)}
+        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100 border border-gray-200 transition"
+        title="Order notes"
+      >
+        Notes
+      </button>
+    </div>
+  );
+
+  const renderItemListActions = (row) => {
+    const rowItem = {
+      ...(row.item && typeof row.item === "object" ? row.item : {}),
+      delivery: { type: row.deliveryType || row.item?.delivery?.type },
+      shipmentId: row.item?.shipmentId ?? row.shipmentId ?? null,
+      shipmentGroupId: row.item?.shipmentGroupId ?? row.shipmentGroupId ?? null,
+      shiprocket: {
+        ...(row.item?.shiprocket || {}),
+        shipmentId: row.item?.shiprocket?.shipmentId ?? row.item?.shipmentId ?? row.shipmentId ?? null,
+      },
+    };
+    const isNormal = String(row.deliveryType || "").toUpperCase() === "NORMAL";
+    return (
+      <div className="flex flex-col items-stretch gap-1 min-w-[7rem]">
+        <button
+          type="button"
+          onClick={() => {
+            if (!row.orderId) return;
+            setSelectedItemIdFromListView(String(row.itemId ?? row.productItemId ?? ""));
+            setItemPage(1);
+            fetchSingleOrder(row.orderId);
+          }}
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50"
+          title="View & update item status"
+        >
+          View details
+        </button>
+        {isNormal && (
+          <>
+            <button
+              type="button"
+              disabled={docDownloadLoading}
+              onClick={() => handleLabelForItem(rowItem)}
+              className="inline-flex items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+            >
+              {docDownloadLoading && docActionType === "label" ? (
+                <RefreshCw size={11} className="animate-spin" />
+              ) : (
+                <Truck size={11} />
+              )}
+              Label
+            </button>
+            <button
+              type="button"
+              disabled={
+                docDownloadLoading ||
+                (() => {
+                  const ids = getShipmentIdsForItem(rowItem);
+                  return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
+                })()
+              }
+              onClick={() => handleManifestForItem(rowItem)}
+              className="inline-flex items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+            >
+              {docDownloadLoading && docActionType === "manifest" ? (
+                <RefreshCw size={11} className="animate-spin" />
+              ) : (
+                <Package size={11} />
+              )}
+              Manifest
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const resetOrderListColumns = () => {
+    const next = defaultVisibleKeysFor(ORDER_LIST_TABLE_COLUMNS);
+    setOrderListVisibleColumns(next);
+    persistVisibleColumns(ORDER_LIST_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const selectAllOrderListColumns = () => {
+    const next = ORDER_LIST_TABLE_COLUMNS.map((c) => c.key);
+    setOrderListVisibleColumns(next);
+    persistVisibleColumns(ORDER_LIST_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const resetItemListColumns = () => {
+    const next = defaultVisibleKeysFor(ITEM_LIST_TABLE_COLUMNS);
+    setItemListVisibleColumns(next);
+    persistVisibleColumns(ITEM_LIST_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const selectAllItemListColumns = () => {
+    const next = ITEM_LIST_TABLE_COLUMNS.map((c) => c.key);
+    setItemListVisibleColumns(next);
+    persistVisibleColumns(ITEM_LIST_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const resetOrderDetailItemColumns = () => {
+    const next = defaultVisibleKeysFor(ORDER_DETAIL_ITEM_DATA_COLUMNS);
+    setOrderDetailItemVisibleColumns(next);
+    persistVisibleColumns(ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const selectAllOrderDetailItemColumns = () => {
+    const next = ORDER_DETAIL_ITEM_DATA_COLUMNS.map((c) => c.key);
+    setOrderDetailItemVisibleColumns(next);
+    persistVisibleColumns(ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY, next);
+  };
+
+  const renderOrderDetailItemDataCell = (key, item, order) => {
+    const itemId = String(item.itemId || item._id || "");
+    const v = item.variant || {};
+    switch (key) {
+      case "image":
+        return <TableItemImageThumb itemLike={item} onPickImage={setZoomImageUrl} sizeClass="h-12 w-12" />;
+      case "productName":
+        return (
+          <span className="text-xs font-medium text-gray-900" title={item.name}>
+            {item.name || "—"}
+          </span>
+        );
+      case "productId":
+        return <span className="text-xs text-gray-700">{item.productId || "—"}</span>;
+      case "itemId":
+        return <span className="break-all text-[10px] text-gray-600">{itemId || "—"}</span>;
+      case "lineSku":
+        return (
+          <div className="min-w-0 space-y-1">
+            <div className="truncate text-xs font-medium text-gray-900" title={item.sku || v.sku}>
+              {item.sku || v.sku || "—"}
+            </div>
+            {(() => {
+              const exIds = getItemExchangeIds(item);
+              if (exIds.length === 0) return null;
+              return (
+                <p className="break-all text-[10px] text-gray-500">
+                  Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
+                </p>
+              );
+            })()}
+          </div>
+        );
+      case "variantSku":
+        return <span className="font-mono text-xs text-gray-800">{v.sku || "—"}</span>;
+      case "size":
+        return v.size || "—";
+      case "color":
+        return v.color || "—";
+      case "qty":
+        return <span className="tabular-nums text-xs">{item.quantity ?? "—"}</span>;
+      case "price":
+        return (
+          <span className="text-xs font-medium tabular-nums text-gray-900">
+            ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
+          </span>
+        );
+      case "pincode":
+        return order?.address?.pincode || "—";
+      case "payment":
+        return manufacturingPaymentLabel(order?.payment);
+      case "customerName":
+        return order?.userId?.name || order?.address?.name || "—";
+      case "customerPhone":
+        return `${order?.userId?.countryCode || ""}${order?.userId?.phoneNumber || order?.address?.phone || "—"}`;
+      case "storeLink":
+        return <TableStoreLink itemId={itemId} itemLike={item} />;
+      default:
+        return "—";
+    }
+  };
+
   return (
     <div className="min-h-screen w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6">
       <div className="mx-auto w-full max-w-[1920px] min-w-0">
@@ -2539,6 +3746,29 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           </div>
         )}
 
+        {!selectedOrder && (
+          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-950 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+                Stale orders (CONFIRMED 24h+)
+              </p>
+              <p className="text-xs text-amber-900/80 mt-1 max-w-xl">
+                Lines still in <span className="font-medium">CONFIRMED</span> with no move to PROCESSING or
+                shipped for at least 24 hours. Review in the list, download PDF, or email the daily report.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openStaleOrdersModal}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors"
+            >
+              <Clock className="h-4 w-4" aria-hidden />
+              View stale orders
+            </button>
+          </div>
+        )}
+
         {error && viewMode === VIEW_ORDER && (
           <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
             <AlertCircle size={20} />
@@ -2555,51 +3785,84 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         {!selectedOrder ? (
           viewMode === VIEW_ORDER ? (
             <>
-              {/* Filters: date range, status, sort (By order view) */}
-              <div className="mb-6 flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
-                <span className="text-sm font-semibold text-gray-700">
-                  Filters
-                </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">
+              {/* Filters: By order */}
+              <div className="mb-6 rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-gray-800">Filters</p>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    {(dateFrom ||
+                      dateTo ||
+                      statusFilter ||
+                      sortOrder !== "desc") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                          setStatusFilter("");
+                          setSortBy("createdAt");
+                          setSortOrder("desc");
+                          setPagination((p) => ({ ...p, page: 1 }));
+                        }}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                    <ColumnPickerDropdown
+                      columns={ORDER_LIST_TABLE_COLUMNS}
+                      visibleKeys={orderListVisibleColumns}
+                      onToggle={toggleOrderListColumn}
+                      onReset={resetOrderListColumns}
+                      onSelectAll={selectAllOrderListColumns}
+                      open={orderListColumnsOpen}
+                      onOpenChange={setOrderListColumnsOpen}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="order-filter-from" className="text-xs font-semibold text-gray-500">
                       From date
                     </label>
                     <input
+                      id="order-filter-from"
                       type="date"
                       value={dateFrom}
                       onChange={(e) => {
                         setDateFrom(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="order-filter-to" className="text-xs font-semibold text-gray-500">
                       To date
                     </label>
                     <input
+                      id="order-filter-to"
                       type="date"
                       value={dateTo}
                       onChange={(e) => {
                         setDateTo(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="order-filter-status" className="text-xs font-semibold text-gray-500">
                       Status
                     </label>
                     <select
+                      id="order-filter-status"
                       value={statusFilter}
                       onChange={(e) => {
                         setStatusFilter(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[160px]"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     >
                       <option value="">All statuses</option>
                       {filteredStatusOptions.map((opt) => (
@@ -2609,11 +3872,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="order-filter-sort" className="text-xs font-semibold text-gray-500">
                       Sort
                     </label>
                     <select
+                      id="order-filter-sort"
                       value={`${sortBy}-${sortOrder}`}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -2622,63 +3886,36 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setSortOrder(order || "desc");
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[140px]"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     >
                       <option value="createdAt-desc">Latest first</option>
                       <option value="createdAt-asc">Oldest first</option>
                     </select>
                   </div>
                 </div>
-                {(dateFrom ||
-                  dateTo ||
-                  statusFilter ||
-                  sortOrder !== "desc") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDateFrom("");
-                      setDateTo("");
-                      setStatusFilter("");
-                      setSortBy("createdAt");
-                      setSortOrder("desc");
-                      setPagination((p) => ({ ...p, page: 1 }));
-                    }}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                  >
-                    Clear filters
-                  </button>
-                )}
               </div>
 
             <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-              <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
-                <colgroup>
-                  <col className="w-[3rem]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[9%]" />
-                </colgroup>
+              <table className="w-full min-w-[720px] table-auto border-collapse text-left text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-1 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Store link">
-                      Info
-                    </th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Order</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Customer</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Phone</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Qty</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Total</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Status</th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Shiprocket (normal delivery)">
-                      Courier / SR
-                    </th>
-                    <th className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">Date</th>
+                    {orderListActiveColumns.map((col) => (
+                      <th
+                        key={col.key}
+                        className={`px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600 ${
+                          col.key === "info" ? "px-1 text-center" : ""
+                        }`}
+                        title={
+                          col.key === "info"
+                            ? "Store link"
+                            : col.key === "courier"
+                              ? "Shiprocket (normal delivery)"
+                              : undefined
+                        }
+                      >
+                        {col.key === "info" ? "Info" : col.key === "orderId" ? "Order" : col.key === "courier" ? "Courier / SR" : col.label}
+                      </th>
+                    ))}
                     <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">
                       Details / notes
                     </th>
@@ -2687,191 +3924,26 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="py-16 text-center text-gray-500">
+                      <td colSpan={orderListColSpan} className="py-16 text-center text-gray-500">
                         Loading orders…
                       </td>
                     </tr>
                   ) : orders.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-16 text-center text-gray-500">
+                      <td colSpan={orderListColSpan} className="py-16 text-center text-gray-500">
                         No orders found
                       </td>
                     </tr>
                   ) : (
                     orders.map((order) => (
                       <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
+                        {orderListActiveColumns.map((col) => (
+                          <td key={col.key} className={orderListCellTdClass(col.key)}>
+                            {renderOrderListCell(col.key, order)}
+                          </td>
+                        ))}
                         <td className="px-1 py-2 align-middle text-center">
-                          <StoreOrderInfoTrigger
-                            order={order}
-                            onOpenDetails={() =>
-                              setStoreInfoModal({
-                                title: `Order #${order.orderId || order._id?.slice(-8) || ""}`,
-                                lines: (Array.isArray(order.items) ? order.items : []).map(
-                                  (it) => ({
-                                    itemId: it.itemId,
-                                    itemLike: it,
-                                    quantity: it.quantity,
-                                    ctx: {
-                                      orderId: order.orderId,
-                                      orderCreatedAt: order.createdAt,
-                                      payment: order.payment,
-                                      address: order.address,
-                                      user: order.user,
-                                    },
-                                  }),
-                                ),
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top font-medium text-indigo-600">
-                          <span className="block truncate text-xs" title={`#${order.orderId || order._id}`}>
-                            #{order.orderId || order._id?.slice(-8).toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top">
-                          <div
-                            className="truncate text-xs font-medium text-gray-900"
-                            title={order.user?.name || order.address?.name || "—"}
-                          >
-                            {order.user?.name || order.address?.name || "—"}
-                          </div>
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top text-xs text-gray-700">
-                          <span
-                            className="block truncate"
-                            title={`${order.user?.countryCode || ""}${order.user?.phoneNumber || order.address?.phone || "—"}`}
-                          >
-                            {order.user?.countryCode || ""}
-                            {order.user?.phoneNumber || order.address?.phone || "—"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums">
-                          {order.totalItems || order.totalQuantity || order.items?.length || "?"}
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top text-xs font-medium text-gray-900 tabular-nums">
-                          ₹{(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top">
-                          {getStatusBadge(
-                            getDisplayOrderStatus(order),
-                          )}
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top">
-                          {(() => {
-                            const prev = getOrderShiprocketPreview(order);
-                            if (!prev) {
-                              return (
-                                <div className="space-y-1">
-                                  <span className="text-xs text-gray-400">—</span>
-                                  {hasNormalDeliveryInOrder(order) && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        disabled={docDownloadLoading}
-                                        onClick={() => handleLabelForOrder(order)}
-                                        className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                      >
-                                    {docDownloadLoading && docActionType === "label" ? (
-                                      <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                    ) : (
-                                      <Truck size={11} className="shrink-0" />
-                                    )}
-                                    {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={docDownloadLoading}
-                                        onClick={() => handleManifestForOrder(order)}
-                                        className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                                      >
-                                    {docDownloadLoading && docActionType === "manifest" ? (
-                                      <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                    ) : (
-                                      <Package size={11} className="shrink-0" />
-                                    )}
-                                    {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            }
-                            return (
-                              <div className="space-y-1">
-                                <ShiprocketDetails sr={prev.primary} compact />
-                                {prev.count > 1 && (
-                                  <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
-                                )}
-                                {hasNormalDeliveryInOrder(order) && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      disabled={docDownloadLoading}
-                                      onClick={() => handleLabelForOrder(order)}
-                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                    >
-                                  {docDownloadLoading && docActionType === "label" ? (
-                                    <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                  ) : (
-                                    <Truck size={11} className="shrink-0" />
-                                  )}
-                                  {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={docDownloadLoading}
-                                      onClick={() => handleManifestForOrder(order)}
-                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                                    >
-                                  {docDownloadLoading && docActionType === "manifest" ? (
-                                    <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                  ) : (
-                                    <Package size={11} className="shrink-0" />
-                                  )}
-                                  {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                        <td className="min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500">
-                          {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "2-digit",
-                          })}
-                        </td>
-                        <td className="px-1 py-2 align-middle text-center">
-                          <div className="flex flex-col items-center gap-1">
-                          <button
-                          onClick={() => {
-                            const customOrderId = order.orderId;
-                            if (!customOrderId) {
-                              setError("Order is missing valid orderId");
-                              return;
-                            }
-                            setSelectedItemIdFromListView(null);
-                            setItemPage(1);
-                            fetchSingleOrder(customOrderId);
-                          }}
-                            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
-                            title="View order details"
-                            type="button"
-                          >
-                            Details
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openOrderNotesModal(order.orderId)}
-                            className="rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100 border border-gray-200 transition"
-                            title="Order notes"
-                          >
-                            Notes
-                          </button>
-                          </div>
+                          {renderOrderListActions(order)}
                         </td>
                       </tr>
                     ))
@@ -2904,42 +3976,108 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             </>
           ) : (
             <>
-              {/* Item-based filters: order date range + status (PDF uses same page as list) */}
-              <div className="mb-6 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm">
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-gray-500">From (order date)</label>
+              {/* Filters: By item */}
+              <div className="mb-6 rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-sm font-semibold text-gray-800">Filters</p>
+                    <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setItemListView("table")}
+                        className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                          itemListViewMode === "table"
+                            ? "bg-white text-indigo-700 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Table
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setItemListView("cards")}
+                        className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                          itemListViewMode === "cards"
+                            ? "bg-white text-indigo-700 shadow-sm"
+                            : "text-gray-600 hover:text-gray-900"
+                        }`}
+                      >
+                        Cards
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    {(dateFrom || dateTo || itemStatusFilter) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDateFrom("");
+                          setDateTo("");
+                          setItemStatusFilter("");
+                          setItemPagination((p) => ({ ...p, page: 1 }));
+                        }}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                    {itemListViewMode === "table" && (
+                      <ColumnPickerDropdown
+                        columns={ITEM_LIST_TABLE_COLUMNS}
+                        visibleKeys={itemListVisibleColumns}
+                        onToggle={toggleItemListColumn}
+                        onReset={resetItemListColumns}
+                        onSelectAll={selectAllItemListColumns}
+                        open={itemListColumnsOpen}
+                        onOpenChange={setItemListColumnsOpen}
+                        badgeClass="bg-violet-100 text-violet-900"
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="item-filter-from" className="text-xs font-semibold text-gray-500">
+                      From date
+                    </label>
                     <input
+                      id="item-filter-from"
                       type="date"
                       value={dateFrom}
                       onChange={(e) => {
                         setDateFrom(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold text-gray-500">To (order date)</label>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="item-filter-to" className="text-xs font-semibold text-gray-500">
+                      To date
+                    </label>
                     <input
+                      id="item-filter-to"
                       type="date"
                       value={dateTo}
                       onChange={(e) => {
                         setDateTo(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-semibold text-gray-500">Line status</span>
+                  <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
+                    <label htmlFor="item-filter-status" className="text-xs font-semibold text-gray-500">
+                      Line status
+                    </label>
                     <select
+                      id="item-filter-status"
                       value={itemStatusFilter}
                       onChange={(e) => {
                         setItemStatusFilter(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="rounded-lg border-2 border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-colors min-w-[200px]"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                     >
                       <option value="">All statuses</option>
                       {filteredStatusOptions.map((opt) => (
@@ -2949,35 +4087,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       ))}
                     </select>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {itemStatusFilter ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setItemStatusFilter("");
-                          setItemPagination((p) => ({ ...p, page: 1 }));
-                        }}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                      >
-                        Clear status
-                      </button>
-                    ) : null}
-                    {(dateFrom || dateTo) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDateFrom("");
-                          setDateTo("");
-                          setItemPagination((p) => ({ ...p, page: 1 }));
-                        }}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                      >
-                        Clear dates
-                      </button>
-                    )}
-                  </div>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
                   The list is paginated for speed. <span className="font-medium">Download manufacturing PDF</span>{" "}
                   above exports <span className="font-medium">all</span> lines matching dates, delivery, status, and
                   search (not only this page).
@@ -3000,6 +4111,43 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     Try changing the status filter or search
                   </p>
                 </div>
+              ) : itemListViewMode === "table" ? (
+                <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <table className="w-full min-w-[800px] table-auto border-collapse text-left text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {itemListActiveColumns.map((col) => (
+                          <th
+                            key={col.key}
+                            className={`px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600 ${
+                              col.key === "info" ? "text-center" : ""
+                            }`}
+                          >
+                            {col.key === "info" ? "Info" : col.label}
+                          </th>
+                        ))}
+                        <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {orderItems.map((row) => (
+                        <tr
+                          key={`${row.orderId}-${row.itemId}`}
+                          className="hover:bg-gray-50/70 transition-colors"
+                        >
+                          {itemListActiveColumns.map((col) => (
+                            <td key={col.key} className={itemListCellTdClass(col.key)}>
+                              {renderItemListCell(col.key, row)}
+                            </td>
+                          ))}
+                          <td className="px-2 py-2 align-top">{renderItemListActions(row)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="space-y-3">
                   {orderItems.map((row) => (
@@ -3008,6 +4156,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-indigo-200 hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
                       <div className="p-5 flex flex-wrap items-center gap-4 sm:gap-6">
+                        <TableItemImageThumb
+                          itemLike={itemLikeFromListRow(row)}
+                          onPickImage={setZoomImageUrl}
+                          sizeClass="h-16 w-16"
+                        />
                         <StoreItemInfoTrigger
                           itemId={row.itemId}
                           itemLike={row.item}
@@ -4142,6 +5295,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
 
                         {selectedOrder?.items?.length > 0 && (
                           <div className="flex flex-wrap items-center gap-3">
+                            <ColumnPickerDropdown
+                              columns={ORDER_DETAIL_ITEM_DATA_COLUMNS}
+                              visibleKeys={orderDetailItemVisibleColumns}
+                              onToggle={toggleOrderDetailItemColumn}
+                              onReset={resetOrderDetailItemColumns}
+                              onSelectAll={selectAllOrderDetailItemColumns}
+                              open={orderDetailColumnsOpen}
+                              onOpenChange={setOrderDetailColumnsOpen}
+                              badgeClass="bg-emerald-100 text-emerald-900"
+                            />
                             <span className="text-sm text-gray-600">
                               {selectedItemIds.length > 0
                                 ? `${selectedItemIds.length} selected`
@@ -4212,17 +5375,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   <div className="py-12 text-center text-gray-500">No items found</div>
                 ) : (
                   <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full min-w-0 table-fixed border-collapse text-left text-sm">
-                      <colgroup>
-                        <col className="w-[3%]" />
-                        <col className="w-[26%]" />
-                        <col className="w-[5%]" />
-                        <col className="w-[7%]" />
-                        <col className="w-[16%]" />
-                        <col className="w-[20%]" />
-                        <col className="w-[13%]" />
-                        <col className="w-[11%]" />
-                      </colgroup>
+                    <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-1.5 py-2 text-left align-middle">
@@ -4238,9 +5391,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                             />
                           </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Product</th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Qty</th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Price</th>
+                          {orderDetailItemActiveColumns.map((col) => (
+                            <th
+                              key={col.key}
+                              className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap"
+                            >
+                              {col.label}
+                            </th>
+                          ))}
                           <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">
                             Status
                           </th>
@@ -4267,131 +5425,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                   className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                 />
                               </td>
-                              <td className="min-w-0 px-2 py-2 align-top">
-                                <div className="flex items-start gap-2">
-                                  {item.variant?.imageUrl && (
-                                    <img
-                                      src={item.variant.imageUrl}
-                                      alt={item.sku}
-                                      className="h-9 w-9 shrink-0 rounded object-cover"
-                                    />
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-xs font-medium text-gray-900" title={item.sku || item.variant?.sku || ""}>
-                                      {item.sku || item.variant?.sku || "—"}
-                                    </div>
-                                    <div className="mt-0.5 break-all text-[10px] leading-snug text-gray-500">
-                                      Item ID: {String(item.itemId || item._id || "—")}
-                                    </div>
-                                    {(() => {
-                                      const exIds = getItemExchangeIds(item);
-                                      if (exIds.length === 0) return null;
-                                      return (
-                                        <div className="mt-0.5 break-all text-[10px] leading-snug text-gray-500">
-                                          Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
-                                        </div>
-                                      );
-                                    })()}
-                                    {(() => {
-                                      const latestExchange = getLatestExchange(item);
-                                      if (!latestExchange) return null;
-                                      const exchangeReason = getExchangeReason(latestExchange);
-                                      const exchangeImages = extractExchangeImageUrls(latestExchange);
-                                      return (
-                                        <div className="mt-1.5 rounded- border border-amber-200 bg-amber-50 px-2 py-1.5">
-                                          <p className="text-[10px] font-bold uppercase tracking-wide text-black">
-                                            Exchange
-                                          </p>
-                                          {exchangeReason ? (
-                                            <p className="mt-0.5 break-all text-[10px] text-red-900 font-bold">
-                                              Reason: {exchangeReason}
-                                            </p>
-                                          ) : null}
-                                          {latestExchange?.desiredColor || latestExchange?.desiredSize ? (
-                                            <p className="mt-0.5 text-[10px] text-red-900 font-bold">
-                                              Requested:{" "}
-                                              {[latestExchange?.desiredColor, latestExchange?.desiredSize]
-                                                .filter(Boolean)
-                                                .join(" / ")}
-                                            </p>
-                                          ) : null}
-                                          {latestExchange?.replacedItem ? (
-                                            <p className="mt-0.5 break-all text-[10px] text-amber-900 font-bold">
-                                              Replacement: {latestExchange.replacedItem?.sku || "—"}
-                                              {latestExchange.replacedItem?.variant?.color
-                                                ? ` · ${latestExchange.replacedItem.variant.color}`
-                                                : ""}
-                                              {latestExchange.replacedItem?.variant?.size
-                                                ? ` · ${latestExchange.replacedItem.variant.size}`
-                                                : ""}
-                                            </p>
-                                          ) : null}
-                                          {latestExchange?.replacedItem?.variant?.imageUrl ? (
-                                            <div className="mt-1">
-                                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                                                Desired Product
-                                              </p>
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  setZoomImageUrl(
-                                                    latestExchange.replacedItem.variant.imageUrl,
-                                                  )
-                                                }
-                                                className="block overflow-hidden rounded border border-amber-200 bg-white"
-                                                title="Open desired replacement image"
-                                              >
-                                                <img
-                                                  src={latestExchange.replacedItem.variant.imageUrl}
-                                                  alt="Desired replacement item"
-                                                  className="h-10 w-10 object-cover"
-                                                  loading="lazy"
-                                                />
-                                              </button>
-                                            </div>
-                                          ) : null}
-                                          {exchangeImages.length > 0 ? (
-                                            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                                              User uploaded exchange items pics
-                                            </p>
-                                          ) : null}
-                                          {exchangeImages.length > 0 ? (
-                                            <div className="mt-1 grid grid-cols-3 gap-1.5">
-                                              {exchangeImages.slice(0, 3).map((url, idx) => (
-                                                <button
-                                                  key={`${url}-${idx}`}
-                                                  type="button"
-                                                  onClick={() => setZoomImageUrl(url)}
-                                                  className="block overflow-hidden rounded border border-amber-200 bg-white"
-                                                  title="Open exchange image"
-                                                >
-                                                  <img
-                                                    src={url}
-                                                    alt={`Exchange ${idx + 1}`}
-                                                    className="h-10 w-full object-cover"
-                                                    loading="lazy"
-                                                  />
-                                                </button>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <p className="mt-0.5 text-[10px] text-amber-700">
-                                              No exchange images uploaded.
-                                            </p>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                    <div className="mt-0.5 truncate text-[10px] text-gray-500">
-                                      {[item.variant?.color, item.variant?.size].filter(Boolean).join(" · ") || ""}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-2 py-2 align-top text-center text-xs tabular-nums text-gray-700">{item.quantity}</td>
-                              <td className="px-2 py-2 align-top text-xs font-medium tabular-nums text-gray-900">
-                                ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
-                              </td>
+                              {orderDetailItemActiveColumns.map((col) => (
+                                <td key={col.key} className="min-w-0 px-2 py-2 align-top">
+                                  {renderOrderDetailItemDataCell(col.key, item, selectedOrder)}
+                                </td>
+                              ))}
                               <td className="min-w-0 px-2 py-2 align-top">
                                 {renderItemStatusBreakdown(item, { compact: true })}
                               </td>
@@ -4746,6 +5784,250 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               </div>
             );
           })()
+        )}
+
+        {staleModalOpen && (
+          <div
+            className="fixed inset-0 z-[74] flex items-center justify-center bg-black/50 p-4 sm:p-6"
+            onClick={closeStaleOrdersModal}
+            role="presentation"
+          >
+            <div
+              className="mx-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="stale-orders-modal-title"
+            >
+              <div className="border-b border-amber-100 bg-amber-50 px-5 py-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3
+                    id="stale-orders-modal-title"
+                    className="text-base font-semibold text-amber-950 flex items-center gap-2"
+                  >
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                    Stale orders
+                  </h3>
+                  <p className="text-xs text-amber-900/90 mt-1">
+                    {staleLoading
+                      ? "Loading…"
+                      : `${staleMeta.totalMatched} line(s) · CONFIRMED for ${staleMeta.olderThanHours}+ hours`}
+                    {staleMeta.truncated ? " (list capped — see PDF for full export)" : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeStaleOrdersModal}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-white/80"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-4 py-3 bg-white">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-medium text-gray-600">Hours</label>
+                  <select
+                    value={staleHours}
+                    onChange={(e) => {
+                      const h = parseInt(e.target.value, 10) || 24;
+                      setStaleHours(h);
+                      fetchStaleOrdersList(h);
+                    }}
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value={24}>24</option>
+                    <option value={48}>48</option>
+                    <option value={72}>72</option>
+                  </select>
+                </div>
+                <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="search"
+                    value={staleSearch}
+                    onChange={(e) => setStaleSearch(e.target.value)}
+                    placeholder="Search order, SKU, customer…"
+                    className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setStaleColumnsOpen((o) => !o)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    aria-expanded={staleColumnsOpen}
+                  >
+                    <Columns3 className="h-4 w-4" />
+                    Columns
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+                      {staleActiveColumns.length}
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${staleColumnsOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {staleColumnsOpen && (
+                    <div className="absolute left-0 top-full z-20 mt-1 w-[min(100vw-2rem,22rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-lg ring-1 ring-black/5">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">
+                        Choose columns to show
+                      </p>
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                        {STALE_ORDER_TABLE_COLUMNS.map((col) => {
+                          const checked = staleVisibleColumns.includes(col.key);
+                          const locked = !!col.alwaysVisible;
+                          return (
+                            <label
+                              key={col.key}
+                              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                                locked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={locked}
+                                onChange={() => toggleStaleColumn(col.key)}
+                                className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                              />
+                              <span className="text-gray-800">{col.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 flex gap-2 border-t border-gray-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={selectAllStaleColumns}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        >
+                          Show all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetStaleColumns}
+                          className="text-xs font-medium text-gray-600 hover:text-gray-800"
+                        >
+                          Reset default
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={staleLoading}
+                  onClick={() => fetchStaleOrdersList(staleHours)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${staleLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  disabled={stalePdfLoading || staleLoading}
+                  onClick={handleDownloadStalePdf}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+                >
+                  {stalePdfLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4" />
+                  )}
+                  PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={staleEmailLoading || staleLoading}
+                  onClick={handleSendStaleAlertEmail}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  title="Sends email to addresses in server STALE_ORDER_ALERT_EMAIL_TO"
+                >
+                  {staleEmailLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  Email report
+                </button>
+              </div>
+
+              {staleColumnsOpen && (
+                <p className="border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-900/90">
+                  Showing:{" "}
+                  <span className="font-medium">
+                    {staleActiveColumns.map((c) => c.label).join(" · ")}
+                  </span>
+                  <span className="text-amber-800/70"> — saved in this browser</span>
+                </p>
+              )}
+
+              <div className="min-h-0 flex-1 overflow-auto">
+                {staleLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                    <RefreshCw className="h-8 w-8 animate-spin text-amber-600 mb-2" />
+                    <p className="text-sm">Loading stale orders…</p>
+                  </div>
+                ) : filteredStaleOrders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                    <CheckCircle className="h-10 w-10 text-emerald-500 mb-2" />
+                    <p className="text-sm font-medium text-gray-700">No stale orders</p>
+                    <p className="text-xs mt-1">
+                      {staleSearch.trim()
+                        ? "No matches for your search"
+                        : `All clear for ${staleHours}+ hour threshold`}
+                    </p>
+                  </div>
+                ) : (
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide z-10">
+                      <tr>
+                        {staleActiveColumns.map((col) => (
+                          <th
+                            key={col.key}
+                            className={`px-4 py-2.5 whitespace-nowrap ${col.headerClass || ""} ${
+                              col.key === "orderId" ? "" : ""
+                            }`}
+                          >
+                            {col.label}
+                          </th>
+                        ))}
+                        <th className="px-4 py-2.5 text-right whitespace-nowrap">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredStaleOrders.map((row, idx) => (
+                        <tr key={`${row.orderId}-${row.sku}-${idx}`} className="hover:bg-amber-50/50">
+                          {staleActiveColumns.map((col) => (
+                            <td
+                              key={col.key}
+                              className={`px-4 py-2 ${col.cellClass || ""}`}
+                              title={
+                                col.key === "sku" || col.key === "customerName"
+                                  ? String(col.render(row) ?? "")
+                                  : undefined
+                              }
+                            >
+                              {col.render(row)}
+                            </td>
+                          ))}
+                          <td className="px-4 py-2 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStaleOrder(row.orderId)}
+                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                            >
+                              Open order
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {orderNotesModalOpen && orderNotesModalOrderId && (

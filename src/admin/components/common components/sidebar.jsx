@@ -26,7 +26,11 @@ import {
   Truck,
   Building2,
   ShieldCheck,
-   Gift,
+  Gift,
+  Wallet,
+  Coins,
+  Banknote,
+  HandCoins,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 import { useDispatch, useSelector } from "react-redux";
@@ -52,6 +56,7 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
+  const [isMoneyFeaturesOpen, setIsMoneyFeaturesOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,6 +104,10 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
   const isAnalyticsSectionActive = () =>
     location.pathname.startsWith(ap("analytics")) ||
     location.pathname.startsWith(ap("coupon-analytics"));
+  const isMoneyFeaturesSectionActive = () =>
+    location.pathname.includes("/money-features") ||
+    location.pathname.startsWith(ap("referral")) ||
+    location.pathname.startsWith(ap("rewards"));
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -136,6 +145,15 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
       setIsAnalyticsOpen(true);
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (isMoneyFeaturesSectionActive()) {
+      setIsMoneyFeaturesOpen(true);
+    }
+  }, [location.pathname]);
+
+  const showMoneyFeatures =
+    isFullAdminUser || canUse(["coupons", "referral", "rewards"]);
 
   const handleLogout = async () => {
     console.log("🚪 Logout button clicked");
@@ -747,36 +765,120 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
               <span>Brands</span>
             </Link>
             )}
-           {canUse(["rewards"]) && (
-  <Link
-    to={ap("rewards")}
-    className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-      isActive(ap("wallet")) ? "bg-white/10 text-white" : ""
-    }`}
-  >
-    <FileText
-      size={20}
-      className="text-gray-400 group-hover:text-black"
-    />
-    <span>Rewards</span>
-  </Link>
-)}
-
-{canUse(["referral"]) && (
-  <Link
-    to={ap("referral")}
-    className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-      isActive(ap("referral")) ? "bg-white/10 text-white" : ""
-    }`}
-  >
-    <Gift
-      size={20}
-      className="text-gray-400 group-hover:text-black"
-    />
-    <span>Referral</span>
-  </Link>
-)}
-
+            {showMoneyFeatures && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIsMoneyFeaturesOpen(!isMoneyFeaturesOpen)}
+                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
+                    isMoneyFeaturesSectionActive() ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <HandCoins
+                      size={20}
+                      className={`${
+                        isMoneyFeaturesSectionActive()
+                          ? "text-white"
+                          : "text-gray-400 group-hover:text-black"
+                      }`}
+                    />
+                    <span>Money features</span>
+                  </div>
+                  {isMoneyFeaturesOpen ? (
+                    <ChevronDown size={16} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={16} className="text-gray-400" />
+                  )}
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    isMoneyFeaturesOpen
+                      ? "max-h-80 opacity-100 mt-1"
+                      : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="pl-10 pr-4 py-2 space-y-1">
+                    {(isFullAdminUser || canUse(["admin"])) && (
+                      <Link
+                        to={ap("money-features")}
+                        className={`block px-3 py-2 text-sm rounded-lg transition ${
+                          location.pathname.endsWith("/money-features") ||
+                          location.pathname.endsWith("/money-features/")
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <HandCoins size={14} /> Overview
+                        </span>
+                      </Link>
+                    )}
+                    {(isFullAdminUser || canUse(["admin"])) && (
+                      <Link
+                        to={ap("money-features/cash-wallet")}
+                        className={`block px-3 py-2 text-sm rounded-lg transition ${
+                          isActive(ap("money-features/cash-wallet")) ||
+                          isActive(ap("money-features/wallet"))
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Wallet size={14} /> Cash wallet
+                        </span>
+                      </Link>
+                    )}
+                    {canUse(["coupons"]) && (
+                      <Link
+                        to={ap("money-features/gift-card")}
+                        className={`block px-3 py-2 text-sm rounded-lg transition ${
+                          isActive(ap("money-features/gift-card")) ||
+                          isActive(ap("money-features/giftcard"))
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Gift size={14} /> Gift card
+                        </span>
+                      </Link>
+                    )}
+                    {(isFullAdminUser || canUse(["rewards", "admin"])) && (
+                      <Link
+                        to={ap("money-features/points-wallet")}
+                        className={`block px-3 py-2 text-sm rounded-lg transition ${
+                          isActive(ap("money-features/points-wallet")) ||
+                          isActive(ap("money-features/redeem-coins")) ||
+                          isActive(ap("rewards"))
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Coins size={14} /> Points wallet
+                        </span>
+                      </Link>
+                    )}
+                    {canUse(["referral"]) && (
+                      <Link
+                        to={ap("money-features/refer-earn")}
+                        className={`block px-3 py-2 text-sm rounded-lg transition ${
+                          isActive(ap("money-features/refer-earn")) ||
+                          isActive(ap("referral"))
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Gift size={14} /> Refer & earn
+                        </span>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {canUse(["features"]) && (
             <Link

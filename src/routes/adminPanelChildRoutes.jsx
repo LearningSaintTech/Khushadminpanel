@@ -77,6 +77,10 @@ import UsersLayout from "../admin/components/users/UsersLayout";
 import RealUsersManage from "../admin/components/users/RealUsersManage";
 import FakeUsersManage from "../admin/components/users/FakeUsersManage";
 import Referral from "../admin/components/Refferal/Refferal";
+import MoneyFeaturesHub from "../admin/components/moneyFeatures/MoneyFeaturesHub";
+import MoneyFeaturesCashWallet from "../admin/components/moneyFeatures/MoneyFeaturesCashWallet";
+import MoneyFeaturesGiftCard from "../admin/components/moneyFeatures/MoneyFeaturesGiftCard";
+import MoneyFeaturesPointsWallet from "../admin/components/moneyFeatures/MoneyFeaturesPointsWallet";
 import AppPopup from "../admin/components/AppPopup/AppPopup";
 import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
 
@@ -140,7 +144,7 @@ export const adminPanelChildRoutes = [
   <Route key="pin" path="pincode" element={<PincodePage />} />,
   <Route key="pin-cr" path="pincode/create" element={<PincodeForm />} />,
   <Route key="pin-ed" path="pincode/edit/:pincode" element={<PincodeForm />} />,
-  <Route key="rewards" path="rewards" element={<Reward/>}/>,
+  <Route key="rewards" path="rewards" element={<Navigate to="money-features/points-wallet" replace />} />,
   <Route key="rewards-cr" path="rewards/create" element={<RewardForm/>}/>,
     <Route key="rewards-ed" path="rewards/edit/:id" element={<RewardForm/>}/>,
 
@@ -183,7 +187,15 @@ export const adminPanelChildRoutes = [
   <Route key="inf-cp-ed" path="influencer/coupons/edit/:id" element={<InfluencerCouponsForm />} />,
   <Route key="inf-cp-m" path="influencer/:id/coupons" element={<InfluencerCouponManage />} />,
   <Route key="rev" path="reviews" element={<Reviews />} />,
-  <Route key="ref" path="referral" element={<Referral/>}/>,
+  <Route key="ref" path="referral" element={<Navigate to="money-features/refer-earn" replace />} />,
+  <Route key="mf-index" path="money-features" element={<MoneyFeaturesHub />} />,
+  <Route key="mf-cash" path="money-features/cash-wallet" element={<MoneyFeaturesCashWallet />} />,
+  <Route key="mf-gift" path="money-features/gift-card" element={<MoneyFeaturesGiftCard />} />,
+  <Route key="mf-points" path="money-features/points-wallet" element={<MoneyFeaturesPointsWallet />} />,
+  <Route key="mf-refer" path="money-features/refer-earn" element={<Referral />} />,
+  <Route key="mf-wallet-redirect" path="money-features/wallet" element={<Navigate to="money-features/cash-wallet" replace />} />,
+  <Route key="mf-giftcard-redirect" path="money-features/giftcard" element={<Navigate to="money-features/gift-card" replace />} />,
+  <Route key="mf-coins-redirect" path="money-features/redeem-coins" element={<Navigate to="money-features/points-wallet" replace />} />,
   <Route key="prof" path="profile" element={<Profile />} />,
   <Route key="contact" path="contact-us" element={<ContactUs />} />,
   <Route key="notif" path="notifications" element={<AdminNotificationsPage />} />,

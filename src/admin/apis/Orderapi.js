@@ -54,6 +54,12 @@ const orderEndpoints = {
   /** POST: filters + allPages (default true) = all matching lines; maxExportRows (≤15000); or allPages false + page + limit */
   MANUFACTURING_SHEET_PDF: `/admin/orders/items/manufacturing-sheet`,
 
+  STALE_ORDERS_LIST: (hours = 24) =>
+    `/admin/orders/stale-alert/list?hours=${encodeURIComponent(hours)}`,
+  STALE_ORDERS_PDF: (hours = 24) =>
+    `/admin/orders/stale-alert/preview?hours=${encodeURIComponent(hours)}`,
+  STALE_ORDERS_RUN: `/admin/orders/stale-alert/run`,
+
   // Get Single Order (with item pagination)
   GET_SINGLE_ORDER: (orderId, itemPage = 1, itemLimit = 10) =>
     `/admin/orders/${orderId}?itemPage=${itemPage}&itemLimit=${itemLimit}`,
@@ -128,6 +134,26 @@ export const downloadManufacturingSheetPdf = (body = {}) => {
     {},
     { responseType: "blob", timeout: 300000 }
   );
+};
+
+/** Stale CONFIRMED lines (no status change for `hours`). */
+export const getStaleOrders = (hours = 24) => {
+  return apiConnector("GET", orderEndpoints.STALE_ORDERS_LIST(hours));
+};
+
+export const downloadStaleOrdersPdf = (hours = 24) => {
+  return apiConnector(
+    "GET",
+    orderEndpoints.STALE_ORDERS_PDF(hours),
+    null,
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
+export const runStaleOrderAlertEmail = (hours = 24) => {
+  return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
 export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType) => {
