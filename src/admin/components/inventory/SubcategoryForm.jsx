@@ -1,13 +1,19 @@
 // SubcategoryForm.jsx - Reusable form component for Create/Edit Subcategory
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, Upload, X } from "lucide-react";
 import {
   createSubcategory,
   updateSubcategory,
   getSubcategoriesByCategory,
 } from "../../apis/subcategoryapis";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import {
+  buildSubcategoryFormData,
+  logSubcategoryFormData,
+  parseSubcategoryFromApiResponse,
+  resolveSubcategoryIconUrl,
+} from "../../utils/subcategoryDisplay";
 
 function normalizeSubcategoryList(res) {
   const data = res?.data?.data || res?.data || res || {};
@@ -35,6 +41,8 @@ const SubcategoryForm = () => {
   const [form, setForm] = useState({
     name: "",
     description: "",
+    iconFile: null,
+    iconPreview: null,
     sortOrder: "",
     image: null,
     imagePreview: null,
@@ -97,6 +105,8 @@ const SubcategoryForm = () => {
             setForm({
               name: subcategory.name || "",
               description: subcategory.description || "",
+              iconFile: null,
+              iconPreview: resolveSubcategoryIconUrl(subcategory) || null,
               sortOrder: so,
               image: null,
               imagePreview: subcategory.imageUrl || null,
@@ -130,7 +140,15 @@ const SubcategoryForm = () => {
   const handleChange = (e) => {
     setBackendErrors([]);
     const { name, value, type, checked, files } = e.target;
-    if (name === "image") {
+    if (name === "iconUpload") {
+      const file = files?.[0] || null;
+      console.log("[SubcategoryForm] icon selected", file?.name, file?.size);
+      setForm({
+        ...form,
+        iconFile: file,
+        iconPreview: file ? URL.createObjectURL(file) : form.iconPreview,
+      });
+    } else if (name === "image") {
       const file = files?.[0] || null;
       setForm({
         ...form,
@@ -170,28 +188,34 @@ const SubcategoryForm = () => {
 
     try {
       setLoading(true);
-      const formData = new FormData();
-      formData.append("name", form.name.trim());
-      formData.append("description", form.description.trim());
-      formData.append("isActive", form.isActive);
-      formData.append("isNavbar", form.showInNavbar);
-      formData.append("isFooter", form.isFooter); // ✅ ADD THIS
-      if (form.image) formData.append("image", form.image);
-      if (!isEdit) {
-        formData.append("sortOrder", form.sortOrder?.trim() || "1");
-      } else if (editSortOrder) {
-        formData.append(
-          "sortOrder",
-          form.sortOrder?.trim() || originalSortOrder || "1"
-        );
-      }
+      console.log("[SubcategoryForm] submit", {
+        isEdit,
+        id,
+        categoryId,
+        hasIconFile: Boolean(form.iconFile),
+        iconFileName: form.iconFile?.name,
+      });
+      const formData = buildSubcategoryFormData(form, {
+        includeSortOrder: !isEdit || editSortOrder,
+        sortOrder: !isEdit
+          ? form.sortOrder?.trim() || "1"
+          : form.sortOrder?.trim() || originalSortOrder || "1",
+      });
+      logSubcategoryFormData(
+        isEdit ? "SubcategoryForm → PATCH" : "SubcategoryForm → POST",
+        formData,
+      );
 
       if (isEdit) {
-        await updateSubcategory(id, formData);
+        const res = await updateSubcategory(id, formData);
+        const updated = parseSubcategoryFromApiResponse(res);
+        console.log("[SubcategoryForm] update response", updated);
+        navigate(backUrl, { state: { refresh: true, updatedSubcategory: updated } });
       } else {
-        await createSubcategory(categoryId, formData);
+        const res = await createSubcategory(categoryId, formData);
+        console.log("[SubcategoryForm] create response", res);
+        navigate(backUrl);
       }
-      navigate(backUrl);
     } catch (err) {
       console.error("Error saving subcategory:", err);
       const msgs = extractBackendMessages(err);
@@ -277,6 +301,63 @@ const SubcategoryForm = () => {
                 rows={3}
                 className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
               />
+            </div>
+
+            {/* Icon file upload */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Icon
+                <span className="text-gray-500 font-normal ml-1">(optional)</span>
+              </label>
+              <p className="mb-2 text-xs text-gray-500">
+                Small icon for navigation (SVG, PNG, etc.). Sent as multipart field{" "}
+                <span className="font-mono text-gray-600">icon</span>.
+              </p>
+
+              {form.iconPreview && (
+                <div className="mb-3 relative inline-block">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBackendErrors([]);
+                      setForm((prev) => ({
+                        ...prev,
+                        iconFile: null,
+                        iconPreview: null,
+                      }));
+                    }}
+                    className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                    title="Remove icon"
+                    aria-label="Remove icon"
+                  >
+                    <X size={16} strokeWidth={2.5} />
+                  </button>
+                  <img
+                    src={form.iconPreview}
+                    alt="Icon preview"
+                    className="h-20 w-20 object-contain rounded-lg border-2 border-gray-200 bg-gray-50 p-1 shadow-sm"
+                  />
+                </div>
+              )}
+
+              <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
+                <div className="flex flex-col items-center justify-center">
+                  <Upload size={22} className="text-gray-400 group-hover:text-gray-600 mb-2" />
+                  <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                    {form.iconPreview ? "Change icon" : "Choose icon file"}
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1">
+                    SVG, PNG, JPG, WebP
+                  </span>
+                </div>
+                <input
+                  type="file"
+                  name="iconUpload"
+                  onChange={handleChange}
+                  accept="image/svg+xml,image/png,image/jpeg,image/webp,.svg"
+                  className="hidden"
+                />
+              </label>
             </div>
 
             {/* Sort Order — create: always; edit: only when checkbox enabled */}

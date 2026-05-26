@@ -77,6 +77,13 @@ import ActiveUsers from "../admin/components/users/ActiveUsers";
 import Referral from "../admin/components/Refferal/Refferal";
 import AppPopup from "../admin/components/AppPopup/AppPopup";
 import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
+import Gift from "../admin/components/Gift/Giftcard";
+import Giftform from "../admin/components/Gift/GIftform";
+import Sectionformnew from "../admin/components/Section/Sectionformnew";
+import Sectionnew from "../admin/components/Section/Sectionnew";
+import Faq from "../admin/components/Faq/Faq";
+import Marque from "../admin/components/Marque/Marque";
+import Feedback from "../admin/components/Feedback/Feedback";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -87,10 +94,11 @@ export const adminPanelChildRoutes = [
   <Route key="inv-cat-ed" path="inventory/categories/edit/:id" element={<CategoryForm />} />,
   <Route key="subcats" path="subcategoriess" element={<Showsubcategory />} />,
   <Route key="items" path="items" element={<ShowItems />} />,
+  // Standalone edit route before :categoryId/edit/:id (else "edit" is parsed as categoryId)
+  <Route key="inv-sc-standalone" path="inventory/subcategories/edit/:id" element={<SubcategoryEditStandalone />} />,
   <Route key="inv-sc" path="inventory/subcategories/:categoryId" element={<Subcategories />} />,
   <Route key="inv-sc-cr" path="inventory/subcategories/:categoryId/create" element={<SubcategoryForm />} />,
   <Route key="inv-sc-ed" path="inventory/subcategories/:categoryId/edit/:id" element={<SubcategoryForm />} />,
-  <Route key="inv-sc-standalone" path="inventory/subcategories/edit/:id" element={<SubcategoryEditStandalone />} />,
   <Route key="inv-it" path="inventory/items/:categoryId/:subcategoryId" element={<Items />} />,
   <Route key="inv-it-cr" path="inventory/items/:categoryId/:subcategoryId/create" element={<ItemForm />} />,
   <Route key="inv-it-ed" path="inventory/items/:categoryId/:subcategoryId/edit/:id" element={<ItemForm />} />,
@@ -121,6 +129,10 @@ export const adminPanelChildRoutes = [
   <Route key="filters" path="filters" element={<Filter />} />,
   <Route key="filters-cr" path="filters/create" element={<FilterForm />} />,
   <Route key="filters-ed" path="filters/edit/:id" element={<FilterForm />} />,
+  <Route key="feedback" path="feedback" element= {<Feedback/>}/>,
+  <Route key="gift" path="gift" element={<Gift />} />,
+  <Route key="gift-cr" path="gift/create" element={<Giftform />} />,
+  <Route key="gift-ed" path="gift/edit/:id" element={<Giftform />} />,
   <Route key="coupons" path="coupons" element={<CouponPage />} />,
   <Route key="coupons-cr" path="coupons/create" element={<CouponForm />} />,
   <Route key="coupons-ed" path="coupons/edit/:id" element={<CouponForm />} />,
@@ -136,6 +148,11 @@ export const adminPanelChildRoutes = [
   <Route key="rewards" path="rewards" element={<Reward/>}/>,
   <Route key="rewards-cr" path="rewards/create" element={<RewardForm/>}/>,
     <Route key="rewards-ed" path="rewards/edit/:id" element={<RewardForm/>}/>,
+    <Route key="sections" path="section" element={<Sectionnew/>}/>,
+    <Route key="sections-cr" path="section/create" element={<Sectionformnew/>}/>,
+      <Route key="sections-ed" path="section/edit/:id" element={<Sectionformnew/>}/>,
+      <Route key="faq" path="faq" element={<Faq/>}/>,
+      <Route key="marque" path="marque" element={<Marque/>}/>,
 
   <Route key="splash" path="splash" element={<SplashPage />} />,
   <Route key="splash-f" path="banner-form" element={<SplashForm />} />,

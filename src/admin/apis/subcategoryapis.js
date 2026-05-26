@@ -22,11 +22,24 @@ export const createSubcategory = (categoryId, formData) => {
     );
   };
   export const updateSubcategory = (subcategoryId, formData) => {
+    console.log("[Subcategory API] PATCH update", subcategoryId);
+    if (formData?.entries) {
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}:`, value.name, value.size, "bytes");
+        } else {
+          console.log(`  ${key}:`, value);
+        }
+      }
+    }
     return apiConnector(
       "PATCH",
       `/subcategories/update/${subcategoryId}`,
       formData // body
-    );
+    ).then((res) => {
+      console.log("[Subcategory API] PATCH response", res);
+      return res;
+    });
   };
   export const toggleSubcategoryActiveStatus = (subcategoryId) => {
     return apiConnector(

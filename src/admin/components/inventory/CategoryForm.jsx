@@ -19,6 +19,8 @@ const CategoryForm = () => {
   const [form, setForm] = useState({
     name: "",
     description: "",
+    iconFile: null,
+    iconPreview: null,
     sortOrder: 1,
     image: null,
     imagePreview: null,
@@ -56,9 +58,19 @@ const CategoryForm = () => {
           if (category) {
             const loadedSort = Number(category.sortOrder ?? 1);
 
+            const iconFromApi =
+              (typeof category.icon === "string" && category.icon.trim()) ||
+              (category.icon &&
+                typeof category.icon === "object" &&
+                String(category.icon.url || "").trim()) ||
+              (typeof category.iconUrl === "string" && category.iconUrl.trim()) ||
+              "";
+
             setForm({
               name: category.name || "",
               description: category.description || "",
+              iconFile: null,
+              iconPreview: iconFromApi || null,
               sortOrder: loadedSort,
               image: null,
               imagePreview: category.imageUrl || null,
@@ -109,6 +121,17 @@ const CategoryForm = () => {
     // Checkbox fields
     if (type === "checkbox") {
       setForm((prev) => ({ ...prev, [name]: checked }));
+      return;
+    }
+
+    // Icon file upload (multipart field name: icon)
+    if (name === "iconUpload") {
+      const file = files?.[0] || null;
+      setForm((prev) => ({
+        ...prev,
+        iconFile: file,
+        iconPreview: file ? URL.createObjectURL(file) : prev.iconPreview,
+      }));
       return;
     }
 
@@ -193,6 +216,9 @@ const CategoryForm = () => {
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.isNavbar);
       formData.append("isFooter", form.isFooter);
+      if (form.iconFile) {
+        formData.append("icon", form.iconFile);
+      }
 
       // Only include sortOrder when creating or when explicitly allowed during edit
       if (!isEdit || allowEditSortOrder) {
@@ -306,6 +332,66 @@ const CategoryForm = () => {
                   rows={3}
                   className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
                 />
+              </div>
+
+              {/* Icon file (navbar / UI — e.g. SVG, PNG) */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Icon
+                  <span className="text-gray-500 font-normal ml-1">(optional)</span>
+                </label>
+                <p className="mb-2 text-xs text-gray-500">
+                  Upload a small icon file (SVG, PNG, etc.). Sent as the multipart field{" "}
+                  <span className="font-mono text-gray-600">icon</span>.
+                </p>
+
+                {form.iconPreview && (
+                  <div className="mb-3 relative inline-block">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setForm((prev) => ({
+                          ...prev,
+                          iconFile: null,
+                          iconPreview: null,
+                        }));
+                      }}
+                      className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                      title="Remove icon"
+                      aria-label="Remove icon"
+                    >
+                      <X size={16} strokeWidth={2.5} />
+                    </button>
+                    <img
+                      src={form.iconPreview}
+                      alt="Icon preview"
+                      className="h-20 w-20 object-contain rounded-lg border-2 border-gray-200 bg-gray-50 p-1 shadow-sm"
+                    />
+                  </div>
+                )}
+
+                <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
+                  <div className="flex flex-col items-center justify-center">
+                    <Upload
+                      size={22}
+                      className="text-gray-400 group-hover:text-gray-600 mb-2"
+                    />
+                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                      {form.iconPreview ? "Change icon" : "Choose icon file"}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      SVG, PNG, JPG, WebP (recommended: square SVG)
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    name="iconUpload"
+                    onChange={handleChange}
+                    accept="image/svg+xml,image/png,image/jpeg,image/webp,.svg"
+                    className="hidden"
+                  />
+                </label>
               </div>
 
               {/* Sort Order */}

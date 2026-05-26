@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ZoomIn, X, Search, Plus, ArrowLeft, Edit } from "lucide-react";
+import { resolveSubcategoryIconUrl } from "../../utils/subcategoryDisplay";
 import {
   getSubcategoriesByCategory,
   toggleSubcategoryActiveStatus,
@@ -65,6 +66,15 @@ export default function Subcategories() {
         ...sub,
         isNavbar: sub.isNavbar ?? sub.showInNavbar ?? false,
       }));
+
+      console.log("[Subcategory] fetched", formattedSubs.length, "rows for category", categoryId);
+      formattedSubs.forEach((sub, idx) => {
+        console.log(`[Subcategory] row ${idx}`, sub._id, sub.name, {
+          iconUrl: sub.iconUrl,
+          iconKey: sub.iconKey,
+          resolvedIcon: resolveSubcategoryIconUrl(sub),
+        });
+      });
 
       setSubcategories(formattedSubs);
       setPagination(pag);
@@ -206,7 +216,7 @@ export default function Subcategories() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-16 text-center text-gray-500"
                     >
                       <div className="inline-flex items-center gap-3">
@@ -218,7 +228,7 @@ export default function Subcategories() {
                 ) : subcategories.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-16 text-center text-gray-500 italic"
                     >
                       {debouncedSearchTerm
@@ -227,7 +237,9 @@ export default function Subcategories() {
                     </td>
                   </tr>
                 ) : (
-                  subcategories.map((sub, i) => (
+                  subcategories.map((sub, i) => {
+                    const iconUrl = resolveSubcategoryIconUrl(sub);
+                    return (
                     <tr
                       key={sub._id}
                       className="group hover:bg-gray-50/70 transition-colors duration-150"
@@ -269,6 +281,32 @@ export default function Subcategories() {
                           ) : (
                             <div className="h-full w-full flex items-center justify-center text-gray-400 text-xs">
                               No img
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div
+                          className={`relative h-10 w-10 rounded-lg overflow-hidden bg-gray-50 border border-gray-200 ${
+                            iconUrl ? "cursor-pointer hover:ring-2 hover:ring-indigo-500" : ""
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (iconUrl) {
+                              setZoomedImage({ url: iconUrl, name: `${sub.name} icon` });
+                            }
+                          }}
+                          title={iconUrl ? "View icon" : "No icon"}
+                        >
+                          {iconUrl ? (
+                            <img
+                              src={iconUrl}
+                              alt=""
+                              className="h-full w-full object-contain p-0.5"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center text-gray-400 text-[10px]">
+                              —
                             </div>
                           )}
                         </div>
@@ -355,7 +393,8 @@ export default function Subcategories() {
                         </button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

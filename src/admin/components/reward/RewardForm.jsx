@@ -36,14 +36,10 @@ const RewardForm = () => {
     },
   });
 
-  // Prefill in edit mode
   useEffect(() => {
-    if (editData) {
-      setForm(editData);
-    }
+    if (editData) setForm(editData);
   }, [editData]);
 
-  /** Empty string / undefined only — omit from payload so server does not get null. */
   const toOptionalNumber = (val) => {
     if (val === "" || val === undefined || val === null) return undefined;
     const n = Number(val);
@@ -53,46 +49,33 @@ const RewardForm = () => {
   const toNumber = (val) => (val === "" || val === null || val === undefined ? null : Number(val));
 
   const inputClass =
-    "w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm";
+    "w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm text-gray-900 placeholder:text-gray-400";
 
-  const labelClass = "block text-sm font-medium text-gray-700 mb-1.5";
+  const labelClass = "block text-xs font-medium text-gray-600 mb-1.5";
 
-  // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     const payload = {
       earning_rules: {
         type: "SLAB_BASED",
-        slabs: form.earning_rules.slabs.map((s) => {
-          const min_price = toNumber(s.min_price);
-          const max_price = toNumber(s.max_price);
-          const points = toOptionalNumber(s.points);
-          const points_percentage = toOptionalNumber(s.points_percentage);
-          return {
-            min_price,
-            max_price,
-            ...(points !== undefined && { points }),
-            ...(points_percentage !== undefined && { points_percentage }),
-          };
-        }),
+        slabs: form.earning_rules.slabs.map((s) => ({
+          min_price: toNumber(s.min_price),
+          max_price: toNumber(s.max_price),
+          ...(toOptionalNumber(s.points) !== undefined && { points: toOptionalNumber(s.points) }),
+          ...(toOptionalNumber(s.points_percentage) !== undefined && { points_percentage: toOptionalNumber(s.points_percentage) }),
+        })),
       },
       redemption_rules: {
         min_points_required: toNumber(form.redemption_rules.min_points_required),
         point_value_in_currency: toNumber(form.redemption_rules.point_value_in_currency),
       },
-      recharge_bonus_rules: form.recharge_bonus_rules.map((r) => {
-        const min_amount = toNumber(r.min_amount);
-        const max_amount = toNumber(r.max_amount);
-        const cashToAdd = toOptionalNumber(r.cashToAdd);
-        const bonus_percentage = toOptionalNumber(r.bonus_percentage);
-        return {
-          min_amount,
-          max_amount,
-          ...(cashToAdd !== undefined && { cashToAdd }),
-          ...(bonus_percentage !== undefined && { bonus_percentage }),
-        };
-      }),
+      recharge_bonus_rules: form.recharge_bonus_rules.map((r) => ({
+        min_amount: toNumber(r.min_amount),
+        max_amount: toNumber(r.max_amount),
+        ...(toOptionalNumber(r.cashToAdd) !== undefined && { cashToAdd: toOptionalNumber(r.cashToAdd) }),
+        ...(toOptionalNumber(r.bonus_percentage) !== undefined && { bonus_percentage: toOptionalNumber(r.bonus_percentage) }),
+      })),
       expiry_rules: {
         expiry_days: toNumber(form.expiry_rules.expiry_days),
         expiry_strategy: form.expiry_rules.expiry_strategy,
@@ -101,9 +84,7 @@ const RewardForm = () => {
         max_points_earned_per_order: toNumber(form.limits.max_points_earned_per_order),
       },
       order_rules: {
-        eligible_for_rewards_min_order_value: toNumber(
-          form.order_rules.eligible_for_rewards_min_order_value
-        ),
+        eligible_for_rewards_min_order_value: toNumber(form.order_rules.eligible_for_rewards_min_order_value),
       },
     };
 
@@ -116,41 +97,34 @@ const RewardForm = () => {
       navigate("/admin/rewards");
     } catch (err) {
       console.error(err);
-      alert("Failed to save reward rule. Please check the inputs.");
+      alert("Failed to save reward rule. Please check your inputs.");
     }
   };
 
-  // Generic updater for simple fields
   const updateField = (path, value) => {
     setForm((prev) => {
       const keys = path.split(".");
       const newForm = { ...prev };
-
       let current = newForm;
       for (let i = 0; i < keys.length - 1; i++) {
         current[keys[i]] = { ...current[keys[i]] };
         current = current[keys[i]];
       }
       current[keys[keys.length - 1]] = value;
-
       return newForm;
     });
   };
 
-  // Updater for items inside arrays (slabs & recharge)
   const updateArrayItem = (arrayPath, index, field, value) => {
     setForm((prev) => {
-      const keys = arrayPath.split(".");
       const newForm = { ...prev };
-
+      const keys = arrayPath.split(".");
       let current = newForm;
+
       for (let i = 0; i < keys.length; i++) {
         if (i === keys.length - 1) {
-          current[keys[i]] = [...current[keys[i]]]; // copy the array
-          current[keys[i]][index] = {
-            ...current[keys[i]][index],
-            [field]: value,
-          };
+          current[keys[i]] = [...current[keys[i]]];
+          current[keys[i]][index] = { ...current[keys[i]][index], [field]: value };
         } else {
           current[keys[i]] = { ...current[keys[i]] };
           current = current[keys[i]];
@@ -165,10 +139,7 @@ const RewardForm = () => {
       ...prev,
       earning_rules: {
         ...prev.earning_rules,
-        slabs: [
-          ...prev.earning_rules.slabs,
-          { min_price: "", max_price: "", points: "", points_percentage: "" },
-        ],
+        slabs: [...prev.earning_rules.slabs, { min_price: "", max_price: "", points: "", points_percentage: "" }],
       },
     }));
   };
@@ -205,19 +176,20 @@ const RewardForm = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-6">
+        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl font-semibold text-gray-900">
             {id ? "Edit Reward Rule" : "Create New Reward Rule"}
           </h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-500 text-sm mt-1">
             Configure earning, redemption, and bonus rules for your users
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Order & Limits */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-xl font-semibold mb-6">📋 Order & Limits</h2>
+          <div className="bg-white rounded-2xl shadow border border-gray-100 p-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-6">Order & Limits</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className={labelClass}>Minimum Order Value (₹)</label>
@@ -243,8 +215,8 @@ const RewardForm = () => {
           </div>
 
           {/* Expiry Rules */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-xl font-semibold mb-6">⏳ Expiry Rules</h2>
+          <div className="bg-white rounded-2xl shadow border border-gray-100 p-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-6">Expiry Rules</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className={labelClass}>Expiry Days</label>
@@ -271,8 +243,8 @@ const RewardForm = () => {
           </div>
 
           {/* Redemption Rules */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <h2 className="text-xl font-semibold mb-6">💰 Redemption Rules</h2>
+          <div className="bg-white rounded-2xl shadow border border-gray-100 p-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-6">Redemption Rules</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className={labelClass}>Minimum Points Required</label>
@@ -292,28 +264,28 @@ const RewardForm = () => {
                   className={inputClass}
                   value={form.redemption_rules.point_value_in_currency || ""}
                   onChange={(e) => updateField("redemption_rules.point_value_in_currency", e.target.value)}
-                  placeholder="0.5"
+                  placeholder="0.50"
                 />
               </div>
             </div>
           </div>
 
           {/* Earning Slabs */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <div className="bg-white rounded-2xl shadow border border-gray-100 p-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">📈 Earning Slabs</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Earning Slabs</h2>
               <button
                 type="button"
                 onClick={addSlab}
-                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
               >
                 + Add Slab
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {form.earning_rules.slabs.map((slab, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-xl border border-gray-100">
                   <div>
                     <label className={labelClass}>Min Price (₹)</label>
                     <input
@@ -355,7 +327,7 @@ const RewardForm = () => {
                         <button
                           type="button"
                           onClick={() => removeSlab(index)}
-                          className="text-red-500 hover:text-red-600 self-end mb-1"
+                          className="text-red-500 hover:text-red-600 text-lg self-end"
                         >
                           ✕
                         </button>
@@ -368,21 +340,21 @@ const RewardForm = () => {
           </div>
 
           {/* Recharge Bonus */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          <div className="bg-white rounded-2xl shadow border border-gray-100 p-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold">⚡ Recharge Bonus</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Recharge Bonus</h2>
               <button
                 type="button"
                 onClick={addRecharge}
-                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
               >
                 + Add Recharge Slab
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {form.recharge_bonus_rules.map((bonus, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-5 bg-gray-50 rounded-xl border border-gray-100">
                   <div>
                     <label className={labelClass}>Min Amount (₹)</label>
                     <input
@@ -424,7 +396,7 @@ const RewardForm = () => {
                         <button
                           type="button"
                           onClick={() => removeRecharge(index)}
-                          className="text-red-500 hover:text-red-600 self-end mb-1"
+                          className="text-red-500 hover:text-red-600 text-lg self-end"
                         >
                           ✕
                         </button>
@@ -436,10 +408,11 @@ const RewardForm = () => {
             </div>
           </div>
 
-          <div className="flex justify-end">
+          {/* Submit */}
+          <div className="flex justify-end pt-4">
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-10 py-3.5 rounded-2xl shadow-md transition-all"
+              className="bg-black text-white font-medium px-8 py-3 rounded-2xl hover:bg-gray-800 transition-all text-sm"
             >
               {id ? "Update Reward Rule" : "Create Reward Rule"}
             </button>

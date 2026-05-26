@@ -3,13 +3,19 @@
 // Back / success → /admin/subcategoriess
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, Upload, X } from "lucide-react";
 import {
   updateSubcategory,
   getSubcategoriesByCategory,
   getAllSubcategories,
 } from "../../apis/subcategoryapis";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import {
+  buildSubcategoryFormData,
+  logSubcategoryFormData,
+  parseSubcategoryFromApiResponse,
+  resolveSubcategoryIconUrl,
+} from "../../utils/subcategoryDisplay";
 
 const BACK_URL = "/admin/subcategoriess";
 
@@ -28,6 +34,7 @@ export default function SubcategoryEditStandalone() {
   const location = useLocation();
   const categoryIdFromState = location.state?.categoryId;
   const subcategoryFromState = location.state?.subcategory;
+  const returnTo = location.state?.returnTo || BACK_URL;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,12 +47,14 @@ export default function SubcategoryEditStandalone() {
   const [form, setForm] = useState({
     name: "",
     description: "",
+    iconFile: null,
+    iconPreview: null,
     sortOrder: "1",
     image: null,
     imagePreview: null,
     isActive: true,
     showInNavbar: false,
-     isFooter: false,
+    isFooter: false,
   });
 
   function normalizeSubList(res) {
@@ -83,12 +92,14 @@ export default function SubcategoryEditStandalone() {
     setForm({
       name: subcategory.name || "",
       description: subcategory.description || "",
+      iconFile: null,
+      iconPreview: resolveSubcategoryIconUrl(subcategory) || null,
       sortOrder: so,
       image: null,
       imagePreview: subcategory.imageUrl || null,
       isActive: subcategory.isActive !== false,
       showInNavbar: subcategory.showInNavbar ?? subcategory.isNavbar ?? false,
-       isFooter: subcategory.isFooter ?? false, 
+      isFooter: subcategory.isFooter ?? false,
     });
   }
 
@@ -140,7 +151,15 @@ export default function SubcategoryEditStandalone() {
   const handleChange = (e) => {
     setBackendErrors([]);
     const { name, value, type, checked, files } = e.target;
-    if (name === "image") {
+    if (name === "iconUpload") {
+      const file = files?.[0] || null;
+      console.log("[SubcategoryEditStandalone] icon selected", file?.name, file?.size);
+      setForm((prev) => ({
+        ...prev,
+        iconFile: file,
+        iconPreview: file ? URL.createObjectURL(file) : prev.iconPreview,
+      }));
+    } else if (name === "image") {
       const file = files?.[0] || null;
       setForm((prev) => ({
         ...prev,
@@ -174,21 +193,30 @@ export default function SubcategoryEditStandalone() {
     setClientErrors({ name: "" });
     try {
       setSaving(true);
-      const formData = new FormData();
-      formData.append("name", form.name.trim());
-      formData.append("description", form.description.trim());
-      formData.append("isActive", form.isActive);
-      formData.append("isNavbar", form.showInNavbar);
-      formData.append("isFooter", form.isFooter); // ✅ ADD
-      if (form.image) formData.append("image", form.image);
-      if (editSortOrder) {
-        formData.append(
-          "sortOrder",
-          form.sortOrder?.trim() || originalSortOrder || "1"
-        );
-      }
-      await updateSubcategory(id, formData);
-      navigate(BACK_URL);
+      console.log("[SubcategoryEditStandalone] submit", {
+        id,
+        hasIconFile: Boolean(form.iconFile),
+        iconFileName: form.iconFile?.name,
+        hasImage: Boolean(form.image),
+        editSortOrder,
+      });
+      const formData = buildSubcategoryFormData(
+        { ...form, showInNavbar: form.showInNavbar },
+        {
+          includeSortOrder: editSortOrder,
+          sortOrder: form.sortOrder?.trim() || originalSortOrder || "1",
+        },
+      );
+      logSubcategoryFormData("SubcategoryEditStandalone → PATCH", formData);
+      const res = await updateSubcategory(id, formData);
+      const updated = parseSubcategoryFromApiResponse(res);
+      console.log("[SubcategoryEditStandalone] saved subcategory", updated);
+      navigate(returnTo, {
+        state: {
+          refresh: true,
+          updatedSubcategory: updated,
+        },
+      });
     } catch (err) {
       console.error("Error saving", err);
       const msgs = extractBackendMessages(err);
@@ -205,7 +233,7 @@ export default function SubcategoryEditStandalone() {
     }
   };
 
-  const goBack = () => navigate(BACK_URL);
+  const goBack = () => navigate(returnTo);
 
   if (loading) {
     return (
@@ -341,6 +369,50 @@ export default function SubcategoryEditStandalone() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Icon <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <p className="mb-2 text-xs text-gray-500">
+                Navbar / UI icon file (SVG, PNG, etc.). Uploaded as multipart field{" "}
+                <span className="font-mono text-gray-600">icon</span>.
+              </p>
+              {form.iconPreview && (
+                <div className="mb-3 relative inline-block">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({ ...prev, iconFile: null, iconPreview: null }))
+                    }
+                    className="absolute -top-1 -right-1 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                    title="Remove icon"
+                    aria-label="Remove icon"
+                  >
+                    <X size={16} strokeWidth={2.5} />
+                  </button>
+                  <img
+                    src={form.iconPreview}
+                    alt="Icon preview"
+                    className="h-20 w-20 object-contain rounded-lg border-2 border-gray-200 bg-gray-50 p-1"
+                  />
+                </div>
+              )}
+              <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group mb-6">
+                <Upload size={22} className="text-gray-400 group-hover:text-gray-600 mb-2" />
+                <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                  {form.iconPreview ? "Change icon" : "Choose icon file"}
+                </span>
+                <span className="text-xs text-gray-500 mt-1">SVG, PNG, JPG, WebP</span>
+                <input
+                  type="file"
+                  name="iconUpload"
+                  onChange={handleChange}
+                  accept="image/svg+xml,image/png,image/jpeg,image/webp,.svg"
+                  className="hidden"
+                />
+              </label>
             </div>
 
             <div>

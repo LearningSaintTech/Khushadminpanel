@@ -1,0 +1,758 @@
+import { useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
+import {
+  Activity,
+  LayoutDashboard,
+  Bell,
+  FileText,
+  Mail,
+  Megaphone,
+  Package,
+  Tags,
+  ShoppingCart,
+  Receipt,
+  ChevronDown,
+  ChevronRight,
+  Gift,
+  Building2,
+} from "lucide-react";
+import { GrDeliver } from "react-icons/gr";
+
+const ICON = 16;
+
+function matchesQuery(label, keywords, query) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (label.toLowerCase().includes(q)) return true;
+  return (keywords || []).some((k) => k.toLowerCase().includes(q));
+}
+
+export default function SidebarMainNav({
+  ap,
+  location,
+  canUse,
+  isActive,
+  searchQuery,
+  isNotificationSectionActive,
+  isAnalyticsSectionActive,
+  isAnalyticsOpen,
+  setIsAnalyticsOpen,
+  isCouponOpen,
+  setIsCouponOpen,
+  isInventoryOpen,
+  setIsInventoryOpen,
+  isNotificationOpen,
+  setIsNotificationOpen,
+  isTemplatesOpen,
+  setIsTemplatesOpen,
+  isPolicyOpen,
+  setIsPolicyOpen,
+}) {
+  const linkClass = (active) =>
+    `flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+      active
+        ? "bg-white/10 text-white"
+        : "text-gray-300 hover:bg-white hover:text-black"
+    }`;
+
+  const groupBtnClass = (active) =>
+    `w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+      active
+        ? "bg-white/10 text-white"
+        : "text-gray-300 hover:bg-white hover:text-black"
+    }`;
+
+  const subLinkClass = (active) =>
+    `block px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
+      active
+        ? "bg-white/10 text-white"
+        : "text-gray-400 hover:bg-white hover:text-black"
+    }`;
+
+  const iconClass = "text-gray-400 group-hover:text-black shrink-0";
+
+  const entries = useMemo(() => {
+    const list = [];
+
+    const push = (label, keywords, visible, node) => {
+      if (visible) list.push({ label, keywords: keywords || [], node });
+    };
+
+    push(
+      "Analytics",
+      ["analytics", "workspace", "events", "coupon"],
+      canUse(["admin"]) || canUse(["coupons"]),
+      <div key="analytics">
+        <button
+          type="button"
+          onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
+          className={groupBtnClass(isAnalyticsSectionActive())}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Activity size={ICON} className={iconClass} />
+            <span className="truncate">Analytics</span>
+          </div>
+          {isAnalyticsOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          )}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isAnalyticsOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            <Link
+              to={ap("analytics/events")}
+              className={subLinkClass(
+                isActive(ap("analytics/events")) ||
+                  isActive(ap("coupon-analytics")),
+              )}
+            >
+              Analytics Workspace
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "App Popups",
+      ["popup", "app"],
+      canUse(["banner"]),
+      <Link
+        key="app-popup"
+        to={ap("app-popup")}
+        className={linkClass(isActive(ap("app-popup")))}
+      >
+        <Megaphone size={ICON} className={iconClass} />
+        <span className="truncate">App Popups</span>
+      </Link>,
+    );
+
+    push(
+      "Banner",
+      ["banner", "splash"],
+      canUse(["banner"]),
+      <Link
+        key="banners"
+        to={ap("banners")}
+        className={linkClass(isActive(ap("banners")))}
+      >
+        <FileText size={ICON} className={iconClass} />
+        <span className="truncate">Banner</span>
+      </Link>,
+    );
+
+    push(
+      "Brands",
+      ["brand"],
+      canUse(["brands"]),
+      <Link
+        key="brands"
+        to={ap("brands")}
+        className={linkClass(isActive(ap("brands")))}
+      >
+        <FileText size={ICON} className={iconClass} />
+        <span className="truncate">Brands</span>
+      </Link>,
+    );
+
+    push(
+      "Cart Charges",
+      ["cart", "charges"],
+      canUse(["cart-charges"]),
+      <Link
+        key="cart-charges"
+        to={ap("cart-charges")}
+        className={linkClass(isActive(ap("cart-charges")))}
+      >
+        <Receipt size={ICON} className={iconClass} />
+        <span className="truncate">Cart Charges</span>
+      </Link>,
+    );
+
+    push(
+      "Contact Requests",
+      ["contact"],
+      canUse(["contact-us"]),
+      <Link
+        key="contact"
+        to={ap("contact-us")}
+        className={linkClass(isActive(ap("contact-us")))}
+      >
+        <Mail size={ICON} className={iconClass} />
+        <span className="truncate">Contact Requests</span>
+      </Link>,
+    );
+
+    push(
+      "Coupons",
+      ["coupon", "list"],
+      canUse(["coupons"]),
+      <div key="coupons">
+        <button
+          type="button"
+          onClick={() => setIsCouponOpen(!isCouponOpen)}
+          className={groupBtnClass(false)}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Tags size={ICON} className={iconClass} />
+            <span className="truncate">Coupons</span>
+          </div>
+          {isCouponOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          )}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isCouponOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1">
+            <Link to={ap("coupons")} className={subLinkClass(false)}>
+              Coupon List
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Dashboard",
+      ["dashboard", "home"],
+      canUse(["admin"]),
+      <Link
+        key="dashboard"
+        to={ap("dashboard")}
+        className={linkClass(isActive(ap("dashboard")))}
+      >
+        <LayoutDashboard size={ICON} className={iconClass} />
+        <span className="truncate">Dashboard</span>
+      </Link>,
+    );
+
+    push(
+      "Delivery",
+      ["delivery", "ship"],
+      canUse(["delivery"]),
+      <Link
+        key="delivery"
+        to={ap("delivery")}
+        className={linkClass(isActive(ap("delivery")))}
+      >
+        <GrDeliver size={ICON} className={iconClass} />
+        <span className="truncate">Delivery</span>
+      </Link>,
+    );
+
+    push(
+      "Exchange Orders",
+      ["exchange", "order"],
+      canUse(["admin"]),
+      <Link
+        key="exchange-orders"
+        to={ap("exchange-orders")}
+        className={linkClass(isActive(ap("exchange-orders")))}
+      >
+        <Receipt size={ICON} className={iconClass} />
+        <span className="truncate">Exchange Orders</span>
+      </Link>,
+    );
+
+    push(
+      "Faq",
+      ["faq", "question"],
+      canUse(["faq"]),
+      <Link
+        key="faq"
+        to={ap("faq")}
+        className={linkClass(isActive(ap("faq")))}
+      >
+        <ShoppingCart size={ICON} className={iconClass} />
+        <span className="truncate">Faq</span>
+      </Link>,
+    );
+
+    push(
+      "Features",
+      ["feature"],
+      canUse(["features"]),
+      <Link
+        key="features"
+        to={ap("features")}
+        className={linkClass(isActive(ap("features")))}
+      >
+        <Package size={ICON} className={iconClass} />
+        <span className="truncate">Features</span>
+      </Link>,
+    );
+
+    push(
+      "Feedback",
+      ["feedback", "review"],
+      canUse(["feedback"]),
+      <Link
+        key="feedback"
+        to={ap("feedback")}
+        className={linkClass(isActive(ap("feedback")))}
+      >
+        <Package size={ICON} className={iconClass} />
+        <span className="truncate">Feedback</span>
+      </Link>,
+    );
+
+    push(
+      "Filters",
+      ["filter"],
+      canUse(["filters"]),
+      <Link
+        key="filters"
+        to={ap("filters")}
+        className={linkClass(isActive(ap("filters")))}
+      >
+        <Package size={ICON} className={iconClass} />
+        <span className="truncate">Filters</span>
+      </Link>,
+    );
+
+    push(
+      "Gift cards",
+      ["gift", "card"],
+      canUse(["gift"]),
+      <Link
+        key="gift"
+        to={ap("gift")}
+        className={linkClass(location.pathname.startsWith(ap("gift")))}
+      >
+        <Gift size={ICON} className={iconClass} />
+        <span className="truncate">Gift cards</span>
+      </Link>,
+    );
+
+    push(
+      "Home banners",
+      ["home", "banner", "splash"],
+      canUse(["banner"]),
+      <Link
+        key="splash"
+        to={ap("splash")}
+        className={linkClass(isActive(ap("splash")))}
+      >
+        <Package size={ICON} className={iconClass} />
+        <span className="truncate">Home banners</span>
+      </Link>,
+    );
+
+    const inventoryLinks = [
+      {
+        label: "Categories",
+        to: ap("inventory/categories"),
+        active: location.pathname.includes(ap("inventory/categories")),
+        keywords: ["category"],
+      },
+      {
+        label: "Central Stock management",
+        to: ap("inventory/central"),
+        active: location.pathname.includes(ap("inventory/central")),
+        keywords: ["central", "stock"],
+      },
+      {
+        label: "Inventory codes",
+        to: ap("inventory-codes"),
+        active: location.pathname.includes(ap("inventory-codes")),
+        keywords: ["code"],
+      },
+      {
+        label: "Items",
+        to: ap("items"),
+        active: location.pathname.includes(ap("items")),
+        keywords: ["item", "product"],
+      },
+      {
+        label: "Stock management",
+        to: ap("stocks"),
+        active: location.pathname.includes(ap("stocks")),
+        keywords: ["stock"],
+      },
+      {
+        label: "SubCategories",
+        to: ap("subcategoriess"),
+        active: location.pathname.includes(ap("subcategoriess")),
+        keywords: ["subcategory"],
+      },
+    ].sort((a, b) => a.label.localeCompare(b.label));
+
+    push(
+      "Inventory",
+      ["inventory", "stock", "category", "items", ...inventoryLinks.map((l) => l.label)],
+      canUse(["categories", "subcategories", "items", "warehouse"]),
+      <div key="inventory">
+        <button
+          type="button"
+          onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+          className={groupBtnClass(isInventoryOpen)}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Package size={ICON} className={iconClass} />
+            <span className="truncate">Inventory</span>
+          </div>
+          {isInventoryOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          )}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isInventoryOpen ? "max-h-96 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {inventoryLinks.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={subLinkClass(item.active)}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Marque Text",
+      ["marque", "text", "ticker"],
+      canUse(["marque"]),
+      <Link
+        key="marque"
+        to={ap("marque")}
+        className={linkClass(isActive(ap("marque")))}
+      >
+        <ShoppingCart size={ICON} className={iconClass} />
+        <span className="truncate">Marque Text</span>
+      </Link>,
+    );
+
+    push(
+      "Notifications",
+      [
+        "notification",
+        "broadcast",
+        "template",
+        "email",
+        "history",
+        "test",
+        "sent",
+      ],
+      canUse(["admin"]),
+      <div key="notifications">
+        <button
+          type="button"
+          onClick={() => {
+            setIsNotificationOpen((o) => !o);
+            if (!isNotificationOpen) setIsTemplatesOpen(false);
+          }}
+          className={groupBtnClass(isNotificationSectionActive())}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Bell size={ICON} className={iconClass} />
+            <span className="truncate">Notifications</span>
+          </div>
+          {isNotificationOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          )}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isNotificationOpen
+              ? "max-h-[420px] opacity-100 mt-0.5"
+              : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-4 pr-1 py-1 space-y-0.5 border-l border-gray-700 ml-4">
+            <Link
+              to={ap("notifications")}
+              className={subLinkClass(location.pathname === ap("notifications"))}
+            >
+              All notifications
+            </Link>
+            <Link
+              to={ap("notifications/sent")}
+              className={subLinkClass(isActive(ap("notifications/sent")))}
+            >
+              All send notifications
+            </Link>
+            <div>
+              <button
+                type="button"
+                onClick={() => setIsTemplatesOpen((o) => !o)}
+                className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-medium rounded-md ${
+                  isActive(ap("notifications/templates")) ||
+                  isActive(ap("notifications/email-templates"))
+                    ? "bg-white/10 text-white"
+                    : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                }`}
+              >
+                Templates
+                {isTemplatesOpen ? (
+                  <ChevronDown size={12} />
+                ) : (
+                  <ChevronRight size={12} />
+                )}
+              </button>
+              <div
+                className={`overflow-hidden ${isTemplatesOpen ? "max-h-24" : "max-h-0"}`}
+              >
+                <Link
+                  to={ap("notifications/templates")}
+                  className="block pl-3 py-1 text-[10px] text-gray-500 hover:text-gray-300"
+                >
+                  In-app
+                </Link>
+                <Link
+                  to={ap("notifications/email-templates")}
+                  className="block pl-3 py-1 text-[10px] text-gray-500 hover:text-gray-300"
+                >
+                  Email
+                </Link>
+              </div>
+            </div>
+            <Link
+              to={ap("notifications/broadcast")}
+              className={subLinkClass(isActive(ap("notifications/broadcast")))}
+            >
+              Broadcast
+            </Link>
+            <Link
+              to={ap("notifications/history")}
+              className="block px-3 py-1.5 text-[11px] text-gray-500 hover:bg-white/5 hover:text-gray-400 rounded-md"
+            >
+              History
+            </Link>
+            <Link
+              to={ap("notifications/test")}
+              className="block px-3 py-1.5 text-[11px] text-gray-500 hover:bg-white/5 hover:text-gray-400 rounded-md"
+            >
+              Test
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Orders",
+      ["order"],
+      canUse(["admin"]),
+      <Link
+        key="orders"
+        to={ap("orders")}
+        className={linkClass(isActive(ap("orders")))}
+      >
+        <Package size={ICON} className={iconClass} />
+        <span className="truncate">Orders</span>
+      </Link>,
+    );
+
+    push(
+      "Pincode",
+      ["pincode", "pin", "serviceable"],
+      canUse(["servicablePincode"]),
+      <Link
+        key="pincode"
+        to={ap("pincode")}
+        className={linkClass(isActive(ap("pincode")))}
+      >
+        <Receipt size={ICON} className={iconClass} />
+        <span className="truncate">Pincode</span>
+      </Link>,
+    );
+
+    const policyChildren = [
+      canUse(["exchange"]) && {
+        label: "Exchange Policy",
+        to: ap("exchange"),
+        active: location.pathname.includes(ap("exchange")),
+      },
+      canUse(["admin"]) && {
+        label: "Cancellation Policy",
+        to: ap("cancellation"),
+        active: location.pathname.includes(ap("cancellation")),
+      },
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    push(
+      "Policy",
+      ["policy", "exchange", "cancellation", ...policyChildren.map((c) => c.label)],
+      canUse(["exchange", "admin"]),
+      <div key="policy">
+        <button
+          type="button"
+          onClick={() => setIsPolicyOpen(!isPolicyOpen)}
+          className={groupBtnClass(false)}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <ShoppingCart size={ICON} className={iconClass} />
+            <span className="truncate">Policy</span>
+          </div>
+          {isPolicyOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          )}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isPolicyOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {policyChildren.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={subLinkClass(item.active)}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Referral",
+      ["referral"],
+      canUse(["referral"]),
+      <Link
+        key="referral"
+        to={ap("referral")}
+        className={linkClass(isActive(ap("referral")))}
+      >
+        <FileText size={ICON} className={iconClass} />
+        <span className="truncate">Referral</span>
+      </Link>,
+    );
+
+    push(
+      "Reviews",
+      ["review"],
+      canUse(["reviews"]),
+      <Link
+        key="reviews"
+        to={ap("reviews")}
+        className={linkClass(isActive(ap("reviews")))}
+      >
+        <Receipt size={ICON} className={iconClass} />
+        <span className="truncate">Reviews</span>
+      </Link>,
+    );
+
+    push(
+      "Rewards",
+      ["reward", "wallet"],
+      canUse(["rewards"]),
+      <Link
+        key="rewards"
+        to={ap("rewards")}
+        className={linkClass(isActive(ap("wallet")))}
+      >
+        <FileText size={ICON} className={iconClass} />
+        <span className="truncate">Rewards</span>
+      </Link>,
+    );
+
+    push(
+      "Sections New",
+      ["section"],
+      canUse(["sections"]),
+      <Link
+        key="section"
+        to={ap("section")}
+        className={linkClass(isActive(ap("sections")))}
+      >
+        <ShoppingCart size={ICON} className={iconClass} />
+        <span className="truncate">Sections New</span>
+      </Link>,
+    );
+
+    push(
+      "Warehouse",
+      ["warehouse"],
+      canUse(["warehouse"]),
+      <Link
+        key="warehouse"
+        to={ap("warehouse")}
+        className={linkClass(isActive(ap("warehouse")))}
+      >
+        <Building2 size={ICON} className={iconClass} />
+        <span className="truncate">Warehouse</span>
+      </Link>,
+    );
+
+    const q = searchQuery.trim();
+    const filtered = q
+      ? list.filter((item) => matchesQuery(item.label, item.keywords, q))
+      : list;
+
+    const dashboard = filtered.filter((item) => item.label === "Dashboard");
+    const rest = filtered
+      .filter((item) => item.label !== "Dashboard")
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return [...dashboard, ...rest];
+  }, [
+    ap,
+    location.pathname,
+    canUse,
+    isActive,
+    searchQuery,
+    isAnalyticsSectionActive,
+    isAnalyticsOpen,
+    isCouponOpen,
+    isInventoryOpen,
+    isNotificationSectionActive,
+    isNotificationOpen,
+    isTemplatesOpen,
+    isPolicyOpen,
+  ]);
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return;
+    if (matchesQuery("Analytics", ["workspace", "events"], q))
+      setIsAnalyticsOpen(true);
+    if (matchesQuery("Coupons", ["coupon"], q)) setIsCouponOpen(true);
+    if (matchesQuery("Inventory", ["stock", "category", "items"], q))
+      setIsInventoryOpen(true);
+    if (matchesQuery("Notifications", ["broadcast", "template"], q))
+      setIsNotificationOpen(true);
+    if (matchesQuery("Policy", ["exchange", "cancellation"], q))
+      setIsPolicyOpen(true);
+    if (matchesQuery("Notifications", ["template", "email"], q))
+      setIsTemplatesOpen(true);
+  }, [searchQuery]);
+
+  if (entries.length === 0 && searchQuery.trim()) {
+    return (
+      <p className="px-3 py-6 text-center text-[11px] text-gray-500">
+        No menu items match &ldquo;{searchQuery}&rdquo;
+      </p>
+    );
+  }
+
+  return <div className="space-y-0.5">{entries.map((e) => e.node)}</div>;
+}

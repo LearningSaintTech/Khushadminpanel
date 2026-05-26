@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   getAllCategories,
 } from "../../apis/categoryapi";
@@ -11,9 +11,14 @@ import {
 } from "../../apis/subcategoryapis";
 import { ChevronDown, Edit, Plus, Search, ZoomIn, X } from "lucide-react";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import {
+  normalizeCategoryId,
+  resolveSubcategoryIconUrl,
+} from "../../utils/subcategoryDisplay";
 
 const Showsubcategory = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const categoryDropdownRef = useRef(null);
 
   const [categories, setCategories] = useState([]);
@@ -71,6 +76,23 @@ const Showsubcategory = () => {
   useEffect(() => {
     if (currentPage > 0) fetchSubcategories(currentPage);
   }, [currentPage, debouncedSearchTerm]);
+
+  // Refetch after returning from edit (list may be stale otherwise)
+  useEffect(() => {
+    if (!location.state?.refresh) return;
+    const updated = location.state?.updatedSubcategory;
+    (async () => {
+      await fetchSubcategories(currentPage);
+      if (updated?._id) {
+        setSubcategories((prev) =>
+          prev.map((s) =>
+            String(s._id) === String(updated._id) ? { ...s, ...updated } : s,
+          ),
+        );
+      }
+      navigate(location.pathname, { replace: true, state: {} });
+    })();
+  }, [location.state?.refresh]);
 
   useEffect(() => {
     setSearchTerm("");
@@ -181,10 +203,19 @@ const Showsubcategory = () => {
         ? subs.map((sub) => ({
             ...sub,
             isNavbar: sub.isNavbar ?? sub.showInNavbar ?? false,
-              isFooter: sub.isFooter ?? sub.showInFooter ?? false,
-            categoryId: sub.categoryId || sub.parentCategory || sub.category?._id || sub.category?.id || (typeof sub.category === 'string' ? sub.category : null),
+            isFooter: sub.isFooter ?? sub.showInFooter ?? false,
+            categoryId: normalizeCategoryId(sub),
           }))
         : [];
+
+      console.log("[showsubcategory] fetched", formattedSubs.length, "rows");
+      formattedSubs.forEach((sub, idx) => {
+        console.log(`[showsubcategory] row ${idx}`, sub._id, sub.name, {
+          iconUrl: sub.iconUrl,
+          iconKey: sub.iconKey,
+          resolvedIcon: resolveSubcategoryIconUrl(sub),
+        });
+      });
 
       setSubcategories(formattedSubs);
 
@@ -232,10 +263,13 @@ const Showsubcategory = () => {
   };
 
   const openEdit = (sub) => {
+    const categoryId = normalizeCategoryId(sub);
+    // Always use standalone edit from this page (avoids route treating "edit" as categoryId).
     navigate(`/admin/inventory/subcategories/edit/${sub._id}`, {
       state: {
-        categoryId: sub.categoryId || sub.parentCategory || sub.category?._id,
+        categoryId,
         subcategory: sub,
+        returnTo: "/admin/subcategoriess",
       },
     });
   };
@@ -486,6 +520,7 @@ const Showsubcategory = () => {
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Order</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Icon</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">Description</th>
                     <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
@@ -499,7 +534,7 @@ const Showsubcategory = () => {
                 <tbody className="bg-white divide-y divide-gray-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-16 text-center text-gray-500">
+                      <td colSpan={9} className="px-5 py-16 text-center text-gray-500">
                         <div className="inline-flex items-center gap-3">
                           <div className="w-6 h-6 border-2 border-gray-300 border-t-black rounded-full animate-spin"></div>
                           <span>Loading subcategories...</span>
@@ -508,7 +543,7 @@ const Showsubcategory = () => {
                     </tr>
                   ) : displayData.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-16 text-center text-gray-500 italic">
+                      <td colSpan={9} className="px-5 py-16 text-center text-gray-500 italic">
                         {debouncedSearchTerm
                           ? "No matching subcategories found..."
                           : selectedCategoryId
@@ -517,7 +552,9 @@ const Showsubcategory = () => {
                       </td>
                     </tr>
                   ) : (
-                    displayData.map((sub, i) => (
+                    displayData.map((sub, i) => {
+                      const iconUrl = resolveSubcategoryIconUrl(sub);
+                      return (
                       <tr
                         key={sub._id}
                         className="group hover:bg-gray-50/70 transition-colors duration-150"
@@ -553,6 +590,35 @@ const Showsubcategory = () => {
                             ) : (
                               <div className="h-full w-full flex items-center justify-center text-gray-400 text-xs">
                                 No img
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div
+                            className={`relative h-10 w-10 rounded-lg overflow-hidden bg-gray-50 border border-gray-200 shadow-sm ${
+                              iconUrl ? "cursor-pointer hover:ring-2 hover:ring-indigo-500" : ""
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (iconUrl) {
+                                setZoomedImage({ url: iconUrl, name: `${sub.name} icon` });
+                              }
+                            }}
+                            title={iconUrl ? "View icon" : "No icon — edit to upload"}
+                          >
+                            {iconUrl ? (
+                              <img
+                                src={iconUrl}
+                                alt=""
+                                className="h-full w-full object-contain p-0.5"
+                                onError={(e) => {
+                                  e.target.style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center text-gray-400 text-[10px]">
+                                —
                               </div>
                             )}
                           </div>
@@ -616,14 +682,15 @@ const Showsubcategory = () => {
                               openEdit(sub);
                             }}
                             className="inline-flex items-center gap-1.5 text-gray-700 hover:text-black font-medium transition px-2 py-1.5 rounded-md hover:bg-gray-100"
-                            title="Edit subcategory"
+                            title="Edit subcategory (name, image, icon, etc.)"
                           >
                             <Edit size={18} />
                             <span className="hidden sm:inline text-sm">Edit</span>
                           </button>
                         </td>
                       </tr>
-                    ))
+                    );
+                    })
                   )}
                 </tbody>
               </table>

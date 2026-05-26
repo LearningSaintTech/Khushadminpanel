@@ -3,6 +3,22 @@ import React, { useEffect, useState } from "react";
 import { getAllBanners, deleteBanner } from "../../apis/homebannerapi";
 import { useNavigate } from "react-router-dom";
 import { Plus, Edit, Trash2, ZoomIn, X } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+function firstBannerUrl(media) {
+  if (!media) return null;
+  const items = media.items;
+  if (Array.isArray(items) && items.length > 0) {
+    return items[0]?.url || null;
+  }
+  return media.url || null;
+}
+
+function bannerItemCount(media) {
+  if (!media) return 0;
+  if (Array.isArray(media.items)) return media.items.length;
+  return media.url ? 1 : 0;
+}
 
 const Banner = () => {
   const [banners, setBanners] = useState([]);
@@ -12,6 +28,7 @@ const Banner = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [zoomedImage, setZoomedImage] = useState(null);
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
 
   const fetchBanners = async (pageNum = 1) => {
     setLoading(true);
@@ -64,7 +81,7 @@ const Banner = () => {
               </p>
             </div>
             <button
-              onClick={() => navigate("/admin/banner-form")}
+              onClick={() => navigate(`${basePath}/banner-form`)}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-gray-900 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow-md transition-all"
             >
               <Plus size={18} />
@@ -91,7 +108,7 @@ const Banner = () => {
               Create your first banner to get started
             </p>
             <button
-              onClick={() => navigate("/admin/banner-form")}
+              onClick={() => navigate(`${basePath}/banner-form`)}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-gray-900 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow-md transition-all"
             >
               <Plus size={18} />
@@ -137,14 +154,19 @@ const Banner = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {banners.map((banner, idx) => {
-                      const desktopItems = banner.desktopBanner?.items;
-                      const desktopUrl = desktopItems?.length
-                        ? desktopItems[0].url
-                        : banner.desktopBanner?.url || null;
+                      const desktopUrl = firstBannerUrl(banner.desktopBanner);
+                      const desktopCount = bannerItemCount(banner.desktopBanner);
+                      const mobileUrl = firstBannerUrl(banner.mobileBanner);
+                      const mobileCount = bannerItemCount(banner.mobileBanner);
                       const isDesktopVideo =
                         banner.desktopBanner?.type === "video" ||
                         (desktopUrl && desktopUrl.toLowerCase().endsWith(".mp4"));
-                      const mobileUrl = banner.mobileBanner?.url || null;
+                      const categoryLabel =
+                        banner.type === "CATEGORY" && banner.categoryId
+                          ? typeof banner.categoryId === "object"
+                            ? banner.categoryId.name
+                            : null
+                          : null;
                       return (
                         <tr
                           key={banner._id}
@@ -187,6 +209,11 @@ const Banner = () => {
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded transition-all duration-200 opacity-0 group-hover:opacity-100">
                                   <ZoomIn className="h-2.5 w-2.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
+                                {desktopCount > 1 && (
+                                  <span className="absolute bottom-0 right-0 bg-black/75 text-white text-[8px] px-1 rounded-tl">
+                                    +{desktopCount - 1}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <div className="h-10 w-14 sm:h-12 sm:w-16 rounded bg-gray-100 border border-gray-200 flex items-center justify-center">
@@ -230,6 +257,11 @@ const Banner = () => {
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 rounded transition-all duration-200 opacity-0 group-hover:opacity-100">
                                   <ZoomIn className="h-2.5 w-2.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
+                                {mobileCount > 1 && (
+                                  <span className="absolute bottom-0 right-0 bg-black/75 text-white text-[8px] px-1 rounded-tl">
+                                    +{mobileCount - 1}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <div className="h-10 w-14 sm:h-12 sm:w-16 rounded bg-gray-100 border border-gray-200 flex items-center justify-center">
@@ -306,6 +338,14 @@ const Banner = () => {
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800 truncate max-w-full">
                               {banner.type || "—"}
                             </span>
+                            {categoryLabel && (
+                              <div
+                                className="mt-0.5 text-[10px] text-gray-500 truncate max-w-[120px]"
+                                title={categoryLabel}
+                              >
+                                {categoryLabel}
+                              </div>
+                            )}
                           </td>
                           <td className="hidden xl:table-cell px-2 py-2.5 text-xs text-gray-600">
                             {banner.discount ? (
@@ -331,7 +371,7 @@ const Banner = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  navigate(`/admin/banner-form/${banner._id}`);
+                                  navigate(`${basePath}/banner-form/${banner._id}`);
                                 }}
                                 className="inline-flex items-center gap-0.5 px-1.5 py-1 text-xs font-medium text-gray-700 hover:text-black hover:bg-gray-100 rounded transition-all"
                                 title="Edit banner"
