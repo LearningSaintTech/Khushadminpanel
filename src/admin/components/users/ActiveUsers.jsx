@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { getActiveUsers } from "../../apis/Dashboardapi";
+import { getActiveUsers } from "../../apis/userApi";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 
 export default function ActiveUsers() {
