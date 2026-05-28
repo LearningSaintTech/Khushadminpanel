@@ -80,6 +80,9 @@ const orderEndpoints = {
   /** Admin override: mark online payment SUCCESS and confirm order */
   FORCE_SUCCESS_PAYMENT: (orderId) => `/admin/orders/${orderId}/payment/force-success`,
 
+  /** Create one Shiprocket order per shipmentGroupId (NORMAL) */
+  CREATE_SHIPROCKET_FOR_SHIPMENTS: (orderId) => `/admin/orders/${orderId}/shiprocket/create`,
+
   // Update Single Item Status inside Order
   UPDATE_ITEM_STATUS: (orderId, itemId) =>
     `/admin/orders/${orderId}/items/${itemId}/status`,
@@ -205,6 +208,14 @@ export const forceSuccessPaymentAndConfirm = (orderId, body) => {
   return apiConnector(
     "POST",
     orderEndpoints.FORCE_SUCCESS_PAYMENT(orderId),
+    body
+  );
+};
+
+export const createShiprocketForOrderShipments = (orderId, body = {}) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.CREATE_SHIPROCKET_FOR_SHIPMENTS(orderId),
     body
   );
 };

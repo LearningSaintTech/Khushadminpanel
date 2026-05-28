@@ -22,6 +22,7 @@ import {
   runStaleOrderAlertEmail,
   appendOrderNote,
   forceSuccessPaymentAndConfirm,
+  createShiprocketForOrderShipments,
 } from "../../apis/Orderapi";
 import toast from "react-hot-toast";
 import {
@@ -774,6 +775,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "customer", label: "Customer name", defaultVisible: true },
   { key: "phone", label: "Customer phone", defaultVisible: true },
   { key: "email", label: "Email", defaultVisible: false },
+  { key: "notes", label: "Notes", defaultVisible: true },
   { key: "qty", label: "Quantity", defaultVisible: true },
   { key: "productName", label: "Dress / product name", defaultVisible: false },
   { key: "productId", label: "Catalog product ID", defaultVisible: false },
@@ -1543,6 +1545,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [paymentOverrideNotes, setPaymentOverrideNotes] = useState("");
   const [paymentOverrideSendNotification, setPaymentOverrideSendNotification] = useState(true);
   const [paymentOverrideSaving, setPaymentOverrideSaving] = useState(false);
+
+  const [createShiprocketLoading, setCreateShiprocketLoading] = useState(false);
 
   useEffect(() => {
     if (exchangeOnly && viewMode !== VIEW_ORDER) {
@@ -2410,6 +2414,27 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     }
   };
 
+  const handleCreateShiprocketSingleShipment = async () => {
+    const oid = selectedOrder?.orderId;
+    if (!oid) return;
+    if (
+      !window.confirm(
+        "Create Shiprocket order for this order's shipment group(s)? This will create ONE Shiprocket order per shipmentGroupId (NORMAL) and mark items as SHIPPED.",
+      )
+    )
+      return;
+    setCreateShiprocketLoading(true);
+    try {
+      await createShiprocketForOrderShipments(oid, {});
+      toast.success("Shiprocket order created");
+      await fetchSingleOrder(oid);
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to create Shiprocket order");
+    } finally {
+      setCreateShiprocketLoading(false);
+    }
+  };
+
   // Statuses that require a driver to be assigned before changing to this status
   const STATUS_REQUIRES_ASSIGNMENT = ["SHIPPED", "OUT_FOR_DELIVERY"];
   // After updating to these statuses, we open assignment modal so admin can assign a driver
@@ -3225,6 +3250,34 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             {order.user?.phoneNumber || order.address?.phone || "—"}
           </span>
         );
+      case "notes": {
+        const latestText =
+          (order?.latestOrderNote?.text != null
+            ? String(order.latestOrderNote.text)
+            : "") ||
+          // Fallback: order detail view includes full `orderNotes`
+          (Array.isArray(order.orderNotes) && order.orderNotes.length
+            ? String(order.orderNotes[order.orderNotes.length - 1]?.text || "")
+            : "");
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => openOrderNotesModal(order.orderId)}
+              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-50"
+              title="View all notes"
+            >
+              <StickyNote size={14} />
+            </button>
+            <span
+              className="block min-w-0 truncate text-xs text-gray-600"
+              title={latestText || "No notes"}
+            >
+              {latestText || "—"}
+            </span>
+          </div>
+        );
+      }
       case "qty":
         return order.totalItems || order.totalQuantity || order.items?.length || "?";
       case "total":
@@ -4651,6 +4704,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       <div className="flex flex-wrap items-center gap-4">
                         {getStatusBadge(getDisplayOrderStatus(selectedOrder))}
                         <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleCreateShiprocketSingleShipment}
+                            disabled={createShiprocketLoading}
+                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-60 inline-flex items-center gap-2"
+                            title="Creates one Shiprocket order per shipment group (NORMAL), not per item"
+                          >
+                            {createShiprocketLoading ? (
+                              <>
+                                <RefreshCw size={14} className="animate-spin" />
+                                Creating…
+                              </>
+                            ) : (
+                              "Create Shiprocket (single)"
+                            )}
+                          </button>
                           {String(selectedOrder?.payment?.mode || "").toUpperCase() !== "COD" &&
                             String(selectedOrder?.payment?.status || "").toUpperCase() === "PENDING" && (
                               <button
