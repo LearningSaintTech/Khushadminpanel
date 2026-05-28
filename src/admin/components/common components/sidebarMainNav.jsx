@@ -15,6 +15,10 @@ import {
   ChevronRight,
   Gift,
   Building2,
+  Users,
+  HandCoins,
+  Wallet,
+  Coins,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -47,20 +51,30 @@ export default function SidebarMainNav({
   setIsTemplatesOpen,
   isPolicyOpen,
   setIsPolicyOpen,
+  isUsersOpen,
+  setIsUsersOpen,
+  isUsersSectionActive,
+  isMoneyFeaturesOpen,
+  setIsMoneyFeaturesOpen,
+  isMoneyFeaturesSectionActive,
+  showMoneyFeatures,
+  isFullAdminUser,
+  compact = false,
 }) {
+  const showChildren = !compact;
   const linkClass = (active) =>
-    `flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+    `flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
         : "text-gray-300 hover:bg-white hover:text-black"
-    }`;
+    } ${compact ? "justify-center" : "gap-2"}`;
 
   const groupBtnClass = (active) =>
-    `w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+    `w-full flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
         : "text-gray-300 hover:bg-white hover:text-black"
-    }`;
+    } ${compact ? "justify-center" : "justify-between"}`;
 
   const subLinkClass = (active) =>
     `block px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
@@ -79,6 +93,48 @@ export default function SidebarMainNav({
     };
 
     push(
+      "Faq",
+      ["faq", "question", "help"],
+      canUse(["faq"]),
+      <Link
+        key="faq"
+        to={ap("faq")}
+        className={linkClass(isActive(ap("faq")))}
+      >
+        <FileText size={ICON} className={iconClass} />
+        <span className="truncate">Faq</span>
+      </Link>,
+    );
+
+    push(
+      "Gift cards",
+      ["gift", "card", "cards"],
+      canUse(["gift"]),
+      <Link
+        key="gift"
+        to={ap("gift")}
+        className={linkClass(location.pathname.startsWith(ap("gift")))}
+      >
+        <Gift size={ICON} className={iconClass} />
+        <span className="truncate">Gift cards</span>
+      </Link>,
+    );
+
+    push(
+      "Marque Text",
+      ["marque", "text", "ticker"],
+      canUse(["marque"]),
+      <Link
+        key="marque"
+        to={ap("marque")}
+        className={linkClass(location.pathname.startsWith(ap("marque")))}
+      >
+        <Megaphone size={ICON} className={iconClass} />
+        <span className="truncate">Marque Text</span>
+      </Link>,
+    );
+
+    push(
       "Analytics",
       ["analytics", "workspace", "events", "coupon"],
       canUse(["admin"]) || canUse(["coupons"]),
@@ -88,19 +144,19 @@ export default function SidebarMainNav({
           onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
           className={groupBtnClass(isAnalyticsSectionActive())}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
             <Activity size={ICON} className={iconClass} />
-            <span className="truncate">Analytics</span>
+            <span className="truncate">{compact ? "" : "Analytics"}</span>
           </div>
-          {isAnalyticsOpen ? (
+          {!compact && (isAnalyticsOpen ? (
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           ) : (
             <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          )}
+          ))}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isAnalyticsOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isAnalyticsOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1 space-y-0.5">
@@ -198,19 +254,19 @@ export default function SidebarMainNav({
           onClick={() => setIsCouponOpen(!isCouponOpen)}
           className={groupBtnClass(false)}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
             <Tags size={ICON} className={iconClass} />
-            <span className="truncate">Coupons</span>
+            <span className="truncate">{compact ? "" : "Coupons"}</span>
           </div>
-          {isCouponOpen ? (
+          {!compact && (isCouponOpen ? (
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           ) : (
             <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          )}
+          ))}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isCouponOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isCouponOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1">
@@ -265,20 +321,6 @@ export default function SidebarMainNav({
     );
 
     push(
-      "Faq",
-      ["faq", "question"],
-      canUse(["faq"]),
-      <Link
-        key="faq"
-        to={ap("faq")}
-        className={linkClass(isActive(ap("faq")))}
-      >
-        <ShoppingCart size={ICON} className={iconClass} />
-        <span className="truncate">Faq</span>
-      </Link>,
-    );
-
-    push(
       "Features",
       ["feature"],
       canUse(["features"]),
@@ -293,20 +335,6 @@ export default function SidebarMainNav({
     );
 
     push(
-      "Feedback",
-      ["feedback", "review"],
-      canUse(["feedback"]),
-      <Link
-        key="feedback"
-        to={ap("feedback")}
-        className={linkClass(isActive(ap("feedback")))}
-      >
-        <Package size={ICON} className={iconClass} />
-        <span className="truncate">Feedback</span>
-      </Link>,
-    );
-
-    push(
       "Filters",
       ["filter"],
       canUse(["filters"]),
@@ -317,20 +345,6 @@ export default function SidebarMainNav({
       >
         <Package size={ICON} className={iconClass} />
         <span className="truncate">Filters</span>
-      </Link>,
-    );
-
-    push(
-      "Gift cards",
-      ["gift", "card"],
-      canUse(["gift"]),
-      <Link
-        key="gift"
-        to={ap("gift")}
-        className={linkClass(location.pathname.startsWith(ap("gift")))}
-      >
-        <Gift size={ICON} className={iconClass} />
-        <span className="truncate">Gift cards</span>
       </Link>,
     );
 
@@ -397,19 +411,19 @@ export default function SidebarMainNav({
           onClick={() => setIsInventoryOpen(!isInventoryOpen)}
           className={groupBtnClass(isInventoryOpen)}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
             <Package size={ICON} className={iconClass} />
-            <span className="truncate">Inventory</span>
+            <span className="truncate">{compact ? "" : "Inventory"}</span>
           </div>
-          {isInventoryOpen ? (
+          {!compact && (isInventoryOpen ? (
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           ) : (
             <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          )}
+          ))}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isInventoryOpen ? "max-h-96 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isInventoryOpen ? "max-h-96 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1 space-y-0.5">
@@ -427,18 +441,111 @@ export default function SidebarMainNav({
       </div>,
     );
 
+    const moneyFeatureLinks = [
+      (isFullAdminUser || canUse(["admin"])) && {
+        label: "Cash wallet",
+        to: ap("money-features/cash-wallet"),
+        active:
+          isActive(ap("money-features/cash-wallet")) ||
+          isActive(ap("money-features/wallet")),
+        keywords: ["cash", "wallet"],
+        icon: Wallet,
+      },
+      canUse(["coupons"]) && {
+        label: "Gift card",
+        to: ap("money-features/gift-card"),
+        active:
+          isActive(ap("money-features/gift-card")) ||
+          isActive(ap("money-features/giftcard")),
+        keywords: ["gift"],
+        icon: Gift,
+      },
+      (isFullAdminUser || canUse(["admin"])) && {
+        label: "Overview",
+        to: ap("money-features"),
+        active:
+          location.pathname.endsWith("/money-features") ||
+          location.pathname.endsWith("/money-features/"),
+        keywords: ["money", "overview"],
+        icon: HandCoins,
+      },
+      (isFullAdminUser || canUse(["rewards", "admin"])) && {
+        label: "Points wallet",
+        to: ap("money-features/points-wallet"),
+        active:
+          isActive(ap("money-features/points-wallet")) ||
+          isActive(ap("money-features/redeem-coins")) ||
+          isActive(ap("rewards")),
+        keywords: ["points", "coins", "rewards"],
+        icon: Coins,
+      },
+      canUse(["referral"]) && {
+        label: "Refer & earn",
+        to: ap("money-features/refer-earn"),
+        active:
+          isActive(ap("money-features/refer-earn")) ||
+          isActive(ap("referral")),
+        keywords: ["referral", "refer"],
+        icon: Gift,
+      },
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
     push(
-      "Marque Text",
-      ["marque", "text", "ticker"],
-      canUse(["marque"]),
-      <Link
-        key="marque"
-        to={ap("marque")}
-        className={linkClass(isActive(ap("marque")))}
-      >
-        <ShoppingCart size={ICON} className={iconClass} />
-        <span className="truncate">Marque Text</span>
-      </Link>,
+      "Money features",
+      [
+        "money",
+        "wallet",
+        "gift",
+        "referral",
+        "rewards",
+        "points",
+        ...moneyFeatureLinks.map((l) => l.label),
+      ],
+      showMoneyFeatures,
+      <div key="money-features">
+        <button
+          type="button"
+          onClick={() => setIsMoneyFeaturesOpen(!isMoneyFeaturesOpen)}
+          className={groupBtnClass(isMoneyFeaturesSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <HandCoins size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Money features"}</span>
+          </div>
+          {!compact && (isMoneyFeaturesOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isMoneyFeaturesOpen
+              ? "max-h-80 opacity-100 mt-0.5"
+              : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {moneyFeatureLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={subLinkClass(item.active)}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon size={12} className="shrink-0" />
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>,
     );
 
     push(
@@ -462,19 +569,19 @@ export default function SidebarMainNav({
           }}
           className={groupBtnClass(isNotificationSectionActive())}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
             <Bell size={ICON} className={iconClass} />
-            <span className="truncate">Notifications</span>
+            <span className="truncate">{compact ? "" : "Notifications"}</span>
           </div>
-          {isNotificationOpen ? (
+          {!compact && (isNotificationOpen ? (
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           ) : (
             <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          )}
+          ))}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isNotificationOpen
+            showChildren && isNotificationOpen
               ? "max-h-[420px] opacity-100 mt-0.5"
               : "max-h-0 opacity-0"
           }`}
@@ -603,19 +710,19 @@ export default function SidebarMainNav({
           onClick={() => setIsPolicyOpen(!isPolicyOpen)}
           className={groupBtnClass(false)}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
             <ShoppingCart size={ICON} className={iconClass} />
-            <span className="truncate">Policy</span>
+            <span className="truncate">{compact ? "" : "Policy"}</span>
           </div>
-          {isPolicyOpen ? (
+          {!compact && (isPolicyOpen ? (
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           ) : (
             <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          )}
+          ))}
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isPolicyOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isPolicyOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1 space-y-0.5">
@@ -634,20 +741,6 @@ export default function SidebarMainNav({
     );
 
     push(
-      "Referral",
-      ["referral"],
-      canUse(["referral"]),
-      <Link
-        key="referral"
-        to={ap("referral")}
-        className={linkClass(isActive(ap("referral")))}
-      >
-        <FileText size={ICON} className={iconClass} />
-        <span className="truncate">Referral</span>
-      </Link>,
-    );
-
-    push(
       "Reviews",
       ["review"],
       canUse(["reviews"]),
@@ -661,32 +754,112 @@ export default function SidebarMainNav({
       </Link>,
     );
 
+
+    push(
+      "Referrals",
+      ["referral", "refer", "earn", "refer-earn", "refer & earn"],
+      canUse(["referral"]),
+      <Link
+        key="referrals-nav"
+        to={ap("money-features/refer-earn")}
+        className={linkClass(
+          location.pathname.startsWith(ap("referral")) ||
+            location.pathname.includes("/money-features/refer-earn") ||
+            location.pathname.includes("/money-features/refer"),
+        )}
+      >
+        <Gift size={ICON} className={iconClass} />
+        <span className="truncate">Referrals</span>
+      </Link>,
+    );
+
     push(
       "Rewards",
-      ["reward", "wallet"],
-      canUse(["rewards"]),
+      ["rewards", "points", "coins", "wallet", "redeem"],
+      isFullAdminUser || canUse(["rewards", "admin"]),
       <Link
-        key="rewards"
-        to={ap("rewards")}
-        className={linkClass(isActive(ap("wallet")))}
+        key="rewards-nav"
+        to={ap("wallet")}
+        className={linkClass(
+          location.pathname.startsWith(ap("wallet")) ||
+            location.pathname.startsWith(ap("rewards")) ||
+            location.pathname.includes("/rewards"),
+        )}
       >
-        <FileText size={ICON} className={iconClass} />
+        <Coins size={ICON} className={iconClass} />
         <span className="truncate">Rewards</span>
       </Link>,
     );
 
     push(
-      "Sections New",
-      ["section"],
-      canUse(["sections"]),
+      "Sections",
+      ["section", "sections"],
+      canUse(["section"]),
       <Link
-        key="section"
+        key="sections"
         to={ap("section")}
         className={linkClass(isActive(ap("sections")))}
       >
         <ShoppingCart size={ICON} className={iconClass} />
-        <span className="truncate">Sections New</span>
+        <span className="truncate">Sections</span>
       </Link>,
+    );
+
+    const userLinks = [
+      {
+        label: "Fake Users",
+        to: ap("users/fake"),
+        active: location.pathname.includes(ap("users/fake")),
+        keywords: ["fake"],
+      },
+      {
+        label: "User",
+        to: ap("users/real"),
+        active:
+          location.pathname.includes(ap("users/real")) ||
+          location.pathname.includes(ap("active-users")),
+        keywords: ["real", "active"],
+      },
+    ].sort((a, b) => a.label.localeCompare(b.label));
+
+    push(
+      "Users",
+      ["users", "fake", "real", "active"],
+      canUse(["admin"]),
+      <div key="users">
+        <button
+          type="button"
+          onClick={() => setIsUsersOpen(!isUsersOpen)}
+          className={groupBtnClass(isUsersSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <Users size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Users"}</span>
+          </div>
+          {!compact && (isUsersOpen ? (
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isUsersOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {userLinks.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={subLinkClass(item.active)}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>,
     );
 
     push(
@@ -728,6 +901,12 @@ export default function SidebarMainNav({
     isNotificationOpen,
     isTemplatesOpen,
     isPolicyOpen,
+    isUsersOpen,
+    isUsersSectionActive,
+    isMoneyFeaturesOpen,
+    isMoneyFeaturesSectionActive,
+    showMoneyFeatures,
+    isFullAdminUser,
   ]);
 
   useEffect(() => {
@@ -744,6 +923,13 @@ export default function SidebarMainNav({
       setIsPolicyOpen(true);
     if (matchesQuery("Notifications", ["template", "email"], q))
       setIsTemplatesOpen(true);
+    if (matchesQuery("Users", ["fake", "real"], q)) setIsUsersOpen(true);
+    if (matchesQuery("Money features", ["wallet", "gift", "referral"], q))
+      setIsMoneyFeaturesOpen(true);
+    if (matchesQuery("Referrals", ["referral", "refer", "earn"], q))
+      setIsMoneyFeaturesOpen(true);
+    if (matchesQuery("Rewards", ["rewards", "points", "coins"], q))
+      setIsMoneyFeaturesOpen(true);
   }, [searchQuery]);
 
   if (entries.length === 0 && searchQuery.trim()) {
@@ -754,5 +940,9 @@ export default function SidebarMainNav({
     );
   }
 
-  return <div className="space-y-0.5">{entries.map((e) => e.node)}</div>;
+  return (
+    <div className={`${compact ? "[&_.truncate]:hidden" : ""} space-y-0.5`}>
+      {entries.map((e) => e.node)}
+    </div>
+  );
 }

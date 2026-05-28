@@ -1,18 +1,57 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2, Ticket, Save } from "lucide-react";
 import {
   createCoupon,
   updateCoupon,
   getCouponById,
 } from "../../apis/Couponapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+const inputClass =
+  "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition disabled:bg-slate-50 disabled:text-slate-500";
+
+const labelClass = "mb-1 block text-[11px] font-medium text-slate-700";
+const hintClass = "mt-0.5 text-[10px] text-slate-400";
+const sectionClass =
+  "rounded-lg border border-slate-200 bg-slate-50/50 p-3 sm:p-3.5 space-y-3";
+
+function FieldLabel({ children, required, hint }) {
+  return (
+    <div className="mb-1">
+      <label className={labelClass}>
+        {children}
+        {required && <span className="text-rose-500"> *</span>}
+      </label>
+      {hint && <p className={hintClass}>{hint}</p>}
+    </div>
+  );
+}
+
+function Section({ title, description, children }) {
+  return (
+    <section className={sectionClass}>
+      <div className="border-b border-slate-200/80 pb-2 mb-1">
+        <h2 className="text-xs font-semibold text-slate-800">{title}</h2>
+        {description && (
+          <p className="mt-0.5 text-[10px] text-slate-500">{description}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 const CouponForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
   const isEdit = !!id;
 
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(isEdit);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     code: "",
@@ -31,13 +70,12 @@ const CouponForm = () => {
     isAutoIncluded: false,
   });
 
-  // Load coupon data if editing
   useEffect(() => {
     if (!isEdit) return;
 
     const loadCoupon = async () => {
       try {
-        setLoading(true);
+        setInitialLoad(true);
         const response = await getCouponById(id);
         const coupon = response?.data;
 
@@ -46,19 +84,17 @@ const CouponForm = () => {
             code: coupon.code || "",
             description: coupon.description || "",
             discountType: coupon.discountType || "PERCENT",
-            discountValue: coupon.discountValue || "",
-            maxDiscountAmount: coupon.maxDiscountAmount || "",
-            minCartValue: coupon.minCartValue || "",
+            discountValue: coupon.discountValue ?? "",
+            maxDiscountAmount: coupon.maxDiscountAmount ?? "",
+            minCartValue: coupon.minCartValue ?? "",
             maxCartValue:
               coupon.maxCartValue !== undefined && coupon.maxCartValue !== null
                 ? String(coupon.maxCartValue)
                 : "",
-            totalUsageLimit: coupon.totalUsageLimit || "",
+            totalUsageLimit: coupon.totalUsageLimit ?? "",
             perUserUsageLimit: coupon.perUserUsageLimit || "1",
             startDate: coupon.startDate ? coupon.startDate.split("T")[0] : "",
-            expiryDate: coupon.expiryDate
-              ? coupon.expiryDate.split("T")[0]
-              : "",
+            expiryDate: coupon.expiryDate ? coupon.expiryDate.split("T")[0] : "",
             applicableOn: coupon.applicableOn || "ALL",
             isInfluencer: !!coupon.isInfluencer,
             isAutoIncluded: !!coupon.isAutoIncluded,
@@ -70,7 +106,7 @@ const CouponForm = () => {
         console.error("Error loading coupon:", err);
         setError("Failed to load coupon");
       } finally {
-        setLoading(false);
+        setInitialLoad(false);
       }
     };
 
@@ -138,7 +174,7 @@ const CouponForm = () => {
         await createCoupon(payload);
       }
 
-      navigate("/admin/coupons");
+      navigate(ap("coupons"));
     } catch (err) {
       console.error("Save error:", err);
       setError(err.response?.data?.message || "Failed to save coupon");
@@ -147,104 +183,106 @@ const CouponForm = () => {
     }
   };
 
+  if (initialLoad) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center gap-2 text-xs text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+        Loading coupon…
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with Back Button and Title on Right */}
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-slate-50/80 pb-8">
+      {/* Header */}
+      <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
           <button
-            onClick={() => navigate("/admin/coupons")}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+            type="button"
+            onClick={() => navigate(ap("coupons"))}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
           >
-            <ArrowLeft
-              size={18}
-              className="group-hover:-translate-x-1 transition-transform"
-            />
-            <span>Back</span>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
           </button>
-          <div className="text-right">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {isEdit ? "Edit Coupon" : "Create Coupon"}
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {isEdit
-                ? "Update coupon information"
-                : "Create a new discount coupon"}
-            </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <Ticket className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 text-right sm:text-left">
+              <h1 className="truncate text-sm font-semibold text-slate-900">
+                {isEdit ? "Edit coupon" : "Create coupon"}
+              </h1>
+              <p className="text-[10px] text-slate-500 hidden sm:block">
+                {isEdit ? "Update discount settings" : "Add a new discount code"}
+              </p>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Form Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Error Message */}
-          {error && (
-            <div className="mx-6 mt-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
+      <div className="mx-auto max-w-3xl px-3 pt-3 sm:px-4">
+        {error && (
+          <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
+        >
+          <Section title="Basic" description="Code and short description">
+            <div>
+              <FieldLabel required hint="Max 20 characters, stored uppercase">
+                Coupon code
+              </FieldLabel>
+              <input
+                type="text"
+                name="code"
+                value={formData.code}
+                onChange={handleInputChange}
+                placeholder="HOLI30"
+                required
+                maxLength={20}
+                className={`${inputClass} max-w-xs font-mono uppercase tracking-wide`}
+              />
             </div>
-          )}
-
-          {/* Loading State */}
-          {loading && !isEdit && (
-            <div className="text-center py-12">
-              <div className="inline-flex items-center gap-2 text-gray-500">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-black rounded-full animate-spin"></div>
-                <span>Loading...</span>
-              </div>
+            <div>
+              <FieldLabel hint="Shown to admins; optional for customers">
+                Description
+              </FieldLabel>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="e.g. 30% off on Holi sale"
+                rows={2}
+                className={`${inputClass} resize-none`}
+              />
             </div>
-          )}
+          </Section>
 
-          <form onSubmit={handleSubmit} className="p-6 sm:p-8">
-            {/* Coupon Code - Small Input */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Coupon Code <span className="text-red-500">*</span>
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  name="code"
-                  value={formData.code}
-                  onChange={handleInputChange}
-                  placeholder="HOLI30"
-                  required
-                  maxLength={20}
-                  className="w-48 px-4 py-2.5 text-sm font-medium rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all uppercase tracking-wide placeholder:normal-case placeholder:text-gray-400"
-                />
-                <span className="text-xs text-gray-500">Max 20 characters</span>
-              </div>
-            </div>
-
-            {/* Discount Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <Section title="Discount" description="Type, value and cap">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Discount Type <span className="text-red-500">*</span>
-                </label>
+                <FieldLabel required>Discount type</FieldLabel>
                 <select
                   name="discountType"
                   value={formData.discountType}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all cursor-pointer"
+                  className={inputClass}
                 >
-                  <option value="PERCENT">PERCENT (%)</option>
-                  <option value="FIXED">FLAT (₹)</option>
+                  <option value="PERCENT">Percent (%)</option>
+                  <option value="FIXED">Flat (₹)</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Discount Value <span className="text-red-500">*</span>
-                </label>
+                <FieldLabel required>Value</FieldLabel>
                 <div className="relative">
-                  {formData.discountType === "PERCENT" ? (
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-                      %
-                    </span>
-                  ) : (
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-                      ₹
-                    </span>
-                  )}
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
+                    {formData.discountType === "PERCENT" ? "%" : "₹"}
+                  </span>
                   <input
                     type="number"
                     name="discountValue"
@@ -254,20 +292,14 @@ const CouponForm = () => {
                     step="0.01"
                     placeholder="30"
                     required
-                    className={`w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all ${formData.discountType === "PERCENT" ? "pl-8" : "pl-8"}`}
+                    className={`${inputClass} pl-7`}
                   />
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Max Discount{" "}
-                  <span className="text-xs text-gray-500 font-normal">
-                    (optional)
-                  </span>
-                </label>
+                <FieldLabel hint="For % discounts only">Max discount (₹)</FieldLabel>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
                     ₹
                   </span>
                   <input
@@ -277,76 +309,19 @@ const CouponForm = () => {
                     onChange={handleInputChange}
                     min="0"
                     placeholder="500"
-                    className="w-full px-4 py-2.5 pl-8 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                    className={`${inputClass} pl-7`}
                   />
                 </div>
               </div>
             </div>
+          </Section>
 
-            {/* Description */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Description{" "}
-                <span className="text-xs text-gray-500 font-normal">
-                  (optional)
-                </span>
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="e.g. 30% off on Holi Sale"
-                rows={2}
-                className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all resize-none placeholder:text-gray-400"
-              />
-            </div>
-
-            {/* Influencer coupon flag */}
-            <div className="mb-6">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <input
-                  type="checkbox"
-                  name="isInfluencer"
-                  checked={!!formData.isInfluencer}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                />
-                <span>Is influencer coupon</span>
-              </label>
-              <p className="mt-1 text-xs text-gray-500">
-                If checked, this coupon is treated as an influencer coupon and will also
-                appear in influencer coupon management.
-              </p>
-            </div>
-
-            {/* Auto included coupon flag */}
-            <div className="mb-6">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <input
-                  type="checkbox"
-                  name="isAutoIncluded"
-                  checked={!!formData.isAutoIncluded}
-                  onChange={handleInputChange}
-                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                />
-                <span>Auto include coupon</span>
-              </label>
-              <p className="mt-1 text-xs text-gray-500">
-                If checked, this coupon can be auto-applied by default in cart/checkout.
-              </p>
-            </div>
-
-            {/* Usage Limits & Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <Section title="Cart & usage limits">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Min Cart Value{" "}
-                  <span className="text-xs text-gray-500 font-normal">
-                    (optional)
-                  </span>
-                </label>
+                <FieldLabel hint="Optional">Min cart (₹)</FieldLabel>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
                     ₹
                   </span>
                   <input
@@ -356,19 +331,14 @@ const CouponForm = () => {
                     onChange={handleInputChange}
                     min="0"
                     placeholder="999"
-                    className="w-full px-4 py-2.5 pl-8 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                    className={`${inputClass} pl-7`}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Max Cart Value{" "}
-                  <span className="text-xs text-gray-500 font-normal">
-                    (optional)
-                  </span>
-                </label>
+                <FieldLabel hint="Optional">Max cart (₹)</FieldLabel>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">
                     ₹
                   </span>
                   <input
@@ -378,33 +348,24 @@ const CouponForm = () => {
                     onChange={handleInputChange}
                     min="0"
                     placeholder="5000"
-                    className="w-full px-4 py-2.5 pl-8 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                    className={`${inputClass} pl-7`}
                   />
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Total Usage Limit{" "}
-                  <span className="text-xs text-gray-500 font-normal">
-                    (optional)
-                  </span>
-                </label>
+                <FieldLabel hint="Blank = unlimited">Total uses</FieldLabel>
                 <input
                   type="number"
                   name="totalUsageLimit"
                   value={formData.totalUsageLimit}
                   onChange={handleInputChange}
                   min="0"
-                  placeholder="Unlimited if blank"
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                  placeholder="∞"
+                  className={inputClass}
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Per User Limit
-                </label>
+                <FieldLabel>Per user</FieldLabel>
                 <input
                   type="number"
                   name="perUserUsageLimit"
@@ -412,87 +373,118 @@ const CouponForm = () => {
                   onChange={handleInputChange}
                   min="1"
                   placeholder="1"
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all placeholder:text-gray-400"
+                  className={inputClass}
                 />
               </div>
             </div>
+          </Section>
 
-            {/* Validity Period */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <Section title="Validity">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Start Date <span className="text-red-500">*</span>
-                </label>
+                <FieldLabel required>Start date</FieldLabel>
                 <input
                   type="date"
                   name="startDate"
                   value={formData.startDate}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
+                  className={inputClass}
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
+                <FieldLabel required>Expiry date</FieldLabel>
                 <input
                   type="date"
                   name="expiryDate"
                   value={formData.expiryDate}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all"
+                  className={inputClass}
                 />
               </div>
             </div>
-
-            {/* Applicable On */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Applicable On
-              </label>
+            <div>
+              <FieldLabel>Applicable on</FieldLabel>
               <select
                 name="applicableOn"
                 value={formData.applicableOn}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition-all cursor-pointer"
+                className={inputClass}
               >
-                <option value="ALL">All Products</option>
-                <option value="CATEGORY">Specific Category</option>
-                <option value="PRODUCT">Specific Product</option>
+                <option value="ALL">All products</option>
+                <option value="CATEGORY">Specific category</option>
+                <option value="PRODUCT">Specific product</option>
               </select>
             </div>
+          </Section>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => navigate("/admin/coupons")}
-                className="px-6 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-black text-white font-semibold hover:bg-gray-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md text-sm"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Saving...
+          <Section title="Options">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/30 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/50">
+                <input
+                  type="checkbox"
+                  name="isInfluencer"
+                  checked={!!formData.isInfluencer}
+                  onChange={handleInputChange}
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-medium text-slate-800">
+                    Influencer coupon
                   </span>
-                ) : isEdit ? (
-                  "Update Coupon"
-                ) : (
-                  "Create Coupon"
-                )}
-              </button>
+                  <span className="block text-[10px] text-slate-500 leading-snug">
+                    Shows in influencer coupon management
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white p-2.5 transition hover:border-indigo-200 hover:bg-indigo-50/30 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/50">
+                <input
+                  type="checkbox"
+                  name="isAutoIncluded"
+                  checked={!!formData.isAutoIncluded}
+                  onChange={handleInputChange}
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-medium text-slate-800">
+                    Auto include
+                  </span>
+                  <span className="block text-[10px] text-slate-500 leading-snug">
+                    Can be auto-applied in cart / checkout
+                  </span>
+                </span>
+              </label>
             </div>
-          </form>
-        </div>
+          </Section>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => navigate(ap("coupons"))}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-4 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" />
+                  {isEdit ? "Update coupon" : "Create coupon"}
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

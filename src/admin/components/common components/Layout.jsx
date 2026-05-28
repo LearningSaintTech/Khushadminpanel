@@ -1,5 +1,5 @@
 // layouts/Layout.jsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell } from "lucide-react";
 import Sidebar from "../common components/sidebar";
@@ -19,6 +19,7 @@ function NotificationBadge({ count }) {
 function LayoutInner({ filterSidebar }) {
   const { unreadCount, refreshUnreadCount } = useNotification();
   const basePath = useAdminPanelBasePath();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -43,9 +44,18 @@ function LayoutInner({ filterSidebar }) {
       )}
 
       <div className="flex flex-1">
-        <Sidebar basePath={basePath} filterByModules={filterSidebar} />
+        <Sidebar
+          basePath={basePath}
+          filterByModules={filterSidebar}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        />
 
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:ml-60">
+        <main
+          className={`min-w-0 flex-1 p-4 sm:p-6 transition-[margin] duration-300 ${
+            sidebarCollapsed ? "lg:ml-16" : "lg:ml-60"
+          }`}
+        >
           <Outlet />
         </main>
       </div>

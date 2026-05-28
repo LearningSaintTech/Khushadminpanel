@@ -50,6 +50,7 @@ import Exchanges from "../admin/components/Policy/exchangePolicy";
 import Status from "../admin/components/Status/Status";
 import StatusPage from "../admin/components/Status/Statusform";
 import Orders from "../admin/components/orders/order";
+import StaleOrdersPage from "../admin/components/orders/StaleOrdersPage";
 import ExchangeOrders from "../admin/components/orders/ExchangeOrders";
 import Reviews from "../admin/components/Review/Reviews";
 import Cancellation from "../admin/components/Policy/cancellationPolicy";
@@ -157,6 +158,7 @@ export const adminPanelChildRoutes = [
   <Route key="pin-cr" path="pincode/create" element={<PincodeForm />} />,
   <Route key="pin-ed" path="pincode/edit/:pincode" element={<PincodeForm />} />,
   <Route key="rewards" path="rewards" element={<Navigate to="money-features/points-wallet" replace />} />,
+  <Route key="wallet" path="wallet" element={<Reward/>}/>,
   <Route key="rewards-cr" path="rewards/create" element={<RewardForm/>}/>,
     <Route key="rewards-ed" path="rewards/edit/:id" element={<RewardForm/>}/>,
     <Route key="sections" path="section" element={<Sectionnew/>}/>,
@@ -170,6 +172,7 @@ export const adminPanelChildRoutes = [
   <Route key="splash-f-id" path="banner-form/:id" element={<SplashForm />} />,
   <Route key="delivery" path="delivery" element={<Delivery />} />,
   <Route key="orders" path="orders" element={<Orders />} />,
+  <Route key="orders-stale" path="orders/stale" element={<StaleOrdersPage />} />,
   <Route key="exchange-orders" path="exchange-orders" element={<ExchangeOrders />} />,
   <Route key="subadm" path="subadmin" element={<SubAdmin />} />,
   <Route key="subadm-cr" path="subadmin/create" element={<SubAdminForm />} />,

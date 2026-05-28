@@ -38,3 +38,7 @@ export const getRewardTransactions = (
   if (source) url += `&source=${encodeURIComponent(source)}`;
   return apiConnector("GET", url);
 };
+
+/** POST /admin/wallet/adjust — credit or debit cash or reward wallet */
+export const adjustWallet = (body) =>
+  apiConnector("POST", `${BASE}/adjust`, body);

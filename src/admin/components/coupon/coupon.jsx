@@ -1,10 +1,42 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCoupons, toggleCouponStatus } from "../../apis/Couponapi";
-import { Plus, Edit } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  Plus,
+  Edit,
+  Eye,
+  Loader2,
+  Search,
+  X,
+  Ticket,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+
+const Badge = ({ children, tone = "slate" }) => {
+  const tones = {
+    slate: "bg-slate-100 text-slate-700",
+    green: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60",
+    red: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/60",
+    purple: "bg-violet-50 text-violet-700 ring-1 ring-violet-200/60",
+    blue: "bg-sky-50 text-sky-700 ring-1 ring-sky-200/60",
+    indigo: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200/60",
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none whitespace-nowrap ${tones[tone] || tones.slate}`}
+    >
+      {children}
+    </span>
+  );
+};
 
 const CouponPage = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -14,25 +46,19 @@ const CouponPage = () => {
   const [limit] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [influencerFilter, setInfluencerFilter] = useState("all"); // all | influencer | normal
-  const [autoIncludedFilter, setAutoIncludedFilter] = useState("all"); // all | auto | manual
-
-  // Modal states
+  const [influencerFilter, setInfluencerFilter] = useState("all");
+  const [autoIncludedFilter, setAutoIncludedFilter] = useState("all");
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 500);
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 400);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset page when search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, influencerFilter, autoIncludedFilter]);
 
   useEffect(() => {
     fetchCoupons();
@@ -44,29 +70,21 @@ const CouponPage = () => {
       setError(null);
 
       let isInfluencerParam;
-      if (influencerFilter === "influencer") {
-        isInfluencerParam = "true";
-      } else if (influencerFilter === "normal") {
-        isInfluencerParam = "false";
-      } else {
-        isInfluencerParam = undefined; // all
-      }
+      if (influencerFilter === "influencer") isInfluencerParam = "true";
+      else if (influencerFilter === "normal") isInfluencerParam = "false";
+      else isInfluencerParam = undefined;
 
       let isAutoIncludedParam;
-      if (autoIncludedFilter === "auto") {
-        isAutoIncludedParam = "true";
-      } else if (autoIncludedFilter === "manual") {
-        isAutoIncludedParam = "false";
-      } else {
-        isAutoIncludedParam = undefined; // all
-      }
+      if (autoIncludedFilter === "auto") isAutoIncludedParam = "true";
+      else if (autoIncludedFilter === "manual") isAutoIncludedParam = "false";
+      else isAutoIncludedParam = undefined;
 
       const response = await getCoupons(
         currentPage,
         limit,
         debouncedSearchTerm,
         isInfluencerParam,
-        isAutoIncludedParam
+        isAutoIncludedParam,
       );
       const data = response?.data?.data || response?.data || {};
       const couponsList = Array.isArray(data) ? data : data.coupons || data.data || [];
@@ -74,16 +92,13 @@ const CouponPage = () => {
       setCoupons(couponsList);
 
       const totalCount = data.total || response?.data?.total || 0;
-      const apiTotalPages = data.totalPages || data.pages || response?.data?.totalPages || response?.data?.pages;
+      const apiTotalPages =
+        data.totalPages || data.pages || response?.data?.totalPages || response?.data?.pages;
 
       let calculatedTotalPages = 1;
-      if (apiTotalPages) {
-        calculatedTotalPages = apiTotalPages;
-      } else if (totalCount > 0) {
-        calculatedTotalPages = Math.ceil(totalCount / limit);
-      } else if (couponsList.length === limit && currentPage === 1) {
-        calculatedTotalPages = 2;
-      }
+      if (apiTotalPages) calculatedTotalPages = apiTotalPages;
+      else if (totalCount > 0) calculatedTotalPages = Math.ceil(totalCount / limit);
+      else if (couponsList.length === limit && currentPage === 1) calculatedTotalPages = 2;
 
       setTotalPages(calculatedTotalPages);
     } catch (err) {
@@ -98,7 +113,7 @@ const CouponPage = () => {
     try {
       await toggleCouponStatus(id);
       setCoupons((prev) =>
-        prev.map((c) => (c._id === id ? { ...c, isActive: !c.isActive } : c))
+        prev.map((c) => (c._id === id ? { ...c, isActive: !c.isActive } : c)),
       );
     } catch (err) {
       console.error("Toggle error:", err);
@@ -106,207 +121,218 @@ const CouponPage = () => {
     }
   };
 
-  const handleViewCoupon = (coupon) => {
-    setSelectedCoupon(coupon);
-    setShowModal(true);
-  };
+  const formatDiscount = (coupon) =>
+    coupon.discountType === "PERCENT"
+      ? `${coupon.discountValue}%`
+      : `₹${coupon.discountValue}`;
+
+  const inputClass =
+    "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50/80">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
-          <div className="flex flex-col gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Coupons</h1>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="flex-1 flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  placeholder="Search coupons..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full sm:flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
-                />
-                <select
-                  value={influencerFilter}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setInfluencerFilter(e.target.value);
-                  }}
-                  className="w-full sm:w-56 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 bg-white shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
-                >
-                  <option value="all">All coupons</option>
-                  <option value="normal">Normal coupons only</option>
-                  <option value="influencer">Influencer coupons only</option>
-                </select>
-                <select
-                  value={autoIncludedFilter}
-                  onChange={(e) => {
-                    setCurrentPage(1);
-                    setAutoIncludedFilter(e.target.value);
-                  }}
-                  className="w-full sm:w-56 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-700 bg-white shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
-                >
-                  <option value="all">All include types</option>
-                  <option value="auto">Auto included only</option>
-                  <option value="manual">Manual apply only</option>
-                </select>
+      <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+                <Ticket className="h-4 w-4" />
               </div>
-              <button
-                onClick={() => navigate("/admin/coupons/create")}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-900 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md whitespace-nowrap"
-              >
-                <Plus size={18} />
-                Add Coupon
-              </button>
+              <div className="min-w-0">
+                <h1 className="text-sm font-semibold text-slate-900 truncate">
+                  Coupons
+                </h1>
+                <p className="text-[10px] text-slate-500 hidden sm:block">
+                  Manage discount codes & offers
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate(ap("coupons/create"))}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add coupon
+            </button>
+          </div>
+
+          <div className="mt-2.5 flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                placeholder="Search by code or description…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={`${inputClass} pl-8 pr-8`}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <select
+              value={influencerFilter}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setInfluencerFilter(e.target.value);
+              }}
+              className={`${inputClass} lg:w-44`}
+            >
+              <option value="all">All types</option>
+              <option value="normal">Normal only</option>
+              <option value="influencer">Influencer only</option>
+            </select>
+            <select
+              value={autoIncludedFilter}
+              onChange={(e) => {
+                setCurrentPage(1);
+                setAutoIncludedFilter(e.target.value);
+              }}
+              className={`${inputClass} lg:w-44`}
+            >
+              <option value="all">All inclusion</option>
+              <option value="auto">Auto included</option>
+              <option value="manual">Manual apply</option>
+            </select>
           </div>
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 lg:py-8">
+      <main className="mx-auto max-w-[1600px] px-3 py-3 sm:px-4">
         {error && (
-          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-gray-500">
-            <div className="inline-flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
-              <span>Loading coupons...</span>
-            </div>
+          <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+            Loading coupons…
           </div>
         ) : coupons.length === 0 ? (
-          <div className="text-center py-12 sm:py-16 bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-sm">
-            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <Plus size={24} className="text-gray-400" />
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-12 text-center shadow-sm">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+              <Ticket className="h-5 w-5 text-slate-400" />
             </div>
-            <p className="text-gray-500 mb-4 text-sm sm:text-base">No coupons found</p>
+            <p className="text-xs font-medium text-slate-600">No coupons found</p>
+            <p className="mt-1 text-[10px] text-slate-400">
+              Try adjusting filters or create a new coupon
+            </p>
             <button
-              onClick={() => navigate("/admin/coupons/create")}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-900 transition-all duration-200 text-sm font-medium"
+              type="button"
+              onClick={() => navigate(ap("coupons/create"))}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 transition-colors"
             >
-              <Plus size={16} />
-              Create your first coupon
+              <Plus className="h-3.5 w-3.5" />
+              Create coupon
             </button>
           </div>
         ) : (
           <>
-            {/* Desktop Table View */}
-            <div className="hidden md:block bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Code
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Discount
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Min Cart
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Influencer
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Auto Include
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-4 lg:px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Actions
-                      </th>
+                <table className="w-full min-w-[900px] border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/90">
+                      {[
+                        "Code",
+                        "Description",
+                        "Discount",
+                        "Min cart",
+                        "Type",
+                        "Include",
+                        "Status",
+                        "",
+                      ].map((h) => (
+                        <th
+                          key={h || "actions"}
+                          className={`px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 ${
+                            h === "" ? "text-right" : ""
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-slate-100">
                     {coupons.map((coupon) => (
-                      <tr key={coupon._id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 lg:px-6 py-3 sm:py-4">
-                          <span className="font-semibold text-gray-900 text-sm">{coupon.code}</span>
-                        </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4 text-sm text-gray-600 max-w-xs truncate">
-                          {coupon.description || "-"}
-                        </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4">
-                          <span className="text-sm font-medium text-gray-900">
-                            {coupon.discountType === "PERCENT"
-                              ? `${coupon.discountValue}%`
-                              : `₹${coupon.discountValue}`}
+                      <tr
+                        key={coupon._id}
+                        className="group transition-colors hover:bg-indigo-50/30"
+                      >
+                        <td className="px-2 py-1.5">
+                          <span className="font-mono text-[11px] font-semibold text-indigo-700">
+                            {coupon.code}
                           </span>
                         </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4 text-sm text-gray-600">
-                          ₹{coupon.minCartValue || "-"}
-                        </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4">
+                        <td className="max-w-[180px] px-2 py-1.5">
                           <span
-                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                              coupon.isInfluencer
-                                ? "bg-purple-100 text-purple-800"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
+                            className="block truncate text-[11px] text-slate-600"
+                            title={coupon.description || ""}
                           >
+                            {coupon.description || "—"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-[11px] font-medium text-slate-800">
+                          {formatDiscount(coupon)}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-[11px] text-slate-600">
+                          {coupon.minCartValue != null ? `₹${coupon.minCartValue}` : "—"}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Badge tone={coupon.isInfluencer ? "purple" : "slate"}>
                             {coupon.isInfluencer ? "Influencer" : "Normal"}
-                          </span>
+                          </Badge>
                         </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4">
-                          <span
-                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                              coupon.isAutoIncluded
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
+                        <td className="px-2 py-1.5">
+                          <Badge tone={coupon.isAutoIncluded ? "blue" : "slate"}>
                             {coupon.isAutoIncluded ? "Auto" : "Manual"}
-                          </span>
+                          </Badge>
                         </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4">
+                        <td className="px-2 py-1.5">
                           <button
+                            type="button"
                             onClick={() => handleToggleStatus(coupon._id)}
-                            className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full transition-all ${
-                              coupon.isActive
-                                ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-200"
-                            }`}
+                            className="rounded transition-opacity hover:opacity-80"
+                            title="Toggle status"
                           >
-                            {coupon.isActive ? "Active" : "Inactive"}
+                            <Badge tone={coupon.isActive ? "green" : "red"}>
+                              {coupon.isActive ? "Active" : "Inactive"}
+                            </Badge>
                           </button>
                         </td>
-                        <td className="px-4 lg:px-6 py-3 sm:py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-2 py-1.5 text-right">
+                          <div className="inline-flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
                             <button
-                              onClick={() => handleViewCoupon(coupon)}
-                              className="p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                              title="View Details"
+                              type="button"
+                              onClick={() => {
+                                setSelectedCoupon(coupon);
+                                setShowModal(true);
+                              }}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                              title="View"
                             >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                <circle cx="12" cy="12" r="3" />
-                              </svg>
+                              <Eye className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => navigate(`/admin/coupons/edit/${coupon._id}`)}
-                              className="p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                              type="button"
+                              onClick={() => navigate(ap(`coupons/edit/${coupon._id}`))}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
                               title="Edit"
                             >
-                              <Edit size={18} />
+                              <Edit className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
@@ -317,294 +343,245 @@ const CouponPage = () => {
               </div>
             </div>
 
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-3">
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-2">
               {coupons.map((coupon) => (
-                <div
+                <article
                   key={coupon._id}
-                  className="bg-white rounded-lg border border-gray-200 shadow-sm p-4"
+                  className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 text-sm mb-1 truncate">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-xs font-semibold text-indigo-700 truncate">
                         {coupon.code}
-                      </h3>
+                      </p>
                       {coupon.description && (
-                        <p className="text-xs text-gray-600 line-clamp-2 mb-2">
+                        <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">
                           {coupon.description}
                         </p>
                       )}
                     </div>
-                    <span
-                      className={`ml-2 flex-shrink-0 inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-                        coupon.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {coupon.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-
-                    <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
-                    <div>
-                      <span className="text-gray-500">Discount:</span>
-                      <span className="ml-1 font-medium text-gray-900">
-                        {coupon.discountType === "PERCENT"
-                          ? `${coupon.discountValue}%`
-                          : `₹${coupon.discountValue}`}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500">Min Cart:</span>
-                      <span className="ml-1 font-medium text-gray-900">
-                        ₹{coupon.minCartValue || "-"}
-                      </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Type:</span>
-                        <span className="ml-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium
-                          bg-gray-100 text-gray-700">
-                          {coupon.isInfluencer ? "Influencer coupon" : "Normal coupon"}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Inclusion:</span>
-                        <span
-                          className={`ml-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                            coupon.isAutoIncluded
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {coupon.isAutoIncluded ? "Auto included" : "Manual apply"}
-                        </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
                     <button
-                      onClick={() => handleViewCoupon(coupon)}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="View Details"
+                      type="button"
+                      onClick={() => handleToggleStatus(coupon._id)}
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => navigate(`/admin/coupons/edit/${coupon._id}`)}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <Edit size={18} />
+                      <Badge tone={coupon.isActive ? "green" : "red"}>
+                        {coupon.isActive ? "Active" : "Inactive"}
+                      </Badge>
                     </button>
                   </div>
-                </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <Badge tone="indigo">{formatDiscount(coupon)}</Badge>
+                    <Badge tone="slate">
+                      Min ₹{coupon.minCartValue ?? "—"}
+                    </Badge>
+                    <Badge tone={coupon.isInfluencer ? "purple" : "slate"}>
+                      {coupon.isInfluencer ? "Influencer" : "Normal"}
+                    </Badge>
+                    <Badge tone={coupon.isAutoIncluded ? "blue" : "slate"}>
+                      {coupon.isAutoIncluded ? "Auto" : "Manual"}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex justify-end gap-0.5 border-t border-slate-100 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCoupon(coupon);
+                        setShowModal(true);
+                      }}
+                      className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`coupons/edit/${coupon._id}`))}
+                      className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
 
             {/* Pagination */}
-            {coupons.length > 0 && totalPages > 0 && (
-              <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+            {totalPages > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button
+                  type="button"
                   onClick={() => currentPage > 1 && setCurrentPage(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
                 >
-                  Previous
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
                 </button>
-                <div className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-50 rounded-xl whitespace-nowrap">
-                  Page {currentPage} of {totalPages}
-                </div>
+                <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+                  {currentPage} / {totalPages}
+                </span>
                 <button
-                  onClick={() => currentPage < totalPages && setCurrentPage(currentPage + 1)}
+                  type="button"
+                  onClick={() =>
+                    currentPage < totalPages && setCurrentPage(currentPage + 1)
+                  }
                   disabled={currentPage >= totalPages}
-                  className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
                 >
                   Next
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
           </>
         )}
 
-        {/* ──────────────────────────────────────────────── */}
-        {/*                  DETAIL MODAL                    */}
-        {/* ──────────────────────────────────────────────── */}
+        {/* Detail modal */}
         {showModal && selectedCoupon && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              {/* Header */}
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-                <h2 className="text-xl font-bold text-gray-900">
-                  Coupon: <span className="text-black">{selectedCoupon.code}</span>
-                </h2>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-[2px]"
+            onClick={() => setShowModal(false)}
+          >
+            <div
+              className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                    Coupon details
+                  </p>
+                  <h2 className="truncate font-mono text-sm font-semibold text-indigo-700">
+                    {selectedCoupon.code}
+                  </h2>
+                </div>
                 <button
+                  type="button"
                   onClick={() => setShowModal(false)}
-                  className="text-gray-500 hover:text-gray-800 text-2xl leading-none"
+                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
-                  ×
+                  <X className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Body */}
-              <div className="p-6 space-y-6 text-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="overflow-y-auto px-3 py-2.5">
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
                   <div>
-                    <dt className="text-gray-500 font-medium">Code</dt>
-                    <dd className="mt-1 font-semibold">{selectedCoupon.code}</dd>
-                  </div>
-
-                  <div>
-                    <dt className="text-gray-500 font-medium">Status</dt>
-                    <dd className="mt-1">
-                      <span
-                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          selectedCoupon.isActive
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
+                    <dt className="text-[10px] text-slate-400">Status</dt>
+                    <dd className="mt-0.5">
+                      <Badge tone={selectedCoupon.isActive ? "green" : "red"}>
                         {selectedCoupon.isActive ? "Active" : "Inactive"}
-                      </span>
+                      </Badge>
                     </dd>
                   </div>
-
                   <div>
-                    <dt className="text-gray-500 font-medium">Discount</dt>
-                    <dd className="mt-1 font-medium">
-                      {selectedCoupon.discountType === "PERCENT"
-                        ? `${selectedCoupon.discountValue}%`
-                        : `₹${selectedCoupon.discountValue}`}
+                    <dt className="text-[10px] text-slate-400">Discount</dt>
+                    <dd className="mt-0.5 font-medium text-slate-800">
+                      {formatDiscount(selectedCoupon)}
                       {selectedCoupon.maxDiscountAmount && (
-                        <span className="text-gray-500 ml-2">
+                        <span className="ml-1 font-normal text-slate-500">
                           (max ₹{selectedCoupon.maxDiscountAmount})
                         </span>
                       )}
                     </dd>
                   </div>
-
                   <div>
-                    <dt className="text-gray-500 font-medium">Influencer Coupon</dt>
-                    <dd className="mt-1">
-                      <span
-                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          selectedCoupon.isInfluencer
-                            ? "bg-purple-100 text-purple-800"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {selectedCoupon.isInfluencer ? "Yes (influencer)" : "No (normal)"}
-                      </span>
+                    <dt className="text-[10px] text-slate-400">Type</dt>
+                    <dd className="mt-0.5">
+                      <Badge tone={selectedCoupon.isInfluencer ? "purple" : "slate"}>
+                        {selectedCoupon.isInfluencer ? "Influencer" : "Normal"}
+                      </Badge>
                     </dd>
                   </div>
-
                   <div>
-                    <dt className="text-gray-500 font-medium">Auto Included</dt>
-                    <dd className="mt-1">
-                      <span
-                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          selectedCoupon.isAutoIncluded
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {selectedCoupon.isAutoIncluded ? "Yes (auto apply)" : "No (manual apply)"}
-                      </span>
+                    <dt className="text-[10px] text-slate-400">Inclusion</dt>
+                    <dd className="mt-0.5">
+                      <Badge tone={selectedCoupon.isAutoIncluded ? "blue" : "slate"}>
+                        {selectedCoupon.isAutoIncluded ? "Auto" : "Manual"}
+                      </Badge>
                     </dd>
                   </div>
-
                   <div>
-                    <dt className="text-gray-500 font-medium">Min Cart Value</dt>
-                    <dd className="mt-1">₹{selectedCoupon.minCartValue || "—"}</dd>
-                  </div>
-
-                  <div>
-                    <dt className="text-gray-500 font-medium">Max Cart Value</dt>
-                    <dd className="mt-1">₹{selectedCoupon.maxCartValue || "—"}</dd>
-                  </div>
-
-                  <div>
-                    <dt className="text-gray-500 font-medium">Usage Limits</dt>
-                    <dd className="mt-1 space-y-1">
-                      <div>Total: {selectedCoupon.totalUsageLimit || "∞"}</div>
-                      <div>Per user: {selectedCoupon.perUserUsageLimit || "∞"}</div>
-                      <div>Used: {selectedCoupon.usedCount || 0}</div>
+                    <dt className="text-[10px] text-slate-400">Min cart</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      ₹{selectedCoupon.minCartValue ?? "—"}
                     </dd>
                   </div>
-
                   <div>
-                    <dt className="text-gray-500 font-medium">Validity Period</dt>
-                    <dd className="mt-1">
-                      {new Date(selectedCoupon.startDate).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                    <dt className="text-[10px] text-slate-400">Max cart</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      ₹{selectedCoupon.maxCartValue ?? "—"}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-slate-400">Usage</dt>
+                    <dd className="mt-0.5 text-slate-700">
+                      Total {selectedCoupon.totalUsageLimit || "∞"} · Per user{" "}
+                      {selectedCoupon.perUserUsageLimit || "∞"} · Used{" "}
+                      {selectedCoupon.usedCount || 0}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-slate-400">Validity</dt>
+                    <dd className="mt-0.5 text-slate-700">
+                      {selectedCoupon.startDate
+                        ? new Date(selectedCoupon.startDate).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "short", year: "numeric" },
+                          )
+                        : "—"}
                       {" → "}
-                      {new Date(selectedCoupon.expiryDate).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {selectedCoupon.expiryDate
+                        ? new Date(selectedCoupon.expiryDate).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "short", year: "numeric" },
+                          )
+                        : "—"}
                     </dd>
                   </div>
-
-                  <div className="col-span-1 sm:col-span-2">
-                    <dt className="text-gray-500 font-medium">Description</dt>
-                    <dd className="mt-1 text-gray-700 whitespace-pre-line">
-                      {selectedCoupon.description || "—"}
-                    </dd>
-                  </div>
-
-                  <div>
-                    <dt className="text-gray-500 font-medium">Applicable On</dt>
-                    <dd className="mt-1 font-medium">{selectedCoupon.applicableOn}</dd>
-                  </div>
-
-                  {selectedCoupon.categories?.length > 0 && (
-                    <div>
-                      <dt className="text-gray-500 font-medium">Categories</dt>
-                      <dd className="mt-1">{selectedCoupon.categories.join(", ")}</dd>
-                    </div>
-                  )}
-
-                  {selectedCoupon.influencerId && (
-                    <div>
-                      <dt className="text-gray-500 font-medium">Influencer Attached</dt>
-                      <dd className="mt-1 space-y-1">
-                        <div className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-800">
-                          Attached to influencer
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          ID:{" "}
-                          <span className="font-mono break-all">
-                            {selectedCoupon.influencerId}
-                          </span>
-                        </div>
+                  {selectedCoupon.description && (
+                    <div className="col-span-2">
+                      <dt className="text-[10px] text-slate-400">Description</dt>
+                      <dd className="mt-0.5 text-slate-700 whitespace-pre-line">
+                        {selectedCoupon.description}
                       </dd>
                     </div>
                   )}
-                </div>
+                  <div>
+                    <dt className="text-[10px] text-slate-400">Applicable on</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      {selectedCoupon.applicableOn || "—"}
+                    </dd>
+                  </div>
+                  {selectedCoupon.categories?.length > 0 && (
+                    <div>
+                      <dt className="text-[10px] text-slate-400">Categories</dt>
+                      <dd className="mt-0.5 text-slate-700 truncate">
+                        {selectedCoupon.categories.join(", ")}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
               </div>
 
-              {/* Footer */}
-              <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end">
+              <div className="flex justify-end gap-2 border-t border-slate-100 px-3 py-2">
                 <button
+                  type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition font-medium"
+                  className="rounded-md px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowModal(false);
+                    navigate(ap(`coupons/edit/${selectedCoupon._id}`));
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 transition-colors"
+                >
+                  <Edit className="h-3 w-3" />
+                  Edit
                 </button>
               </div>
             </div>

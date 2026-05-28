@@ -262,21 +262,21 @@ export default function SubcategoryEditStandalone() {
         <div className="flex items-center justify-between mb-8">
           <button
             onClick={goBack}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+            className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
             <span>Back to Subcategories</span>
           </button>
           <div className="text-right">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Edit Subcategory</h1>
-            <p className="mt-1 text-sm text-gray-500">Update subcategory (from all subcategories)</p>
+            <h1 className="text-base sm:text-lg font-bold text-gray-900">Edit Subcategory</h1>
+            <p className="mt-1 text-xs text-gray-500">Update subcategory (from all subcategories)</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {backendErrors.length > 0 && (
-              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs">
                 <div className="font-semibold mb-2">Please review:</div>
                 <ul className="list-disc list-inside space-y-1">
                   {backendErrors.map((msg, idx) => (
@@ -286,7 +286,7 @@ export default function SubcategoryEditStandalone() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Subcategory Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -295,23 +295,23 @@ export default function SubcategoryEditStandalone() {
                 value={form.name}
                 onChange={handleChange}
                 placeholder="Enter subcategory name"
-                className={`w-full px-3.5 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent ${
+                className={`w-full px-3.5 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent ${
                   clientErrors.name ? "border-red-400" : "border-gray-300"
                 }`}
               />
               {clientErrors.name && (
-                <p className="mt-1 text-sm text-red-600">{clientErrors.name}</p>
+                <p className="mt-1 text-xs text-red-600">{clientErrors.name}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
               <textarea
                 name="description"
                 value={form.description}
                 onChange={handleChange}
                 placeholder="Enter description"
                 rows={3}
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
               />
             </div>
 
@@ -325,7 +325,7 @@ export default function SubcategoryEditStandalone() {
                   className="mt-0.5 w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
                 />
                 <span>
-                  <span className="block text-sm font-semibold text-gray-800 group-hover:text-gray-900">
+                  <span className="block text-xs font-semibold text-gray-800 group-hover:text-gray-900">
                     Edit sort order
                   </span>
                   <span className="block text-xs text-gray-500 mt-0.5 font-normal">
@@ -345,7 +345,7 @@ export default function SubcategoryEditStandalone() {
               </label>
               {editSortOrder && (
                 <div className="pl-7 space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                     New sort order
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
@@ -356,13 +356,13 @@ export default function SubcategoryEditStandalone() {
                       onChange={handleChange}
                       placeholder="Sort order"
                       min="0"
-                      className="flex-1 min-w-0 px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                      className="flex-1 min-w-0 px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                     />
                     <button
                       type="button"
                       disabled={!categoryIdForSort}
                       onClick={() => suggestNextSortOrder()}
-                      className="shrink-0 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="shrink-0 px-4 py-2 text-xs font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Use next available
                     </button>
@@ -372,7 +372,7 @@ export default function SubcategoryEditStandalone() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Icon <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <p className="mb-2 text-xs text-gray-500">
@@ -401,7 +401,7 @@ export default function SubcategoryEditStandalone() {
               )}
               <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group mb-6">
                 <Upload size={22} className="text-gray-400 group-hover:text-gray-600 mb-2" />
-                <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
                   {form.iconPreview ? "Change icon" : "Choose icon file"}
                 </span>
                 <span className="text-xs text-gray-500 mt-1">SVG, PNG, JPG, WebP</span>
@@ -416,7 +416,7 @@ export default function SubcategoryEditStandalone() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Image <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               {form.imagePreview && (
@@ -439,7 +439,7 @@ export default function SubcategoryEditStandalone() {
               )}
               <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
                 <ImageIcon size={24} className="text-gray-400 mb-2" />
-                <span className="text-sm font-medium text-gray-600">
+                <span className="text-xs font-medium text-gray-600">
                   {form.imagePreview ? "Change Image" : "Choose Image"}
                 </span>
                 <input
@@ -460,7 +460,7 @@ export default function SubcategoryEditStandalone() {
                   onChange={handleChange}
                   className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
                 />
-                <span className="text-sm font-medium text-gray-700">Active</span>
+                <span className="text-xs font-medium text-gray-700">Active</span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
@@ -471,7 +471,7 @@ export default function SubcategoryEditStandalone() {
                   disabled={!form.isActive}
                   className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black disabled:opacity-50"
                 />
-                <span className="text-sm font-medium text-gray-700">Show in Navbar</span>
+                <span className="text-xs font-medium text-gray-700">Show in Navbar</span>
               </label>
 
               <label className="flex items-center gap-2.5 cursor-pointer">
@@ -483,7 +483,7 @@ export default function SubcategoryEditStandalone() {
     disabled={!form.isActive}
     className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black disabled:opacity-50"
   />
-  <span className="text-sm font-medium text-gray-700">
+  <span className="text-xs font-medium text-gray-700">
     Show in Footer
   </span>
 </label>
@@ -492,14 +492,14 @@ export default function SubcategoryEditStandalone() {
               <button
                 type="button"
                 onClick={goBack}
-                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                className="px-6 py-2 text-xs font-medium text-white bg-black rounded-lg hover:bg-gray-800 disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Update Subcategory"}
               </button>

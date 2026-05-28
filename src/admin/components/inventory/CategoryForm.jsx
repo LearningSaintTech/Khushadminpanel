@@ -274,7 +274,7 @@ const CategoryForm = () => {
     <>
       {successMessage && (
         <div className="max-w-4xl mx-auto mt-4">
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-xs">
             {successMessage}
           </div>
         </div>
@@ -286,27 +286,27 @@ const CategoryForm = () => {
           <div className="flex items-center justify-between mb-8">
             <button
               onClick={() => navigate("/admin/inventory/categories")}
-              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+              className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors group"
             >
               <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
               <span>Back</span>
             </button>
             <div className="text-right">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900">
                 {isEdit ? "Edit Category" : "Create Category"}
               </h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs text-gray-500">
                 {isEdit ? "Update category information" : "Add a new category"}
               </p>
             </div>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Category Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -315,13 +315,13 @@ const CategoryForm = () => {
                   value={form.name}
                   onChange={handleChange}
                   placeholder="Enter category name"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Description
                 </label>
                 <textarea
@@ -330,13 +330,13 @@ const CategoryForm = () => {
                   onChange={handleChange}
                   placeholder="Enter category description"
                   rows={3}
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
+                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
                 />
               </div>
 
               {/* Icon file (navbar / UI — e.g. SVG, PNG) */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Icon
                   <span className="text-gray-500 font-normal ml-1">(optional)</span>
                 </label>
@@ -377,7 +377,7 @@ const CategoryForm = () => {
                       size={22}
                       className="text-gray-400 group-hover:text-gray-600 mb-2"
                     />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
                       {form.iconPreview ? "Change icon" : "Choose icon file"}
                     </span>
                     <span className="text-xs text-gray-500 mt-1">
@@ -396,7 +396,7 @@ const CategoryForm = () => {
 
               {/* Sort Order */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Sort Order{" "}
                   {!isEdit && (
                     <span className="text-gray-500 font-normal">
@@ -410,13 +410,13 @@ const CategoryForm = () => {
                   value={form.sortOrder}
                   onChange={handleChange}
                   disabled={isEdit && !allowEditSortOrder}
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500"
+                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500"
                   min="1"
                   step="1"
                 />
 
                 {isEdit && (
-                  <label className="flex items-center gap-2 mt-2 text-sm text-gray-600 cursor-pointer">
+                  <label className="flex items-center gap-2 mt-2 text-xs text-gray-600 cursor-pointer">
                     <input
                       type="checkbox"
                       name="allowEditSortOrder"
@@ -435,7 +435,7 @@ const CategoryForm = () => {
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Category Image{" "}
                   {isEdit ? (
                     <span className="text-gray-400 font-normal">(optional)</span>
@@ -496,7 +496,7 @@ const CategoryForm = () => {
                       size={24}
                       className="text-gray-400 group-hover:text-gray-600 mb-2"
                     />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-900">
+                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
                       {form.imagePreview ? "Change Image" : "Choose Image"}
                     </span>
                     <span className="text-xs text-gray-500 mt-1">
@@ -523,7 +523,7 @@ const CategoryForm = () => {
                     onChange={handleChange}
                     className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
                   />
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
                     Active
                   </span>
                 </label>
@@ -536,7 +536,7 @@ const CategoryForm = () => {
                     onChange={handleChange}
                     className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
                   />
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
                     Show in Navbar
                   </span>
                 </label>
@@ -549,7 +549,7 @@ const CategoryForm = () => {
                     onChange={handleChange}
                     className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
                   />
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
                     Show in Footer
                   </span>
                 </label>
@@ -557,7 +557,7 @@ const CategoryForm = () => {
 
               {/* Error */}
               {submitError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-xs">
                   {submitError}
                 </div>
               )}
@@ -567,14 +567,14 @@ const CategoryForm = () => {
                 <button
                   type="button"
                   onClick={() => navigate("/admin/inventory/categories")}
-                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 text-xs font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading
                     ? "Saving..."

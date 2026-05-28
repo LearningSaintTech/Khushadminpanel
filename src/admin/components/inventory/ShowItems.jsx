@@ -5,12 +5,14 @@ import {
   Search,
   Edit,
   Plus,
-  ZoomIn,
   X,
   Eye,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Warehouse,
   Loader2,
+  Package,
 } from "lucide-react";
 import {
   searchItems,
@@ -60,6 +62,22 @@ function normalizeWarehouseRows(res) {
   const list = payload.data ?? payload.stock ?? payload.items ?? [];
   return Array.isArray(list) ? list : [];
 }
+
+const inputClass =
+  "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition disabled:bg-slate-50 disabled:cursor-not-allowed";
+const labelClass = "mb-1 block text-[11px] font-medium text-slate-700";
+const dropdownBtnClass = `${inputClass} flex items-center justify-between gap-2`;
+const btnPrimary =
+  "inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors";
+const btnOutline =
+  "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors";
+const thClass =
+  "px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap bg-slate-50/90 border-b border-slate-200";
+const tdClass = "px-2 py-1.5 text-[11px] text-slate-600 align-middle";
+const badgeActive =
+  "inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60";
+const badgeInactive =
+  "inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-200/60";
 
 const ShowItems = () => {
   const navigate = useNavigate();
@@ -928,35 +946,38 @@ const ShowItems = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/70">
+    <div className="min-h-screen bg-slate-50/80">
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b z-10">
-        <div className="px-6 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">All Items</h1>
-          <p className="mt-2 text-sm text-gray-600 max-w-2xl">
-            To move central stock into a warehouse for every SKU on a product at
-            once, open{" "}
-            <Link
-              to="/admin/inventory/stock-management"
-              className="font-medium text-gray-900 underline underline-offset-2 hover:no-underline"
-            >
-              Stock management
-            </Link>
-            , pick the warehouse, search the item name, and use &quot;Add all SKUs
-            from one item&quot;.
-          </p>
+      <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+              <Package className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm font-semibold text-slate-900">All items</h1>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 max-w-2xl">
+                Move central stock to a warehouse via{" "}
+                <Link
+                  to="/admin/inventory/stock-management"
+                  className="font-medium text-indigo-600 hover:text-indigo-800 underline-offset-2 hover:underline"
+                >
+                  Stock management
+                </Link>
+                {" "}→ pick warehouse, search item, use &quot;Add all SKUs from one item&quot;.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="px-4 sm:px-6 py-6">
-        {/* Filters Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mx-auto max-w-[1600px] px-3 py-3 sm:px-4">
+        {/* Filters */}
+        <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {/* Category Dropdown */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Category
-              </label>
+              <label className={labelClass}>Category</label>
               <div className="relative" ref={categoryDropdownRef}>
                 <button
                   type="button"
@@ -964,15 +985,15 @@ const ShowItems = () => {
                     setIsCategoryDropdownOpen(!isCategoryDropdownOpen)
                   }
                   disabled={loadingCategories}
-                  className="w-full px-4 py-2.5 text-sm bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-between"
+                  className={dropdownBtnClass}
                 >
-                  <span className="truncate">
+                  <span className="truncate text-left">
                     {loadingCategories
                       ? "Loading..."
                       : getSelectedCategoryName()}
                   </span>
                   <ChevronDown
-                    size={20}
+                    size={14}
                     className={`text-gray-500 transition-transform flex-shrink-0 ml-2 ${
                       isCategoryDropdownOpen ? "rotate-180" : ""
                     }`}
@@ -1126,9 +1147,7 @@ const ShowItems = () => {
 
             {/* Subcategory Dropdown */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Subcategory
-              </label>
+              <label className={labelClass}>Subcategory</label>
               <div className="relative" ref={subcategoryDropdownRef}>
                 <button
                   type="button"
@@ -1140,9 +1159,9 @@ const ShowItems = () => {
                     setIsSubcategoryDropdownOpen(!isSubcategoryDropdownOpen);
                   }}
                   disabled={!selectedCategoryId || loadingSubcategories}
-                  className="w-full px-4 py-2.5 text-sm bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-between"
+                  className={dropdownBtnClass}
                 >
-                  <span className="truncate">
+                  <span className="truncate text-left">
                     {loadingSubcategories
                       ? "Loading..."
                       : !selectedCategoryId
@@ -1150,7 +1169,7 @@ const ShowItems = () => {
                         : getSelectedSubcategoryName()}
                   </span>
                   <ChevronDown
-                    size={20}
+                    size={14}
                     className={`text-gray-500 transition-transform flex-shrink-0 ml-2 ${
                       isSubcategoryDropdownOpen ? "rotate-180" : ""
                     }`}
@@ -1306,25 +1325,23 @@ const ShowItems = () => {
 
             {/* Search Input */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Search Products
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <label className={labelClass}>Search products</label>
+              <div className="flex flex-col gap-1.5 sm:flex-row">
                 <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by name, product ID, or SKU…"
-                    className="w-full px-4 py-2.5 pl-10 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all"
+                    placeholder="Name, product ID, SKU…"
+                    className={`${inputClass} pl-8`}
                   />
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 </div>
                 <button
                   type="button"
                   onClick={handleSearchClick}
                   disabled={!searchTerm.trim()}
-                  className="px-4 py-2.5 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  className={btnPrimary}
                 >
                   Search
                 </button>
@@ -1332,7 +1349,7 @@ const ShowItems = () => {
                   type="button"
                   onClick={handleClearSearch}
                   disabled={!searchTerm && !appliedSearchTerm}
-                  className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  className={btnOutline}
                 >
                   Clear
                 </button>
@@ -1341,66 +1358,67 @@ const ShowItems = () => {
           </div>
         </div>
 
-        {/* Actions Bar */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="text-sm text-gray-600">
+        {/* Actions bar */}
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] text-slate-500">
             {pagination ? (
-              <span>
-                Showing {(currentPage - 1) * limit + 1} to{" "}
-                {Math.min(
-                  currentPage * limit,
-                  pagination.total || items.length,
-                )}{" "}
-                of {pagination.total || items.length} items
-              </span>
+              <>
+                Showing{" "}
+                <span className="font-medium text-slate-700">
+                  {(currentPage - 1) * limit + 1}–
+                  {Math.min(currentPage * limit, pagination.total || items.length)}
+                </span>{" "}
+                of {pagination.total || items.length}
+              </>
             ) : (
-              <span>{items.length} items found</span>
-            )}
-          </div>
-          <div className="flex gap-3">
+              <span className="font-medium text-slate-700">{items.length}</span>
+            )}{" "}
+            items
+          </p>
+          <div className="flex flex-wrap gap-1.5">
             <button
+              type="button"
               onClick={() => setShowBulkUpload(true)}
-              className="flex items-center gap-2 px-6 py-2.5 border border-black text-black font-medium rounded-lg hover:bg-black hover:text-white transition"
+              className={btnOutline}
             >
-              Bulk Upload
+              Bulk upload
             </button>
-
             <button
+              type="button"
               onClick={openCreate}
               disabled={!selectedCategoryId || !selectedSubcategoryId}
-              className="flex items-center gap-2 px-6 py-2.5 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition disabled:bg-gray-400"
+              className={btnPrimary}
             >
-              <Plus className="h-4 w-4" />
-              Add Item
+              <Plus className="h-3.5 w-3.5" />
+              Add item
             </button>
           </div>
         </div>
 
-        {/* Error Message */}
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <div className="mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {error}
           </div>
         )}
 
-        {/* Items Table */}
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        {/* Items table */}
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-100 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[1100px] border-collapse text-left">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left">#</th>
-                  <th className="px-4 py-3 text-left">Image</th>
-                  <th className="px-4 py-3 text-left">Name</th>
-                  <th className="px-4 py-3 text-left">Product ID</th>
-                  <th className="px-4 py-3 text-left">Description</th>
-                  <th className="px-4 py-3 text-left min-w-[120px]">SEO</th>
-                  <th className="px-4 py-3 text-center">Size chart</th>
-                  <th className="px-4 py-3 text-left min-w-[140px]">Warehouses</th>
-                  <th className="px-4 py-3 text-right">Price</th>
-                  <th className="px-4 py-3 text-right">Discounted</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className={`${thClass} text-left w-8`}>#</th>
+                  <th className={`${thClass} text-left`}>Img</th>
+                  <th className={`${thClass} text-left min-w-[120px]`}>Name</th>
+                  <th className={`${thClass} text-left`}>Product ID</th>
+                  <th className={`${thClass} text-left min-w-[100px]`}>Desc</th>
+                  <th className={`${thClass} text-left min-w-[100px]`}>SEO</th>
+                  <th className={`${thClass} text-center`}>Chart</th>
+                  <th className={`${thClass} text-left min-w-[120px]`}>Warehouse</th>
+                  <th className={`${thClass} text-right`}>MRP</th>
+                  <th className={`${thClass} text-right`}>Disc.</th>
+                  <th className={`${thClass} text-center`}>Status</th>
+                  <th className={`${thClass} text-right`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1408,16 +1426,19 @@ const ShowItems = () => {
                   <tr>
                     <td
                       colSpan={12}
-                      className="px-4 py-12 text-center text-gray-500"
+                      className="px-2 py-10 text-center text-xs text-slate-500"
                     >
-                      Loading items...
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                        Loading items…
+                      </span>
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td
                       colSpan={12}
-                      className="px-4 py-12 text-center text-gray-500"
+                      className="px-2 py-10 text-center text-xs text-slate-500"
                     >
                       No items found
                     </td>
@@ -1426,12 +1447,12 @@ const ShowItems = () => {
                   filteredItems.map((item, index) => (
                     <tr
                       key={item._id || item.productId}
-                      className="border-t hover:bg-gray-50 transition"
+                      className="border-t border-slate-100 transition-colors hover:bg-indigo-50/25"
                     >
-                      <td className="px-4 py-4 text-gray-600">
+                      <td className={`${tdClass} text-slate-400 tabular-nums`}>
                         {(currentPage - 1) * limit + index + 1}
                       </td>
-                      <td className="px-4 py-4">
+                      <td className={tdClass}>
                         <img
                           src={
                             item?.thumbnail ||
@@ -1446,23 +1467,29 @@ const ShowItems = () => {
                                 "https://via.placeholder.com/50",
                             )
                           }
-                          className="h-12 w-12 rounded-lg object-cover border cursor-pointer hover:opacity-80 transition"
+                          className="h-9 w-9 rounded-md border border-slate-200 object-cover cursor-pointer hover:opacity-80 transition-opacity"
                         />
                       </td>
-                      <td className="px-4 py-4 font-medium text-gray-900">
-                        {item.name || "—"}
+                      <td className={`${tdClass} font-medium text-slate-900 max-w-[140px]`}>
+                        <span className="line-clamp-2 leading-snug" title={item.name}>
+                          {item.name || "—"}
+                        </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-600">
-                        {item.productId || "—"}
+                      <td className={`${tdClass} font-mono text-[10px] text-slate-500 max-w-[90px]`}>
+                        <span className="line-clamp-2 break-all" title={item.productId}>
+                          {item.productId || "—"}
+                        </span>
                       </td>
                       <td
-                        className="px-4 py-4 text-sm text-gray-600 max-w-xs truncate"
+                        className={`${tdClass} max-w-[120px]`}
                         title={item.shortDescription || item.description}
                       >
-                        {item.shortDescription || item.description || "—"}
+                        <span className="line-clamp-2 text-slate-500">
+                          {item.shortDescription || item.description || "—"}
+                        </span>
                       </td>
                       <td
-                        className="px-4 py-4 text-xs text-gray-600 max-w-[160px]"
+                        className={`${tdClass} max-w-[120px]`}
                         title={[
                           item.metaTitle && `Title: ${item.metaTitle}`,
                           item.metaDescription && `Desc: ${item.metaDescription}`,
@@ -1473,40 +1500,38 @@ const ShowItems = () => {
                           .filter(Boolean)
                           .join("\n")}
                       >
-                        <div className="font-medium text-gray-800 line-clamp-1">
+                        <div className="font-medium text-slate-800 line-clamp-1 text-[10px]">
                           {String(item.metaTitle || "").trim() || "—"}
                         </div>
-                        <div className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">
+                        <div className="mt-0.5 text-[10px] text-slate-400 line-clamp-1">
                           {Array.isArray(item.metaTags) && item.metaTags.length > 0
                             ? item.metaTags.join(", ")
                             : ""}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-center text-sm text-gray-600">
+                      <td className={`${tdClass} text-center`}>
                         {itemHasSizeChartContent(item) ? (
-                          <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                            Yes
-                          </span>
+                          <span className={badgeActive}>Yes</span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-left align-top">
-                        <div className="flex flex-col gap-1.5 max-w-[200px]">
+                      <td className={`${tdClass} align-top`}>
+                        <div className="flex flex-col gap-1 max-w-[160px]">
                           {warehouseColLoading ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                              Checking…
+                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                              …
                             </span>
                           ) : !(item.name || "").trim() ? (
-                            <span className="text-xs text-amber-700" title="Product name required to match warehouse rows">
-                              Name missing
+                            <span className="text-[10px] text-amber-700" title="Product name required">
+                              No name
                             </span>
                           ) : (
                             <>
                               {warehouseSummaries[itemRowKey(item)]?.hasAny ? (
                                 <span
-                                  className="text-xs font-medium text-emerald-800 line-clamp-3"
+                                  className="text-[10px] font-medium text-emerald-700 line-clamp-2 leading-snug"
                                   title={
                                     warehouseSummaries[itemRowKey(item)]
                                       ?.summary || ""
@@ -1518,7 +1543,7 @@ const ShowItems = () => {
                                   }
                                 </span>
                               ) : (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-[10px] text-slate-400">
                                   {warehouseSummaries[itemRowKey(item)]
                                     ?.summary || "—"}
                                 </span>
@@ -1531,29 +1556,29 @@ const ShowItems = () => {
                               e.stopPropagation();
                               openWarehouseStockModal(item);
                             }}
-                            className="inline-flex items-center gap-1 self-start rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50"
-                            title="View warehouse stock and attach SKUs"
+                            className="inline-flex items-center gap-0.5 self-start rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-colors"
+                            title="Warehouse stock"
                           >
-                            <Warehouse className="h-3.5 w-3.5" />
+                            <Warehouse className="h-3 w-3" />
                             Manage
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-right font-medium">
+                      <td className={`${tdClass} text-right font-medium text-slate-800`}>
                         {editingPriceItemId === (item._id || item.productId) ? (
                           <div className="flex items-center justify-end gap-2">
                             <input
                               autoFocus
                               value={editingPriceValue}
                               onChange={(e) => setEditingPriceValue(e.target.value)}
-                              className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-xs sm:text-sm"
+                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
                               placeholder="MRP"
                             />
                             <button
                               type="button"
                               onClick={() => saveInlinePrice(item._id || item.productId)}
                               disabled={savingPrice}
-                              className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
                             >
                               Save
                             </button>
@@ -1561,26 +1586,26 @@ const ShowItems = () => {
                               type="button"
                               onClick={cancelInlineEdit}
                               disabled={savingPrice}
-                              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                              className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
                             >
-                              Cancel
+                              ×
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <span>₹{item.price || 0}</span>
+                          <div className="flex items-center justify-end gap-0.5">
+                            <span className="tabular-nums">₹{item.price || 0}</span>
                             <button
                               type="button"
                               onClick={() => startPriceEdit(item)}
-                              className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition"
+                              className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                               title="Edit MRP"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3 w-3" />
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-right">
+                      <td className={`${tdClass} text-right`}>
                         {editingDiscountItemId === (item._id || item.productId) ? (
                           <div className="flex items-center justify-end gap-2">
                             <input
@@ -1589,8 +1614,8 @@ const ShowItems = () => {
                               onChange={(e) =>
                                 setEditingDiscountValue(e.target.value)
                               }
-                              className="w-24 rounded border border-gray-300 px-2 py-1 text-right text-xs sm:text-sm"
-                              placeholder="Discount"
+                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
+                              placeholder="Disc."
                             />
                             <button
                               type="button"
@@ -1598,7 +1623,7 @@ const ShowItems = () => {
                                 saveInlineDiscount(item._id || item.productId)
                               }
                               disabled={savingPrice}
-                              className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 hover:bg-green-700 hover:text-white transition-colors disabled:opacity-40"
+                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
                             >
                               Save
                             </button>
@@ -1606,57 +1631,55 @@ const ShowItems = () => {
                               type="button"
                               onClick={cancelInlineEdit}
                               disabled={savingPrice}
-                              className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                              className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
                             >
-                              Cancel
+                              ×
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-0.5">
                             {item.discountedPrice ? (
-                              <span className="text-green-600 font-semibold">
+                              <span className="font-medium text-emerald-700 tabular-nums">
                                 ₹{item.discountedPrice}
                               </span>
                             ) : (
-                              <span>—</span>
+                              <span className="text-slate-300">—</span>
                             )}
                             <button
                               type="button"
                               onClick={() => startDiscountEdit(item)}
-                              className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition"
-                              title="Edit discounted price"
+                              className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                              title="Edit discount"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3 w-3" />
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-center">
+                      <td className={`${tdClass} text-center`}>
                         {item.isActive ? (
-                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                            Active
-                          </span>
+                          <span className={badgeActive}>Active</span>
                         ) : (
-                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
-                            Inactive
-                          </span>
+                          <span className={badgeInactive}>Off</span>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className={`${tdClass} text-right`}>
+                        <div className="flex items-center justify-end gap-0.5">
                           <button
+                            type="button"
                             onClick={() => openDetails(item)}
-                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
-                            title="View Details"
+                            className="rounded p-1 text-slate-500 hover:bg-sky-50 hover:text-sky-700 transition-colors"
+                            title="View"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => openEdit(item)}
-                            className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition"
+                            className="rounded p-1 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                             title="Edit"
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1682,18 +1705,18 @@ const ShowItems = () => {
               aria-modal="true"
               aria-labelledby="showitems-wh-title"
             >
-              <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 shrink-0">
+              <div className="flex items-start justify-between gap-3 px-4 py-2.5 border-b border-slate-200 shrink-0 bg-slate-50/50">
                 <div className="min-w-0">
                   <h2
                     id="showitems-wh-title"
-                    className="text-lg font-bold text-gray-900 truncate"
+                    className="text-xs font-semibold text-slate-900 truncate"
                   >
                     Warehouse stock
                   </h2>
-                  <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">
+                  <p className="text-[11px] font-medium text-slate-800 mt-0.5 truncate">
                     {warehouseUiItem.name}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1 font-mono">
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
                     Product ID:{" "}
                     {warehouseUiItem.productId != null &&
                     String(warehouseUiItem.productId).trim() !== ""
@@ -1878,73 +1901,75 @@ const ShowItems = () => {
 
         {/* Pagination */}
         {pagination && pagination.totalPages > 1 && (
-          <div className="mt-6 flex justify-center items-center gap-4">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             <button
+              type="button"
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage(currentPage - 1)}
-              className="px-5 py-2 border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+              className={`${btnOutline} gap-1`}
             >
-              Previous
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
             </button>
-            <span className="text-gray-700">
-              Page {currentPage} of {pagination.totalPages}
+            <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+              {currentPage} / {pagination.totalPages}
             </span>
             <button
+              type="button"
               disabled={currentPage >= pagination.totalPages}
               onClick={() => setCurrentPage(currentPage + 1)}
-              className="px-5 py-2 border border-gray-300 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition"
+              className={`${btnOutline} gap-1`}
             >
               Next
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
 
         {showBulkUpload && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-lg">
-              <h2 className="text-xl font-semibold mb-4">
-                Bulk Upload Products
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-[2px]">
+            <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Bulk upload products
               </h2>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                JSON catalog + image files
+              </p>
 
-              <div className="space-y-4">
+              <div className="mt-3 space-y-3">
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Products JSON
-                  </label>
+                  <label className={labelClass}>Products JSON</label>
                   <input
                     type="file"
                     accept=".json"
                     onChange={(e) => setJsonFile(e.target.files[0])}
-                    className="w-full border rounded p-2"
+                    className={`${inputClass} file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-0.5 file:text-[10px]`}
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Product Images
-                  </label>
+                  <label className={labelClass}>Product images</label>
                   <input
                     type="file"
                     multiple
                     onChange={(e) => setImageFiles(Array.from(e.target.files))}
-                    className="w-full border rounded p-2"
+                    className={`${inputClass} file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-0.5 file:text-[10px]`}
                   />
                 </div>
-
-                <div className="flex justify-end gap-3 pt-4">
+                <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
                   <button
+                    type="button"
                     onClick={() => setShowBulkUpload(false)}
-                    className="px-4 py-2 border rounded"
+                    className={btnOutline}
                   >
                     Cancel
                   </button>
-
                   <button
+                    type="button"
                     onClick={handleBulkUpload}
                     disabled={uploading}
-                    className="px-4 py-2 bg-black text-white rounded"
+                    className={btnPrimary}
                   >
-                    {uploading ? "Uploading..." : "Upload"}
+                    {uploading ? "Uploading…" : "Upload"}
                   </button>
                 </div>
               </div>

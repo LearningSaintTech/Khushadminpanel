@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { adminNotificationApi } from "../../services/notificationApi.js";
-import { Megaphone } from "lucide-react";
+import { Megaphone, X } from "lucide-react";
 
 const CHANNELS = [
   { value: "in_app", label: "In-app" },
@@ -27,12 +27,26 @@ const TEMPLATE_KEY_OPTIONS = [
 export default function AdminBroadcastPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [imageFile, setImageFile] = useState(null);
   const [channels, setChannels] = useState(["in_app"]);
   const [whatsappTemplateKey, setWhatsappTemplateKey] = useState("BROADCAST");
   const [smsTemplateKey, setSmsTemplateKey] = useState("BROADCAST");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [zoomOpen, setZoomOpen] = useState(false);
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl("");
+      setZoomOpen(false);
+      return undefined;
+    }
+    const objectUrl = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [imageFile]);
 
   const toggleChannel = (value) => {
     setChannels((prev) =>
@@ -41,41 +55,84 @@ export default function AdminBroadcastPage() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!title?.trim()) {
-      setError("Title is required");
-      return;
+  e.preventDefault();
+
+  if (!title?.trim()) {
+    setError("Title is required");
+    return;
+  }
+
+  if (channels.length === 0) {
+    setError("Select at least one channel");
+    return;
+  }
+
+  setSubmitting(true);
+  setError("");
+  setResult(null);
+
+  try {
+    const payload = new FormData();
+    payload.append("title", title.trim());
+    payload.append("body", body?.trim() ?? "");
+    channels.forEach((channel) => payload.append("channels", channel));
+    if (channels.includes("whatsapp")) {
+      payload.append("whatsappTemplateKey", whatsappTemplateKey);
     }
-    if (channels.length === 0) {
-      setError("Select at least one channel");
-      return;
+    if (channels.includes("sms")) {
+      payload.append("smsTemplateKey", smsTemplateKey);
     }
-    setSubmitting(true);
-    setError("");
-    setResult(null);
-    try {
-      const data = await adminNotificationApi.broadcast({
-        title: title.trim(),
-        body: body?.trim() ?? "",
-        channels,
-        whatsappTemplateKey: channels.includes("whatsapp") ? whatsappTemplateKey : undefined,
-        smsTemplateKey: channels.includes("sms") ? smsTemplateKey : undefined,
-      });
-      setResult(data);
-      setTitle("");
-      setBody("");
-    } catch (e) {
-      setError(e?.message || "Broadcast failed");
-    } finally {
-      setSubmitting(false);
+    if (imageFile) {
+      payload.append("image", imageFile);
     }
-  };
+
+    console.log("Broadcast payload:", {
+      title: title.trim(),
+      body: body?.trim() ?? "",
+      channels,
+      whatsappTemplateKey: channels.includes("whatsapp")
+        ? whatsappTemplateKey
+        : undefined,
+      smsTemplateKey: channels.includes("sms")
+        ? smsTemplateKey
+        : undefined,
+      image: imageFile
+        ? {
+            name: imageFile.name,
+            type: imageFile.type,
+            size: imageFile.size,
+          }
+        : null,
+    });
+
+    const data = await adminNotificationApi.broadcast(payload);
+
+    console.log("Broadcast response:", data);
+
+    setResult(data);
+
+    // Reset form
+    setTitle("");
+    setBody("");
+    setImageFile(null);
+  } catch (e) {
+    console.error("Broadcast failed:", e);
+
+    setError(
+      e?.response?.data?.message ||
+      e?.message ||
+      "Broadcast failed"
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
       <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2 mb-6">
         <Megaphone size={24} />
-        Broadcast notification
+        Broadcast notifications
       </h1>
       <p className="text-gray-600 text-sm mb-6">
         Send a notification to all users. Choose channels (in-app is always recommended).
@@ -111,6 +168,43 @@ export default function AdminBroadcastPage() {
             rows={4}
             className="w-full border border-gray-300 rounded-lg px-3 py-2"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Image (optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          />
+          {imageFile && imagePreviewUrl && (
+            <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <div className="relative inline-block">
+                <img
+                  src={imagePreviewUrl}
+                  alt={imageFile.name}
+                  onClick={() => setZoomOpen(true)}
+                  className="h-28 w-44 cursor-zoom-in rounded-md border border-gray-200 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageFile(null);
+                    setZoomOpen(false);
+                  }}
+                  className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black"
+                  aria-label="Remove image"
+                  title="Remove image"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <p className="mt-1 max-w-44 truncate text-xs text-gray-600">
+                {imageFile.name}
+              </p>
+              <p className="text-[11px] text-gray-500">Click image to zoom</p>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Channels</label>
@@ -169,6 +263,32 @@ export default function AdminBroadcastPage() {
           {submitting ? "Sending..." : "Send to all users"}
         </button>
       </form>
+
+      {zoomOpen && imagePreviewUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setZoomOpen(false)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-[90vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setZoomOpen(false)}
+              className="absolute -right-2 -top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-700 shadow hover:bg-gray-100"
+              aria-label="Close zoom preview"
+            >
+              <X size={16} />
+            </button>
+            <img
+              src={imagePreviewUrl}
+              alt={imageFile?.name || "Preview"}
+              className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,7 +23,7 @@ const GiftCardForm = () => {
   const ap = (suffix) =>
     `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(
       /\/+/g,
-      "/"
+      "/",
     );
 
   const isEdit = useMemo(() => Boolean(id), [id]);
@@ -32,10 +32,19 @@ const GiftCardForm = () => {
     name: "",
     description: "",
     currency: "INR",
-    multiplier: "",
     isActive: true,
+
     rules: "",
     image: null,
+
+    slabs: [
+      {
+        minPrice: "",
+        maxPrice: "",
+        percent: "",
+        label: "",
+      },
+    ],
   });
 
   const [previewImage, setPreviewImage] = useState(null);
@@ -70,12 +79,28 @@ const GiftCardForm = () => {
           name: item.name || "",
           description: item.description || "",
           currency: item.currency || "INR",
-          multiplier: item.multiplier ?? "",
           isActive: Boolean(item.isActive),
-          rules: Array.isArray(item.rules)
-            ? item.rules.join(", ")
-            : "",
+
+          rules: Array.isArray(item.rules) ? item.rules.join(", ") : "",
+
           image: null,
+
+          slabs:
+            Array.isArray(item.slabs) && item.slabs.length > 0
+              ? item.slabs.map((slab) => ({
+                  minPrice: slab.minPrice ?? "",
+                  maxPrice: slab.maxPrice ?? "",
+                 percent: slab.percent ?? "",
+                  label: slab.label ?? "",
+                }))
+              : [
+                  {
+                    minPrice: "",
+                    maxPrice: "",
+                     percent: "",
+                    label: "",
+                  },
+                ],
         });
 
         setPreviewImage(item.image || null);
@@ -83,8 +108,7 @@ const GiftCardForm = () => {
         console.error("❌ Fetch Single Error:", err);
 
         setLoadError(
-          extractBackendMessages(err).join("; ") ||
-            "Failed to load gift card."
+          extractBackendMessages(err).join("; ") || "Failed to load gift card.",
         );
       } finally {
         setLoading(false);
@@ -117,6 +141,44 @@ const GiftCardForm = () => {
     }
   };
 
+  // ================= SLAB CHANGE =================
+  const handleSlabChange = (index, field, value) => {
+    setFormData((prev) => {
+      const updatedSlabs = [...prev.slabs];
+
+      updatedSlabs[index][field] = value;
+
+      return {
+        ...prev,
+        slabs: updatedSlabs,
+      };
+    });
+  };
+
+  // ================= ADD SLAB =================
+  const addSlab = () => {
+    setFormData((prev) => ({
+      ...prev,
+      slabs: [
+        ...prev.slabs,
+        {
+          minPrice: "",
+          maxPrice: "",
+          percent: "",
+          label: "",
+        },
+      ],
+    }));
+  };
+
+  // ================= REMOVE SLAB =================
+  const removeSlab = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      slabs: prev.slabs.filter((_, i) => i !== index),
+    }));
+  };
+
   // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,11 +192,16 @@ const GiftCardForm = () => {
       payload.append("name", formData.name.trim());
       payload.append("description", formData.description.trim());
       payload.append("currency", formData.currency);
-      payload.append("multiplier", String(formData.multiplier));
-      payload.append(
-        "isActive",
-        formData.isActive ? "true" : "false"
-      );
+      // payload.append("multiplier", String(formData.multiplier));
+const formattedSlabs = formData.slabs.map((slab) => ({
+  minPrice: Number(slab.minPrice),
+  maxPrice:
+    slab.maxPrice === "" ? null : Number(slab.maxPrice),
+  percent: Number(slab.percent),
+  label: slab.label,
+}));
+
+payload.append("slabs", JSON.stringify(formattedSlabs));      payload.append("isActive", formData.isActive ? "true" : "false");
 
       const rulesArray = formData.rules
         .split(",")
@@ -178,7 +245,7 @@ const GiftCardForm = () => {
       setErrors(
         extractBackendMessages(err).length
           ? extractBackendMessages(err)
-          : ["Something went wrong. Please try again."]
+          : ["Something went wrong. Please try again."],
       );
     } finally {
       setSubmitting(false);
@@ -194,9 +261,7 @@ const GiftCardForm = () => {
         className="flex min-h-[40vh] items-center justify-center gap-3"
       >
         <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-        <span className="text-slate-600">
-          Loading gift card...
-        </span>
+        <span className="text-slate-600">Loading gift card...</span>
       </motion.div>
     );
   }
@@ -248,9 +313,7 @@ const GiftCardForm = () => {
 
               <div>
                 <h1 className="text-2xl font-bold">
-                  {isEdit
-                    ? "Edit Gift Card"
-                    : "Create Gift Card"}
+                  {isEdit ? "Edit Gift Card" : "Create Gift Card"}
                 </h1>
 
                 <p className="mt-1 text-sm text-indigo-100">
@@ -263,10 +326,7 @@ const GiftCardForm = () => {
           </div>
 
           {/* FORM */}
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-6 p-6 sm:p-8"
-          >
+          <form onSubmit={handleSubmit} className="space-y-6 p-6 sm:p-8">
             {/* ERRORS */}
             {errors.length > 0 && (
               <ul className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -300,8 +360,114 @@ const GiftCardForm = () => {
                   />
                 </div>
 
+                {/* SLABS */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Price Slabs
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={addSlab}
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+                    >
+                      Add Slab
+                    </button>
+                  </div>
+
+                  {formData.slabs.map((slab, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4"
+                    >
+                      {/* MIN PRICE */}
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Min Price
+                        </label>
+
+                        <input
+                          type="number"
+                          value={slab.minPrice}
+                          onChange={(e) =>
+                            handleSlabChange(index, "minPrice", e.target.value)
+                          }
+                          className={fieldClass}
+                          placeholder="100"
+                        />
+                      </div>
+
+                      {/* MAX PRICE */}
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Max Price
+                        </label>
+
+                        <input
+                          type="number"
+                          value={slab.maxPrice}
+                          onChange={(e) =>
+                            handleSlabChange(index, "maxPrice", e.target.value)
+                          }
+                          className={fieldClass}
+                          placeholder="499"
+                        />
+                      </div>
+
+                      {/* MULTIPLIER */}
+                     {/* PERCENT */}
+<div>
+  <label className="mb-1 block text-xs font-medium text-slate-600">
+    Percent
+  </label>
+
+  <input
+    type="number"
+    step="1"
+    value={slab.percent}
+    onChange={(e) =>
+      handleSlabChange(index, "percent", e.target.value)
+    }
+    className={fieldClass}
+    placeholder="100"
+  />
+</div>
+
+                      {/* LABEL */}
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-slate-600">
+                          Label
+                        </label>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={slab.label}
+                            onChange={(e) =>
+                              handleSlabChange(index, "label", e.target.value)
+                            }
+                            className={fieldClass}
+                            placeholder="Starter"
+                          />
+
+                          {formData.slabs.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeSlab(index)}
+                              className="rounded-lg bg-rose-100 px-3 text-rose-600 hover:bg-rose-200"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {/* MULTIPLIER */}
-                <div>
+                {/* <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">
                     Multiplier
                   </label>
@@ -315,7 +481,7 @@ const GiftCardForm = () => {
                     placeholder="2"
                     required
                   />
-                </div>
+                </div> */}
 
                 {/* CURRENCY */}
                 <div>

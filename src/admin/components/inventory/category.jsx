@@ -142,7 +142,7 @@ export default function Categories() {
       {/* Header */}
       <div className="sticky top-0 z-20 bg-white h-16 flex items-center border-b border-gray-200">
         <div className="px-4 sm:px-6 w-full">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-base sm:text-lg font-bold tracking-tight text-gray-900">
             Categories
           </h1>
         </div>
@@ -156,12 +156,12 @@ export default function Categories() {
               placeholder="Search categories..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-1 focus:ring-black transition-all"
+              className="w-full rounded-lg border border-gray-300 px-3 sm:px-4 py-2 sm:py-2 text-xs text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-1 focus:ring-black transition-all"
             />
           </div>
           <button
             onClick={() => navigate("/admin/inventory/categories/create")}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-medium text-white shadow-md hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all duration-200 w-full sm:w-auto whitespace-nowrap flex-shrink-0"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 sm:px-5 py-2 sm:py-2 text-xs font-medium text-white shadow-md hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition-all duration-200 w-full sm:w-auto whitespace-nowrap flex-shrink-0"
           >
             <span className="text-lg">+</span>
             <span className="hidden sm:inline">Add Category</span>
@@ -171,7 +171,7 @@ export default function Categories() {
       </div>
       <div className="min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
+          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-red-700 text-xs">
             {error}
           </div>
         )}
@@ -183,31 +183,31 @@ export default function Categories() {
               <table className="w-full min-w-[640px] divide-y divide-gray-200 table-auto">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="w-12 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-12 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       #
                     </th>
-                    <th className="w-16 shrink-0 px-2 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-16 shrink-0 px-2 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Image
                     </th>
-                    <th className="min-w-[7rem] px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="min-w-[7rem] px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Name
                     </th>
-                    <th className="hidden lg:table-cell min-w-[10rem] max-w-xs px-3 lg:px-4 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden lg:table-cell min-w-[10rem] max-w-xs px-3 lg:px-4 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Description
                     </th>
-                    <th className="hidden md:table-cell w-20 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden md:table-cell w-20 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Order
                     </th>
-                    <th className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Status
                     </th>
-                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Navbar
                     </th>
-                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-left text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-gray-600">
                       Footer
                     </th>
-                    <th className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-right text-xs lg:text-sm font-semibold text-gray-600">
+                    <th className="w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-right text-xs lg:text-xs font-semibold text-gray-600">
                       Actions
                     </th>
                   </tr>
@@ -217,7 +217,7 @@ export default function Categories() {
                     <tr>
                       <td
                         colSpan={9}
-                        className="px-6 py-12 text-center text-gray-500 text-sm"
+                        className="px-6 py-12 text-center text-gray-500 text-xs"
                       >
                         Loading categories...
                       </td>
@@ -226,7 +226,7 @@ export default function Categories() {
                     <tr>
                       <td
                         colSpan={9}
-                        className="px-6 py-12 text-center text-gray-500 text-sm"
+                        className="px-6 py-12 text-center text-gray-500 text-xs"
                       >
                         {debouncedSearchTerm
                           ? "No categories match your search"
@@ -240,10 +240,10 @@ export default function Categories() {
                         onClick={() => handleCategoryClick(cat.id)}
                         className="group hover:bg-gray-50/70 transition-colors cursor-pointer"
                       >
-                        <td className="px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm text-gray-500">
+                        <td className="px-2 sm:px-3 py-2 lg:py-3 text-xs lg:text-xs text-gray-500">
                           {(currentPage - 1) * limit + idx + 1}
                         </td>
-                        <td className="px-2 py-3 lg:py-4 shrink-0">
+                        <td className="px-2 py-2 lg:py-3 shrink-0">
                           <div
                             className="relative group cursor-pointer"
                             onClick={(e) => {
@@ -264,7 +264,7 @@ export default function Categories() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-900 min-w-0">
+                        <td className="px-2 sm:px-3 py-2 lg:py-3 text-xs lg:text-xs font-medium text-gray-900 min-w-0">
                           <div>
                             <span
                               className={`${
@@ -289,7 +289,7 @@ export default function Categories() {
                             )}
                           </div>
                         </td>
-                        <td className="hidden lg:table-cell min-w-0 max-w-xs px-3 lg:px-4 py-3 lg:py-4 text-xs lg:text-sm text-gray-600">
+                        <td className="hidden lg:table-cell min-w-0 max-w-xs px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-xs text-gray-600">
                           <div
                             className="line-clamp-2 cursor-pointer hover:text-black"
                             onClick={(e) => {
@@ -302,10 +302,10 @@ export default function Categories() {
                             {cat.description || "—"}
                           </div>
                         </td>
-                        <td className="hidden md:table-cell px-2 sm:px-3 py-3 lg:py-4 text-xs lg:text-sm font-medium text-gray-800 whitespace-nowrap">
+                        <td className="hidden md:table-cell px-2 sm:px-3 py-2 lg:py-3 text-xs lg:text-xs font-medium text-gray-800 whitespace-nowrap">
                           {cat.sortOrder}
                         </td>
-                        <td className="px-2 sm:px-3 py-3 lg:py-4 whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 lg:py-3 whitespace-nowrap">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -320,7 +320,7 @@ export default function Categories() {
                             {cat.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="hidden xl:table-cell px-2 sm:px-3 py-3 lg:py-4 whitespace-nowrap">
+                        <td className="hidden xl:table-cell px-2 sm:px-3 py-2 lg:py-3 whitespace-nowrap">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -346,7 +346,7 @@ export default function Categories() {
                             {cat.isFooter ? "Footer" : "Hidden"}
                           </button>
                         </td>
-                        <td className="w-24 shrink-0 px-2 sm:px-3 py-3 lg:py-4 text-right text-xs lg:text-sm">
+                        <td className="w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-right text-xs lg:text-xs">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -367,11 +367,11 @@ export default function Categories() {
           {/* Mobile Card View */}
           <div className="md:hidden divide-y divide-gray-200">
             {loading ? (
-              <div className="px-4 py-12 text-center text-gray-500 text-sm">
+              <div className="px-4 py-12 text-center text-gray-500 text-xs">
                 Loading categories...
               </div>
             ) : categories.length === 0 ? (
-              <div className="px-4 py-12 text-center text-gray-500 text-sm">
+              <div className="px-4 py-12 text-center text-gray-500 text-xs">
                 {debouncedSearchTerm
                   ? "No categories match your search"
                   : "No categories found"}
@@ -402,7 +402,7 @@ export default function Categories() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900 text-sm truncate flex-1">
+                        <h3 className="font-semibold text-gray-900 text-xs truncate flex-1">
                           {cat.name}
                         </h3>
                         <button
@@ -468,11 +468,11 @@ export default function Categories() {
                 }
               }}
               disabled={currentPage === 1}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
             >
               Previous
             </button>
-            <div className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-50 rounded-xl whitespace-nowrap">
+            <div className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-50 rounded-xl whitespace-nowrap">
               Page {currentPage} of {totalPages}
             </div>
             <button
@@ -482,7 +482,7 @@ export default function Categories() {
                 }
               }}
               disabled={currentPage >= totalPages}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
             >
               Next
             </button>
@@ -529,13 +529,13 @@ export default function Categories() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold mb-4">Category Description</h2>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+            <p className="text-xs text-gray-700 whitespace-pre-wrap">
               {fullDescription}
             </p>
             <div className="mt-6 text-right">
               <button
                 onClick={() => setFullDescription(null)}
-                className="px-4 py-2 bg-black text-white rounded-lg text-sm"
+                className="px-4 py-2 bg-black text-white rounded-lg text-xs"
               >
                 Close
               </button>

@@ -26,6 +26,18 @@ import { getSectionDisplayOrders } from "../../utils/sectionDisplay";
 
 const PAGE_SIZE = 10;
 
+const inputClass =
+  "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
+const labelClass = "mb-1 block text-[11px] font-semibold text-slate-700";
+const sectionCard = "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm";
+const sectionHeader =
+  "flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-slate-50/80";
+const sectionBody = "space-y-3 border-t border-slate-100 p-3 sm:p-4";
+const btnPrimary =
+  "inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
+const btnOutline =
+  "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition-colors";
+
 function getTotalPages(pagination) {
   if (!pagination) return 1;
   return (
@@ -131,16 +143,16 @@ function buildSubcategoryMap(categoryIds, subcategoryIds) {
 function PaginationBar({ page, totalPages, onPageChange, loading }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
+    <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[11px] text-slate-600">
       <span>
-        Page {page} of {totalPages}
+        Page {page} / {totalPages}
       </span>
-      <div className="flex gap-2">
+      <div className="flex gap-1">
         <button
           type="button"
           disabled={page <= 1 || loading}
           onClick={() => onPageChange(page - 1)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-medium hover:bg-slate-100 disabled:opacity-40"
+          className={btnOutline}
         >
           Prev
         </button>
@@ -148,7 +160,7 @@ function PaginationBar({ page, totalPages, onPageChange, loading }) {
           type="button"
           disabled={page >= totalPages || loading}
           onClick={() => onPageChange(page + 1)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-medium hover:bg-slate-100 disabled:opacity-40"
+          className={btnOutline}
         >
           Next
         </button>
@@ -172,29 +184,31 @@ const SectionForm = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   const [formData, setFormData] = useState({
-    title: "",
-    type: "MANUAL",
-    text: "",
-    categoryId: [],
-    subcategoryId: [],
-    products: [],
+      title: "",
+      type: "MANUAL",
+      text: "",
+      categoryId: [],
+      subcategoryId: [],
+      products: [],
 
     enableDiscount: false,
-    discountType: "FLAT",
+      discountType: "FLAT",
     discountValue: "",
-    externalLink: "",
-    navigate: "",
-    startDate: "",
-    endDate: "",
-    desktopbanner: null,
-    mobilebanner: null,
-    apporder: 0,
-    weborder: 0,
-    isapp: true,
-    isweb: true,
-  });
+      externalLink: "",
+      navigate: "",
+      startDate: "",
+      endDate: "",
+      desktopbanner: null,
+      mobilebanner: null,
+      apporder: 0,
+      weborder: 0,
+      isapp: true,
+      isweb: true,
+    });
 
   const [desktopPreview, setDesktopPreview] = useState(null);
   const [mobilePreview, setMobilePreview] = useState(null);
@@ -249,6 +263,12 @@ const SectionForm = () => {
   useEffect(() => setCategoryPage(1), [debouncedCategorySearch]);
   useEffect(() => setProductPage(1), [debouncedProductSearch]);
   useEffect(() => setSubcategoryPage(1), [debouncedSubcategorySearch, activeSubcatTab]);
+
+  useEffect(() => {
+    if (formError || submitError) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [formError, submitError]);
 
   const syncProductsToForm = useCallback((ids, enableDiscount, discountType, discountValue) => {
     setFormData((prev) => ({
@@ -417,12 +437,12 @@ const SectionForm = () => {
         section.discount != null &&
         Number(section.discount?.value) > 0,
       discountType: section.discount?.type || "FLAT",
-      discountValue:
+          discountValue:
         section.discount?.value != null && section.discount?.value !== ""
           ? section.discount.value
           : "",
       externalLink: section.navigation?.externalLink || "",
-      navigate:
+          navigate:
         section.navigation?.navigate ||
         section.navigation?.path ||
         "",
@@ -430,25 +450,25 @@ const SectionForm = () => {
         ? String(section.startDate).slice(0, 10)
         : "",
       endDate: section.endDate ? String(section.endDate).slice(0, 10) : "",
-      desktopbanner: null,
-      mobilebanner: null,
+          desktopbanner: null,
+          mobilebanner: null,
       apporder: getSectionDisplayOrders(section).appOrder ?? 0,
       weborder: getSectionDisplayOrders(section).webOrder ?? 0,
       isapp: section.isApp ?? section.isapp ?? true,
-      isweb:
+          isweb:
         section.isWeb ??
         section.isweb ??
         section.webinfo?.isWeb ??
         true,
-    });
+        });
 
-    setDesktopPreview(
+        setDesktopPreview(
       section.desktopBanner?.[0]?.imageUrl ||
         section.desktopBanner?.[0]?.url ||
         section.desktopbanner?.[0]?.imageUrl ||
         null,
     );
-    setMobilePreview(
+        setMobilePreview(
       section.mobileBanner?.[0]?.imageUrl ||
         section.mobileBanner?.[0]?.url ||
         section.mobilebanner?.[0]?.imageUrl ||
@@ -507,6 +527,8 @@ const SectionForm = () => {
 
   const handleChange = (e) => {
     const { name, value, checked, type } = e.target;
+    setFormError("");
+    setSubmitError("");
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
@@ -515,29 +537,31 @@ const SectionForm = () => {
 
   const validate = () => {
     if (!formData.title.trim()) {
-      alert("Section title is required.");
+      setFormError("Section title is required.");
       return false;
     }
     if (formData.type === "CATEGORY" && categoryIds.length === 0) {
-      alert("Select at least one category for a CATEGORY section.");
+      setFormError("Select at least one category for a CATEGORY section.");
       return false;
     }
     if (formData.type === "MANUAL" && productIds.length === 0) {
-      alert("Select at least one product for a MANUAL section.");
+      setFormError("Select at least one product for a MANUAL section.");
       return false;
     }
     if (formData.enableDiscount) {
       const v = Number(formData.discountValue);
       if (formData.discountValue === "" || Number.isNaN(v) || v <= 0) {
-        alert("Enter a discount value greater than 0, or turn off “Add discount”.");
+        setFormError("Enter a discount value greater than 0, or turn off “Add discount”.");
         return false;
       }
     }
+    setFormError("");
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError("");
     if (!validate()) return;
 
     try {
@@ -587,7 +611,9 @@ const SectionForm = () => {
       navigate(ap("section"));
     } catch (err) {
       console.error(err);
-      alert(err?.message || err?.response?.data?.message || "Failed to save section");
+      setSubmitError(
+        err?.message || err?.response?.data?.message || "Failed to save section",
+      );
     } finally {
       setLoading(false);
     }
@@ -603,9 +629,6 @@ const SectionForm = () => {
     [subcategoryMap],
   );
 
-  const inputClass =
-    "w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 shadow-sm transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20";
-
   if (initialLoading) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 bg-slate-50">
@@ -616,7 +639,7 @@ const SectionForm = () => {
   }
 
   if (isEdit && loadError) {
-    return (
+  return (
       <div className="flex min-h-[60vh] items-center justify-center bg-slate-50 px-4">
         <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
           <p className="font-semibold text-slate-900">Could not load section</p>
@@ -652,61 +675,76 @@ const SectionForm = () => {
   }
 
   return (
-    <div className="min-h-full bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-h-screen bg-slate-50/80 pb-24">
+      <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <button
             type="button"
             onClick={() => navigate(ap("section"))}
-            className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5" />
             Back to sections
           </button>
           <div className="text-left sm:text-right">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-sm font-semibold text-slate-900">
               {isEdit ? "Edit section" : "Create section"}
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Build homepage sections with categories, products, and banners
+            <p className="text-[10px] text-slate-500">
+              Categories, products, banners & display order
             </p>
           </div>
         </div>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="mx-auto max-w-4xl px-3 pt-3 sm:px-4">
+        {(formError || submitError) && (
+          <div
+            role="alert"
+            className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+          >
+            {formError || submitError}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
           {/* Basic */}
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className={sectionCard}>
             <button
               type="button"
               onClick={() => setOpenBasic(!openBasic)}
-              className="flex w-full items-center justify-between bg-gradient-to-r from-slate-50 to-white px-6 py-4"
+              className={`${sectionHeader} bg-gradient-to-r from-slate-50 to-white`}
             >
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-indigo-600" />
-                <span className="font-semibold text-slate-900">Basic details</span>
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-indigo-600" />
+                <span className="text-xs font-semibold text-slate-900">Basic details</span>
               </div>
-              {openBasic ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {openBasic ? (
+                <ChevronUp className="h-4 w-4 text-slate-500" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-500" />
+              )}
             </button>
             {openBasic && (
-              <div className="space-y-5 border-t border-slate-100 p-6">
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              <div className={sectionBody}>
+          <div>
+                  <label className={labelClass}>
                     Title <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
+            </label>
+            <input
+              type="text"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
                     className={inputClass}
                     placeholder="Summer collection"
                     required
                   />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+          </div>
+          <div>
+                  <label className={labelClass}>
                     Section type <span className="text-red-500">*</span>
-                  </label>
+            </label>
                   <select
                     name="type"
                     value={formData.type}
@@ -722,41 +760,37 @@ const SectionForm = () => {
                     <option value="MANUAL">MANUAL — pick products yourself</option>
                     <option value="CATEGORY">CATEGORY — link categories & subcategories</option>
                   </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                    Description
-                  </label>
+              </div>
+              <div>
+                  <label className={labelClass}>Description</label>
                   <textarea
                     name="text"
-                    rows={3}
+                    rows={2}
                     value={formData.text}
                     onChange={handleChange}
                     className={`${inputClass} resize-none`}
                     placeholder="Short copy shown on the storefront"
                   />
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input
+              </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                  <label className="flex cursor-pointer items-center gap-2">
+            <input
                       type="checkbox"
                       name="enableDiscount"
                       checked={formData.enableDiscount}
                       onChange={handleChange}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span className="text-sm font-semibold text-slate-800">
+                    <span className="text-xs font-semibold text-slate-800">
                       Add discount to this section
                     </span>
-                    <span className="text-xs font-normal text-slate-500">(optional)</span>
-                  </label>
+                    <span className="text-[10px] font-normal text-slate-500">(optional)</span>
+              </label>
 
                   {formData.enableDiscount ? (
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                          Discount type
-                        </label>
+                        <label className={labelClass}>Discount type</label>
                         <select
                           name="discountType"
                           value={formData.discountType}
@@ -766,129 +800,115 @@ const SectionForm = () => {
                           <option value="FLAT">Flat (₹)</option>
                           <option value="PERCENT">Percent (%)</option>
                         </select>
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                          Discount value
-                        </label>
-                        <input
-                          type="number"
-                          name="discountValue"
+            </div>
+            <div>
+                        <label className={labelClass}>Discount value</label>
+              <input
+                type="number"
+                name="discountValue"
                           min="0"
                           step="0.01"
                           value={formData.discountValue}
-                          onChange={handleChange}
+                onChange={handleChange}
                           className={inputClass}
                           placeholder="e.g. 20"
                         />
-                      </div>
-                    </div>
+            </div>
+          </div>
                   ) : (
-                    <p className="mt-2 text-xs text-slate-500">
+                    <p className="mt-1.5 text-[10px] text-slate-500">
                       Leave unchecked if this section should not apply a discount.
                     </p>
                   )}
-                </div>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Navigate path
-                    </label>
-                    <input
-                      type="text"
+          </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+                    <label className={labelClass}>Navigate path</label>
+              <input
+                type="text"
                       name="navigate"
                       value={formData.navigate}
-                      onChange={handleChange}
+                onChange={handleChange}
                       className={inputClass}
                       placeholder="/summer-sale"
                     />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      External link
-                    </label>
-                    <input
-                      type="text"
+            </div>
+            <div>
+                    <label className={labelClass}>External link</label>
+              <input
+                type="text"
                       name="externalLink"
                       value={formData.externalLink}
-                      onChange={handleChange}
+                onChange={handleChange}
                       className={inputClass}
                       placeholder="https://..."
                     />
-                  </div>
-                </div>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Start date
-                    </label>
-                    <input
-                      type="date"
-                      name="startDate"
+            </div>
+          </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+                    <label className={labelClass}>Start date</label>
+              <input
+                type="date"
+                name="startDate"
                       value={formData.startDate}
-                      onChange={handleChange}
+                onChange={handleChange}
                       className={inputClass}
                     />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      End date
-                    </label>
-                    <input
-                      type="date"
-                      name="endDate"
+            </div>
+            <div>
+                    <label className={labelClass}>End date</label>
+              <input
+                type="date"
+                name="endDate"
                       value={formData.endDate}
-                      onChange={handleChange}
+                onChange={handleChange}
                       className={inputClass}
                     />
-                  </div>
-                </div>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      App order
-                    </label>
-                    <input
-                      type="number"
-                      name="apporder"
-                      value={formData.apporder}
-                      onChange={handleChange}
+            </div>
+          </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+                    <label className={labelClass}>App order</label>
+              <input
+                type="number"
+                name="apporder"
+                value={formData.apporder}
+                onChange={handleChange}
                       className={inputClass}
                     />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-semibold text-slate-700">
-                      Web order
-                    </label>
-                    <input
-                      type="number"
-                      name="weborder"
-                      value={formData.weborder}
-                      onChange={handleChange}
+            </div>
+            <div>
+                    <label className={labelClass}>Web order</label>
+              <input
+                type="number"
+                name="weborder"
+                value={formData.weborder}
+                onChange={handleChange}
                       className={inputClass}
                     />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      name="isapp"
-                      checked={formData.isapp}
-                      onChange={handleChange}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+            </div>
+          </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                type="checkbox"
+                name="isapp"
+                checked={formData.isapp}
+                onChange={handleChange}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-slate-700">Show on app</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      name="isweb"
-                      checked={formData.isweb}
-                      onChange={handleChange}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                    <span className="text-xs font-medium text-slate-700">Show on app</span>
+            </label>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                type="checkbox"
+                name="isweb"
+                checked={formData.isweb}
+                onChange={handleChange}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-slate-700">Show on web</span>
+                    <span className="text-xs font-medium text-slate-700">Show on web</span>
                   </label>
                 </div>
               </div>
@@ -897,45 +917,49 @@ const SectionForm = () => {
 
           {/* Categories */}
           {formData.type === "CATEGORY" && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className={sectionCard}>
               <button
                 type="button"
                 onClick={() => setOpenCategories(!openCategories)}
-                className="flex w-full items-center justify-between bg-gradient-to-r from-indigo-50 to-violet-50 px-6 py-4"
+                className={`${sectionHeader} bg-gradient-to-r from-indigo-50 to-violet-50`}
               >
-                <div className="flex items-center gap-3">
-                  <Tag className="h-5 w-5 text-indigo-600" />
+                <div className="flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-indigo-600" />
                   <div className="text-left">
-                    <span className="font-semibold text-slate-900">Categories</span>
-                    <p className="text-xs text-slate-600">
+                    <span className="text-xs font-semibold text-slate-900">Categories</span>
+                    <p className="text-[10px] text-slate-600">
                       {categoryIds.length
                         ? `${categoryIds.length} selected`
                         : "Required — pick at least one"}
                     </p>
                   </div>
                 </div>
-                {openCategories ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                {openCategories ? (
+                  <ChevronUp className="h-4 w-4 text-slate-500" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-slate-500" />
+                )}
               </button>
               {openCategories && (
-                <div className="border-t border-slate-100 p-6 space-y-4">
+                <div className={`${sectionBody} space-y-3`}>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={categorySearch}
                       onChange={(e) => setCategorySearch(e.target.value)}
                       placeholder="Search categories..."
-                      className={`${inputClass} pl-10`}
+                      className={`${inputClass} pl-8`}
                     />
                   </div>
                   {categoryIds.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {categoryIds.map((cid) => {
                         const cat = categories.find((c) => c._id === cid);
                         return (
                           <span
                             key={cid}
-                            className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-800"
+                            className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-800"
                           >
                             {cat?.name || cat?.title || cid.slice(-6)}
                             <button
@@ -945,35 +969,35 @@ const SectionForm = () => {
                             >
                               ×
                             </button>
-                          </span>
+              </span>
                         );
                       })}
                     </div>
                   )}
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <div className="max-h-64 overflow-y-auto p-2">
+                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <div className="max-h-52 overflow-y-auto p-1.5">
                       {loadingCategories ? (
-                        <div className="flex justify-center py-10">
-                          <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
                         </div>
                       ) : categories.length === 0 ? (
-                        <p className="py-10 text-center text-sm text-slate-500">No categories found</p>
+                        <p className="py-8 text-center text-xs text-slate-500">No categories found</p>
                       ) : (
                         categories.map((cat) => (
                           <label
                             key={cat._id}
-                            className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-slate-50"
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
                           >
                             <input
                               type="checkbox"
                               checked={categoryIds.includes(cat._id)}
                               onChange={() => toggleId(setCategoryIds, categoryIds, cat._id)}
-                              className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
                             />
-                            <span className="text-sm font-medium text-slate-800">
+                            <span className="text-xs font-medium text-slate-800">
                               {cat.name || cat.title || "Unnamed"}
                             </span>
-                          </label>
+            </label>
                         ))
                       )}
                     </div>
@@ -991,26 +1015,30 @@ const SectionForm = () => {
 
           {/* Subcategories */}
           {formData.type === "CATEGORY" && categoryIds.length > 0 && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className={sectionCard}>
               <button
                 type="button"
                 onClick={() => setOpenSubcategories(!openSubcategories)}
-                className="flex w-full items-center justify-between bg-gradient-to-r from-violet-50 to-purple-50 px-6 py-4"
+                className={`${sectionHeader} bg-gradient-to-r from-violet-50 to-purple-50`}
               >
-                <div className="flex items-center gap-3">
-                  <Layers className="h-5 w-5 text-violet-600" />
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-violet-600" />
                   <div className="text-left">
-                    <span className="font-semibold text-slate-900">Subcategories</span>
-                    <p className="text-xs text-slate-600">
+                    <span className="text-xs font-semibold text-slate-900">Subcategories</span>
+                    <p className="text-[10px] text-slate-600">
                       {selectedSubCount ? `${selectedSubCount} selected` : "Optional refinement"}
                     </p>
-                  </div>
+          </div>
                 </div>
-                {openSubcategories ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                {openSubcategories ? (
+                  <ChevronUp className="h-4 w-4 text-slate-500" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-slate-500" />
+                )}
               </button>
               {openSubcategories && (
-                <div className="border-t border-slate-100 p-6 space-y-4">
-                  <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-3">
+                <div className={`${sectionBody} space-y-3`}>
+                  <div className="flex flex-wrap gap-1.5 border-b border-slate-100 pb-2">
                     {categoryIds.map((cid) => {
                       const cat = categories.find((c) => c._id === cid);
                       const count = subcategoryMap[cid]?.length || 0;
@@ -1019,7 +1047,7 @@ const SectionForm = () => {
                           key={cid}
                           type="button"
                           onClick={() => setActiveSubcatTab(cid)}
-                          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
                             activeSubcatTab === cid
                               ? "bg-indigo-600 text-white shadow-sm"
                               : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -1036,30 +1064,30 @@ const SectionForm = () => {
                     })}
                   </div>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={subcategorySearch}
                       onChange={(e) => setSubcategorySearch(e.target.value)}
                       placeholder="Search subcategories..."
-                      className={`${inputClass} pl-10`}
+                      className={`${inputClass} pl-8`}
                     />
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-slate-200">
-                    <div className="max-h-64 overflow-y-auto p-2">
+                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <div className="max-h-52 overflow-y-auto p-1.5">
                       {loadingSubcategories ? (
-                        <div className="flex justify-center py-10">
-                          <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
                         </div>
                       ) : !activeSubcat?.items?.length ? (
-                        <p className="py-10 text-center text-sm text-slate-500">
+                        <p className="py-8 text-center text-xs text-slate-500">
                           No subcategories on this page
                         </p>
                       ) : (
                         activeSubcat.items.map((sub) => (
                           <label
                             key={sub._id}
-                            className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-slate-50"
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
                           >
                             <input
                               type="checkbox"
@@ -1067,9 +1095,9 @@ const SectionForm = () => {
                               onChange={() =>
                                 handleSubcategoryToggle(activeSubcatTab, sub._id)
                               }
-                              className="h-4 w-4 rounded border-slate-300 text-violet-600"
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
                             />
-                            <span className="text-sm font-medium text-slate-800">
+                            <span className="text-xs font-medium text-slate-800">
                               {sub.name || sub.title || "Unnamed"}
                             </span>
                           </label>
@@ -1089,17 +1117,17 @@ const SectionForm = () => {
           )}
 
           {/* Products */}
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className={sectionCard}>
             <button
               type="button"
               onClick={() => setOpenProducts(!openProducts)}
-              className="flex w-full items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50 px-6 py-4"
+              className={`${sectionHeader} bg-gradient-to-r from-emerald-50 to-teal-50`}
             >
-              <div className="flex items-center gap-3">
-                <Package className="h-5 w-5 text-emerald-600" />
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-emerald-600" />
                 <div className="text-left">
-                  <span className="font-semibold text-slate-900">Products</span>
-                  <p className="text-xs text-slate-600">
+                  <span className="text-xs font-semibold text-slate-900">Products</span>
+                  <p className="text-[10px] text-slate-600">
                     {formData.type === "MANUAL" ? (
                       <>
                         {productIds.length
@@ -1112,26 +1140,30 @@ const SectionForm = () => {
                   </p>
                 </div>
               </div>
-              {openProducts ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {openProducts ? (
+                <ChevronUp className="h-4 w-4 text-slate-500" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-500" />
+              )}
             </button>
             {openProducts && (
-              <div className="border-t border-slate-100 p-6 space-y-4">
+              <div className={`${sectionBody} space-y-3`}>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Search by name or SKU..."
-                    className={`${inputClass} pl-10`}
+                    className={`${inputClass} pl-8`}
                   />
                 </div>
                 {productIds.length > 0 && (
-                  <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
                     {productIds.map((pid) => (
                       <span
                         key={pid}
-                        className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-900"
+                        className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-900"
                       >
                         {productLabels[pid] || `…${pid.slice(-6)}`}
                         <button
@@ -1155,19 +1187,19 @@ const SectionForm = () => {
                     </button>
                   </div>
                 )}
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <div className="max-h-80 overflow-y-auto p-2">
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <div className="max-h-60 overflow-y-auto p-1.5">
                     {loadingProducts ? (
-                      <div className="flex justify-center py-10">
-                        <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
                       </div>
                     ) : products.length === 0 ? (
-                      <p className="py-10 text-center text-sm text-slate-500">No products found</p>
+                      <p className="py-8 text-center text-xs text-slate-500">No products found</p>
                     ) : (
                       products.map((prod) => (
                         <label
                           key={prod._id}
-                          className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-slate-50"
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
                         >
                           <input
                             type="checkbox"
@@ -1186,19 +1218,19 @@ const SectionForm = () => {
                                   "Product",
                               }));
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-slate-800">
+                            <p className="truncate text-xs font-medium text-slate-800">
                               {prod.title || prod.name || prod.productName || "Unnamed"}
                             </p>
                             {prod.discountedPrice != null && (
-                              <p className="text-xs text-emerald-700">
+                              <p className="text-[10px] text-emerald-700">
                                 ₹{prod.discountedPrice}
                               </p>
                             )}
                           </div>
-                        </label>
+              </label>
                       ))
                     )}
                   </div>
@@ -1214,78 +1246,108 @@ const SectionForm = () => {
           </section>
 
           {/* Banners */}
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className={sectionCard}>
             <button
               type="button"
               onClick={() => setOpenMedia(!openMedia)}
-              className="flex w-full items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4"
+              className={`${sectionHeader} bg-gradient-to-r from-amber-50 to-orange-50`}
             >
-              <div className="flex items-center gap-3">
-                <ImageIcon className="h-5 w-5 text-amber-600" />
-                <span className="font-semibold text-slate-900">Banner images</span>
+              <div className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-amber-600" />
+                <span className="text-xs font-semibold text-slate-900">Banner images</span>
               </div>
-              {openMedia ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              {openMedia ? (
+                <ChevronUp className="h-4 w-4 text-slate-500" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-500" />
+              )}
             </button>
             {openMedia && (
-              <div className="grid gap-6 border-t border-slate-100 p-6 sm:grid-cols-2">
+              <div className="grid gap-4 border-t border-slate-100 p-3 sm:grid-cols-2 sm:p-4">
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Desktop banner
-                  </label>
-                  <input
-                    type="file"
+                  <label className={labelClass}>Desktop banner</label>
+              <input
+                type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       setFormData((prev) => ({ ...prev, desktopbanner: file }));
                       setDesktopPreview(URL.createObjectURL(file));
                     }}
-                    className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:font-medium"
+                    className="block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
                   />
-                  {desktopPreview && (
-                    <img
-                      src={desktopPreview}
-                      alt=""
-                      className="mt-3 h-36 w-full rounded-xl border border-slate-200 object-cover"
-                    />
-                  )}
+              {desktopPreview && (
+                <div className="relative mt-2 h-28 w-full">
+                  <img
+                    src={desktopPreview}
+                    alt="Desktop banner preview"
+                    className="h-full w-full rounded-lg border border-slate-200 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDesktopPreview(null);
+                      setFormData((prev) => ({ ...prev, desktopbanner: null }));
+                    }}
+                    className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-semibold text-white shadow-sm hover:bg-black"
+                    aria-label="Remove desktop banner"
+                    title="Remove desktop banner"
+                  >
+                    ×
+                  </button>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Mobile banner
-                  </label>
-                  <input
-                    type="file"
+              )}
+            </div>
+            <div>
+                  <label className={labelClass}>Mobile banner</label>
+              <input
+                type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       setFormData((prev) => ({ ...prev, mobilebanner: file }));
                       setMobilePreview(URL.createObjectURL(file));
                     }}
-                    className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:font-medium"
+                    className="block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
                   />
-                  {mobilePreview && (
-                    <img
-                      src={mobilePreview}
-                      alt=""
-                      className="mt-3 h-36 w-full rounded-xl border border-slate-200 object-cover"
-                    />
-                  )}
+              {mobilePreview && (
+                <div className="relative mt-2 h-28 w-full">
+                  <img
+                    src={mobilePreview}
+                    alt="Mobile banner preview"
+                    className="h-full w-full rounded-lg border border-slate-200 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobilePreview(null);
+                      setFormData((prev) => ({ ...prev, mobilebanner: null }));
+                    }}
+                    className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-semibold text-white shadow-sm hover:bg-black"
+                    aria-label="Remove mobile banner"
+                    title="Remove mobile banner"
+                  >
+                    ×
+                  </button>
                 </div>
-              </div>
+              )}
+            </div>
+          </div>
             )}
           </section>
 
+          <div className="sticky bottom-0 z-10 -mx-3 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur-sm sm:-mx-4 sm:px-4">
           <button
-            type="submit"
+              type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-            {loading ? "Saving…" : isEdit ? "Update section" : "Create section"}
+              className={`${btnPrimary} w-full py-2.5 text-xs font-semibold`}
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {loading ? "Saving…" : isEdit ? "Update section" : "Create section"}
           </button>
+          </div>
         </form>
       </div>
     </div>

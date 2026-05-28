@@ -1,5 +1,6 @@
 // src/pages/admin/Orders.jsx
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOrders,
   getOrderItems,
@@ -17,11 +18,18 @@ import {
   downloadShippingLabel,
   downloadManifest,
   downloadManufacturingSheetPdf,
-  getStaleOrders,
-  downloadStaleOrdersPdf,
-  runStaleOrderAlertEmail,
   appendOrderNote,
 } from "../../apis/Orderapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  btnDocSmInvoice,
+  DocLabelButton,
+  DocManifestButton,
+  orderDetailCard,
+  orderDetailHeader,
+  orderFormSelect,
+  orderSectionTitle,
+} from "./orderform";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -47,7 +55,6 @@ import {
   Info,
   StickyNote,
   AlertTriangle,
-  Mail,
   Columns3,
   ChevronDown,
 } from "lucide-react";
@@ -62,6 +69,15 @@ const DELIVERY_TYPE_TABS = [
   { value: "ONE_DAY", label: "One day" },
   { value: "90_MIN", label: "90 min" },
 ];
+
+const btnPrimary =
+  "inline-flex items-center justify-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
+const btnOutline =
+  "inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition-colors";
+const btnAmber =
+  "inline-flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-amber-700 transition-colors";
+const inputCompact =
+  "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
 
 /** apiConnector rejects with a string message; success body is { success, message, data } */
 const apiErrMessage = (err, fallback) =>
@@ -526,211 +542,15 @@ function formatManufacturingModalDate(d) {
   }
 }
 
-const STALE_COLUMNS_STORAGE_KEY = "khush_admin_stale_order_visible_columns";
-
-function staleVariantLabel(variant) {
-  const v = variant || {};
-  const parts = [v.size, v.color].filter(Boolean);
-  return parts.length ? parts.join(" / ") : "—";
+function getOrderWalletUsedAmount(order) {
+  if (!order) return 0;
+  const raw = order.pricing?.walletUsedAmount ?? order.walletUsedAmount ?? 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
-/** Configurable stale-order table columns (admin picks visible fields). */
-const STALE_ORDER_TABLE_COLUMNS = [
-  {
-    key: "orderId",
-    label: "Order ID",
-    defaultVisible: true,
-    alwaysVisible: true,
-    headerClass: "",
-    cellClass: "font-medium text-gray-900 tabular-nums",
-    render: (row) => row.orderId || "—",
-  },
-  {
-    key: "orderStatus",
-    label: "Order status",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-600",
-    render: (row) => row.orderStatus || "—",
-  },
-  {
-    key: "confirmedAt",
-    label: "Confirmed at",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-gray-600 whitespace-nowrap text-xs",
-    render: (row) => formatManufacturingModalDate(row.confirmedAt || row.staleSince),
-  },
-  {
-    key: "orderCreatedAt",
-    label: "Order placed",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-600 whitespace-nowrap text-xs",
-    render: (row) => formatManufacturingModalDate(row.orderCreatedAt),
-  },
-  {
-    key: "hoursStale",
-    label: "Hours stale",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-amber-800 font-semibold tabular-nums",
-    render: (row) => (row.hoursStale != null ? Math.floor(row.hoursStale) : "—"),
-  },
-  {
-    key: "sku",
-    label: "SKU",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-gray-700 max-w-[140px] truncate",
-    render: (row) => row.sku || "—",
-  },
-  {
-    key: "variant",
-    label: "Size / color",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700",
-    render: (row) => staleVariantLabel(row.variant),
-  },
-  {
-    key: "quantity",
-    label: "Qty",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700 tabular-nums",
-    render: (row) => (row.quantity != null ? String(row.quantity) : "—"),
-  },
-  {
-    key: "customerName",
-    label: "Customer",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-gray-700 max-w-[160px] truncate",
-    render: (row) => row.customerName || "—",
-  },
-  {
-    key: "phone",
-    label: "Phone",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-gray-600 tabular-nums",
-    render: (row) => row.phone || "—",
-  },
-  {
-    key: "city",
-    label: "City",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700",
-    render: (row) => row.city || "—",
-  },
-  {
-    key: "deliveryType",
-    label: "Delivery",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-gray-600",
-    render: (row) => row.deliveryType || "—",
-  },
-  {
-    key: "finalPayable",
-    label: "Order amount",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-800 tabular-nums font-medium",
-    render: (row) =>
-      row.finalPayable != null && row.finalPayable !== ""
-        ? `₹${row.finalPayable}`
-        : "—",
-  },
-  {
-    key: "paymentMode",
-    label: "Payment mode",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-600",
-    render: (row) => row.paymentMode || "—",
-  },
-  {
-    key: "paymentStatus",
-    label: "Payment status",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-600",
-    render: (row) => row.paymentStatus || "—",
-  },
-  {
-    key: "image",
-    label: "Image",
-    defaultVisible: true,
-    headerClass: "",
-    cellClass: "text-center",
-    render: (row) => {
-      const url = row.variant?.imageUrl;
-      if (!url) return <span className="text-xs text-gray-400">—</span>;
-      return (
-        <img src={url} alt="" className="mx-auto h-10 w-10 rounded object-cover border border-gray-200" loading="lazy" />
-      );
-    },
-  },
-  {
-    key: "variantSku",
-    label: "Variant SKU",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700 max-w-[140px] truncate font-mono text-xs",
-    render: (row) => row.variant?.sku || "—",
-  },
-  {
-    key: "size",
-    label: "Size",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700",
-    render: (row) => row.variant?.size || "—",
-  },
-  {
-    key: "color",
-    label: "Color",
-    defaultVisible: false,
-    headerClass: "",
-    cellClass: "text-gray-700",
-    render: (row) => row.variant?.color || "—",
-  },
-];
-
-function defaultStaleVisibleColumnKeys() {
-  return STALE_ORDER_TABLE_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
-}
-
-function loadStaleVisibleColumnsFromStorage() {
-  const fallback = defaultStaleVisibleColumnKeys();
-  try {
-    const raw = localStorage.getItem(STALE_COLUMNS_STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return fallback;
-    const validKeys = new Set(STALE_ORDER_TABLE_COLUMNS.map((c) => c.key));
-    const keys = [...new Set(parsed.filter((k) => validKeys.has(k)))];
-    STALE_ORDER_TABLE_COLUMNS.filter((c) => c.alwaysVisible).forEach((c) => {
-      if (!keys.includes(c.key)) keys.unshift(c.key);
-    });
-    STALE_ORDER_TABLE_COLUMNS.filter((c) => c.defaultVisible).forEach((c) => {
-      if (!keys.includes(c.key)) keys.push(c.key);
-    });
-    return keys.length ? keys : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function persistStaleVisibleColumns(keys) {
-  try {
-    localStorage.setItem(STALE_COLUMNS_STORAGE_KEY, JSON.stringify(keys));
-  } catch {
-    /* ignore quota / private mode */
-  }
+function formatInr(amount) {
+  return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
 }
 
 const ORDER_LIST_COLUMNS_STORAGE_KEY = "khush_admin_order_list_visible_columns";
@@ -757,6 +577,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
   { key: "storeLink", label: "Store link", defaultVisible: false },
   { key: "total", label: "Order amount", defaultVisible: true },
+  { key: "walletUsed", label: "Wallet used", defaultVisible: true },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
   { key: "status", label: "Status", defaultVisible: true },
   { key: "courier", label: "Courier / Shiprocket", defaultVisible: true },
@@ -857,10 +678,10 @@ function ColumnPickerDropdown({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
         aria-expanded={open}
       >
-        <Columns3 className="h-4 w-4" />
+        <Columns3 className="h-3.5 w-3.5" />
         Columns
         <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
           {activeCount}
@@ -1374,6 +1195,15 @@ function ShiprocketDetails({ sr, compact }) {
 }
 
 const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const basePath = useAdminPanelBasePath();
+  const ap = useMemo(
+    () => (suffix) =>
+      `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/"),
+    [basePath],
+  );
+  const openedFromQueryRef = useRef(false);
   const [viewMode, setViewMode] = useState(
     defaultViewMode === VIEW_ITEM ? VIEW_ITEM : VIEW_ORDER,
   ); // "order" | "item"
@@ -1453,22 +1283,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     () => new Set(),
   );
   const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
-  const [staleModalOpen, setStaleModalOpen] = useState(false);
-  const [staleOrders, setStaleOrders] = useState([]);
-  const [staleMeta, setStaleMeta] = useState({
-    totalMatched: 0,
-    truncated: false,
-    olderThanHours: 24,
-  });
-  const [staleLoading, setStaleLoading] = useState(false);
-  const [stalePdfLoading, setStalePdfLoading] = useState(false);
-  const [staleEmailLoading, setStaleEmailLoading] = useState(false);
-  const [staleHours, setStaleHours] = useState(24);
-  const [staleSearch, setStaleSearch] = useState("");
-  const [staleVisibleColumns, setStaleVisibleColumns] = useState(
-    loadStaleVisibleColumnsFromStorage,
-  );
-  const [staleColumnsOpen, setStaleColumnsOpen] = useState(false);
 
   const [orderListVisibleColumns, setOrderListVisibleColumns] = useState(() =>
     loadVisibleColumnsFromStorage(ORDER_LIST_COLUMNS_STORAGE_KEY, ORDER_LIST_TABLE_COLUMNS),
@@ -1493,11 +1307,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   );
   const [orderDetailColumnsOpen, setOrderDetailColumnsOpen] = useState(false);
 
-  const staleActiveColumns = useMemo(
-    () =>
-      STALE_ORDER_TABLE_COLUMNS.filter((col) => staleVisibleColumns.includes(col.key)),
-    [staleVisibleColumns],
-  );
   // When Reassign is used: unassign this assignment first, then assign new driver
   const [reassignAssignmentId, setReassignAssignmentId] = useState(null);
   const [orderNotesModalOpen, setOrderNotesModalOpen] = useState(false);
@@ -2042,141 +1851,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     }
   };
 
-  const fetchStaleOrdersList = useCallback(async (hours = staleHours) => {
-    try {
-      setStaleLoading(true);
-      const res = await getStaleOrders(hours);
-      const payload = res?.data ?? res;
-      setStaleOrders(Array.isArray(payload?.rows) ? payload.rows : []);
-      setStaleMeta({
-        totalMatched: payload?.totalMatched ?? 0,
-        truncated: !!payload?.truncated,
-        olderThanHours: payload?.olderThanHours ?? hours,
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error(getBackendErrorMessages(err, "Failed to load stale orders"));
-      setStaleOrders([]);
-    } finally {
-      setStaleLoading(false);
-    }
-  }, [staleHours]);
-
-  const openStaleOrdersModal = () => {
-    setStaleModalOpen(true);
-    setStaleSearch("");
-    fetchStaleOrdersList(staleHours);
-  };
-
-  const closeStaleOrdersModal = () => {
-    setStaleModalOpen(false);
-    setStaleSearch("");
-    setStaleColumnsOpen(false);
-  };
-
-  const handleDownloadStalePdf = async () => {
-    try {
-      setStalePdfLoading(true);
-      const blob = await downloadStaleOrdersPdf(staleHours);
-      if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
-        const text = await blob.text();
-        let msg = "Could not generate stale orders PDF";
-        try {
-          const j = JSON.parse(text);
-          if (j?.message) msg = j.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(msg);
-      }
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `stale-orders-${staleHours}h.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success("Stale orders PDF downloaded");
-    } catch (err) {
-      console.error(err);
-      toast.error(getBackendErrorMessages(err, "Could not download stale orders PDF"));
-    } finally {
-      setStalePdfLoading(false);
-    }
-  };
-
-  const handleSendStaleAlertEmail = async () => {
-    try {
-      setStaleEmailLoading(true);
-      const res = await runStaleOrderAlertEmail(staleHours);
-      const data = res?.data ?? res;
-      if (data?.emailSent) {
-        toast.success(`Alert email sent (${data.rowCount ?? 0} lines)`);
-      } else if (data?.skippedReason === "no_stale_orders") {
-        toast.success("No stale orders — email not sent");
-      } else if (data?.skippedReason === "no_recipients") {
-        toast.error(data?.emailError || "Set STALE_ORDER_ALERT_EMAIL_TO on the server");
-      } else {
-        toast.success(res?.message || "Report processed");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error(getBackendErrorMessages(err, "Could not send stale order alert email"));
-    } finally {
-      setStaleEmailLoading(false);
-    }
-  };
-
-  const handleOpenStaleOrder = async (orderId) => {
-    if (!orderId) return;
-    closeStaleOrdersModal();
-    setViewMode(VIEW_ORDER);
-    await fetchSingleOrder(orderId);
-  };
-
-  const filteredStaleOrders = staleSearch.trim()
-    ? staleOrders.filter((row) => {
-        const q = staleSearch.trim().toLowerCase();
-        return (
-          String(row.orderId || "").toLowerCase().includes(q) ||
-          String(row.sku || "").toLowerCase().includes(q) ||
-          String(row.customerName || "").toLowerCase().includes(q) ||
-          String(row.phone || "").toLowerCase().includes(q) ||
-          String(row.city || "").toLowerCase().includes(q) ||
-          String(row.deliveryType || "").toLowerCase().includes(q)
-        );
-      })
-    : staleOrders;
-
-  const toggleStaleColumn = (key) => {
-    const def = STALE_ORDER_TABLE_COLUMNS.find((c) => c.key === key);
-    if (def?.alwaysVisible) return;
-    setStaleVisibleColumns((prev) => {
-      const has = prev.includes(key);
-      const without = has ? prev.filter((k) => k !== key) : [...prev, key];
-      const always = STALE_ORDER_TABLE_COLUMNS.filter((c) => c.alwaysVisible).map(
-        (c) => c.key,
-      );
-      const next = [...new Set([...always, ...without])];
-      if (next.length <= always.length && has) return prev;
-      persistStaleVisibleColumns(next);
-      return next;
-    });
-  };
-
-  const resetStaleColumns = () => {
-    const next = defaultStaleVisibleColumnKeys();
-    setStaleVisibleColumns(next);
-    persistStaleVisibleColumns(next);
-  };
-
-  const selectAllStaleColumns = () => {
-    const next = STALE_ORDER_TABLE_COLUMNS.map((c) => c.key);
-    setStaleVisibleColumns(next);
-    persistStaleVisibleColumns(next);
-  };
-
   const orderListActiveColumns = useMemo(
     () => ORDER_LIST_TABLE_COLUMNS.filter((c) => orderListVisibleColumns.includes(c.key)),
     [orderListVisibleColumns],
@@ -2270,6 +1944,19 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       setOrderLoading(false);
     }
   };
+
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId || openedFromQueryRef.current) return;
+    openedFromQueryRef.current = true;
+    setViewMode(VIEW_ORDER);
+    setSelectedItemIdFromListView(null);
+    setItemPage(1);
+    fetchSingleOrder(openId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const openOrderNotesModal = async (orderId) => {
     if (!orderId) return;
@@ -3145,7 +2832,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       case "qty":
         return order.totalItems || order.totalQuantity || order.items?.length || "?";
       case "total":
-        return `₹${(order.totalAmount || order.pricing?.finalPayable || 0).toLocaleString("en-IN")}`;
+        return formatInr(
+          order.totalAmount ??
+            order.pricing?.finalPayableBeforeWallet ??
+            order.pricing?.finalPayable ??
+            0,
+        );
+      case "walletUsed": {
+        const walletUsed = getOrderWalletUsedAmount(order);
+        return walletUsed > 0 ? formatInr(walletUsed) : "—";
+      }
       case "status":
         return getStatusBadge(getDisplayOrderStatus(order));
       case "courier": {
@@ -3156,71 +2852,49 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               <span className="text-xs text-gray-400">—</span>
               {hasNormalDeliveryInOrder(order) && (
                 <>
-                  <button
-                    type="button"
+                  <DocLabelButton
+                    className="w-full"
+                    loading={docDownloadLoading}
+                    loadingType={docActionType}
                     disabled={docDownloadLoading}
                     onClick={() => handleLabelForOrder(order)}
-                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                  >
-                    {docDownloadLoading && docActionType === "label" ? (
-                      <RefreshCw size={11} className="shrink-0 animate-spin" />
-                    ) : (
-                      <Truck size={11} className="shrink-0" />
-                    )}
-                    {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
-                  </button>
-                  <button
-                    type="button"
+                  />
+                  <DocManifestButton
+                    className="w-full"
+                    loading={docDownloadLoading}
+                    loadingType={docActionType}
                     disabled={docDownloadLoading}
                     onClick={() => handleManifestForOrder(order)}
-                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                  >
-                    {docDownloadLoading && docActionType === "manifest" ? (
-                      <RefreshCw size={11} className="shrink-0 animate-spin" />
-                    ) : (
-                      <Package size={11} className="shrink-0" />
-                    )}
-                    {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
-                  </button>
+                  />
                 </>
               )}
             </div>
           );
         }
         return (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <ShiprocketDetails sr={prev.primary} compact />
             {prev.count > 1 && (
               <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
             )}
             {hasNormalDeliveryInOrder(order) && (
               <>
-                <button
-                  type="button"
+                <DocLabelButton
+                  loading={docDownloadLoading}
+                  loadingType={docActionType}
                   disabled={docDownloadLoading}
                   onClick={() => handleLabelForOrder(order)}
-                  className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                >
-                  {docDownloadLoading && docActionType === "label" ? (
-                    <RefreshCw size={11} className="shrink-0 animate-spin" />
-                  ) : (
-                    <Truck size={11} className="shrink-0" />
-                  )}
-                  {docDownloadLoading && docActionType === "label" ? "Loading..." : "Label"}
-                </button>
-                <button
-                  type="button"
+                  showText={false}
+                  className="w-full"
+                />
+                <DocManifestButton
+                  loading={docDownloadLoading}
+                  loadingType={docActionType}
                   disabled={docDownloadLoading}
                   onClick={() => handleManifestForOrder(order)}
-                  className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                >
-                  {docDownloadLoading && docActionType === "manifest" ? (
-                    <RefreshCw size={11} className="shrink-0 animate-spin" />
-                  ) : (
-                    <Package size={11} className="shrink-0" />
-                  )}
-                  {docDownloadLoading && docActionType === "manifest" ? "Loading..." : "Manifest"}
-                </button>
+                  showText={false}
+                  className="w-full"
+                />
               </>
             )}
           </div>
@@ -3390,6 +3064,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       case "qty":
         return "px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums";
       case "total":
+      case "walletUsed":
         return "min-w-0 px-2 py-2 align-top text-xs font-medium text-gray-900 tabular-nums";
       case "date":
         return "min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500";
@@ -3477,21 +3152,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         </button>
         {isNormal && (
           <>
-            <button
-              type="button"
+            <DocLabelButton
+              loading={docDownloadLoading}
+              loadingType={docActionType}
               disabled={docDownloadLoading}
               onClick={() => handleLabelForItem(rowItem)}
-              className="inline-flex items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-            >
-              {docDownloadLoading && docActionType === "label" ? (
-                <RefreshCw size={11} className="animate-spin" />
-              ) : (
-                <Truck size={11} />
-              )}
-              Label
-            </button>
-            <button
-              type="button"
+            />
+            <DocManifestButton
+              loading={docDownloadLoading}
+              loadingType={docActionType}
               disabled={
                 docDownloadLoading ||
                 (() => {
@@ -3500,15 +3169,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 })()
               }
               onClick={() => handleManifestForItem(rowItem)}
-              className="inline-flex items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-            >
-              {docDownloadLoading && docActionType === "manifest" ? (
-                <RefreshCw size={11} className="animate-spin" />
-              ) : (
-                <Package size={11} />
-              )}
-              Manifest
-            </button>
+            />
           </>
         )}
       </div>
@@ -3614,22 +3275,31 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   };
 
   return (
-    <div className="min-h-screen w-full min-w-0 px-3 py-5 sm:px-5 lg:px-6">
-      <div className="mx-auto w-full max-w-[1920px] min-w-0">
-        {/* Header + Search */}
-        <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
-            <Package className="h-8 w-8 text-indigo-600" />
-            {exchangeOnly ? "Exchange Orders" : "Order Management"}
-          </h1>
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+    <div className="min-h-screen bg-slate-50/80">
+      <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-[1920px] flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <Package className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold text-slate-900">
+                {exchangeOnly ? "Exchange orders" : "Order management"}
+              </h1>
+              <p className="hidden text-[10px] text-slate-500 sm:block">
+                {viewMode === VIEW_ORDER ? "By order" : "By item"}
+                {deliveryTypeFilter ? ` · ${deliveryTypeFilter}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="relative w-full max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder={
                 viewMode === VIEW_ORDER
-                  ? "Search by ID, name, phone..."
-                  : "Search by order ID, SKU, customer..."
+                  ? "Search ID, name, phone…"
+                  : "Search order ID, SKU, customer…"
               }
               value={viewMode === VIEW_ORDER ? search : itemSearch}
               onChange={(e) => {
@@ -3641,21 +3311,19 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   setItemPagination((p) => ({ ...p, page: 1 }));
                 }
               }}
-              className="w-full rounded-lg border border-gray-300 pl-10 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              className={`${inputCompact} pl-8`}
             />
           </div>
         </div>
-
-        {/* View mode tabs: By order | By item */}
-        {!exchangeOnly ? (
-          <div className="mb-6 flex gap-2 border-b border-gray-200">
+        {!exchangeOnly && (
+          <div className="mx-auto flex max-w-[1920px] gap-1 border-t border-slate-100 px-3 sm:px-4">
             <button
               type="button"
               onClick={() => setViewMode(VIEW_ORDER)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`border-b-2 px-2.5 py-2 text-[11px] font-medium transition-colors -mb-px ${
                 viewMode === VIEW_ORDER
                   ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
               By order
@@ -3663,25 +3331,30 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             <button
               type="button"
               onClick={() => setViewMode(VIEW_ITEM)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`border-b-2 px-2.5 py-2 text-[11px] font-medium transition-colors -mb-px ${
                 viewMode === VIEW_ITEM
                   ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
               By item
             </button>
           </div>
-        ) : (
-          <div className="mb-6 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700">
-            Exchange Orders are shown in By order mode.
+        )}
+      </div>
+
+      <div className="mx-auto w-full max-w-[1920px] min-w-0 px-3 py-3 sm:px-4">
+        {exchangeOnly && (
+          <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-medium text-indigo-700">
+            Exchange orders — by order view only.
           </div>
         )}
 
-        {/* Delivery type — filters both list APIs on the backend */}
-        <div className="mb-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Delivery type</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="mb-3">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Delivery type
+          </p>
+          <div className="flex flex-wrap gap-1.5">
             {DELIVERY_TYPE_TABS.map((tab) => (
               <button
                 key={tab.value || "all"}
@@ -3691,10 +3364,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   setPagination((p) => ({ ...p, page: 1 }));
                   setItemPagination((p) => ({ ...p, page: 1 }));
                 }}
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   deliveryTypeFilter === tab.value
                     ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
                 {tab.label}
@@ -3704,12 +3377,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         </div>
 
         {!selectedOrder && (
-          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-indigo-950">
+              <p className="text-xs font-semibold text-indigo-950">
                 Manufacturing & fulfilment PDF
               </p>
-              <p className="text-xs text-indigo-900/80 mt-1 max-w-xl">
+              <p className="text-[10px] text-indigo-900/80 mt-0.5 max-w-xl">
                 Exports <span className="font-medium">every line</span> that matches your current filters (up to 8,000
                 lines per file — the PDF header says if the export was capped). Uses{" "}
                 <span className="font-medium">order date range</span>, <span className="font-medium">delivery type</span>
@@ -3733,38 +3406,37 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               type="button"
               disabled={manufacturingPdfLoading}
               onClick={handleDownloadManufacturingPdf}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-indigo-300 bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-              title="Downloads one PDF with all order lines matching your filters (max 8,000 per download). Large exports may take a minute."
+              className={`${btnPrimary} shrink-0`}
+              title="Downloads one PDF with all order lines matching your filters (max 8,000 per download)."
             >
               {manufacturingPdfLoading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
               ) : (
-                <FileDown className="h-4 w-4" aria-hidden />
+                <FileDown className="h-3.5 w-3.5" aria-hidden />
               )}
-              Download manufacturing PDF
+              Manufacturing PDF
             </button>
           </div>
         )}
 
-        {!selectedOrder && (
-          <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        {!selectedOrder && !exchangeOnly && (
+          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-950 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+              <p className="text-xs font-semibold text-amber-950 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
                 Stale orders (CONFIRMED 24h+)
               </p>
-              <p className="text-xs text-amber-900/80 mt-1 max-w-xl">
-                Lines still in <span className="font-medium">CONFIRMED</span> with no move to PROCESSING or
-                shipped for at least 24 hours. Review in the list, download PDF, or email the daily report.
+              <p className="text-[10px] text-amber-900/80 mt-0.5 max-w-xl">
+                Lines stuck in CONFIRMED — review, export PDF, or email report on a dedicated page.
               </p>
             </div>
             <button
               type="button"
-              onClick={openStaleOrdersModal}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors"
+              onClick={() => navigate(ap("orders/stale"))}
+              className={`${btnAmber} shrink-0`}
             >
-              <Clock className="h-4 w-4" aria-hidden />
-              View stale orders
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              Stale orders page
             </button>
           </div>
         )}
@@ -3786,9 +3458,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           viewMode === VIEW_ORDER ? (
             <>
               {/* Filters: By order */}
-              <div className="mb-6 rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-gray-800">Filters</p>
+              <div className="mb-3 rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold text-slate-800">Filters</p>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     {(dateFrom ||
                       dateTo ||
@@ -3895,14 +3567,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 </div>
               </div>
 
-            <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-              <table className="w-full min-w-[720px] table-auto border-collapse text-left text-sm">
-                <thead className="bg-gray-50">
+            <div className="w-full min-w-0 overflow-x-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <table className="w-full min-w-full border-collapse text-left text-xs">
+                <thead className="bg-slate-50/90">
                   <tr>
                     {orderListActiveColumns.map((col) => (
                       <th
                         key={col.key}
-                        className={`px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600 ${
+                        className={`px-1.5 py-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 ${
                           col.key === "info" ? "px-1 text-center" : ""
                         }`}
                         title={
@@ -3916,7 +3588,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         {col.key === "info" ? "Info" : col.key === "orderId" ? "Order" : col.key === "courier" ? "Courier / SR" : col.label}
                       </th>
                     ))}
-                    <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                    <th className="px-1.5 py-1.5 text-center text-[9px] font-semibold uppercase tracking-wide text-slate-500">
                       Details / notes
                     </th>
                   </tr>
@@ -3959,16 +3631,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   <button
                     disabled={pagination.page <= 1 || loading}
                     onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                    className={btnOutline}
                   >
-                    <ChevronLeft size={16} /> Prev
+                    <ChevronLeft className="h-3.5 w-3.5" /> Prev
                   </button>
                   <button
                     disabled={pagination.page >= pagination.totalPages || loading}
                     onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
+                    className={btnOutline}
                   >
-                    Next <ChevronRight size={16} />
+                    Next <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -4112,7 +3784,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   </p>
                 </div>
               ) : itemListViewMode === "table" ? (
-                <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="w-full min-w-0 overflow-x-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                   <table className="w-full min-w-[800px] table-auto border-collapse text-left text-sm">
                     <thead className="bg-gray-50">
                       <tr>
@@ -4276,24 +3948,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               return null;
                             }
                             return (
-                              <div className="mt-1 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                <DocLabelButton
+                                  loading={docDownloadLoading}
+                                  loadingType={docActionType}
                                   disabled={docDownloadLoading}
                                   onClick={() => handleLabelForItem(rowItem)}
-                                  className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                >
-                                  {docDownloadLoading && docActionType === "label" ? (
-                                    <RefreshCw size={12} className="animate-spin" />
-                                  ) : (
-                                    <Truck size={12} className="shrink-0" />
-                                  )}
-                                  {docDownloadLoading && docActionType === "label"
-                                    ? "Loading..."
-                                    : "Download label"}
-                                </button>
-                                <button
-                                  type="button"
+                                />
+                                <DocManifestButton
+                                  loading={docDownloadLoading}
+                                  loadingType={docActionType}
                                   disabled={
                                     docDownloadLoading ||
                                     (() => {
@@ -4302,25 +3966,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                     })()
                                   }
                                   onClick={() => handleManifestForItem(rowItem)}
-                                  className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
                                   title={
                                     (() => {
                                       const ids = getShipmentIdsForItem(rowItem);
                                       return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                        ? "Manifest already downloaded for this shipment"
+                                        ? "Manifest already downloaded"
                                         : "Download manifest";
                                     })()
                                   }
-                                >
-                                  {docDownloadLoading && docActionType === "manifest" ? (
-                                    <RefreshCw size={12} className="animate-spin" />
-                                  ) : (
-                                    <Package size={12} className="shrink-0" />
-                                  )}
-                                  {docDownloadLoading && docActionType === "manifest"
-                                    ? "Loading..."
-                                    : "Manifest"}
-                                </button>
+                                />
                               </div>
                             );
                           })()}
@@ -4997,11 +4651,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               selectedOrder?.pricing?.gst?.totalGst || 0
                             ).toLocaleString("en-IN")}
                           </p>
+                          {getOrderWalletUsedAmount(selectedOrder) > 0 && (
+                            <p className="text-emerald-700">
+                              Wallet used: {formatInr(getOrderWalletUsedAmount(selectedOrder))}
+                            </p>
+                          )}
                           <p className="font-bold text-base pt-2 border-t mt-2">
-                            Final Payable: ₹
-                            {(
-                              selectedOrder?.pricing?.finalPayable || 0
-                            ).toLocaleString("en-IN")}
+                            Final Payable: {formatInr(selectedOrder?.pricing?.finalPayable || 0)}
                           </p>
                         </div>
                       </div>
@@ -5374,7 +5030,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 ) : !selectedOrder?.items?.length ? (
                   <div className="py-12 text-center text-gray-500">No items found</div>
                 ) : (
-                  <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-gray-200">
+                  <div className="w-full min-w-0 overflow-x-hidden rounded-lg border border-gray-200">
                     <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
                       <thead className="bg-gray-50">
                         <tr>
@@ -5628,6 +5284,49 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           );
                         })}
                       </tbody>
+                      <tfoot className="border-t border-slate-200 bg-slate-50/90">
+                        <tr>
+                          <td
+                            colSpan={1 + orderDetailItemActiveColumns.length + 4}
+                            className="px-3 py-2.5"
+                          >
+                            <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1 text-xs text-gray-700">
+                              <span>
+                                Subtotal:{" "}
+                                <span className="font-medium tabular-nums">
+                                  {formatInr(selectedOrder?.pricing?.subTotal)}
+                                </span>
+                              </span>
+                              {getOrderWalletUsedAmount(selectedOrder) > 0 && (
+                                <span className="text-emerald-700">
+                                  Wallet used:{" "}
+                                  <span className="font-medium tabular-nums">
+                                    {formatInr(getOrderWalletUsedAmount(selectedOrder))}
+                                  </span>
+                                </span>
+                              )}
+                              <span>
+                                Delivery:{" "}
+                                <span className="font-medium tabular-nums">
+                                  {formatInr(selectedOrder?.pricing?.delivery?.totalCharge)}
+                                </span>
+                              </span>
+                              <span>
+                                GST:{" "}
+                                <span className="font-medium tabular-nums">
+                                  {formatInr(selectedOrder?.pricing?.gst?.totalGst)}
+                                </span>
+                              </span>
+                              <span className="font-semibold text-gray-900">
+                                Final payable:{" "}
+                                <span className="tabular-nums">
+                                  {formatInr(selectedOrder?.pricing?.finalPayable)}
+                                </span>
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 )}
@@ -5784,250 +5483,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               </div>
             );
           })()
-        )}
-
-        {staleModalOpen && (
-          <div
-            className="fixed inset-0 z-[74] flex items-center justify-center bg-black/50 p-4 sm:p-6"
-            onClick={closeStaleOrdersModal}
-            role="presentation"
-          >
-            <div
-              className="mx-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="stale-orders-modal-title"
-            >
-              <div className="border-b border-amber-100 bg-amber-50 px-5 py-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3
-                    id="stale-orders-modal-title"
-                    className="text-base font-semibold text-amber-950 flex items-center gap-2"
-                  >
-                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-                    Stale orders
-                  </h3>
-                  <p className="text-xs text-amber-900/90 mt-1">
-                    {staleLoading
-                      ? "Loading…"
-                      : `${staleMeta.totalMatched} line(s) · CONFIRMED for ${staleMeta.olderThanHours}+ hours`}
-                    {staleMeta.truncated ? " (list capped — see PDF for full export)" : ""}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeStaleOrdersModal}
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-white/80"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-4 py-3 bg-white">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-600">Hours</label>
-                  <select
-                    value={staleHours}
-                    onChange={(e) => {
-                      const h = parseInt(e.target.value, 10) || 24;
-                      setStaleHours(h);
-                      fetchStaleOrdersList(h);
-                    }}
-                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value={24}>24</option>
-                    <option value={48}>48</option>
-                    <option value={72}>72</option>
-                  </select>
-                </div>
-                <div className="relative flex-1 min-w-[180px] max-w-xs">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="search"
-                    value={staleSearch}
-                    onChange={(e) => setStaleSearch(e.target.value)}
-                    placeholder="Search order, SKU, customer…"
-                    className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-1.5 text-sm"
-                  />
-                </div>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setStaleColumnsOpen((o) => !o)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    aria-expanded={staleColumnsOpen}
-                  >
-                    <Columns3 className="h-4 w-4" />
-                    Columns
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
-                      {staleActiveColumns.length}
-                    </span>
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${staleColumnsOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {staleColumnsOpen && (
-                    <div className="absolute left-0 top-full z-20 mt-1 w-[min(100vw-2rem,22rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-lg ring-1 ring-black/5">
-                      <p className="text-xs font-semibold text-gray-700 mb-2">
-                        Choose columns to show
-                      </p>
-                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                        {STALE_ORDER_TABLE_COLUMNS.map((col) => {
-                          const checked = staleVisibleColumns.includes(col.key);
-                          const locked = !!col.alwaysVisible;
-                          return (
-                            <label
-                              key={col.key}
-                              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                                locked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={locked}
-                                onChange={() => toggleStaleColumn(col.key)}
-                                className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                              />
-                              <span className="text-gray-800">{col.label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-2 flex gap-2 border-t border-gray-100 pt-2">
-                        <button
-                          type="button"
-                          onClick={selectAllStaleColumns}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                        >
-                          Show all
-                        </button>
-                        <button
-                          type="button"
-                          onClick={resetStaleColumns}
-                          className="text-xs font-medium text-gray-600 hover:text-gray-800"
-                        >
-                          Reset default
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={staleLoading}
-                  onClick={() => fetchStaleOrdersList(staleHours)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-4 w-4 ${staleLoading ? "animate-spin" : ""}`} />
-                  Refresh
-                </button>
-                <button
-                  type="button"
-                  disabled={stalePdfLoading || staleLoading}
-                  onClick={handleDownloadStalePdf}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50"
-                >
-                  {stalePdfLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileDown className="h-4 w-4" />
-                  )}
-                  PDF
-                </button>
-                <button
-                  type="button"
-                  disabled={staleEmailLoading || staleLoading}
-                  onClick={handleSendStaleAlertEmail}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
-                  title="Sends email to addresses in server STALE_ORDER_ALERT_EMAIL_TO"
-                >
-                  {staleEmailLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mail className="h-4 w-4" />
-                  )}
-                  Email report
-                </button>
-              </div>
-
-              {staleColumnsOpen && (
-                <p className="border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-900/90">
-                  Showing:{" "}
-                  <span className="font-medium">
-                    {staleActiveColumns.map((c) => c.label).join(" · ")}
-                  </span>
-                  <span className="text-amber-800/70"> — saved in this browser</span>
-                </p>
-              )}
-
-              <div className="min-h-0 flex-1 overflow-auto">
-                {staleLoading ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                    <RefreshCw className="h-8 w-8 animate-spin text-amber-600 mb-2" />
-                    <p className="text-sm">Loading stale orders…</p>
-                  </div>
-                ) : filteredStaleOrders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                    <CheckCircle className="h-10 w-10 text-emerald-500 mb-2" />
-                    <p className="text-sm font-medium text-gray-700">No stale orders</p>
-                    <p className="text-xs mt-1">
-                      {staleSearch.trim()
-                        ? "No matches for your search"
-                        : `All clear for ${staleHours}+ hour threshold`}
-                    </p>
-                  </div>
-                ) : (
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide z-10">
-                      <tr>
-                        {staleActiveColumns.map((col) => (
-                          <th
-                            key={col.key}
-                            className={`px-4 py-2.5 whitespace-nowrap ${col.headerClass || ""} ${
-                              col.key === "orderId" ? "" : ""
-                            }`}
-                          >
-                            {col.label}
-                          </th>
-                        ))}
-                        <th className="px-4 py-2.5 text-right whitespace-nowrap">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredStaleOrders.map((row, idx) => (
-                        <tr key={`${row.orderId}-${row.sku}-${idx}`} className="hover:bg-amber-50/50">
-                          {staleActiveColumns.map((col) => (
-                            <td
-                              key={col.key}
-                              className={`px-4 py-2 ${col.cellClass || ""}`}
-                              title={
-                                col.key === "sku" || col.key === "customerName"
-                                  ? String(col.render(row) ?? "")
-                                  : undefined
-                              }
-                            >
-                              {col.render(row)}
-                            </td>
-                          ))}
-                          <td className="px-4 py-2 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenStaleOrder(row.orderId)}
-                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                            >
-                              Open order
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
         )}
 
         {orderNotesModalOpen && orderNotesModalOrderId && (

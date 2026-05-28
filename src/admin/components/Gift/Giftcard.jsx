@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Gift,
-  Loader2,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Gift, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
 import {
@@ -19,7 +13,10 @@ const GiftCardRule = () => {
   const navigate = useNavigate();
   const basePath = useAdminPanelBasePath();
   const ap = (suffix) =>
-    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(
+      /\/+/g,
+      "/",
+    );
 
   const [giftCards, setGiftCards] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -76,21 +73,26 @@ const GiftCardRule = () => {
       }
     } catch (err) {
       console.error(err);
-      alert(extractBackendMessages(err).join("; ") || "Failed to update status.");
+      alert(
+        extractBackendMessages(err).join("; ") || "Failed to update status.",
+      );
     } finally {
       setBusyId("");
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this gift card rule? This cannot be undone.")) return;
+    if (!window.confirm("Delete this gift card rule? This cannot be undone."))
+      return;
     try {
       setBusyId(id);
       await deleteGiftCardRule(id);
       await fetchGiftCards();
     } catch (err) {
       console.error(err);
-      alert(extractBackendMessages(err).join("; ") || "Failed to delete gift card.");
+      alert(
+        extractBackendMessages(err).join("; ") || "Failed to delete gift card.",
+      );
     } finally {
       setBusyId("");
     }
@@ -154,7 +156,9 @@ const GiftCardRule = () => {
           ) : giftCards.length === 0 ? (
             <div className="py-16 text-center">
               <Gift className="mx-auto h-10 w-10 text-slate-300" />
-              <p className="mt-3 text-sm font-medium text-slate-700">No gift cards yet</p>
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                No gift cards yet
+              </p>
               <p className="mt-1 text-sm text-slate-500">
                 Create your first gift card rule to get started.
               </p>
@@ -176,7 +180,7 @@ const GiftCardRule = () => {
                       Card
                     </th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Multiplier
+                      Slabs
                     </th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                       Rules
@@ -191,7 +195,10 @@ const GiftCardRule = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {giftCards.map((item) => (
-                    <tr key={item._id} className="transition hover:bg-slate-50/80">
+                    <tr
+                      key={item._id}
+                      className="transition hover:bg-slate-50/80"
+                    >
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           {item.image ? (
@@ -206,7 +213,9 @@ const GiftCardRule = () => {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-900">{item.name}</p>
+                            <p className="font-semibold text-slate-900">
+                              {item.name}
+                            </p>
                             <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
                               {item.description || "No description"}
                             </p>
@@ -216,10 +225,34 @@ const GiftCardRule = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-sm font-semibold text-indigo-800 ring-1 ring-indigo-100">
-                          {item.multiplier}x
-                        </span>
+                      <td className="px-4 py-4">
+                        <div className="space-y-2">
+                          {Array.isArray(item.slabs) &&
+                          item.slabs.length > 0 ? (
+                            item.slabs.map((slab, index) => (
+                              <div
+                                key={index}
+                                className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2"
+                              >
+                                <p className="text-xs font-semibold text-indigo-700">
+                                  ₹{slab.minPrice} - ₹{slab.maxPrice}
+                                </p>
+
+                               {slab.percent}% Percent
+
+                                {slab.label && (
+                                  <p className="text-[11px] text-slate-500">
+                                    {slab.label}
+                                  </p>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              No slabs
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="max-w-xs px-4 py-4">
                         <div className="flex flex-wrap gap-1.5">
@@ -248,7 +281,11 @@ const GiftCardRule = () => {
                               : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
                           }`}
                         >
-                          {busyId === item._id ? "…" : item.isActive ? "Active" : "Inactive"}
+                          {busyId === item._id
+                            ? "…"
+                            : item.isActive
+                              ? "Active"
+                              : "Inactive"}
                         </button>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-right">

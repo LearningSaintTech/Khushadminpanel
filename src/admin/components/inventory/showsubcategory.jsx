@@ -312,8 +312,8 @@ const Showsubcategory = () => {
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-4 sm:px-6">
           {/* Title */}
-          <div className="py-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+          <div className="py-3">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight">
               Subcategories
             </h1>
           </div>
@@ -322,7 +322,7 @@ const Showsubcategory = () => {
           <div className="pb-5 space-y-5 border-t border-gray-100 pt-5">
             {/* Category Dropdown */}
             <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
+              <label className="block mb-2 text-xs font-semibold text-gray-700">
                 Filter by Category
               </label>
               <div className="relative" ref={categoryDropdownRef}>
@@ -330,7 +330,7 @@ const Showsubcategory = () => {
                   type="button"
                   onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
                   disabled={loadingCategories}
-                  className="w-full px-4 py-2.5 text-sm bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-between"
+                  className="w-full px-4 py-2 text-xs bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-between"
                 >
                   <span className="truncate">
                     {loadingCategories ? "Loading..." : getSelectedCategoryName()}
@@ -356,7 +356,7 @@ const Showsubcategory = () => {
                             setCategoryCurrentPage(1);
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black"
+                          className="w-full pl-10 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black"
                           autoFocus
                         />
                       </div>
@@ -364,9 +364,9 @@ const Showsubcategory = () => {
 
                     <div className="overflow-y-auto flex-1 min-h-0">
                       {loadingCategories && categories.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">Loading categories...</div>
+                        <div className="p-4 text-center text-gray-500 text-xs">Loading categories...</div>
                       ) : categories.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">
+                        <div className="p-4 text-center text-gray-500 text-xs">
                           {categorySearchTerm ? "No categories found matching your search" : "No categories available"}
                         </div>
                       ) : (
@@ -374,7 +374,7 @@ const Showsubcategory = () => {
                           <button
                             type="button"
                             onClick={() => handleCategorySelect("")}
-                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            className={`w-full px-4 py-2 text-left text-xs hover:bg-gray-50 transition-colors ${
                               selectedCategoryId === "" ? "bg-gray-100 font-semibold text-black" : "text-gray-700"
                             }`}
                           >
@@ -386,7 +386,7 @@ const Showsubcategory = () => {
                               key={cat._id}
                               type="button"
                               onClick={() => handleCategorySelect(cat._id)}
-                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors border-t border-gray-100 ${
+                              className={`w-full px-4 py-2 text-left text-xs hover:bg-gray-50 transition-colors border-t border-gray-100 ${
                                 selectedCategoryId === cat._id ? "bg-gray-100 font-semibold text-black" : "text-gray-700"
                               }`}
                             >
@@ -407,7 +407,7 @@ const Showsubcategory = () => {
                                   loadMoreCategories();
                                 }}
                                 disabled={loadingCategories}
-                                className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {loadingCategories ? "Loading..." : "Load More..."}
                               </button>
@@ -481,14 +481,14 @@ const Showsubcategory = () => {
                   placeholder="Search subcategories by name or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 placeholder-gray-400"
+                  className="w-full pl-10 pr-4 py-2 text-xs bg-white border-2 border-gray-300 rounded-lg shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all outline-none text-gray-900 placeholder-gray-400"
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" size={20} />
               </div>
 
               <button
                 onClick={openCreate}
-                className="px-5 py-2.5 bg-black hover:bg-gray-900 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
+                className="px-5 py-2 bg-black hover:bg-gray-900 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
               >
                 <Plus size={18} />
                 <span>New Subcategory</span>
@@ -502,7 +502,7 @@ const Showsubcategory = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 sm:px-6 py-6">
           {listErrors.length > 0 && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-sm">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs">
               <div className="font-semibold mb-2">Please review:</div>
               <ul className="list-disc list-inside space-y-1">
                 {listErrors.map((msg, idx) => (
@@ -517,18 +517,18 @@ const Showsubcategory = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Order</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Icon</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">Description</th>
-                    <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">Navbar</th>
-                    <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden sm:table-cell">Order</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Icon</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Name</th>
+                    <th className="px-5 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider hidden lg:table-cell">Description</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">Navbar</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider hidden md:table-cell">
   Footer
 </th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
@@ -559,15 +559,15 @@ const Showsubcategory = () => {
                         key={sub._id}
                         className="group hover:bg-gray-50/70 transition-colors duration-150"
                       >
-                        <td className="px-4 py-4 text-sm text-gray-600">
+                        <td className="px-4 py-3 text-xs text-gray-600">
                           {(currentPage - 1) * limit + i + 1}
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-600 hidden sm:table-cell">
+                        <td className="px-4 py-3 text-xs text-gray-600 hidden sm:table-cell">
                           {sub.sortOrder || "—"}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <div
-                            className="relative group cursor-pointer h-12 w-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
+                            className="relative group cursor-pointer h-10 w-10 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
                             onClick={(e) => {
                               e.stopPropagation();
                               if (sub.imageUrl) {
@@ -594,7 +594,7 @@ const Showsubcategory = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-4 py-3">
                           <div
                             className={`relative h-10 w-10 rounded-lg overflow-hidden bg-gray-50 border border-gray-200 shadow-sm ${
                               iconUrl ? "cursor-pointer hover:ring-2 hover:ring-indigo-500" : ""
@@ -623,13 +623,13 @@ const Showsubcategory = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm font-semibold text-gray-900">{sub.name}</div>
+                        <td className="px-4 py-3">
+                          <div className="text-xs font-semibold text-gray-900">{sub.name}</div>
                         </td>
-                        <td className="px-5 py-4 text-sm text-gray-600 hidden lg:table-cell max-w-md">
+                        <td className="px-5 py-3 text-xs text-gray-600 hidden lg:table-cell max-w-md">
                           <div className="line-clamp-2">{sub.description || "—"}</div>
                         </td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-4 py-3 text-center">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -644,7 +644,7 @@ const Showsubcategory = () => {
                             {sub.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="px-4 py-4 text-center hidden md:table-cell">
+                        <td className="px-4 py-3 text-center hidden md:table-cell">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -660,7 +660,7 @@ const Showsubcategory = () => {
                           </button>
                         </td>
 
-                        <td className="px-4 py-4 text-center hidden md:table-cell">
+                        <td className="px-4 py-3 text-center hidden md:table-cell">
   <button
     onClick={(e) => {
       e.stopPropagation();
@@ -675,7 +675,7 @@ const Showsubcategory = () => {
     {sub.isFooter ? "Shown" : "Hidden"}
   </button>
 </td>
-                        <td className="px-4 py-4 text-right">
+                        <td className="px-4 py-3 text-right">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -685,7 +685,7 @@ const Showsubcategory = () => {
                             title="Edit subcategory (name, image, icon, etc.)"
                           >
                             <Edit size={18} />
-                            <span className="hidden sm:inline text-sm">Edit</span>
+                            <span className="hidden sm:inline text-xs">Edit</span>
                           </button>
                         </td>
                       </tr>
@@ -700,7 +700,7 @@ const Showsubcategory = () => {
           {/* Pagination */}
           {displayData.length > 0 && !loading && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 px-1 pb-6">
-              <div className="text-sm text-gray-700">
+              <div className="text-xs text-gray-700">
                 {isSearching ? (
                   <>
                     Showing <strong>{displayData.length}</strong> of{" "}
@@ -718,12 +718,12 @@ const Showsubcategory = () => {
                 <button
                   disabled={currentPage <= 1 || loading}
                   onClick={() => setCurrentPage(currentPage - 1)}
-                  className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                  className="px-5 py-2 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
                 >
                   Previous
                 </button>
 
-                <span className="px-5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-700 min-w-[140px] text-center">
+                <span className="px-5 py-2 bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-700 min-w-[140px] text-center">
                   Page {currentPage} of{" "}
                   {pagination?.pages ||
                     Math.ceil((pagination?.total || subcategories.length) / limit) ||
@@ -738,7 +738,7 @@ const Showsubcategory = () => {
                         1) || loading
                   }
                   onClick={() => setCurrentPage(currentPage + 1)}
-                  className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
+                  className="px-5 py-2 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
                 >
                   Next
                 </button>

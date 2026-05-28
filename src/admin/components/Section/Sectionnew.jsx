@@ -6,7 +6,7 @@ import {
   FiPlus,
   FiTrash2,
 } from "react-icons/fi";
-import { Loader2, Search, X } from "lucide-react";
+import { Loader2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   deleteSection,
   getAllSections,
@@ -204,43 +204,46 @@ const Section = () => {
     setDebouncedSearch("");
   };
 
+  const btnPrimary =
+    "inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
+  const btnOutline =
+    "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-colors";
+
   return (
-    <div className="min-h-full bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-              <FiLayers className="h-5 w-5" />
+    <div className="min-h-screen bg-slate-50/80">
+      <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-3 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <FiLayers className="h-4 w-4" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold text-slate-900">
                 Homepage sections
               </h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Curate product blocks, category rails, and hero banners for your storefront.
+              <p className="hidden text-[10px] text-slate-500 sm:block">
+                Product blocks, category rails, and hero banners
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate(ap("section/create"))}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <FiPlus className="h-4 w-4" />
+          <button type="button" onClick={() => navigate(ap("section/create"))} className={btnPrimary}>
+            <FiPlus className="h-3.5 w-3.5" />
             Create section
           </button>
         </div>
+      </div>
 
-        {/* Search + type filters */}
-        <div className="mb-6 space-y-4">
+      <div className="mx-auto max-w-[1600px] px-3 pb-8 sm:px-4">
+
+        <div className="mb-3 space-y-3">
           <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by title, description, or path…"
-              className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-12 pr-12 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              placeholder="Search title, description, path…"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15"
             />
             {searchInput && (
               <button
@@ -254,7 +257,7 @@ const Section = () => {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {TYPE_TABS.map((tab) => {
               const active = typeFilter === tab.id;
               return (
@@ -262,10 +265,10 @@ const Section = () => {
                   key={tab.id}
                   type="button"
                   onClick={() => setTypeFilter(tab.id)}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
                     active
                       ? "bg-indigo-600 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
                   {tab.label}
@@ -279,7 +282,7 @@ const Section = () => {
                   setTypeFilter("ALL");
                   clearSearch();
                 }}
-                className="ml-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
               >
                 Clear filters
               </button>
@@ -287,19 +290,19 @@ const Section = () => {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {loading && sections.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-500">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-              <span className="text-sm font-medium">Loading sections…</span>
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-500">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+              <span className="text-xs">Loading sections…</span>
             </div>
           ) : sections.length === 0 ? (
-            <div className="px-6 py-20 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                <FiLayers className="h-7 w-7" />
+            <div className="px-4 py-12 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                <FiLayers className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-semibold text-slate-900">{emptyMessage}</h2>
-              <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">
+              <h2 className="text-sm font-semibold text-slate-900">{emptyMessage}</h2>
+              <p className="mx-auto mt-1 max-w-sm text-[11px] text-slate-500">
                 {hasActiveFilters
                   ? "Try another keyword or switch the type filter."
                   : "Create your first homepage section to showcase products or categories."}
@@ -311,7 +314,7 @@ const Section = () => {
                     setTypeFilter("ALL");
                     clearSearch();
                   }}
-                  className="mt-6 inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className={`${btnOutline} mt-4`}
                 >
                   Clear filters
                 </button>
@@ -319,7 +322,7 @@ const Section = () => {
                 <button
                   type="button"
                   onClick={() => navigate(ap("section/create"))}
-                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                  className={`${btnPrimary} mt-4`}
                 >
                   <FiPlus />
                   Create section
@@ -328,31 +331,31 @@ const Section = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left">
+              <table className="w-full min-w-[880px] border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80">
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <tr className="border-b border-slate-200 bg-slate-50/90">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Preview
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Section
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Type
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Products
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Order
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Platforms
                     </th>
-                    <th className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Status
                     </th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Actions
                     </th>
                   </tr>
@@ -372,28 +375,28 @@ const Section = () => {
                     return (
                       <tr
                         key={section._id}
-                        className="transition-colors hover:bg-slate-50/80"
+                        className="border-t border-slate-100 transition-colors hover:bg-indigo-50/30"
                       >
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-1.5">
                           {img ? (
                             <img
                               src={img}
                               alt=""
-                              className="h-14 w-24 rounded-lg border border-slate-200 object-cover shadow-sm"
+                              className="h-10 w-16 rounded-md border border-slate-200 object-cover"
                               onError={(e) => {
                                 e.target.style.display = "none";
                               }}
                             />
                           ) : (
-                            <div className="flex h-14 w-24 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-400">
+                            <div className="flex h-10 w-16 items-center justify-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-[9px] font-medium text-slate-400">
                               No image
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-slate-900">{section.title}</p>
+                        <td className="px-2 py-1.5">
+                          <p className="font-medium text-slate-900 line-clamp-2">{section.title}</p>
                           {section.text && (
-                            <p className="mt-0.5 max-w-[220px] truncate text-xs text-slate-500">
+                            <p className="mt-0.5 max-w-[200px] truncate text-[10px] text-slate-500">
                               {section.text}
                             </p>
                           )}
@@ -403,12 +406,12 @@ const Section = () => {
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-1.5">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
                               section.type === "CATEGORY"
-                                ? "bg-violet-100 text-violet-800"
-                                : "bg-sky-100 text-sky-800"
+                                ? "bg-violet-50 text-violet-700 ring-1 ring-violet-200/60"
+                                : "bg-sky-50 text-sky-700 ring-1 ring-sky-200/60"
                             }`}
                           >
                             {section.type || "—"}
@@ -419,12 +422,10 @@ const Section = () => {
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-4">
-                          <span className="text-sm font-semibold text-slate-800">
-                            {section.products?.length ?? 0}
-                          </span>
+                        <td className="px-2 py-1.5 tabular-nums text-slate-700">
+                          {section.products?.length ?? 0}
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600">
+                        <td className="px-2 py-1.5 text-[11px] text-slate-600 tabular-nums">
                           <div className="flex flex-col gap-0.5">
                             <span>
                               App{" "}
@@ -440,8 +441,8 @@ const Section = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-wrap gap-1.5">
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-wrap gap-1">
                             {section.isApp && (
                               <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                                 App
@@ -457,39 +458,39 @@ const Section = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-1.5">
                           <button
                             type="button"
                             disabled={isBusy}
                             onClick={() => handleToggle(section._id)}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
                               section.isActive
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 hover:opacity-80"
                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             } disabled:opacity-50`}
                           >
                             {isBusy ? "…" : section.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-2 py-1.5 text-right">
+                          <div className="inline-flex items-center justify-end gap-0.5">
                             <button
                               type="button"
                               disabled={isBusy}
                               onClick={() => navigate(ap(`section/edit/${section._id}`))}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                              className="rounded p-1 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"
+                              title="Edit"
                             >
                               <FiEdit2 className="h-3.5 w-3.5" />
-                              Edit
                             </button>
                             <button
                               type="button"
                               disabled={isBusy}
                               onClick={() => handleDelete(section._id)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                              className="rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              title="Delete"
                             >
                               <FiTrash2 className="h-3.5 w-3.5" />
-                              Delete
                             </button>
                           </div>
                         </td>
@@ -502,41 +503,35 @@ const Section = () => {
           )}
 
           {sections.length > 0 && (
-            <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200 bg-slate-50/50 px-4 py-4 sm:flex-row sm:px-6">
-              <p className="text-sm text-slate-600">
-                Page <span className="font-semibold text-slate-900">{page}</span> of{" "}
-                <span className="font-semibold text-slate-900">{totalPages}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
+              <span>
+                Page <span className="font-medium text-slate-800">{page}</span> /{" "}
+                <span className="font-medium text-slate-800">{totalPages}</span>
                 {(pagination?.total != null || filteredTotal > 0) && (
                   <span className="text-slate-400">
                     {" "}
                     · {useClientFilter ? filteredTotal : pagination.total} total
                   </span>
                 )}
-                {hasActiveFilters && (
-                  <span className="text-slate-400">
-                    {" "}
-                    · filtered
-                    {typeFilter !== "ALL" ? ` · ${typeFilter}` : ""}
-                    {debouncedSearch.trim() ? ` · "${debouncedSearch}"` : ""}
-                  </span>
-                )}
-              </p>
-              <div className="flex items-center gap-2">
+              </span>
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   disabled={page <= 1 || loading}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+                  className={btnOutline}
                 >
-                  Previous
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
                 </button>
                 <button
                   type="button"
                   disabled={page >= totalPages || loading}
                   onClick={() => setPage((p) => p + 1)}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+                  className={btnOutline}
                 >
                   Next
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>

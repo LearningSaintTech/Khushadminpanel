@@ -16,18 +16,24 @@ import {
   UserPlus,
   Truck,
   ShieldCheck,
+  Search,
+  X,
   Gift,
-  Wallet,
   Coins,
-  Banknote,
-  HandCoins,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { logoutUser } from "../../apis/Authapi";
 import { logout } from "../../../redux/GlobalSlice";
 import { subadminApi } from "../../../subadmin/apis/subadminApi";
 
-const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
+const Sidebar = ({
+  basePath = "/admin",
+  filterByModules = false,
+  collapsed = false,
+  onToggleCollapse,
+}) => {
   const ap = (suffix) => {
     const t = String(suffix || "").replace(/^\/+/, "");
     return `${basePath}/${t}`.replace(/\/+/g, "/");
@@ -106,6 +112,19 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
     location.pathname.includes("/money-features") ||
     location.pathname.startsWith(ap("referral")) ||
     location.pathname.startsWith(ap("rewards"));
+
+  const isReferralsActive = () =>
+    location.pathname.startsWith(ap("referral")) ||
+    location.pathname.includes("/money-features/refer-earn") ||
+    location.pathname.includes("/money-features/refer");
+
+  const isRewardsActive = () =>
+    location.pathname.startsWith(ap("rewards")) ||
+    location.pathname.includes("/money-features/points-wallet") ||
+    location.pathname.includes("/money-features/redeem-coins");
+
+  const showReferralsTab = isFullAdminUser || canUse(["referral"]);
+  const showRewardsTab = isFullAdminUser || canUse(["rewards"]);
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -209,16 +228,21 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-40 w-60 bg-black text-gray-100 flex flex-col
-          transform transition-transform duration-300 ease-in-out
+          fixed inset-y-0 left-0 z-40 bg-black text-gray-100 flex flex-col
+          transform transition-all duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
+          ${collapsed ? "w-16" : "w-60"}
           lg:shadow-2xl
         `}
       >
         {/* Logo + Notification icon */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-800 shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
+        <div
+          className={`h-16 flex items-center border-b border-gray-800 shrink-0 ${
+            collapsed ? "justify-center px-2" : "justify-between px-4"
+          }`}
+        >
+          {/* <div className="flex items-center gap-2 min-w-0">
             <div className="w-14 h-10 rounded-xl flex items-center justify-center shadow-md shrink-0">
               <img
                 src={Khush}
@@ -226,9 +250,18 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
                 className="w-full h-full object-contain"
               />
             </div>
-          </div>
+          </div> */}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
           {canUse(["admin"]) && (
-            <div className="relative shrink-0" ref={bellRef}>
+            <div className={`relative shrink-0 ${collapsed ? "hidden" : ""}`} ref={bellRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -305,779 +338,109 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
           )}
         </div>
 
-        {/* Navigation - scrollable but scrollbar hidden */}
-        <nav className="flex-1 px-4 py-5 overflow-y-auto scrollbar-hide">
-          <div className="space-y-1.5">
-            {/* Dashboard */}
-            {canUse(["admin"]) && (
-              <Link
-                to={ap("dashboard")}
-                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive(ap("dashboard")) ? "bg-white/10 text-white" : ""
-                }`}
-              >
-                <LayoutDashboard
-                  size={20}
-                  className="text-gray-400 group-hover:text-black"
-                />
-                <span>Dashboard</span>
-              </Link>
-            )}
-
-            {/* Users dropdown */}
-            {canUse(["admin"]) && (
-              <div>
+        {/* Navigation */}
+        <nav className={`flex-1 flex flex-col min-h-0 py-3 overflow-hidden ${collapsed ? "px-2" : "px-3"}`}>
+          {!collapsed && (
+          <div className="shrink-0 mb-3 px-1">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+              />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search menu..."
+                className="w-full rounded-lg border border-gray-700 bg-gray-900/80 py-2 pl-8 pr-8 text-xs text-gray-100 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
+                aria-label="Search sidebar menu"
+              />
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setIsUsersOpen(!isUsersOpen)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isUsersSectionActive() ? "bg-white/10 text-white" : ""
-                  }`}
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-500 hover:text-gray-200"
+                  aria-label="Clear search"
                 >
-                  <div className="flex items-center gap-3">
-                    <Users
-                      size={20}
-                      className="text-gray-400 group-hover:text-black"
-                    />
-                    <span>Users</span>
-                  </div>
-                  {isUsersOpen ? (
-                    <ChevronDown size={18} className="text-gray-400" />
-                  ) : (
-                    <ChevronRight size={18} className="text-gray-400" />
-                  )}
+                  <X size={14} />
                 </button>
-                <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    isUsersOpen ? "max-h-40 opacity-100 mt-1" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="pl-10 pr-4 py-2 space-y-1">
-                    <Link
-                      to={ap("users/real")}
-                      className={`block px-4 py-2 text-sm rounded ${
-                        location.pathname.includes(ap("users/real")) ||
-                        location.pathname.includes(ap("active-users"))
-                          ? "bg-white/10 text-white"
-                          : "text-gray-400 hover:bg-white hover:text-black"
-                      }`}
-                    >
-                      User
-                    </Link>
-                    <Link
-                      to={ap("users/fake")}
-                      className={`block px-4 py-2 text-sm rounded ${
-                        location.pathname.includes(ap("users/fake"))
-                          ? "bg-white/10 text-white"
-                          : "text-gray-400 hover:bg-white hover:text-black"
-                      }`}
-                    >
-                      Fake Users
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+          )}
 
-            {/* Notifications dropdown */}
-            {canUse(["admin"]) && (
-            <div>
-              <button
-                onClick={() => {
-                  setIsNotificationOpen((o) => !o);
-                  if (!isNotificationOpen) setIsTemplatesOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isNotificationSectionActive() ? "bg-white/10 text-white" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Bell size={20} className="text-gray-400 group-hover:text-black" />
-                  <span>Notifications</span>
-                </div>
-                {isNotificationOpen ? (
-                  <ChevronDown size={18} className="text-gray-400" />
-                ) : (
-                  <ChevronRight size={18} className="text-gray-400" />
+          {/* {!collapsed && (showReferralsTab || showRewardsTab) && (
+            <div className="shrink-0 mb-3 px-1">
+              <p className="mb-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Money
+              </p>
+              <div className="flex gap-1 rounded-lg border border-gray-700 bg-gray-900/60 p-0.5">
+                {showReferralsTab && (
+                  <Link
+                    to={ap("money-features/refer-earn")}
+                    onClick={() => setIsMoneyFeaturesOpen(true)}
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                      isReferralsActive()
+                        ? "bg-white text-black"
+                        : "text-gray-400 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <Gift size={13} className="shrink-0" />
+                    Referrals
+                  </Link>
                 )}
-              </button>
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  isNotificationOpen ? "max-h-[420px] opacity-100 mt-1" : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="pl-4 pr-2 py-1 space-y-0.5 border-l-2 border-gray-700 ml-5">
+                {showRewardsTab && (
                   <Link
-                    to={ap("notifications")}
-                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      location.pathname === ap("notifications")
-                        ? "bg-white/10 text-white"
-                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                    to={ap("money-features/points-wallet")}
+                    onClick={() => setIsMoneyFeaturesOpen(true)}
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                      isRewardsActive()
+                        ? "bg-white text-black"
+                        : "text-gray-400 hover:bg-white/10 hover:text-white"
                     }`}
                   >
-                    1. All notifications
+                    <Coins size={13} className="shrink-0" />
+                    Rewards
                   </Link>
-                  <Link
-                    to={ap("notifications/sent")}
-                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      isActive(ap("notifications/sent"))
-                        ? "bg-white/10 text-white"
-                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
-                    }`}
-                  >
-                    2. All send notifications
-                  </Link>
-                  <div>
-                    <button
-                      onClick={() => setIsTemplatesOpen((o) => !o)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded text-sm font-medium ${
-                        isActive(ap("notifications/templates")) || isActive(ap("notifications/email-templates"))
-                          ? "bg-white/10 text-white"
-                          : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
-                      }`}
-                    >
-                      3. Templates
-                      {isTemplatesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                    <div className={`overflow-hidden ${isTemplatesOpen ? "max-h-24" : "max-h-0"}`}>
-                      <Link
-                        to={ap("notifications/templates")}
-                        className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
-                      >
-                        In-app
-                      </Link>
-                      <Link
-                        to={ap("notifications/email-templates")}
-                        className="block pl-4 py-2 text-xs text-gray-500 hover:text-gray-300"
-                      >
-                        Email
-                      </Link>
-                    </div>
-                  </div>
-                  <Link
-                    to={ap("notifications/broadcast")}
-                    className={`block px-3 py-2.5 rounded text-sm font-medium ${
-                      isActive(ap("notifications/broadcast"))
-                        ? "bg-white/10 text-white"
-                        : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
-                    }`}
-                  >
-                    4. Broadcast
-                  </Link>
-                  <Link
-                    to={ap("notifications/history")}
-                    className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
-                  >
-                    History
-                  </Link>
-                  <Link
-                    to={ap("notifications/test")}
-                    className="block px-3 py-2.5 rounded text-sm text-gray-500 hover:bg-white/5 hover:text-gray-400"
-                  >
-                    Test
-                  </Link>
-                </div>
+                )}
               </div>
             </div>
-            )}
+          )} */}
 
-            {/* Inventory Dropdown */}
-            {canUse(["categories", "subcategories", "items", "warehouse"]) && (
-            <div>
-              <button
-                onClick={() => setIsInventoryOpen(!isInventoryOpen)}
-                className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isInventoryOpen ? "bg-white/5 text-white" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Package
-                    size={20}
-                    className="text-gray-400 group-hover:text-black"
-                  />
-                  <span>Inventory</span>
-                </div>
-                {isInventoryOpen ? (
-                  <ChevronDown size={18} className="text-gray-400" />
-                ) : (
-                  <ChevronRight size={18} className="text-gray-400" />
-                )}
-              </button>
-
-              {/* Dropdown */}
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  isInventoryOpen
-                    ? "max-h-96 opacity-100 mt-1"
-                    : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="pl-10 pr-4 py-2 space-y-1">
-                  <Link
-                    to={ap("inventory/categories")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("inventory/categories"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Categories
-                  </Link>
-
-                  <Link
-                    to={ap("inventory-codes")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("inventory-codes"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Inventory codes
-                  </Link>
-
-                  <Link
-                    to={ap("subcategoriess")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("subcategoriess"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    SubCategories
-                  </Link>
-                  <Link
-                    to={ap("items")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("items"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Items
-                  </Link>
-                  <Link
-                    to={ap("inventory/central")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("items"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                  Central  Stock management
-                  </Link>
-                  <Link
-                    to={ap("stocks")}
-                    className={`block px-4 py-2.5 text-gray-400 hover:bg-white hover:text-black transition-all duration-200 text-sm font-medium ${
-                      location.pathname.includes(ap("items"))
-                        ? "bg-white/10 text-white"
-                        : ""
-                    }`}
-                  >
-                    Stock management
-                  </Link>
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* Other items */}
-            {/* Coupons Dropdown */}
-            {canUse(["coupons"]) && (
-            <div>
-              <button
-                onClick={() => setIsCouponOpen(!isCouponOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group"
-              >
-                <div className="flex items-center gap-3">
-                  <Tags
-                    size={20}
-                    className="text-gray-400 group-hover:text-black"
-                  />
-                  <span>Coupons</span>
-                </div>
-                {isCouponOpen ? (
-                  <ChevronDown size={18} className="text-gray-400" />
-                ) : (
-                  <ChevronRight size={18} className="text-gray-400" />
-                )}
-              </button>
-
-              <div
-                className={`overflow-hidden transition-all duration-300 ${
-                  isCouponOpen
-                    ? "max-h-40 opacity-100 mt-1"
-                    : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="pl-10 pr-4 py-2 space-y-1">
-                  <Link
-                    to={ap("coupons")}
-                    className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
-                  >
-                    Coupon List
-                  </Link>
-                </div>
-              </div>
-            </div>
-            )}
-
-            {(canUse(["admin"]) || canUse(["coupons"])) && (
-              <div>
-                <button
-                  onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isAnalyticsSectionActive() ? "bg-white/10 text-white" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Activity
-                      size={20}
-                      className="text-gray-400 group-hover:text-black"
-                    />
-                    <span>Analytics</span>
-                  </div>
-                  {isAnalyticsOpen ? (
-                    <ChevronDown size={18} className="text-gray-400" />
-                  ) : (
-                    <ChevronRight size={18} className="text-gray-400" />
-                  )}
-                </button>
-
-                <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    isAnalyticsOpen ? "max-h-40 opacity-100 mt-1" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="pl-10 pr-4 py-2 space-y-1">
-                    <Link
-                      to={ap("analytics/events")}
-                      className={`block px-4 py-2 text-sm hover:bg-white hover:text-black ${
-                        isActive(ap("analytics/events")) || isActive(ap("coupon-analytics"))
-                          ? "bg-white/10 text-white"
-                          : "text-gray-400"
-                      }`}
-                    >
-                      Analytics Workspace
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {canUse(["sections"]) && (
-            <Link
-              to={ap("sections")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("sections")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <ShoppingCart
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Sections</span>
-            </Link>
-            )}
-            {/* Policy Dropdown */}
-            {canUse(["exchange", "admin"]) && (
-            <div>
-              <button
-                onClick={() => setIsPolicyOpen(!isPolicyOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group"
-              >
-                <div className="flex items-center gap-3">
-                  <ShoppingCart
-                    size={20}
-                    className="text-gray-400 group-hover:text-black"
-                  />
-                  <span>Policy</span>
-                </div>
-
-                {isPolicyOpen ? (
-                  <ChevronDown size={18} className="text-gray-400" />
-                ) : (
-                  <ChevronRight size={18} className="text-gray-400" />
-                )}
-              </button>
-
-              <div
-                className={`overflow-hidden transition-all duration-300 ${
-                  isPolicyOpen
-                    ? "max-h-40 opacity-100 mt-1"
-                    : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="pl-10 pr-4 py-2 space-y-1">
-                  {canUse(["exchange"]) && (
-                    <Link
-                      to={ap("exchange")}
-                      className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
-                        location.pathname.includes(ap("exchange"))
-                          ? "bg-white/10 text-white"
-                          : ""
-                      }`}
-                    >
-                      Exchange Policy
-                    </Link>
-                  )}
-
-                  {canUse(["admin"]) && (
-                    <Link
-                      to={ap("cancellation")}
-                      className={`block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black ${
-                        location.pathname.includes(ap("cancellation"))
-                          ? "bg-white/10 text-white"
-                          : ""
-                      }`}
-                    >
-                      Cancellation Policy
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </div>
-            )}
-
-            {canUse(["banner"]) && (
-            <Link
-              to={ap("banners")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("banners")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <FileText
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Banner</span>
-            </Link>
-            )}
-
-            {canUse(["banner"]) && (
-            <Link
-              to={ap("app-popup")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("app-popup")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Megaphone
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>App Popups</span>
-            </Link>
-            )}
-
-            {canUse(["brands"]) && (
-            <Link
-              to={ap("brands")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("brands")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <FileText
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Brands</span>
-            </Link>
-            )}
-            {showMoneyFeatures && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setIsMoneyFeaturesOpen(!isMoneyFeaturesOpen)}
-                  className={`w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isMoneyFeaturesSectionActive() ? "bg-white/10 text-white" : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <HandCoins
-                      size={20}
-                      className={`${
-                        isMoneyFeaturesSectionActive()
-                          ? "text-white"
-                          : "text-gray-400 group-hover:text-black"
-                      }`}
-                    />
-                    <span>Money features</span>
-                  </div>
-                  {isMoneyFeaturesOpen ? (
-                    <ChevronDown size={16} className="text-gray-400" />
-                  ) : (
-                    <ChevronRight size={16} className="text-gray-400" />
-                  )}
-                </button>
-                <div
-                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                    isMoneyFeaturesOpen
-                      ? "max-h-80 opacity-100 mt-1"
-                      : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="pl-10 pr-4 py-2 space-y-1">
-                    {(isFullAdminUser || canUse(["admin"])) && (
-                      <Link
-                        to={ap("money-features")}
-                        className={`block px-3 py-2 text-sm rounded-lg transition ${
-                          location.pathname.endsWith("/money-features") ||
-                          location.pathname.endsWith("/money-features/")
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <HandCoins size={14} /> Overview
-                        </span>
-                      </Link>
-                    )}
-                    {(isFullAdminUser || canUse(["admin"])) && (
-                      <Link
-                        to={ap("money-features/cash-wallet")}
-                        className={`block px-3 py-2 text-sm rounded-lg transition ${
-                          isActive(ap("money-features/cash-wallet")) ||
-                          isActive(ap("money-features/wallet"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Wallet size={14} /> Cash wallet
-                        </span>
-                      </Link>
-                    )}
-                    {canUse(["coupons"]) && (
-                      <Link
-                        to={ap("money-features/gift-card")}
-                        className={`block px-3 py-2 text-sm rounded-lg transition ${
-                          isActive(ap("money-features/gift-card")) ||
-                          isActive(ap("money-features/giftcard"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Gift size={14} /> Gift card
-                        </span>
-                      </Link>
-                    )}
-                    {(isFullAdminUser || canUse(["rewards", "admin"])) && (
-                      <Link
-                        to={ap("money-features/points-wallet")}
-                        className={`block px-3 py-2 text-sm rounded-lg transition ${
-                          isActive(ap("money-features/points-wallet")) ||
-                          isActive(ap("money-features/redeem-coins")) ||
-                          isActive(ap("rewards"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Coins size={14} /> Points wallet
-                        </span>
-                      </Link>
-                    )}
-                    {canUse(["referral"]) && (
-                      <Link
-                        to={ap("money-features/refer-earn")}
-                        className={`block px-3 py-2 text-sm rounded-lg transition ${
-                          isActive(ap("money-features/refer-earn")) ||
-                          isActive(ap("referral"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white/5 hover:text-white"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <Gift size={14} /> Refer & earn
-                        </span>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {canUse(["features"]) && (
-            <Link
-              to={ap("features")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("features")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Package
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Features</span>
-            </Link>
-            )}
-
-            {canUse(["admin"]) && (
-              <>
-                <Link
-                  to={ap("orders")}
-                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isActive(ap("orders")) ? "bg-white/10 text-white" : ""
-                  }`}
-                >
-                  <Package
-                    size={20}
-                    className="text-gray-400 group-hover:text-black"
-                  />
-                  <span>Orders</span>
-                </Link>
-                <Link
-                  to={ap("exchange-orders")}
-                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isActive(ap("exchange-orders")) ? "bg-white/10 text-white" : ""
-                  }`}
-                >
-                  <Receipt
-                    size={20}
-                    className="text-gray-400 group-hover:text-black"
-                  />
-                  <span>Exchange Orders</span>
-                </Link>
-              </>
-            )}
-
-            {/* <Link
-              to={ap("status")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("status")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Package
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Status</span>
-
-              
-            </Link> */}
-
-            {canUse(["filters"]) && (
-            <Link
-              to={ap("filters")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("filters")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Package
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Filters</span>
-            </Link>
-            )}
-
-            {canUse(["banner"]) && (
-            <Link
-              to={ap("splash")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("splash")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Package
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Home banners</span>
-            </Link>
-            )}
-
-            {canUse(["warehouse"]) && (
-            <Link
-              to={ap("warehouse")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("warehouse")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Building2
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Warehouse</span>
-            </Link>
-            )}
-
-            {canUse(["cart-charges"]) && (
-            <Link
-              to={ap("cart-charges")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("cart-charges")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Receipt
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Cart Charges</span>
-            </Link>
-            )}
-
-            {canUse(["reviews"]) && (
-            <Link
-              to={ap("reviews")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("reviews")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Receipt
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Reviews</span>
-            </Link>
-            )}
-
-            {canUse(["contact-us"]) && (
-            <Link
-              to={ap("contact-us")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("contact-us")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Mail
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Contact Requests</span>
-            </Link>
-            )}
-
-            {canUse(["delivery"]) && (
-            <Link
-              to={ap("delivery")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("delivery")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <GrDeliver
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Delivery</span>
-            </Link>
-            )}
-
-            {canUse(["servicablePincode"]) && (
-            <Link
-              to={ap("pincode")}
-              className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                isActive(ap("pincode")) ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <Receipt
-                size={20}
-                className="text-gray-400 group-hover:text-black"
-              />
-              <span>Pincode</span>
-            </Link>
-            )}
+          <div className="flex-1 overflow-y-auto scrollbar-hide pr-0.5">
+            <SidebarMainNav
+              ap={ap}
+              location={location}
+              canUse={canUse}
+              isActive={isActive}
+              searchQuery={searchQuery}
+              isNotificationSectionActive={isNotificationSectionActive}
+              isAnalyticsSectionActive={isAnalyticsSectionActive}
+              isAnalyticsOpen={isAnalyticsOpen}
+              setIsAnalyticsOpen={setIsAnalyticsOpen}
+              isCouponOpen={isCouponOpen}
+              setIsCouponOpen={setIsCouponOpen}
+              isInventoryOpen={isInventoryOpen}
+              setIsInventoryOpen={setIsInventoryOpen}
+              isNotificationOpen={isNotificationOpen}
+              setIsNotificationOpen={setIsNotificationOpen}
+              isTemplatesOpen={isTemplatesOpen}
+              setIsTemplatesOpen={setIsTemplatesOpen}
+              isPolicyOpen={isPolicyOpen}
+              setIsPolicyOpen={setIsPolicyOpen}
+              isUsersOpen={isUsersOpen}
+              setIsUsersOpen={setIsUsersOpen}
+              isUsersSectionActive={isUsersSectionActive}
+              isMoneyFeaturesOpen={isMoneyFeaturesOpen}
+              setIsMoneyFeaturesOpen={setIsMoneyFeaturesOpen}
+              isMoneyFeaturesSectionActive={isMoneyFeaturesSectionActive}
+              showMoneyFeatures={showMoneyFeatures}
+              isFullAdminUser={isFullAdminUser}
+              compact={collapsed}
+            />
 
             {/* Panel Management Section */}
-            {canUse(["admin"]) && (
+            {!collapsed && canUse(["admin"]) && (
             <div className="pt-4 mt-4 border-t border-gray-800">
               <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Panel Management
@@ -1238,36 +601,42 @@ const Sidebar = ({ basePath = "/admin", filterByModules = false }) => {
         </nav>
 
         {/* Bottom */}
-        <div className="p-3 border-t border-gray-800 shrink-0">
+        <div className={`border-t border-gray-800 shrink-0 ${collapsed ? "p-2" : "p-3"}`}>
           <Link
             to={ap("settings")}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1"
+            className={`flex items-center px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1 ${
+              collapsed ? "justify-center" : "gap-2"
+            }`}
           >
             <Settings
               size={16}
               className="text-gray-400 group-hover:text-white shrink-0"
             />
-            <span>Settings</span>
+            {!collapsed && <span>Settings</span>}
           </Link>
           <Link
             to={ap("profile")}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1"
+            className={`flex items-center px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1 ${
+              collapsed ? "justify-center" : "gap-2"
+            }`}
           >
             <Settings
               size={16}
               className="text-gray-400 group-hover:text-white shrink-0"
             />
-            <span>Profile</span>
+            {!collapsed && <span>Profile</span>}
           </Link>
 
           <button
             type="button"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full flex items-center px-3 py-2 text-xs font-medium rounded-md text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              collapsed ? "justify-center" : "gap-2"
+            }`}
           >
             <LogOut size={16} className="shrink-0" />
-            <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
+            {!collapsed && <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>}
           </button>
         </div>
       </aside>
