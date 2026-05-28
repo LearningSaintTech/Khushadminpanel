@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "") => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "") => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -34,13 +34,21 @@ const orderEndpoints = {
       url += `&deliveryType=${encodeURIComponent(deliveryType)}`;
     }
 
+    if (paymentStatus) {
+      url += `&paymentStatus=${encodeURIComponent(paymentStatus)}`;
+    }
+
+    if (paymentMode) {
+      url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
+    }
+
     return url;
   },
   GET_INVOICE: (orderId, itemId) =>
   `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
-  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "") => {
+  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "") => {
     let url = `/admin/orders/items?page=${page}&limit=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (orderStatus) url += `&orderStatus=${encodeURIComponent(orderStatus)}`;
@@ -48,6 +56,8 @@ const orderEndpoints = {
     if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
     if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
     if (deliveryType) url += `&deliveryType=${encodeURIComponent(deliveryType)}`;
+    if (paymentStatus) url += `&paymentStatus=${encodeURIComponent(paymentStatus)}`;
+    if (paymentMode) url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
     return url;
   },
 
@@ -66,6 +76,9 @@ const orderEndpoints = {
 
   /** Append optional staff note (text + server timestamp); multiple notes allowed */
   APPEND_ORDER_NOTE: (orderId) => `/admin/orders/${orderId}/notes`,
+
+  /** Admin override: mark online payment SUCCESS and confirm order */
+  FORCE_SUCCESS_PAYMENT: (orderId) => `/admin/orders/${orderId}/payment/force-success`,
 
   // Update Single Item Status inside Order
   UPDATE_ITEM_STATUS: (orderId, itemId) =>
@@ -156,18 +169,18 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType) => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode)
   );
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType) => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode)
   );
 };
 
@@ -184,6 +197,14 @@ export const appendOrderNote = (orderId, body) => {
   return apiConnector(
     "POST",
     orderEndpoints.APPEND_ORDER_NOTE(orderId),
+    body
+  );
+};
+
+export const forceSuccessPaymentAndConfirm = (orderId, body) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.FORCE_SUCCESS_PAYMENT(orderId),
     body
   );
 };
