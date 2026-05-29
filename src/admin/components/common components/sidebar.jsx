@@ -228,7 +228,7 @@ const Sidebar = ({
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-40 bg-black text-gray-100 flex flex-col
+          fixed inset-y-0 left-0 z-40 bg-gradient-to-r from-[#4B0082] to-[#6C47FF] text-gray-100 flex flex-col
           transform transition-all duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? "translate-x-0" : "-translate-x-full"}

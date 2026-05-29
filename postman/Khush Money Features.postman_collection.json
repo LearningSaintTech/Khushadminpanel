@@ -1,0 +1,427 @@
+{
+  "info": {
+    "name": "Khush Admin — Money Features",
+    "description": "Postman collection for admin money features screens (wallet overview, cash/reward wallets + transactions, gift card rules, coupons, reward rules).\n\nAuth: set `token` (admin JWT) in environment. Base URL: set `baseUrl` (e.g. http://localhost:5000/api).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Admin Wallet (MoneyFeaturesapi.js)",
+      "item": [
+        {
+          "name": "Get wallet overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/wallet/overview",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "wallet", "overview"]
+            }
+          }
+        },
+        {
+          "name": "List cash wallets",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/wallet/cash-wallets?page=1&limit=20&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "wallet", "cash-wallets"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List cash transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/wallet/cash-transactions?page=1&limit=25&source=&type=&status=",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "wallet", "cash-transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "25" },
+                { "key": "source", "value": "" },
+                { "key": "type", "value": "" },
+                { "key": "status", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List reward wallets",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/wallet/reward-wallets?page=1&limit=20&search=",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "wallet", "reward-wallets"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List reward transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/wallet/reward-transactions?page=1&limit=25&type=&source=",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "wallet", "reward-transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "25" },
+                { "key": "type", "value": "" },
+                { "key": "source", "value": "" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gift Card Rules (GiftCardRulesapi.js)",
+      "item": [
+        {
+          "name": "List gift card rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules?page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get active gift card rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules", "active"]
+            }
+          }
+        },
+        {
+          "name": "Preview gift card credit",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules/preview-credit?faceValue=1100",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules", "preview-credit"],
+              "query": [{ "key": "faceValue", "value": "1100" }]
+            }
+          }
+        },
+        {
+          "name": "Create gift card rules (multipart/form-data)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Gift card promo May", "type": "text" },
+                { "key": "description", "value": "2× up to ₹1000; +25% above ₹1000 on excess", "type": "text" },
+                { "key": "currency", "value": "INR", "type": "text" },
+                { "key": "multiplier", "value": "2", "type": "text" },
+                { "key": "rules", "value": "[\"2x up to 1000\",\"+25% above 1000\"]", "type": "text" },
+                { "key": "bonusTiers", "value": "[{\"type\":\"multiplier\",\"maxPayAmount\":1000,\"multiplier\":2},{\"type\":\"excess_bonus_percent\",\"threshold\":1000,\"bonusPercent\":25}]", "type": "text" },
+                { "key": "isActive", "value": "true", "type": "text" },
+                { "key": "image", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules"]
+            }
+          }
+        },
+        {
+          "name": "Update gift card rules (multipart/form-data)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Gift card promo May", "type": "text" },
+                { "key": "description", "value": "Updated description", "type": "text" },
+                { "key": "currency", "value": "INR", "type": "text" },
+                { "key": "multiplier", "value": "2", "type": "text" },
+                { "key": "rules", "value": "[\"2x up to 1000\",\"+25% above 1000\"]", "type": "text" },
+                { "key": "bonusTiers", "value": "[{\"type\":\"multiplier\",\"maxPayAmount\":1000,\"multiplier\":2},{\"type\":\"excess_bonus_percent\",\"threshold\":1000,\"bonusPercent\":25}]", "type": "text" },
+                { "key": "isActive", "value": "false", "type": "text" },
+                { "key": "image", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules/{{giftCardRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules", "{{giftCardRuleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Toggle gift card rule active",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules/{{giftCardRuleId}}/toggle-active",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules", "{{giftCardRuleId}}", "toggle-active"]
+            }
+          }
+        },
+        {
+          "name": "Delete gift card rules",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/gift-card/rules/{{giftCardRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["gift-card", "rules", "{{giftCardRuleId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Coupons (Couponapi.js)",
+      "item": [
+        {
+          "name": "Create coupon",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"WELCOME50\",\n  \"discountType\": \"FLAT\",\n  \"discountValue\": 50,\n  \"minCartValue\": 499,\n  \"maxDiscountAmount\": 50,\n  \"isInfluencer\": false,\n  \"isAutoIncluded\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/coupons/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "create"]
+            }
+          }
+        },
+        {
+          "name": "Get all coupons",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/coupons/getAll?page=1&limit=10&search=&isInfluencer=false&isAutoIncluded=",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "getAll"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "isInfluencer", "value": "false" },
+                { "key": "isAutoIncluded", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get coupon by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/coupons/getSingle/{{couponId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "getSingle", "{{couponId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update coupon",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountValue\": 75\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/coupons/update/{{couponId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "update", "{{couponId}}"]
+            }
+          }
+        },
+        {
+          "name": "Toggle coupon active status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/coupons/toggleActiveStatus/{{couponId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "toggleActiveStatus", "{{couponId}}"]
+            }
+          }
+        },
+        {
+          "name": "Coupons analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/coupons/analytics",
+              "host": ["{{baseUrl}}"],
+              "path": ["coupons", "analytics"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reward Rules (Rewardapi.js)",
+      "item": [
+        {
+          "name": "Get reward rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reward-rules/getAll",
+              "host": ["{{baseUrl}}"],
+              "path": ["reward-rules", "getAll"]
+            }
+          }
+        },
+        {
+          "name": "Create reward rules",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"earning_rules\": {\n    \"type\": \"PERCENT\",\n    \"slabs\": [\n      { \"minOrderValue\": 0, \"percent\": 1 }\n    ]\n  },\n  \"redemption_rules\": {\n    \"min_points_required\": 100,\n    \"point_value_in_currency\": 1\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reward-rules/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["reward-rules", "create"]
+            }
+          }
+        },
+        {
+          "name": "Update reward rules",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"redemption_rules\": { \"min_points_required\": 200 }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reward-rules/update/{{rewardRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reward-rules", "update", "{{rewardRuleId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete reward rules",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reward-rules/delete/{{rewardRuleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reward-rules", "delete", "{{rewardRuleId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

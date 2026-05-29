@@ -19,6 +19,8 @@ import {
   downloadManifest,
   downloadManufacturingSheetPdf,
   appendOrderNote,
+  forceSuccessPaymentAndConfirm,
+  createShiprocketForOrderShipments,
 } from "../../apis/Orderapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
@@ -50,6 +52,7 @@ import {
   UserCircle,
   UserMinus,
   UserPlus,
+  Copy,
   ExternalLink,
   FileDown,
   Info,
@@ -78,6 +81,34 @@ const btnAmber =
   "inline-flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-amber-700 transition-colors";
 const inputCompact =
   "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
+const tableScrollShell =
+  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-slate-200 bg-white shadow-sm [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
+const tableScrollShellMuted =
+  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-gray-200 bg-white shadow-sm [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
+
+function TableScrollHint() {
+  return (
+    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+      <span aria-hidden className="select-none text-slate-300">
+        ↔
+      </span>
+      <span>Scroll horizontally to view all columns</span>
+    </p>
+  );
+}
+
+/** Maps UI tab → API query (pending Razorpay/Nimble, not COD) */
+const PAYMENT_FILTER_TABS = [
+  { value: "", label: "All payments" },
+  { value: "pending_online", label: "Pending online (not COD)" },
+];
+
+const paymentFilterToQuery = (paymentFilter) => {
+  if (paymentFilter === "pending_online") {
+    return { paymentStatus: "PENDING", paymentMode: "ONLINE" };
+  }
+  return { paymentStatus: undefined, paymentMode: undefined };
+};
 
 /** apiConnector rejects with a string message; success body is { success, message, data } */
 const apiErrMessage = (err, fallback) =>
@@ -131,6 +162,18 @@ const showBackendErrorsAsToasts = (err, fallback) => {
   msgs.slice(0, 6).forEach((m) => toast.error(m, { duration: 5500 }));
   return msgs[0] || fallback;
 };
+
+async function copyTextToClipboard(value, label = "Copied") {
+  const text = value == null ? "" : String(value);
+  if (!text.trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(label);
+  } catch (err) {
+    console.error("Clipboard copy failed:", err);
+    toast.error("Copy failed");
+  }
+}
 
 const getItemExchangeIds = (item) =>
   Array.isArray(item?.exchanges)
@@ -567,6 +610,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "customer", label: "Customer name", defaultVisible: true },
   { key: "phone", label: "Customer phone", defaultVisible: true },
   { key: "email", label: "Email", defaultVisible: false },
+  { key: "notes", label: "Notes", defaultVisible: true },
   { key: "qty", label: "Quantity", defaultVisible: true },
   { key: "productName", label: "Dress / product name", defaultVisible: false },
   { key: "productId", label: "Catalog product ID", defaultVisible: false },
@@ -579,6 +623,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "total", label: "Order amount", defaultVisible: true },
   { key: "walletUsed", label: "Wallet used", defaultVisible: true },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
+  { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
   { key: "status", label: "Status", defaultVisible: true },
   { key: "courier", label: "Courier / Shiprocket", defaultVisible: true },
   { key: "city", label: "City", defaultVisible: false },
@@ -605,6 +650,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
   { key: "storeLink", label: "Store link", defaultVisible: false },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
+  { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
   { key: "status", label: "Line status", defaultVisible: true },
   { key: "delivery", label: "Delivery", defaultVisible: true },
   { key: "shiprocket", label: "Shiprocket", defaultVisible: false },
@@ -1222,6 +1268,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [sortOrder, setSortOrder] = useState("desc");
   /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
   const [deliveryTypeFilter, setDeliveryTypeFilter] = useState("");
+  /** Pending online (Razorpay/Nimble) — excludes COD */
+  const [paymentFilter, setPaymentFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Item-based view state
@@ -1315,6 +1363,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [orderNotesModalNotes, setOrderNotesModalNotes] = useState([]);
   const [orderNotesModalDraft, setOrderNotesModalDraft] = useState("");
   const [orderNotesModalSaving, setOrderNotesModalSaving] = useState(false);
+  // Payment override modal (admin)
+  const [paymentOverrideOpen, setPaymentOverrideOpen] = useState(false);
+  const [paymentOverridePaymentId, setPaymentOverridePaymentId] = useState("");
+  const [paymentOverrideNotes, setPaymentOverrideNotes] = useState("");
+  const [paymentOverrideSendNotification, setPaymentOverrideSendNotification] = useState(true);
+  const [paymentOverrideSaving, setPaymentOverrideSaving] = useState(false);
+
+  const [createShiprocketLoading, setCreateShiprocketLoading] = useState(false);
 
   useEffect(() => {
     if (exchangeOnly && viewMode !== VIEW_ORDER) {
@@ -1705,6 +1761,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     try {
       setLoading(true);
       setError(null);
+      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const res = await getOrders(
         pagination.page,
         pagination.limit,
@@ -1714,7 +1771,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         dateTo || undefined,
         sortBy,
         sortOrder,
-        deliveryTypeFilter || undefined
+        deliveryTypeFilter || undefined,
+        paymentStatus,
+        paymentMode
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
@@ -1749,7 +1808,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, exchangeOnly]);
+  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, exchangeOnly]);
 
   useEffect(() => {
     fetchOrders();
@@ -1759,6 +1818,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     try {
       setItemLoading(true);
       setItemError(null);
+      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const res = await getOrderItems(
         itemPagination.page,
         itemPagination.limit,
@@ -1767,7 +1827,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         itemStatusFilter,
         dateFrom || undefined,
         dateTo || undefined,
-        deliveryTypeFilter || undefined
+        deliveryTypeFilter || undefined,
+        paymentStatus,
+        paymentMode
       );
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
@@ -1792,7 +1854,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, exchangeOnly, dateFrom, dateTo]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, paymentFilter, exchangeOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -1805,10 +1867,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         viewMode === VIEW_ORDER
           ? search?.trim() || undefined
           : itemSearch?.trim() || undefined;
+      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const body = {
         search: searchVal,
         itemStatus: itemStatusFilter || undefined,
         deliveryType: deliveryTypeFilter || undefined,
+        paymentStatus,
+        paymentMode,
         startDate: dateFrom || undefined,
         endDate: dateTo || undefined,
         allPages: true,
@@ -2011,6 +2076,64 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       showBackendErrorsAsToasts(err, "Could not save note");
     } finally {
       setOrderNotesModalSaving(false);
+    }
+  };
+
+  const openPaymentOverrideModal = () => {
+    setPaymentOverridePaymentId("");
+    setPaymentOverrideNotes("");
+    setPaymentOverrideSendNotification(true);
+    setPaymentOverrideOpen(true);
+  };
+
+  const closePaymentOverrideModal = () => {
+    if (paymentOverrideSaving) return;
+    setPaymentOverrideOpen(false);
+  };
+
+  const handleForcePaymentSuccess = async () => {
+    const oid = selectedOrder?.orderId;
+    if (!oid) return;
+    const paymentId = String(paymentOverridePaymentId || "").trim();
+    if (!paymentId) {
+      toast.error("Payment ID is required");
+      return;
+    }
+    setPaymentOverrideSaving(true);
+    try {
+      await forceSuccessPaymentAndConfirm(oid, {
+        paymentId,
+        notes: String(paymentOverrideNotes || "").trim() || undefined,
+        sendNotification: !!paymentOverrideSendNotification,
+      });
+      toast.success("Payment marked SUCCESS and order confirmed");
+      setPaymentOverrideOpen(false);
+      await fetchSingleOrder(oid);
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to update payment status");
+    } finally {
+      setPaymentOverrideSaving(false);
+    }
+  };
+
+  const handleCreateShiprocketSingleShipment = async () => {
+    const oid = selectedOrder?.orderId;
+    if (!oid) return;
+    if (
+      !window.confirm(
+        "Create Shiprocket order for this order's shipment group(s)? This will create ONE Shiprocket order per shipmentGroupId (NORMAL) and mark items as SHIPPED.",
+      )
+    )
+      return;
+    setCreateShiprocketLoading(true);
+    try {
+      await createShiprocketForOrderShipments(oid, {});
+      toast.success("Shiprocket order created");
+      await fetchSingleOrder(oid);
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to create Shiprocket order");
+    } finally {
+      setCreateShiprocketLoading(false);
     }
   };
 
@@ -2829,6 +2952,34 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             {order.user?.phoneNumber || order.address?.phone || "—"}
           </span>
         );
+      case "notes": {
+        const latestText =
+          (order?.latestOrderNote?.text != null
+            ? String(order.latestOrderNote.text)
+            : "") ||
+          // Fallback: order detail view includes full `orderNotes`
+          (Array.isArray(order.orderNotes) && order.orderNotes.length
+            ? String(order.orderNotes[order.orderNotes.length - 1]?.text || "")
+            : "");
+        return (
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => openOrderNotesModal(order.orderId)}
+              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-50"
+              title="View all notes"
+            >
+              <StickyNote size={14} />
+            </button>
+            <span
+              className="block min-w-0 truncate text-xs text-gray-600"
+              title={latestText || "No notes"}
+            >
+              {latestText || "—"}
+            </span>
+          </div>
+        );
+      }
       case "qty":
         return order.totalItems || order.totalQuantity || order.items?.length || "?";
       case "total":
@@ -2941,6 +3092,25 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       }
       case "payment":
         return manufacturingPaymentLabel(order.payment);
+      case "gatewayOrderId": {
+        const id = order.payment?.gatewayOrderId || null;
+        if (!id) return "—";
+        return (
+          <div className="flex items-center gap-2">
+            <span className="block max-w-[180px] truncate font-mono text-[11px] text-gray-700" title={String(id)}>
+              {String(id)}
+            </span>
+            <button
+              type="button"
+              onClick={() => copyTextToClipboard(id, "Gateway order ID copied")}
+              className="inline-flex items-center justify-center rounded border border-gray-200 bg-white p-1 text-gray-600 hover:bg-gray-50"
+              title="Copy gateway order ID"
+            >
+              <Copy size={14} />
+            </button>
+          </div>
+        );
+      }
       case "city":
         return order.address?.city || "—";
       default:
@@ -3046,6 +3216,25 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       }
       case "payment":
         return manufacturingPaymentLabel(row.payment);
+      case "gatewayOrderId": {
+        const id = row.payment?.gatewayOrderId || null;
+        if (!id) return "—";
+        return (
+          <div className="flex items-center gap-2">
+            <span className="block max-w-[180px] truncate font-mono text-[11px] text-gray-700" title={String(id)}>
+              {String(id)}
+            </span>
+            <button
+              type="button"
+              onClick={() => copyTextToClipboard(id, "Gateway order ID copied")}
+              className="inline-flex items-center justify-center rounded border border-gray-200 bg-white p-1 text-gray-600 hover:bg-gray-50"
+              title="Copy gateway order ID"
+            >
+              <Copy size={14} />
+            </button>
+          </div>
+        );
+      }
       default:
         return "—";
     }
@@ -3376,6 +3565,30 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           </div>
         </div>
 
+        <div className="mb-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_FILTER_TABS.map((tab) => (
+              <button
+                key={tab.value || "all-payments"}
+                type="button"
+                onClick={() => {
+                  setPaymentFilter(tab.value);
+                  setPagination((p) => ({ ...p, page: 1 }));
+                  setItemPagination((p) => ({ ...p, page: 1 }));
+                }}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                  paymentFilter === tab.value
+                    ? "bg-amber-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {!selectedOrder && (
           <div className="mb-3 flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -3386,7 +3599,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 Exports <span className="font-medium">every line</span> that matches your current filters (up to 8,000
                 lines per file — the PDF header says if the export was capped). Uses{" "}
                 <span className="font-medium">order date range</span>, <span className="font-medium">delivery type</span>
-                , search
+                , <span className="font-medium">payment</span>, search
                 {exchangeOnly ? (
                   <>, and <span className="font-medium">exchange</span> lines only.</>
                 ) : viewMode === VIEW_ITEM ? (
@@ -3465,6 +3678,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     {(dateFrom ||
                       dateTo ||
                       statusFilter ||
+                      paymentFilter ||
                       sortOrder !== "desc") && (
                       <button
                         type="button"
@@ -3472,6 +3686,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           setDateFrom("");
                           setDateTo("");
                           setStatusFilter("");
+                          setPaymentFilter("");
                           setSortBy("createdAt");
                           setSortOrder("desc");
                           setPagination((p) => ({ ...p, page: 1 }));
@@ -3567,9 +3782,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 </div>
               </div>
 
-            <div className="w-full min-w-0 overflow-x-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-full border-collapse text-left text-xs">
-                <thead className="bg-slate-50/90">
+            <TableScrollHint />
+            <div className={tableScrollShell}>
+              <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
+                <thead className="sticky top-0 z-[1] bg-slate-50/95 shadow-[0_1px_0_0_rgb(226_232_240)]">
                   <tr>
                     {orderListActiveColumns.map((col) => (
                       <th
@@ -3679,13 +3895,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    {(dateFrom || dateTo || itemStatusFilter) && (
+                    {(dateFrom || dateTo || itemStatusFilter || paymentFilter) && (
                       <button
                         type="button"
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
                           setItemStatusFilter("");
+                          setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
                         className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -3762,7 +3979,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 </div>
                 <p className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
                   The list is paginated for speed. <span className="font-medium">Download manufacturing PDF</span>{" "}
-                  above exports <span className="font-medium">all</span> lines matching dates, delivery, status, and
+                  above exports <span className="font-medium">all</span> lines matching dates, delivery, payment, status, and
                   search (not only this page).
                 </p>
               </div>
@@ -3784,9 +4001,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   </p>
                 </div>
               ) : itemListViewMode === "table" ? (
-                <div className="w-full min-w-0 overflow-x-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <table className="w-full min-w-[800px] table-auto border-collapse text-left text-sm">
-                    <thead className="bg-gray-50">
+                <>
+                  <TableScrollHint />
+                  <div className={tableScrollShellMuted}>
+                  <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
+                    <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
                       <tr>
                         {itemListActiveColumns.map((col) => (
                           <th
@@ -3819,7 +4038,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </>
               ) : (
                 <div className="space-y-3">
                   {orderItems.map((row) => (
@@ -4157,6 +4377,33 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       <div className="flex flex-wrap items-center gap-4">
                         {getStatusBadge(getDisplayOrderStatus(selectedOrder))}
                         <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleCreateShiprocketSingleShipment}
+                            disabled={createShiprocketLoading}
+                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-60 inline-flex items-center gap-2"
+                            title="Creates one Shiprocket order per shipment group (NORMAL), not per item"
+                          >
+                            {createShiprocketLoading ? (
+                              <>
+                                <RefreshCw size={14} className="animate-spin" />
+                                Creating…
+                              </>
+                            ) : (
+                              "Create Shiprocket (single)"
+                            )}
+                          </button>
+                          {String(selectedOrder?.payment?.mode || "").toUpperCase() !== "COD" &&
+                            String(selectedOrder?.payment?.status || "").toUpperCase() === "PENDING" && (
+                              <button
+                                type="button"
+                                onClick={openPaymentOverrideModal}
+                                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                                title="Use only if customer has paid but payment is still pending"
+                              >
+                                Mark paid + Confirm
+                              </button>
+                            )}
                           <label className="text-sm text-gray-700 whitespace-nowrap">
                             Update all items:
                           </label>
@@ -4196,6 +4443,90 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     </div>
                   )}
                 </div>
+
+                {paymentOverrideOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
+                      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900">
+                            Mark payment SUCCESS + confirm order
+                          </h3>
+                          <p className="text-xs text-gray-500 mt-1">
+                            This will set payment to <span className="font-medium">SUCCESS</span>, move order to{" "}
+                            <span className="font-medium">CONFIRMED</span>, confirm items, and update stock.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closePaymentOverrideModal}
+                          disabled={paymentOverrideSaving}
+                          className="rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <div className="px-5 py-4 space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            Payment ID (required)
+                          </label>
+                          <input
+                            value={paymentOverridePaymentId}
+                            onChange={(e) => setPaymentOverridePaymentId(e.target.value)}
+                            placeholder="e.g. pay_..."
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            Notes (optional)
+                          </label>
+                          <textarea
+                            value={paymentOverrideNotes}
+                            onChange={(e) => setPaymentOverrideNotes(e.target.value)}
+                            placeholder="Reason / reference"
+                            rows={3}
+                            className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={paymentOverrideSendNotification}
+                            onChange={(e) => setPaymentOverrideSendNotification(e.target.checked)}
+                          />
+                          Send “order confirmed” notification
+                        </label>
+                      </div>
+                      <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={closePaymentOverrideModal}
+                          disabled={paymentOverrideSaving}
+                          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleForcePaymentSuccess}
+                          disabled={paymentOverrideSaving}
+                          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60 inline-flex items-center gap-2"
+                        >
+                          {paymentOverrideSaving ? (
+                            <>
+                              <RefreshCw size={14} className="animate-spin" />
+                              Updating…
+                            </>
+                          ) : (
+                            "Confirm update"
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {orderError && (
                   <div className="mx-6 mt-5 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-3">
@@ -5030,9 +5361,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 ) : !selectedOrder?.items?.length ? (
                   <div className="py-12 text-center text-gray-500">No items found</div>
                 ) : (
-                  <div className="w-full min-w-0 overflow-x-hidden rounded-lg border border-gray-200">
-                    <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
-                      <thead className="bg-gray-50">
+                  <>
+                  <TableScrollHint />
+                  <div className={tableScrollShellMuted}>
+                    <table className="w-full min-w-[1040px] table-auto border-collapse text-left text-sm">
+                      <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
                         <tr>
                           <th className="px-1.5 py-2 text-left align-middle">
                             <input
@@ -5329,6 +5662,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       </tfoot>
                     </table>
                   </div>
+                  </>
                 )}
 
               </div>
