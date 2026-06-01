@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 import { Video } from "lucide-react";
 import toast from "react-hot-toast";
-import { createItem } from "../../apis/itemapi";
 import { getAllCategories } from "../../apis/categoryapi";
 import { getSubcategoriesByCategory } from "../../apis/subcategoryapis";
-import { getDesignerInventoryById, patchDesignerInventoryListed } from "../../apis/Designerapi";
+import { getDesignerInventoryById } from "../../apis/Designerapi";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import { designerInventoryToItemFormState } from "../../utils/buildItemCreateFormData";
 import {
-  buildItemCreateFormData,
-  designerInventoryToItemFormState,
-} from "../../utils/buildItemCreateFormData";
+  catalogCategoryLabel,
+  catalogSubcategoryLabel,
+  groupSecondarySubsByCategory,
+  normalizeIdList,
+  parseCatalogCategoriesResponse,
+  parseCatalogSubcategoriesResponse,
+} from "../../utils/catalogCategoryDisplay";
+import { publishDesignerToCatalog } from "../../utils/publishDesignerToCatalog";
 import {
   SIZE_CHART_PRESETS,
   garmentPresetCategoryLabel,
@@ -128,6 +133,83 @@ function allSkusFromDesigner(d) {
   return [...new Set(skus.filter(Boolean))];
 }
 
+function StoreCategoriesSummary({
+  designer,
+  categories,
+  subsByCategory,
+  labelsLoading,
+}) {
+  if (!designer) return null;
+  const primaryCat = categories.find((c) => String(c._id) === String(designer.categoryId || ""));
+  const primarySubName =
+    (subsByCategory[designer.categoryId] || []).find(
+      (s) => String(s._id) === String(designer.subcategoryId || ""),
+    ) || null;
+  const secondaryCats = normalizeIdList(designer.secondaryCategoryId);
+  const secondarySubs = normalizeIdList(designer.secondarySubcategoryId);
+  const grouped = groupSecondarySubsByCategory(
+    secondaryCats,
+    secondarySubs,
+    subsByCategory,
+  );
+
+  return (
+    <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3">
+      <h3 className="mb-2 border-l-4 border-teal-600 pl-2 text-sm font-semibold text-teal-950">
+        Store categories (saved on designer — copied to catalog on publish)
+      </h3>
+      {labelsLoading ? (
+        <p className="text-xs text-gray-600">Loading category names…</p>
+      ) : null}
+      <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div className="sm:col-span-2 rounded-lg border border-white/80 bg-white/90 p-2">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-teal-800">Primary</dt>
+          <dd className="mt-1 text-gray-900">
+            {primaryCat ? catalogCategoryLabel(primaryCat) : designer.categoryId || "—"}
+            <span className="text-gray-500"> → </span>
+            {primarySubName
+              ? catalogSubcategoryLabel(primarySubName)
+              : designer.subcategoryId || "—"}
+          </dd>
+        </div>
+        {grouped.length > 0 ? (
+          <div className="sm:col-span-2 rounded-lg border border-white/80 bg-white/90 p-2">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-teal-800">
+              Secondary (cross-listing)
+            </dt>
+            <dd className="mt-1 space-y-2">
+              {grouped.map(({ categoryId, subcategoryIds }) => {
+                const cat = categories.find((c) => String(c._id) === String(categoryId));
+                const subs = (subsByCategory[categoryId] || []).filter((s) =>
+                  subcategoryIds.includes(String(s._id)),
+                );
+                return (
+                  <div key={categoryId} className="text-sm text-gray-900">
+                    <span className="font-medium">
+                      {cat ? catalogCategoryLabel(cat) : categoryId}
+                    </span>
+                    {subs.length > 0 ? (
+                      <ul className="mt-0.5 list-inside list-disc text-gray-700">
+                        {subs.map((sub) => (
+                          <li key={sub._id}>{catalogSubcategoryLabel(sub)}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="ml-1 text-gray-500">(no subcategories selected)</span>
+                    )}
+                  </div>
+                );
+              })}
+            </dd>
+          </div>
+        ) : (
+          <div className="sm:col-span-2 text-xs text-gray-600">No secondary categories on this item.</div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 function DesignerSourceDetails({ d }) {
   if (!d) return null;
   const allSkus = allSkusFromDesigner(d);
@@ -150,6 +232,9 @@ function DesignerSourceDetails({ d }) {
           </div>
           <div>
             <span className="font-medium text-gray-700">Status:</span> {d.status || "—"}
+            {String(d.status || "").toLowerCase() !== "approved" ? (
+              <span className="ml-1 text-amber-700">(approve in inventory before listing)</span>
+            ) : null}
           </div>
           <div>
             <span className="font-medium text-gray-700">Gender:</span> {d.gender || "—"}
@@ -418,9 +503,17 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
   const [subcategories, setSubcategories] = useState([]);
   const [loadErr, setLoadErr] = useState("");
   const [sizeChartCategory, setSizeChartCategory] = useState("upper");
+  const [subsByCategory, setSubsByCategory] = useState({});
+  const [categoryLabelsLoading, setCategoryLabelsLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    if (designerRow && String(designerRow.status || "").toLowerCase() !== "approved") {
+      console.warn("[ListDesignerToCatalogModal] item not approved", designerRow?.status);
+      toast.error("Approve this item in Designer Inventory before publishing to catalog.");
+      onClose?.();
+      return;
+    }
     (async () => {
       setLoadErr("");
       setLoadingDoc(true);
@@ -435,13 +528,20 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
           designerRow?._id ? getDesignerInventoryById(designerRow._id) : Promise.resolve(null),
         ]);
 
-        const catRoot = catRes?.data?.data || catRes?.data || {};
-        const catList = catRoot.categories || catRoot || [];
-        setCategories(Array.isArray(catList) ? catList : []);
+        setCategories(parseCatalogCategoriesResponse(catRes));
 
         if (invRes?.success && invRes.data) {
-          setSourceDesigner(invRes.data);
-          setForm(designerInventoryToItemFormState(invRes.data));
+          const doc = invRes.data;
+          console.log("[ListDesignerToCatalogModal] loaded designer item", {
+            id: doc._id,
+            status: doc.status,
+            categoryId: doc.categoryId,
+            subcategoryId: doc.subcategoryId,
+          });
+          setSourceDesigner(doc);
+          setForm(designerInventoryToItemFormState(doc));
+          if (doc.categoryId) setCategoryId(String(doc.categoryId));
+          if (doc.subcategoryId) setSubcategoryId(String(doc.subcategoryId));
         } else {
           setLoadErr(invRes?.message || "Could not load designer inventory.");
         }
@@ -454,6 +554,44 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
   }, [open, designerRow?._id]);
 
   useEffect(() => {
+    if (!open || !sourceDesigner) {
+      setSubsByCategory({});
+      return undefined;
+    }
+    const categoryIds = [
+      ...new Set(
+        [
+          sourceDesigner.categoryId,
+          ...normalizeIdList(sourceDesigner.secondaryCategoryId),
+        ].filter(Boolean),
+      ),
+    ];
+    if (categoryIds.length === 0) return undefined;
+    let cancelled = false;
+    setCategoryLabelsLoading(true);
+    (async () => {
+      const map = {};
+      try {
+        await Promise.all(
+          categoryIds.map(async (catId) => {
+            const res = await getSubcategoriesByCategory(catId, 1, 200);
+            map[catId] = parseCatalogSubcategoriesResponse(res);
+          }),
+        );
+      } catch {
+        /* partial */
+      }
+      if (!cancelled) {
+        setSubsByCategory(map);
+        setCategoryLabelsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sourceDesigner]);
+
+  useEffect(() => {
     if (!open || !categoryId) {
       setSubcategories([]);
       return;
@@ -461,9 +599,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
     (async () => {
       try {
         const res = await getSubcategoriesByCategory(categoryId, 1, 80, "");
-        const root = res?.data?.data || res?.data || {};
-        const list = root.subcategories || root.subCategories || root || [];
-        setSubcategories(Array.isArray(list) ? list : []);
+        setSubcategories(parseCatalogSubcategoriesResponse(res));
       } catch {
         setSubcategories([]);
       }
@@ -508,19 +644,25 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
     setSaving(true);
     try {
       const formForSubmit = ensureSizeChartMeasureImagesFromSource(form, sourceDesigner);
-      const fd = buildItemCreateFormData(formForSubmit, categoryId, subcategoryId);
-      const res = await createItem(fd);
-      const created = res?.data;
-      const catalogItemId = created?._id;
-      if (!catalogItemId) {
-        throw new Error("Catalog create did not return an item id.");
-      }
-      await patchDesignerInventoryListed(designerRow._id, {
-        isListed: true,
-        catalogItemId: String(catalogItemId),
+      console.log("[ListDesignerToCatalogModal] submit — publish flow", {
+        designerInventoryId: designerRow._id,
+        categoryId,
+        subcategoryId,
+        productId: formForSubmit.productId,
       });
-      toast.success("Listed in catalog and linked to main inventory.");
-      onPublished?.();
+      const result = await publishDesignerToCatalog({
+        designerInventoryId: designerRow._id,
+        designerRow,
+        form: formForSubmit,
+        categoryId,
+        subcategoryId,
+      });
+      console.log("[ListDesignerToCatalogModal] publish complete", {
+        catalogItemId: result.catalogItemId,
+        updatedDesigner: result.updatedDesigner,
+      });
+      toast.success("Catalog item saved and designer row marked as listed.");
+      onPublished?.(result.updatedDesigner);
       onClose?.();
     } catch (raw) {
       const messages = extractBackendMessages(raw);
@@ -563,17 +705,27 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
             <form onSubmit={handleSubmit} className="space-y-4">
               <DesignerSourceDetails d={sourceDesigner} />
 
+              <StoreCategoriesSummary
+                designer={sourceDesigner}
+                categories={categories}
+                subsByCategory={subsByCategory}
+                labelsLoading={categoryLabelsLoading}
+              />
+
               <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-3">
                 <h3 className="mb-2 border-l-4 border-indigo-600 pl-2 text-sm font-semibold text-gray-900">
                   Main inventory (catalog) — edit & submit
                 </h3>
                 <p className="mb-3 text-xs text-gray-600">
-                  Fields below are sent to main item inventory. Descriptions are prefilled from the
-                  designer API and you can edit before publish.
+                  Primary category and subcategory below are sent to main inventory. All primary and
+                  secondary categories from the designer row are included in the create payload
+                  automatically.
                 </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label className="mb-0.5 block text-xs font-medium text-gray-700">Category *</label>
+                  <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                    Primary catalog category *
+                  </label>
                   <select
                     className={fieldClass}
                     value={categoryId}
@@ -592,7 +744,9 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                   </select>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-0.5 block text-xs font-medium text-gray-700">Subcategory *</label>
+                  <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                    Primary catalog subcategory *
+                  </label>
                   <select
                     className={fieldClass}
                     value={subcategoryId}

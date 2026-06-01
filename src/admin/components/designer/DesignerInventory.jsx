@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Eye, Info, X } from "lucide-react";
+import toast from "react-hot-toast";
 import {
   approveDesignerCatalogSync,
   dismissDesignerCatalogPending,
@@ -10,7 +11,10 @@ import {
   getDesignerInventoryById,
   regenerateDesignerSku,
   patchDesignerInventoryListed,
+  unwrapDesignerInventoryItem,
 } from "../../apis/Designerapi";
+import { getAllCategories } from "../../apis/categoryapi";
+import { getSubcategoriesByCategory } from "../../apis/subcategoryapis";
 import { getSingleItem } from "../../apis/itemapi";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
 import {
@@ -154,6 +158,59 @@ function DescriptionWithInfo({ label, value, previewLen, onOpenFull }) {
   );
 }
 
+function normalizeIdList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((v) =>
+        typeof v === "object" && v?._id ? String(v._id) : v != null ? String(v) : "",
+      )
+      .filter(Boolean);
+  }
+  if (typeof value === "object" && value._id) return [String(value._id)];
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function parseCatalogCategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.categories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+function parseCatalogSubcategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.subcategories || data.subCategories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+function catalogCategoryLabel(cat) {
+  return String(cat?.name || cat?.title || cat?.categoryName || "Category").trim();
+}
+
+function catalogSubcategoryLabel(sub) {
+  return String(sub?.name || sub?.title || sub?.subcategoryName || "Subcategory").trim();
+}
+
+function canAdminListItem(row) {
+  return String(row?.status || "").toLowerCase() === "approved";
+}
+
+const STATUS_CONFIRM = {
+  rejected: "Reject this designer item? The designer can edit and resubmit.",
+  archived: "Archive this item? It will be hidden from active review.",
+};
+
+const getSkuIds = (item) => {
+  const skus = [];
+  for (const variant of item?.variants || []) {
+    for (const size of variant?.sizes || []) {
+      if (size?.sku) skus.push(size.sku);
+    }
+  }
+  return [...new Set(skus)];
+};
+
 const DesignerInventory = () => {
   const [params] = useSearchParams();
   const presetDesignerId = params.get("designerId") || "";
@@ -179,15 +236,27 @@ const DesignerInventory = () => {
   const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
   const [fullTextModal, setFullTextModal] = useState(null);
+  const [catalogCategories, setCatalogCategories] = useState([]);
+  const [subcategoryLabels, setSubcategoryLabels] = useState({});
+  const [subcategoryLabelsLoading, setSubcategoryLabelsLoading] = useState(false);
 
-  const getSkuIds = (item) => {
-    const skus = [];
-    for (const variant of item?.variants || []) {
-      for (const size of variant?.sizes || []) {
-        if (size?.sku) skus.push(size.sku);
-      }
-    }
-    return [...new Set(skus)];
+  const mergeRowFromApi = (id, data) => {
+    if (!id || !data) return;
+    setRows((prev) => prev.map((row) => (row._id === id ? { ...row, ...data } : row)));
+    setSelectedItem((prev) => (prev?._id === id ? { ...prev, ...data } : prev));
+  };
+
+  const resolveCategoryName = (id) => {
+    const key = String(id || "").trim();
+    if (!key) return "—";
+    const cat = catalogCategories.find((c) => String(c._id) === key);
+    return cat ? catalogCategoryLabel(cat) : key;
+  };
+
+  const resolveSubcategoryName = (id) => {
+    const key = String(id || "").trim();
+    if (!key) return "—";
+    return subcategoryLabels[key] || key;
   };
 
   const variantMediaSrc = (img) => variantMediaUrl(img);
@@ -218,22 +287,28 @@ const DesignerInventory = () => {
   const fetchRows = async () => {
     setLoading(true);
     setError("");
+    const query = {
+      page,
+      limit: 10,
+      search,
+      status,
+      designerId: presetDesignerId,
+      isListed: listedFilter,
+      catalogUpdateStatus: catalogSyncFilter,
+    };
+    console.log("[DesignerInventory] fetch list", query);
     try {
-      const res = await getDesignerInventory({
-        page,
-        limit: 10,
-        search,
-        status,
-        designerId: presetDesignerId,
-        isListed: listedFilter,
-        catalogUpdateStatus: catalogSyncFilter,
-      });
+      const res = await getDesignerInventory(query);
+      console.log("[DesignerInventory] fetch list response", res);
       if (res?.success) {
         setRows(res.data?.items || []);
         setPagination(res.data?.pagination || { totalPages: 1 });
+      } else {
+        setError(res?.message || "Failed to fetch inventory.");
       }
     } catch (err) {
-      setError(err?.message || "Failed to fetch inventory.");
+      const msgs = extractBackendMessages(err);
+      setError(msgs.length ? msgs.join("\n") : err?.message || "Failed to fetch inventory.");
     } finally {
       setLoading(false);
     }
@@ -247,14 +322,84 @@ const DesignerInventory = () => {
     setSelectedRowIds([]);
   }, [page, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
 
-  const onChangeStatus = async (id, nextStatus) => {
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getAllCategories(1, 500);
+        setCatalogCategories(parseCatalogCategoriesResponse(res));
+      } catch {
+        setCatalogCategories([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setSubcategoryLabels({});
+      setSubcategoryLabelsLoading(false);
+      return undefined;
+    }
+    const categoryIds = [
+      ...new Set(
+        [
+          selectedItem.categoryId,
+          ...normalizeIdList(selectedItem.secondaryCategoryId),
+        ].filter(Boolean),
+      ),
+    ];
+    if (categoryIds.length === 0) return undefined;
+    let cancelled = false;
+    setSubcategoryLabelsLoading(true);
+    (async () => {
+      const labels = {};
+      try {
+        await Promise.all(
+          categoryIds.map(async (catId) => {
+            const res = await getSubcategoriesByCategory(catId, 1, 200);
+            parseCatalogSubcategoriesResponse(res).forEach((sub) => {
+              if (sub?._id) labels[String(sub._id)] = catalogSubcategoryLabel(sub);
+            });
+          }),
+        );
+      } catch {
+        /* partial labels ok */
+      }
+      if (!cancelled) {
+        setSubcategoryLabels(labels);
+        setSubcategoryLabelsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedItem]);
+
+  const onChangeStatus = async (row, nextStatus) => {
+    const id = row?._id;
+    const prevStatus = row?.status;
+    if (!id || !nextStatus || nextStatus === prevStatus) return;
+
+    const confirmMsg = STATUS_CONFIRM[nextStatus];
+    if (confirmMsg && !window.confirm(confirmMsg)) {
+      await fetchRows();
+      return;
+    }
+
     setBusyStatusId(id);
     setError("");
+    console.log("[DesignerInventory] change status", { id, nextStatus });
     try {
-      await changeDesignerInventoryStatus(id, nextStatus);
+      const res = await changeDesignerInventoryStatus(id, nextStatus);
+      const updated = unwrapDesignerInventoryItem(res);
+      if (updated) mergeRowFromApi(id, updated);
+      toast.success(`Status set to ${nextStatus}.`);
       await fetchRows();
     } catch (err) {
-      setError(err?.message || "Failed to update inventory status.");
+      const msgs = extractBackendMessages(err);
+      const msg = msgs.length ? msgs.join("; ") : err?.message || "Failed to update status.";
+      setError(msg);
+      toast.error(msg);
+      await fetchRows();
     } finally {
       setBusyStatusId("");
     }
@@ -269,24 +414,44 @@ const DesignerInventory = () => {
     const next = e.target.value === "true";
     if (next) {
       if (r.isListed) return;
+      if (!canAdminListItem(r)) {
+        toast.error("Approve the item before listing it on the catalog.");
+        await fetchRows();
+        return;
+      }
+      console.log("[DesignerInventory] open list-to-catalog modal", { id: r._id });
       setListModalDesigner(r);
       return;
     }
     if (!r.isListed) return;
+    const ok = window.confirm(
+      "Mark this item as not listed? It stays approved but is hidden from catalog listing.",
+    );
+    if (!ok) {
+      await fetchRows();
+      return;
+    }
     setBusyListedId(r._id);
     setError("");
+    console.log("[DesignerInventory] unlist", { id: r._id });
     try {
       const res = await patchDesignerInventoryListed(r._id, { isListed: false });
-      if (res?.success && selectedItem?._id === r._id) {
-        setSelectedItem(res.data);
-      }
+      const updated = unwrapDesignerInventoryItem(res);
+      if (updated) mergeRowFromApi(r._id, updated);
+      toast.success("Item marked as not listed.");
       await fetchRows();
     } catch (err) {
-      setError(err?.message || "Failed to update listing.");
+      const msgs = extractBackendMessages(err);
+      const msg = msgs.length ? msgs.join("; ") : err?.message || "Failed to update listing.";
+      setError(msg);
+      toast.error(msg);
+      await fetchRows();
     } finally {
       setBusyListedId("");
     }
   };
+
+  const quickApprove = (row) => onChangeStatus(row, "approved");
 
   const parseCatalogItemResponse = (res) => {
     if (!res || typeof res !== "object") return null;
@@ -349,9 +514,10 @@ const DesignerInventory = () => {
       }
 
       const res = await approveDesignerCatalogSync(r._id);
-      if (res?.success && selectedItem?._id === r._id) {
-        setSelectedItem(res.data);
-      }
+      console.log("[DesignerInventory] approve catalog sync response", res);
+      const updated = unwrapDesignerInventoryItem(res);
+      if (updated) mergeRowFromApi(r._id, updated);
+      toast.success("Designer changes applied to catalog item.");
       await fetchRows();
     } catch (err) {
       const msgs = extractBackendMessages(err);
@@ -371,9 +537,10 @@ const DesignerInventory = () => {
     setError("");
     try {
       const res = await dismissDesignerCatalogPending(r._id);
-      if (res?.success && selectedItem?._id === r._id) {
-        setSelectedItem(res.data);
-      }
+      console.log("[DesignerInventory] dismiss catalog pending response", res);
+      const updated = unwrapDesignerInventoryItem(res);
+      if (updated) mergeRowFromApi(r._id, updated);
+      toast.success("Pending catalog flag cleared.");
       await fetchRows();
     } catch (err) {
       const msgs = extractBackendMessages(err);
@@ -646,6 +813,22 @@ const DesignerInventory = () => {
         </div>
       ) : null}
 
+      <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-xs text-indigo-950">
+        <p className="font-semibold">Review workflow</p>
+        <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-indigo-900/90">
+          <li>Designer submits → status becomes <strong>submitted</strong>.</li>
+          <li>Set status to <strong>approved</strong> (PATCH …/status).</li>
+          <li>
+            Set <strong>Listed</strong> to publish: creates main catalog item, then PATCH …/listed{" "}
+            <code className="rounded bg-white/80 px-1">{"{ isListed: true }"}</code>.
+          </li>
+          <li>
+            Set Listed to <strong>Not listed</strong> to hide without deleting (
+            <code className="rounded bg-white/80 px-1">{"{ isListed: false }"}</code>).
+          </li>
+        </ol>
+      </div>
+
       {/* Card layout: small / split viewports (incl. narrow MacBook) */}
       <div className="space-y-3 lg:hidden">
         {loading ? (
@@ -793,7 +976,7 @@ const DesignerInventory = () => {
                   className="min-w-0 flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed sm:max-w-[200px] sm:flex-none"
                   disabled={busyStatusId === r._id}
                   value={r.status}
-                  onChange={(e) => onChangeStatus(r._id, e.target.value)}
+                  onChange={(e) => onChangeStatus(r, e.target.value)}
                 >
                   <option value="draft">draft</option>
                   <option value="submitted">submitted</option>
@@ -801,6 +984,16 @@ const DesignerInventory = () => {
                   <option value="rejected">rejected</option>
                   <option value="archived">archived</option>
                 </select>
+                {String(r.status || "").toLowerCase() === "submitted" ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                    disabled={busyStatusId === r._id}
+                    onClick={() => quickApprove(r)}
+                  >
+                    Approve
+                  </button>
+                ) : null}
               </div>
             </div>
           ))
@@ -996,7 +1189,7 @@ const DesignerInventory = () => {
                           className="min-w-0 max-w-[5.5rem] flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-1 py-1 text-[11px] font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed xl:max-w-[7rem] xl:px-2 xl:py-1.5 xl:text-xs"
                           disabled={busyStatusId === r._id}
                           value={r.status}
-                          onChange={(e) => onChangeStatus(r._id, e.target.value)}
+                          onChange={(e) => onChangeStatus(r, e.target.value)}
                         >
                           <option value="draft">draft</option>
                           <option value="submitted">submitted</option>
@@ -1004,6 +1197,17 @@ const DesignerInventory = () => {
                           <option value="rejected">rejected</option>
                           <option value="archived">archived</option>
                         </select>
+                        {String(r.status || "").toLowerCase() === "submitted" ? (
+                          <button
+                            type="button"
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-1.5 py-1 text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 xl:text-[11px]"
+                            disabled={busyStatusId === r._id}
+                            onClick={() => quickApprove(r)}
+                            title="Approve"
+                          >
+                            OK
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1080,8 +1284,99 @@ const DesignerInventory = () => {
               <div><span className="font-medium">Style Number:</span> {selectedItem.StyleNumber || "-"}</div>
               <div><span className="font-medium">Designer:</span> {selectedItem.designerName || "-"}</div>
               <div><span className="font-medium">Employee ID:</span> {selectedItem.employeeId || "-"}</div>
+              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
+                <p className="mb-2 text-xs font-semibold text-indigo-900">Admin actions</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-gray-600">
+                    Status
+                    <select
+                      className="ml-1 rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs font-medium text-indigo-800 disabled:opacity-50"
+                      disabled={busyStatusId === selectedItem._id}
+                      value={selectedItem.status || "draft"}
+                      onChange={(e) => onChangeStatus(selectedItem, e.target.value)}
+                    >
+                      <option value="draft">draft</option>
+                      <option value="submitted">submitted</option>
+                      <option value="approved">approved</option>
+                      <option value="rejected">rejected</option>
+                      <option value="archived">archived</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-gray-600">
+                    Listed
+                    <select
+                      className="ml-1 rounded-lg border border-teal-200 bg-white px-2 py-1 text-xs font-medium text-teal-800 disabled:opacity-50"
+                      disabled={busyListedId === selectedItem._id}
+                      value={listedSelectValue(selectedItem)}
+                      onChange={(e) => handleListedSelect(selectedItem, e)}
+                    >
+                      <option value="false">Not listed</option>
+                      <option value="true">Listed</option>
+                    </select>
+                  </label>
+                  {String(selectedItem.status || "").toLowerCase() === "submitted" ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                      disabled={busyStatusId === selectedItem._id}
+                      onClick={() => quickApprove(selectedItem)}
+                    >
+                      Quick approve
+                    </button>
+                  ) : null}
+                </div>
+                {!canAdminListItem(selectedItem) && !selectedItem.isListed ? (
+                  <p className="mt-2 text-[11px] text-amber-800">
+                    Approve this item before setting Listed to Yes.
+                  </p>
+                ) : null}
+              </div>
               <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
               <div><span className="font-medium">Listed (catalog):</span> {selectedItem.isListed ? "Yes" : "No"}</div>
+              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-slate-200 bg-slate-50/90 p-3">
+                <h4 className="mb-2 text-xs font-semibold text-slate-900">Store categories</h4>
+                {subcategoryLabelsLoading ? (
+                  <p className="text-xs text-gray-500">Loading names…</p>
+                ) : null}
+                <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-gray-600">Primary category</dt>
+                    <dd>{resolveCategoryName(selectedItem.categoryId)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-600">Primary subcategory</dt>
+                    <dd>{resolveSubcategoryName(selectedItem.subcategoryId)}</dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-gray-600">Secondary categories</dt>
+                    <dd>
+                      {normalizeIdList(selectedItem.secondaryCategoryId).length > 0 ? (
+                        <ul className="mt-0.5 list-inside list-disc text-sm">
+                          {normalizeIdList(selectedItem.secondaryCategoryId).map((id) => (
+                            <li key={id}>{resolveCategoryName(id)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-gray-600">Secondary subcategories</dt>
+                    <dd>
+                      {normalizeIdList(selectedItem.secondarySubcategoryId).length > 0 ? (
+                        <ul className="mt-0.5 list-inside list-disc text-sm">
+                          {normalizeIdList(selectedItem.secondarySubcategoryId).map((id) => (
+                            <li key={id}>{resolveSubcategoryName(id)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
               <div><span className="font-medium">Main inventory item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
               <div>
                 <span className="font-medium">Main catalog update:</span>{" "}
@@ -1372,8 +1667,10 @@ const DesignerInventory = () => {
         open={Boolean(listModalDesigner)}
         designerRow={listModalDesigner}
         onClose={() => setListModalDesigner(null)}
-        onPublished={async () => {
+        onPublished={async (updatedRow) => {
+          console.log("[DesignerInventory] catalog published", updatedRow);
           setListModalDesigner(null);
+          if (updatedRow?._id) mergeRowFromApi(updatedRow._id, updatedRow);
           await fetchRows();
         }}
       />

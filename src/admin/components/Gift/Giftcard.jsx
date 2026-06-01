@@ -99,33 +99,9 @@ const GiftCardRule = () => {
   };
 
   return (
-    <div className="min-h-full bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-              <Gift className="h-5 w-5" strokeWidth={2} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Gift card rules
-              </h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Configure multipliers, terms, and artwork for gift card offers.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            <Plus className="h-4 w-4" />
-            New gift card
-          </button>
-        </div>
-
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium text-slate-700">Status</label>
           <select
             value={statusFilter}
@@ -139,6 +115,15 @@ const GiftCardRule = () => {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          </div>
+          <button
+            type="button"
+            onClick={handleCreate}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700"
+          >
+            <Plus className="h-4 w-4" />
+            New gift card
+          </button>
         </div>
 
         {error ? (
@@ -340,7 +325,6 @@ const GiftCardRule = () => {
             </div>
           ) : null}
         </div>
-      </div>
     </div>
   );
 };

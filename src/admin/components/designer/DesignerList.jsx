@@ -19,7 +19,9 @@ const DesignerList = () => {
     setLoading(true);
     setError("");
     try {
+      console.log("[DesignerList] fetch", { page, limit, search });
       const res = await getDesigners(page, limit, search);
+      console.log("[DesignerList] fetch response", res);
       if (res?.success) {
         setRows(res.data?.designers || []);
         setPagination(res.data?.pagination || { totalPages: 1 });
@@ -158,6 +160,10 @@ const DesignerList = () => {
               <h2 className="text-xl font-semibold">Designer Details</h2>
               <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-black hover:text-white transition-colors" onClick={() => setSelectedDesigner(null)}>Close</button>
             </div>
+            <p className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-950">
+              Open <strong>Inventory</strong> to review submissions: approve status (PATCH …/status), then
+              list on catalog (PATCH …/listed).
+            </p>
             <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div><span className="font-medium">Name:</span> {selectedDesigner.name || "-"}</div>
               <div><span className="font-medium">Phone:</span> {(selectedDesigner.countryCode || "")} {selectedDesigner.phoneNumber || "-"}</div>
@@ -168,6 +174,18 @@ const DesignerList = () => {
               <div><span className="font-medium">Active:</span> {selectedDesigner.isActive ? "Yes" : "No"}</div>
               <div><span className="font-medium">Verified:</span> {selectedDesigner.isNumberVerified ? "Yes" : "No"}</div>
               <div className="sm:col-span-2"><span className="font-medium">Profile Image:</span> {selectedDesigner.profileImage || "-"}</div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                onClick={() => {
+                  setSelectedDesigner(null);
+                  navigate(`/admin/designer/inventory?designerId=${selectedDesigner._id}`);
+                }}
+              >
+                View inventory
+              </button>
             </div>
           </div>
         </div>

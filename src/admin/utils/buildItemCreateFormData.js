@@ -1,3 +1,4 @@
+import { normalizeIdList } from "./catalogCategoryDisplay.js";
 import { designerItemToFormSizeCharts } from "../../utils/designerSizeChartDisplay.js";
 import {
   inferVariantMediaType,
@@ -27,6 +28,14 @@ function metaTagsToJsonPayload(str) {
 
 export function buildItemCreateFormData(form, categoryId, subcategoryId, options = {}) {
   const { isEdit = false, id = null } = options;
+  console.log("[buildItemCreateFormData] start", {
+    isEdit,
+    categoryId,
+    subcategoryId,
+    name: form?.name,
+    productId: form?.productId,
+    variantCount: form?.variants?.length ?? 0,
+  });
   const formData = new FormData();
 
   formData.append("name", form.name);
@@ -41,6 +50,14 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
   formData.append("skuCodeInputs", JSON.stringify(form.skuCodeInputs || {}));
   formData.append("categoryId", categoryId);
   formData.append("subcategoryId", subcategoryId);
+  const secondaryCategoryId = normalizeIdList(
+    options.secondaryCategoryId ?? form.secondaryCategoryId,
+  ).filter((id) => id !== String(categoryId || ""));
+  const secondarySubcategoryId = normalizeIdList(
+    options.secondarySubcategoryId ?? form.secondarySubcategoryId,
+  ).filter((id) => id !== String(subcategoryId || ""));
+  formData.append("secondaryCategoryId", JSON.stringify(secondaryCategoryId));
+  formData.append("secondarySubcategoryId", JSON.stringify(secondarySubcategoryId));
   formData.append("defaultColor", form.defaultColor);
   formData.append("isActive", String(form.isActive !== false));
 
@@ -329,6 +346,10 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
 
   formData.append("filters", JSON.stringify(form.filters || []));
 
+  console.log("[buildItemCreateFormData] done", {
+    variantJsonCount: variantsData.length,
+    skuIdGenerationCount: skuIdGenerationInputs.length,
+  });
   return formData;
 }
 
@@ -341,6 +362,14 @@ function orderedVariantImages(variant) {
  * Map a designer inventory document (API shape) into ItemForm-like state for catalog create.
  */
 export function designerInventoryToItemFormState(designer) {
+  console.log("[designerInventoryToItemFormState] map designer → catalog form", {
+    id: designer?._id,
+    StyleNumber: designer?.StyleNumber,
+    status: designer?.status,
+    categoryId: designer?.categoryId,
+    subcategoryId: designer?.subcategoryId,
+    variantCount: designer?.variants?.length ?? 0,
+  });
   const desc = (designer.description || "").trim();
   const styleLabel = (designer.styleName || designer.StyleNumber || "Product").trim();
   const shortDescription = String(
@@ -463,5 +492,7 @@ export function designerInventoryToItemFormState(designer) {
     returnPolicy: { iconUrl: "", iconKey: "", text: "", iconFile: null },
     exchangePolicy: { iconUrl: "", iconKey: "", text: "", iconFile: null },
     cancellationPolicy: { iconUrl: "", iconKey: "", text: "", iconFile: null },
+    secondaryCategoryId: normalizeIdList(designer.secondaryCategoryId),
+    secondarySubcategoryId: normalizeIdList(designer.secondarySubcategoryId),
   };
 }

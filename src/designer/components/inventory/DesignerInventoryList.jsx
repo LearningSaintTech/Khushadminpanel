@@ -6,6 +6,8 @@ import {
   listDesignerItems,
   regenerateDesignerSku,
 } from "../../apis/designerApi";
+import { getAllCategories } from "../../../admin/apis/categoryapi";
+import { getSubcategoriesByCategory } from "../../../admin/apis/subcategoryapis";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
 import {
   formatProductTypeAndFit,
@@ -98,6 +100,40 @@ const showSubmitButton = (status) => {
   return false;
 };
 
+function normalizeIdList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((v) =>
+        typeof v === "object" && v?._id ? String(v._id) : v != null ? String(v) : "",
+      )
+      .filter(Boolean);
+  }
+  if (typeof value === "object" && value._id) return [String(value._id)];
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function parseCatalogCategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.categories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+function parseCatalogSubcategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.subcategories || data.subCategories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+function catalogCategoryLabel(cat) {
+  return String(cat?.name || cat?.title || cat?.categoryName || "Category").trim();
+}
+
+function catalogSubcategoryLabel(sub) {
+  return String(sub?.name || sub?.title || sub?.subcategoryName || "Subcategory").trim();
+}
+
 const getSkuIds = (item) => {
   const skus = [];
   for (const variant of item?.variants || []) {
@@ -121,6 +157,11 @@ const DesignerInventoryList = () => {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ totalPages: 1 });
   const [status, setStatus] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [catalogCategories, setCatalogCategories] = useState([]);
+  const [catalogCategoriesLoading, setCatalogCategoriesLoading] = useState(false);
+  const [subcategoryLabels, setSubcategoryLabels] = useState({});
+  const [subcategoryLabelsLoading, setSubcategoryLabelsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -139,7 +180,78 @@ const DesignerInventoryList = () => {
 
   useLayoutEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status]);
+  }, [debouncedSearch, status, categoryFilter]);
+
+  useEffect(() => {
+    (async () => {
+      setCatalogCategoriesLoading(true);
+      try {
+        const res = await getAllCategories(1, 500);
+        setCatalogCategories(parseCatalogCategoriesResponse(res));
+      } catch {
+        setCatalogCategories([]);
+      } finally {
+        setCatalogCategoriesLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setSubcategoryLabels({});
+      setSubcategoryLabelsLoading(false);
+      return undefined;
+    }
+    const categoryIds = [
+      ...new Set(
+        [selected.categoryId, ...normalizeIdList(selected.secondaryCategoryId)].filter(
+          Boolean,
+        ),
+      ),
+    ];
+    if (categoryIds.length === 0) {
+      setSubcategoryLabels({});
+      return undefined;
+    }
+    let cancelled = false;
+    setSubcategoryLabelsLoading(true);
+    (async () => {
+      const labels = {};
+      try {
+        await Promise.all(
+          categoryIds.map(async (catId) => {
+            const res = await getSubcategoriesByCategory(catId, 1, 200);
+            const subs = parseCatalogSubcategoriesResponse(res);
+            subs.forEach((sub) => {
+              if (sub?._id) labels[String(sub._id)] = catalogSubcategoryLabel(sub);
+            });
+          }),
+        );
+      } catch {
+        /* keep partial labels */
+      }
+      if (!cancelled) {
+        setSubcategoryLabels(labels);
+        setSubcategoryLabelsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const resolveCategoryName = (id) => {
+    const key = String(id || "").trim();
+    if (!key) return "—";
+    const cat = catalogCategories.find((c) => String(c._id) === key);
+    return cat ? catalogCategoryLabel(cat) : key;
+  };
+
+  const resolveSubcategoryName = (id) => {
+    const key = String(id || "").trim();
+    if (!key) return "—";
+    return subcategoryLabels[key] || key;
+  };
 
   const fetchRows = async () => {
     setLoading(true);
@@ -150,6 +262,7 @@ const DesignerInventoryList = () => {
         limit: 10,
         ...(status ? { status } : {}),
         ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        ...(categoryFilter ? { categoryId: categoryFilter } : {}),
       });
       if (res?.success) {
         setRows(res.data?.items || []);
@@ -166,7 +279,7 @@ const DesignerInventoryList = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [page, status, debouncedSearch]);
+  }, [page, status, debouncedSearch, categoryFilter]);
 
   const run = async (id, fn) => {
     setBusyId(id);
@@ -325,6 +438,24 @@ const DesignerInventoryList = () => {
           <option value="approved">approved</option>
           <option value="rejected">rejected</option>
           <option value="archived">archived</option>
+        </select>
+        <select
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:min-w-[180px]"
+          value={categoryFilter}
+          disabled={catalogCategoriesLoading}
+          onChange={(e) => {
+            setActionErrors([]);
+            setCategoryFilter(e.target.value);
+          }}
+        >
+          <option value="">
+            {catalogCategoriesLoading ? "Loading categories…" : "All categories"}
+          </option>
+          {catalogCategories.map((cat) => (
+            <option key={cat._id} value={cat._id}>
+              {catalogCategoryLabel(cat)}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -659,6 +790,54 @@ const DesignerInventoryList = () => {
               <div>
                 <span className="font-medium text-gray-600">Product / fit:</span>{" "}
                 {formatProductTypeAndFitDetail(selected)}
+              </div>
+              <div className="sm:col-span-2 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
+                <h3 className="mb-2 text-xs font-semibold text-indigo-900">Store categories</h3>
+                {subcategoryLabelsLoading ? (
+                  <p className="text-xs text-gray-500">Loading category names…</p>
+                ) : null}
+                <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium text-gray-600">Primary category</dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {resolveCategoryName(selected.categoryId)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-gray-600">Primary subcategory</dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {resolveSubcategoryName(selected.subcategoryId)}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-gray-600">Secondary categories</dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {normalizeIdList(selected.secondaryCategoryId).length > 0 ? (
+                        <ul className="list-inside list-disc space-y-0.5">
+                          {normalizeIdList(selected.secondaryCategoryId).map((id) => (
+                            <li key={id}>{resolveCategoryName(id)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-gray-600">Secondary subcategories</dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {normalizeIdList(selected.secondarySubcategoryId).length > 0 ? (
+                        <ul className="list-inside list-disc space-y-0.5">
+                          {normalizeIdList(selected.secondarySubcategoryId).map((id) => (
+                            <li key={id}>{resolveSubcategoryName(id)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        "—"
+                      )}
+                    </dd>
+                  </div>
+                </dl>
               </div>
               <div>
                 <span className="font-medium text-gray-600">MRP:</span> {Number(selected.mrp ?? 0)}

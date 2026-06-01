@@ -1,11 +1,12 @@
 // layouts/Layout.jsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { Bell } from "lucide-react";
 import Sidebar from "../common components/sidebar";
-import { Outlet } from "react-router-dom";
 import { useNotification } from "../../../context/NotificationContext";
 import { AdminPanelBasePathProvider, useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { ThemeProvider } from "../../../context/ThemeContext";
+import { getAdminPageTitle } from "../../utils/adminPageTitle";
 
 function NotificationBadge({ count }) {
   if (!count || count <= 0) return null;
@@ -19,7 +20,9 @@ function NotificationBadge({ count }) {
 function LayoutInner({ filterSidebar }) {
   const { unreadCount, refreshUnreadCount } = useNotification();
   const basePath = useAdminPanelBasePath();
+  const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const pageTitle = getAdminPageTitle(location.pathname, basePath);
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -28,22 +31,8 @@ function LayoutInner({ filterSidebar }) {
   const notificationsPath = `${basePath}/notifications`;
 
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Top bar bell only on admin shell; subadmin shell uses sidebar notifications (module-gated). */}
-      {!filterSidebar && (
-        <div className="hidden lg:flex items-center justify-end gap-2 px-4 py-2 bg-gray-100 border-b border-gray-200 shrink-0">
-          <Link
-            to={notificationsPath}
-            className="relative p-2 rounded-lg hover:bg-gray-200 transition"
-            aria-label="Notifications"
-          >
-            <Bell className="w-5 h-5 text-gray-700" />
-            <NotificationBadge count={unreadCount} />
-          </Link>
-        </div>
-      )}
-
-      <div className="flex flex-1">
+    <div className="min-h-screen bg-[#e8ecf1] p-3">
+      <div className="flex h-[calc(100vh-1.5rem)] gap-3">
         <Sidebar
           basePath={basePath}
           filterByModules={filterSidebar}
@@ -51,13 +40,25 @@ function LayoutInner({ filterSidebar }) {
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
         />
 
-        <main
-          className={`min-w-0 flex-1 p-4 sm:p-6 transition-[margin] duration-300 ${
-            sidebarCollapsed ? "lg:ml-16" : "lg:ml-60"
-          }`}
-        >
-          <Outlet />
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col gap-3 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 pl-14 shadow-sm lg:pl-4">
+            <h1 className="truncate text-sm font-semibold text-slate-900">{pageTitle}</h1>
+            {!filterSidebar && (
+              <Link
+                to={notificationsPath}
+                className="relative shrink-0 rounded-xl p-2 text-slate-600 transition hover:bg-slate-100"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                <NotificationBadge count={unreadCount} />
+              </Link>
+            )}
+          </header>
+
+          <main className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200/80 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   );
@@ -66,10 +67,12 @@ function LayoutInner({ filterSidebar }) {
 /** @param {{ basePath?: string, filterSidebar?: boolean }} props */
 const Layout = ({ basePath = "/admin", filterSidebar = false }) => {
   return (
-    <AdminPanelBasePathProvider basePath={basePath}>
-      <LayoutInner filterSidebar={filterSidebar} />
-    </AdminPanelBasePathProvider>
+    <ThemeProvider>
+      <AdminPanelBasePathProvider basePath={basePath}>
+        <LayoutInner filterSidebar={filterSidebar} />
+      </AdminPanelBasePathProvider>
+    </ThemeProvider>
   );
 };
 
-export default Layout
+export default Layout;

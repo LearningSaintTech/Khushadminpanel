@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Gift, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
@@ -304,28 +304,6 @@ payload.append("slabs", JSON.stringify(formattedSlabs));      payload.append("is
 
         {/* CARD */}
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {/* HEADER */}
-          <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15">
-                <Gift className="h-5 w-5" />
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {isEdit ? "Edit Gift Card" : "Create Gift Card"}
-                </h1>
-
-                <p className="mt-1 text-sm text-indigo-100">
-                  {isEdit
-                    ? "Update gift card information"
-                    : "Create a new gift card offer"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* FORM */}
           <form onSubmit={handleSubmit} className="space-y-6 p-6 sm:p-8">
             {/* ERRORS */}
             {errors.length > 0 && (

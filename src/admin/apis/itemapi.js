@@ -146,11 +146,22 @@ export const updateItemSkuUid = async (itemId, skuUidId, body) => {
  */
 export const createItem = async (formData) => {
   try {
+    console.log("[itemapi] POST /items/create — start");
+    if (formData?.entries) {
+      const keys = [];
+      for (const [key] of formData.entries()) keys.push(key);
+      console.log("[itemapi] POST /items/create — FormData keys", [...new Set(keys)]);
+    }
     // Do not set Content-Type — browser/axios must add multipart boundary automatically.
     const response = await apiConnector('POST', '/items/create', formData);
+    console.log("[itemapi] POST /items/create — success", {
+      success: response?.success,
+      message: response?.message,
+      itemId: response?.data?._id ?? response?.data?.data?._id,
+    });
     return response;
   } catch (error) {
-    console.error('Error creating item:', error);
+    console.error("[itemapi] POST /items/create — error", error);
     // apiConnector rejects with response body object (no err.response)
     if (error && typeof error === 'object' && !Array.isArray(error)) {
       throw error;

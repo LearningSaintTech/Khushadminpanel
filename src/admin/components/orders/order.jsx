@@ -717,66 +717,97 @@ function ColumnPickerDropdown({
   open,
   onOpenChange,
   badgeClass = "bg-indigo-100 text-indigo-900",
+  /** 'end' = anchor to trigger's right (toolbar on the right); 'start' = anchor left */
+  align = "end",
 }) {
   const activeCount = columns.filter((c) => visibleKeys.includes(c.key)).length;
+  const panelAlignClass =
+    align === "start"
+      ? "sm:left-0 sm:right-auto"
+      : "sm:right-0 sm:left-auto";
+
   return (
-    <div className="relative">
+    <div className="relative shrink-0" data-order-column-picker>
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
         className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
         aria-expanded={open}
+        aria-haspopup="dialog"
       >
-        <Columns3 className="h-3.5 w-3.5" />
+        <Columns3 className="h-3.5 w-3.5 shrink-0" />
         Columns
-        <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
           {activeCount}
         </span>
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-[min(100vw-2rem,22rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-lg ring-1 ring-black/5">
-          <p className="text-xs font-semibold text-gray-700 mb-2">Choose columns to show</p>
-          <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
-            {columns.map((col) => {
-              const checked = visibleKeys.includes(col.key);
-              const locked = !!col.alwaysVisible;
-              return (
-                <label
-                  key={col.key}
-                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                    locked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={locked}
-                    onChange={() => onToggle(col.key)}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-gray-800">{col.label}</span>
-                </label>
-              );
-            })}
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-slate-900/25 sm:hidden"
+            aria-label="Close column picker"
+            onClick={() => onOpenChange(false)}
+          />
+          <div
+            role="dialog"
+            aria-label="Choose columns to show"
+            className={`fixed z-50 flex max-h-[min(70vh,22rem)] w-[calc(100vw-1.5rem)] max-w-sm flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-xl ring-1 ring-black/5 left-1/2 top-[max(5rem,12vh)] -translate-x-1/2 sm:absolute sm:top-full sm:mt-1 sm:max-h-[min(calc(100vh-6rem),20rem)] sm:w-[min(20rem,calc(100vw-1.5rem))] sm:translate-x-0 sm:left-auto ${panelAlignClass}`}
+          >
+            <p className="mb-2 shrink-0 text-[11px] font-semibold text-slate-700">
+              Choose columns to show
+            </p>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 space-y-1">
+              {columns.map((col) => {
+                const checked = visibleKeys.includes(col.key);
+                const locked = !!col.alwaysVisible;
+                return (
+                  <label
+                    key={col.key}
+                    className={`flex items-start gap-2 rounded-md px-2 py-1.5 text-[11px] leading-snug ${
+                      locked
+                        ? "cursor-not-allowed opacity-60"
+                        : "cursor-pointer hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={locked}
+                      onChange={() => onToggle(col.key)}
+                      className="mt-0.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="min-w-0 flex-1 text-slate-800">{col.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex shrink-0 flex-wrap gap-3 border-t border-slate-100 pt-2">
+              <button
+                type="button"
+                onClick={onSelectAll}
+                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+              >
+                Show all
+              </button>
+              <button
+                type="button"
+                onClick={onReset}
+                className="text-[11px] font-medium text-slate-600 hover:text-slate-800"
+              >
+                Reset default
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="ml-auto text-[11px] font-medium text-slate-500 hover:text-slate-800 sm:hidden"
+              >
+                Done
+              </button>
+            </div>
           </div>
-          <div className="mt-2 flex gap-2 border-t border-gray-100 pt-2">
-            <button
-              type="button"
-              onClick={onSelectAll}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-            >
-              Show all
-            </button>
-            <button
-              type="button"
-              onClick={onReset}
-              className="text-xs font-medium text-gray-600 hover:text-gray-800"
-            >
-              Reset default
-            </button>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -3465,22 +3496,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
 
   return (
     <div className="min-h-screen bg-slate-50/80">
-      <div className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[1920px] flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
-              <Package className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold text-slate-900">
-                {exchangeOnly ? "Exchange orders" : "Order management"}
-              </h1>
-              <p className="hidden text-[10px] text-slate-500 sm:block">
-                {viewMode === VIEW_ORDER ? "By order" : "By item"}
-                {deliveryTypeFilter ? ` · ${deliveryTypeFilter}` : ""}
-              </p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-[1920px] px-1">
+      <div className="mb-3 flex justify-end">
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
@@ -3671,10 +3688,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           viewMode === VIEW_ORDER ? (
             <>
               {/* Filters: By order */}
-              <div className="mb-3 rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-3 overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-2 overflow-visible border-b border-slate-100 bg-slate-50/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-semibold text-slate-800">Filters</p>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
                     {(dateFrom ||
                       dateTo ||
                       statusFilter ||
@@ -3865,8 +3882,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           ) : (
             <>
               {/* Filters: By item */}
-              <div className="mb-6 rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-6 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-3 overflow-visible border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-3">
                     <p className="text-sm font-semibold text-gray-800">Filters</p>
                     <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
@@ -3894,7 +3911,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
                     {(dateFrom || dateTo || itemStatusFilter || paymentFilter) && (
                       <button
                         type="button"

@@ -196,16 +196,16 @@ const CouponForm = () => {
     <div className="min-h-screen bg-slate-50/80 pb-8">
       {/* Header */}
       <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:px-4">
           <button
             type="button"
             onClick={() => navigate(ap("coupons"))}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back
           </button>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:justify-start">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
               <Ticket className="h-4 w-4" />
             </div>
@@ -213,7 +213,7 @@ const CouponForm = () => {
               <h1 className="truncate text-sm font-semibold text-slate-900">
                 {isEdit ? "Edit coupon" : "Create coupon"}
               </h1>
-              <p className="text-[10px] text-slate-500 hidden sm:block">
+              <p className="text-[10px] text-slate-500">
                 {isEdit ? "Update discount settings" : "Add a new discount code"}
               </p>
             </div>
@@ -221,7 +221,7 @@ const CouponForm = () => {
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-3 pt-3 sm:px-4">
+      <div className="mx-auto w-full max-w-3xl min-w-0 px-3 pt-3 sm:px-4">
         {error && (
           <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {error}
@@ -245,7 +245,7 @@ const CouponForm = () => {
                 placeholder="HOLI30"
                 required
                 maxLength={20}
-                className={`${inputClass} max-w-xs font-mono uppercase tracking-wide`}
+                className={`${inputClass} w-full max-w-xs font-mono uppercase tracking-wide`}
               />
             </div>
             <div>
@@ -264,7 +264,7 @@ const CouponForm = () => {
           </Section>
 
           <Section title="Discount" description="Type, value and cap">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <FieldLabel required>Discount type</FieldLabel>
                 <select
@@ -317,7 +317,7 @@ const CouponForm = () => {
           </Section>
 
           <Section title="Cart & usage limits">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
               <div>
                 <FieldLabel hint="Optional">Min cart (₹)</FieldLabel>
                 <div className="relative">
@@ -381,7 +381,7 @@ const CouponForm = () => {
 
           <Section title="Validity">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
+              <div className="min-w-0">
                 <FieldLabel required>Start date</FieldLabel>
                 <input
                   type="date"
@@ -389,10 +389,10 @@ const CouponForm = () => {
                   value={formData.startDate}
                   onChange={handleInputChange}
                   required
-                  className={inputClass}
+                  className={`${inputClass} min-w-0 max-w-full`}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <FieldLabel required>Expiry date</FieldLabel>
                 <input
                   type="date"
@@ -400,11 +400,11 @@ const CouponForm = () => {
                   value={formData.expiryDate}
                   onChange={handleInputChange}
                   required
-                  className={inputClass}
+                  className={`${inputClass} min-w-0 max-w-full`}
                 />
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <FieldLabel>Applicable on</FieldLabel>
               <select
                 name="applicableOn"

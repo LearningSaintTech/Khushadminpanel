@@ -1,5 +1,6 @@
 import { useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
+import SidebarTooltip from "./SidebarTooltip";
 import {
   Activity,
   LayoutDashboard,
@@ -57,33 +58,65 @@ export default function SidebarMainNav({
   isMoneyFeaturesOpen,
   setIsMoneyFeaturesOpen,
   isMoneyFeaturesSectionActive,
+  isOrdersOpen,
+  setIsOrdersOpen,
+  isOrdersSectionActive,
   showMoneyFeatures,
   isFullAdminUser,
   compact = false,
+  lightMode = false,
 }) {
   const showChildren = !compact;
-  const linkClass = (active) =>
-    `flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+  const linkClass = (active) => {
+    if (lightMode) {
+      return `flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors duration-150 group ${
+        active
+          ? "bg-indigo-50 text-indigo-700"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      } ${compact ? "justify-center" : "gap-2"}`;
+    }
+    return `flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
         : "text-gray-300 hover:bg-white hover:text-black"
     } ${compact ? "justify-center" : "gap-2"}`;
+  };
 
-  const groupBtnClass = (active) =>
-    `w-full flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
+  const groupBtnClass = (active) => {
+    if (lightMode) {
+      return `w-full flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors duration-150 group ${
+        active
+          ? "bg-indigo-50 text-indigo-700"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      } ${compact ? "justify-center" : "justify-between"}`;
+    }
+    return `w-full flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
         : "text-gray-300 hover:bg-white hover:text-black"
     } ${compact ? "justify-center" : "justify-between"}`;
+  };
 
-  const subLinkClass = (active) =>
-    `block px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
+  const subLinkClass = (active) => {
+    if (lightMode) {
+      return `block px-3 py-1.5 text-[11px] font-medium rounded-lg transition-colors ${
+        active
+          ? "bg-indigo-50 text-indigo-700"
+          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+      }`;
+    }
+    return `block px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
       active
         ? "bg-white/10 text-white"
         : "text-gray-400 hover:bg-white hover:text-black"
     }`;
+  };
 
-  const iconClass = "text-gray-400 group-hover:text-black shrink-0";
+  const iconClass = lightMode
+    ? "text-slate-400 group-hover:text-slate-700 shrink-0"
+    : "text-gray-400 group-hover:text-black shrink-0";
+
+  const chevronClass = lightMode ? "text-slate-400 shrink-0" : "text-gray-400 shrink-0";
 
   const entries = useMemo(() => {
     const list = [];
@@ -149,9 +182,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Analytics"}</span>
           </div>
           {!compact && (isAnalyticsOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -259,9 +292,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Coupons"}</span>
           </div>
           {!compact && (isCouponOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -416,9 +449,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Inventory"}</span>
           </div>
           {!compact && (isInventoryOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -515,9 +548,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Money features"}</span>
           </div>
           {!compact && (isMoneyFeaturesOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -574,9 +607,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Notifications"}</span>
           </div>
           {!compact && (isNotificationOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -659,16 +692,49 @@ export default function SidebarMainNav({
 
     push(
       "Orders",
-      ["order"],
+      ["order", "orders", "exchange"],
       canUse(["admin"]),
-      <Link
-        key="orders"
-        to={ap("orders")}
-        className={linkClass(isActive(ap("orders")))}
-      >
-        <Package size={ICON} className={iconClass} />
-        <span className="truncate">Orders</span>
-      </Link>,
+      <div key="orders">
+        <button
+          type="button"
+          onClick={() => setIsOrdersOpen(!isOrdersOpen)}
+          className={groupBtnClass(isOrdersSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <ShoppingCart size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Orders"}</span>
+          </div>
+          {!compact &&
+            (isOrdersOpen ? (
+              <ChevronDown size={14} className={chevronClass} />
+            ) : (
+              <ChevronRight size={14} className={chevronClass} />
+            ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isOrdersOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            <Link
+              to={ap("orders")}
+              className={subLinkClass(
+                isActive(ap("orders")) &&
+                  !location.pathname.startsWith(ap("exchange-orders")),
+              )}
+            >
+              Orders
+            </Link>
+            <Link
+              to={ap("exchange-orders")}
+              className={subLinkClass(isActive(ap("exchange-orders")))}
+            >
+              Exchange orders
+            </Link>
+          </div>
+        </div>
+      </div>,
     );
 
     push(
@@ -696,6 +762,12 @@ export default function SidebarMainNav({
         to: ap("cancellation"),
         active: location.pathname.includes(ap("cancellation")),
       },
+
+      canUse(["admin"]) && {
+  label: "US Policy",
+  to: ap("usp"),
+  active: location.pathname.includes(ap("uspolicy")),
+},
     ]
       .filter(Boolean)
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -715,9 +787,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Policy"}</span>
           </div>
           {!compact && (isPolicyOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -837,9 +909,9 @@ export default function SidebarMainNav({
             <span className="truncate">{compact ? "" : "Users"}</span>
           </div>
           {!compact && (isUsersOpen ? (
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            <ChevronDown size={14} className={chevronClass} />
           ) : (
-            <ChevronRight size={14} className="text-gray-400 shrink-0" />
+            <ChevronRight size={14} className={chevronClass} />
           ))}
         </button>
         <div
@@ -905,6 +977,8 @@ export default function SidebarMainNav({
     isUsersSectionActive,
     isMoneyFeaturesOpen,
     isMoneyFeaturesSectionActive,
+    isOrdersOpen,
+    isOrdersSectionActive,
     showMoneyFeatures,
     isFullAdminUser,
   ]);
@@ -919,7 +993,7 @@ export default function SidebarMainNav({
       setIsInventoryOpen(true);
     if (matchesQuery("Notifications", ["broadcast", "template"], q))
       setIsNotificationOpen(true);
-    if (matchesQuery("Policy", ["exchange", "cancellation"], q))
+    if (matchesQuery("Policy", ["exchange", "cancellation","uspolicy"], q))
       setIsPolicyOpen(true);
     if (matchesQuery("Notifications", ["template", "email"], q))
       setIsTemplatesOpen(true);
@@ -930,6 +1004,7 @@ export default function SidebarMainNav({
       setIsMoneyFeaturesOpen(true);
     if (matchesQuery("Rewards", ["rewards", "points", "coins"], q))
       setIsMoneyFeaturesOpen(true);
+    if (matchesQuery("Orders", ["order", "exchange"], q)) setIsOrdersOpen(true);
   }, [searchQuery]);
 
   if (entries.length === 0 && searchQuery.trim()) {
@@ -942,7 +1017,11 @@ export default function SidebarMainNav({
 
   return (
     <div className={`${compact ? "[&_.truncate]:hidden" : ""} space-y-0.5`}>
-      {entries.map((e) => e.node)}
+      {entries.map((e) => (
+        <SidebarTooltip key={e.label} label={e.label} show={compact} lightMode={lightMode}>
+          {e.node}
+        </SidebarTooltip>
+      ))}
     </div>
   );
 }

@@ -91,6 +91,7 @@ import Sectionnew from "../admin/components/Section/Sectionnew";
 import Faq from "../admin/components/Faq/Faq";
 import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
+import UsPolicy from "../admin/components/Policy/uspPolicy";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -226,4 +227,5 @@ export const adminPanelChildRoutes = [
   <Route key="notif-bc" path="notifications/broadcast" element={<AdminBroadcastPage />} />,
   <Route key="notif-test" path="notifications/test" element={<AdminNotificationTestPage />} />,
   <Route key="audit" path="audit-logs" element={<AuditLogsPage />} />,
+  <Route key="usp" path="usp" element={<UsPolicy/>}/>,
 ];

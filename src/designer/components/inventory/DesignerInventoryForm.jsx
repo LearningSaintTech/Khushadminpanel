@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2, Loader2, ImagePlus, Video } from "lucide-react";
+import { Plus, Trash2, Loader2, ImagePlus, Video, ChevronLeft } from "lucide-react";
 import {
   createDesignerItem,
   designerApi,
@@ -12,6 +12,8 @@ import {
   listDesignerSizeCharts,
   updateDesignerItem,
 } from "../../apis/designerApi";
+import { getAllCategories } from "../../../admin/apis/categoryapi";
+import { getSubcategoriesByCategory } from "../../../admin/apis/subcategoryapis";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
 import {
   SIZE_CHART_PRESETS,
@@ -247,6 +249,89 @@ function mapImportedDesignerItemToForm(d) {
   };
 }
 
+function normalizeIdList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((v) =>
+        typeof v === "object" && v?._id ? String(v._id) : v != null ? String(v) : "",
+      )
+      .filter(Boolean);
+  }
+  if (typeof value === "object" && value._id) return [String(value._id)];
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function parseCatalogCategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.categories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+function parseCatalogSubcategoriesResponse(res) {
+  const data = res?.data?.data || res?.data || {};
+  const list = data.subcategories || data.subCategories || data;
+  return Array.isArray(list) ? list : [];
+}
+
+const CATALOG_PAGE_SIZE = 15;
+
+function parseCatalogPagination(res, limit) {
+  const data = res?.data?.data || res?.data || {};
+  const p = data.pagination || res?.pagination || {};
+  const total = Number(p.total) || 0;
+  const totalPages =
+    p.totalPages ||
+    p.pages ||
+    (total > 0 ? Math.ceil(total / limit) : 1);
+  return { totalPages: Math.max(1, Number(totalPages) || 1), total };
+}
+
+function CatalogListPager({
+  page,
+  totalPages,
+  onPageChange,
+  disabled,
+  className = "",
+}) {
+  const pages = Math.max(1, Number(totalPages) || 1);
+  const current = Math.min(Math.max(1, page), pages);
+  return (
+    <div
+      className={`mt-1.5 flex items-center justify-between gap-2 text-[11px] text-gray-600 ${className}`}
+    >
+      <button
+        type="button"
+        disabled={disabled || current <= 1}
+        onClick={() => onPageChange(current - 1)}
+        className="rounded border border-gray-200 bg-white px-2 py-0.5 disabled:opacity-40"
+      >
+        Prev
+      </button>
+      <span>
+        Page {current} / {pages}
+      </span>
+      <button
+        type="button"
+        disabled={disabled || current >= pages}
+        onClick={() => onPageChange(current + 1)}
+        className="rounded border border-gray-200 bg-white px-2 py-0.5 disabled:opacity-40"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+function catalogCategoryLabel(cat) {
+  return String(cat?.name || cat?.title || cat?.categoryName || "Category").trim();
+}
+
+function catalogSubcategoryLabel(sub) {
+  return String(sub?.name || sub?.title || sub?.subcategoryName || "Subcategory").trim();
+}
+
 function mapDesignerItemToForm(d) {
   return {
     StyleNumber: d.StyleNumber || "",
@@ -262,6 +347,10 @@ function mapDesignerItemToForm(d) {
       : "",
     productType: d.productType || "",
     productTypeCode: d.productTypeCode || d.skuCodeInputs?.productTypeCode || "",
+    categoryId: d.categoryId ? String(d.categoryId) : "",
+    subcategoryId: d.subcategoryId ? String(d.subcategoryId) : "",
+    secondaryCategoryId: normalizeIdList(d.secondaryCategoryId),
+    secondarySubcategoryId: normalizeIdList(d.secondarySubcategoryId),
     fitType: d.fitType || "",
     gender: d.gender || "men",
     defaultColor: d.defaultColor || "",
@@ -509,6 +598,28 @@ const DesignerInventoryForm = () => {
   const [productTypeOptions, setProductTypeOptions] = useState([]);
   const [fitTypeOptions, setFitTypeOptions] = useState([]);
   const [colorCodeOptions, setColorCodeOptions] = useState([]);
+  const [catalogCategories, setCatalogCategories] = useState([]);
+  const [catalogCategoriesLoading, setCatalogCategoriesLoading] = useState(false);
+  const [primarySubcategories, setPrimarySubcategories] = useState([]);
+  const [primarySubcategoriesLoading, setPrimarySubcategoriesLoading] = useState(false);
+  const [secondarySubcategoriesByCategory, setSecondarySubcategoriesByCategory] =
+    useState({});
+  /** `'primary'` or a secondary category id — drives subcategory tab panel */
+  const [activeSubcategoryTab, setActiveSubcategoryTab] = useState("primary");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [debouncedCategorySearch, setDebouncedCategorySearch] = useState("");
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [categoryTotalPages, setCategoryTotalPages] = useState(1);
+  const [subcategorySearch, setSubcategorySearch] = useState("");
+  const [debouncedSubcategorySearch, setDebouncedSubcategorySearch] = useState("");
+  const [subcategoryPage, setSubcategoryPage] = useState(1);
+  const [subcategoryTotalPages, setSubcategoryTotalPages] = useState(1);
+  const [tabSubcategorySearch, setTabSubcategorySearch] = useState("");
+  const [debouncedTabSubcategorySearch, setDebouncedTabSubcategorySearch] =
+    useState("");
+  const [tabSubcategoryPage, setTabSubcategoryPage] = useState(1);
+  const [tabSubcategoryTotalPages, setTabSubcategoryTotalPages] = useState(1);
+  const [tabSubcategoriesLoading, setTabSubcategoriesLoading] = useState(false);
   const [sizeChartTemplates, setSizeChartTemplates] = useState([]);
   const [selectedSizeChartTemplateId, setSelectedSizeChartTemplateId] = useState("");
   const [sizeChartTemplateLoading, setSizeChartTemplateLoading] = useState(false);
@@ -538,6 +649,10 @@ const DesignerInventoryForm = () => {
     metaTagsStr: "",
     productType: "",
     productTypeCode: "",
+    categoryId: "",
+    subcategoryId: "",
+    secondaryCategoryId: [],
+    secondarySubcategoryId: [],
     fitType: "",
     gender: "men",
     defaultColor: "",
@@ -659,6 +774,158 @@ const DesignerInventoryForm = () => {
       return { ...s, productTypeCode: code, productType: name };
     });
   }, [productTypeOptions, loadItem]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCategorySearch(categorySearch.trim()), 350);
+    return () => clearTimeout(t);
+  }, [categorySearch]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSubcategorySearch(subcategorySearch.trim()), 350);
+    return () => clearTimeout(t);
+  }, [subcategorySearch]);
+
+  useEffect(() => {
+    const t = setTimeout(
+      () => setDebouncedTabSubcategorySearch(tabSubcategorySearch.trim()),
+      350,
+    );
+    return () => clearTimeout(t);
+  }, [tabSubcategorySearch]);
+
+  useEffect(() => {
+    setCategoryPage(1);
+  }, [debouncedCategorySearch]);
+
+  useEffect(() => {
+    setSubcategoryPage(1);
+  }, [debouncedSubcategorySearch, form.categoryId]);
+
+  useEffect(() => {
+    setTabSubcategorySearch("");
+    setDebouncedTabSubcategorySearch("");
+    setSubcategorySearch("");
+    setSubcategoryPage(1);
+    setTabSubcategoryPage(1);
+  }, [activeSubcategoryTab]);
+
+  useEffect(() => {
+    setTabSubcategoryPage(1);
+  }, [debouncedTabSubcategorySearch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCatalogCategoriesLoading(true);
+      try {
+        const res = await getAllCategories(
+          categoryPage,
+          CATALOG_PAGE_SIZE,
+          debouncedCategorySearch,
+        );
+        if (!cancelled) {
+          setCatalogCategories(parseCatalogCategoriesResponse(res));
+          setCategoryTotalPages(parseCatalogPagination(res, CATALOG_PAGE_SIZE).totalPages);
+        }
+      } catch {
+        if (!cancelled) {
+          setCatalogCategories([]);
+          setCategoryTotalPages(1);
+        }
+      } finally {
+        if (!cancelled) setCatalogCategoriesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryPage, debouncedCategorySearch]);
+
+  useEffect(() => {
+    const categoryId = String(form.categoryId || "").trim();
+    if (!categoryId) {
+      setPrimarySubcategories([]);
+      setSubcategoryTotalPages(1);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setPrimarySubcategoriesLoading(true);
+      try {
+        const res = await getSubcategoriesByCategory(
+          categoryId,
+          subcategoryPage,
+          CATALOG_PAGE_SIZE,
+          debouncedSubcategorySearch,
+        );
+        if (!cancelled) {
+          setPrimarySubcategories(parseCatalogSubcategoriesResponse(res));
+          setSubcategoryTotalPages(parseCatalogPagination(res, CATALOG_PAGE_SIZE).totalPages);
+        }
+      } catch {
+        if (!cancelled) {
+          setPrimarySubcategories([]);
+          setSubcategoryTotalPages(1);
+        }
+      } finally {
+        if (!cancelled) setPrimarySubcategoriesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.categoryId, subcategoryPage, debouncedSubcategorySearch]);
+
+  const activeSecondaryCategoryId = useMemo(() => {
+    if (activeSubcategoryTab === "primary") return "";
+    const isSecondary = (form.secondaryCategoryId || []).some(
+      (id) => String(id) === String(activeSubcategoryTab),
+    );
+    return isSecondary ? String(activeSubcategoryTab) : "";
+  }, [activeSubcategoryTab, form.secondaryCategoryId]);
+
+  useEffect(() => {
+    const categoryId = activeSecondaryCategoryId;
+    if (!categoryId) return undefined;
+    let cancelled = false;
+    (async () => {
+      setTabSubcategoriesLoading(true);
+      try {
+        const res = await getSubcategoriesByCategory(
+          categoryId,
+          tabSubcategoryPage,
+          CATALOG_PAGE_SIZE,
+          debouncedTabSubcategorySearch,
+        );
+        if (cancelled) return;
+        const list = parseCatalogSubcategoriesResponse(res);
+        setSecondarySubcategoriesByCategory((prev) => ({
+          ...prev,
+          [categoryId]: list,
+        }));
+        setTabSubcategoryTotalPages(
+          parseCatalogPagination(res, CATALOG_PAGE_SIZE).totalPages,
+        );
+      } catch {
+        if (!cancelled) {
+          setSecondarySubcategoriesByCategory((prev) => ({
+            ...prev,
+            [categoryId]: [],
+          }));
+          setTabSubcategoryTotalPages(1);
+        }
+      } finally {
+        if (!cancelled) setTabSubcategoriesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSecondaryCategoryId,
+    tabSubcategoryPage,
+    debouncedTabSubcategorySearch,
+  ]);
 
   useEffect(() => {
     (async () => {
@@ -1201,6 +1468,27 @@ const DesignerInventoryForm = () => {
         );
       }
       formData.append("productTypeCode", productTypeCode);
+      const categoryId = String(form.categoryId || "").trim();
+      const subcategoryId = String(form.subcategoryId || "").trim();
+      if (!categoryId) {
+        throw new Error("Primary category is required.");
+      }
+      if (!subcategoryId) {
+        throw new Error("Primary subcategory is required.");
+      }
+      formData.append("categoryId", categoryId);
+      formData.append("subcategoryId", subcategoryId);
+      const secondaryCategoryId = normalizeIdList(form.secondaryCategoryId).filter(
+        (id) => id !== categoryId,
+      );
+      const secondarySubcategoryId = normalizeIdList(form.secondarySubcategoryId).filter(
+        (id) => id !== subcategoryId,
+      );
+      formData.append("secondaryCategoryId", JSON.stringify(secondaryCategoryId));
+      formData.append(
+        "secondarySubcategoryId",
+        JSON.stringify(secondarySubcategoryId),
+      );
       formData.append("fitType", form.fitType);
       formData.append("gender", form.gender);
       formData.append("defaultColor", form.defaultColor || "");
@@ -1352,33 +1640,160 @@ const DesignerInventoryForm = () => {
     handleSave(e);
   };
 
-  if (loadItem) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-indigo-800">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading item…
-      </div>
-    );
-  }
+  const subcategoryTabs = useMemo(() => {
+    const tabs = [];
+    if (form.categoryId) {
+      const cat = catalogCategories.find((c) => String(c._id) === String(form.categoryId));
+      const catLabel = cat ? catalogCategoryLabel(cat) : "Primary";
+      tabs.push({
+        key: "primary",
+        categoryId: String(form.categoryId),
+        label: `${catLabel} (primary)`,
+        mode: "single",
+      });
+    }
+    for (const cid of form.secondaryCategoryId || []) {
+      const cat = catalogCategories.find((c) => String(c._id) === String(cid));
+      tabs.push({
+        key: String(cid),
+        categoryId: String(cid),
+        label: cat ? catalogCategoryLabel(cat) : String(cid),
+        mode: "multi",
+      });
+    }
+    return tabs;
+  }, [form.categoryId, form.secondaryCategoryId, catalogCategories]);
 
-  if (isEdit && loadItemErrors.length > 0) {
-    return (
-      <div className="max-w-2xl space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-        <p className="font-semibold">Could not load this item</p>
-        <ul className="list-disc space-y-1 pl-5">
-          {loadItemErrors.map((msg, idx) => (
-            <li key={idx}>{msg}</li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-rose-800 hover:bg-rose-100"
-          onClick={() => navigate("/designer/inventory")}
-        >
-          Back to inventory
-        </button>
-      </div>
+  useEffect(() => {
+    if (subcategoryTabs.length === 0) {
+      setActiveSubcategoryTab("primary");
+      return;
+    }
+    const keys = subcategoryTabs.map((t) => t.key);
+    if (!keys.includes(activeSubcategoryTab)) {
+      setActiveSubcategoryTab(keys[0]);
+    }
+  }, [subcategoryTabs, activeSubcategoryTab]);
+
+  const countSubsOnTab = useCallback(
+    (tab) => {
+      if (tab.mode === "single") {
+        return form.subcategoryId ? 1 : 0;
+      }
+      const subs = secondarySubcategoriesByCategory[tab.categoryId] || [];
+      const ids = new Set(subs.map((s) => String(s._id)));
+      return (form.secondarySubcategoryId || []).filter((id) => ids.has(String(id))).length;
+    },
+    [
+      form.subcategoryId,
+      form.secondarySubcategoryId,
+      secondarySubcategoriesByCategory,
+    ],
+  );
+
+  const toggleSecondaryCategory = useCallback(
+    (catId) => {
+      const id = String(catId || "");
+      if (!id || id === String(form.categoryId || "")) return;
+      setForm((s) => {
+        const current = Array.isArray(s.secondaryCategoryId)
+          ? [...s.secondaryCategoryId]
+          : [];
+        if (current.includes(id)) {
+          const subs = secondarySubcategoriesByCategory[id] || [];
+          const removeSubIds = new Set(subs.map((sub) => String(sub._id)));
+          if (activeSubcategoryTab === id) setActiveSubcategoryTab("primary");
+          return {
+            ...s,
+            secondaryCategoryId: current.filter((x) => x !== id),
+            secondarySubcategoryId: (s.secondarySubcategoryId || []).filter(
+              (subId) => !removeSubIds.has(String(subId)),
+            ),
+          };
+        }
+        setActiveSubcategoryTab(id);
+        return { ...s, secondaryCategoryId: [...current, id] };
+      });
+    },
+    [form.categoryId, secondarySubcategoriesByCategory, activeSubcategoryTab],
+  );
+
+  const toggleSecondarySubcategory = useCallback(
+    (subId) => {
+      const id = String(subId || "");
+      if (!id || id === String(form.subcategoryId || "")) return;
+      setForm((s) => {
+        const current = Array.isArray(s.secondarySubcategoryId)
+          ? [...s.secondarySubcategoryId]
+          : [];
+        if (current.includes(id)) {
+          return {
+            ...s,
+            secondarySubcategoryId: current.filter((x) => x !== id),
+          };
+        }
+        return { ...s, secondarySubcategoryId: [...current, id] };
+      });
+    },
+    [form.subcategoryId],
+  );
+
+  const categorySelectOptions = useMemo(() => {
+    const list = [...catalogCategories];
+    if (
+      form.categoryId &&
+      !list.some((c) => String(c._id) === String(form.categoryId))
+    ) {
+      list.unshift({
+        _id: form.categoryId,
+        name: `Selected (${String(form.categoryId).slice(-6)})`,
+      });
+    }
+    return list;
+  }, [catalogCategories, form.categoryId]);
+
+  const primarySubcategoryRadioOptions = useMemo(() => {
+    const list = [...primarySubcategories];
+    if (
+      form.subcategoryId &&
+      !list.some((s) => String(s._id) === String(form.subcategoryId))
+    ) {
+      list.unshift({
+        _id: form.subcategoryId,
+        name: `Selected (${String(form.subcategoryId).slice(-6)})`,
+      });
+    }
+    return list;
+  }, [primarySubcategories, form.subcategoryId]);
+
+  const secondaryCategoryCheckboxOptions = useMemo(
+    () =>
+      categorySelectOptions.filter(
+        (cat) => String(cat._id) !== String(form.categoryId || ""),
+      ),
+    [categorySelectOptions, form.categoryId],
+  );
+
+  const activeSecondarySubcategoryOptions = useMemo(() => {
+    if (!activeSecondaryCategoryId) return [];
+    const list = secondarySubcategoriesByCategory[activeSecondaryCategoryId] || [];
+    const merged = [...list];
+    for (const sid of form.secondarySubcategoryId || []) {
+      if (merged.some((s) => String(s._id) === String(sid))) continue;
+      merged.unshift({
+        _id: sid,
+        name: `Selected (${String(sid).slice(-6)})`,
+      });
+    }
+    return merged.filter(
+      (sub) => String(sub._id) !== String(form.subcategoryId || ""),
     );
-  }
+  }, [
+    activeSecondaryCategoryId,
+    secondarySubcategoriesByCategory,
+    form.secondarySubcategoryId,
+    form.subcategoryId,
+  ]);
 
   const fieldClass =
     "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -1442,6 +1857,12 @@ const DesignerInventoryForm = () => {
       if (!String(form.employeeId || "").trim()) errors.push("Employee ID is required.");
       if (!String(form.productTypeCode || "").trim()) {
         errors.push("Product type code is required.");
+      }
+      if (!String(form.categoryId || "").trim()) {
+        errors.push("Primary category is required.");
+      }
+      if (!String(form.subcategoryId || "").trim()) {
+        errors.push("Primary subcategory is required.");
       }
       if (!String(form.fitType || "").trim()) errors.push("Fit type is required.");
       if (!String(form.shortDescription || "").trim()) {
@@ -1558,16 +1979,71 @@ const DesignerInventoryForm = () => {
   };
   const isStepComplete = (stepId) => (stepErrors[stepId] || []).length === 0;
 
+  if (loadItem) {
+    return (
+      <div className="max-w-6xl space-y-3">
+        {isEdit ? (
+          <button
+            type="button"
+            onClick={() => navigate("/designer/inventory")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-800 shadow-sm hover:bg-indigo-50"
+            aria-label="Back to inventory"
+            title="Back to inventory"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        ) : null}
+        <div className="flex items-center gap-2 text-sm text-indigo-800">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading item…
+        </div>
+      </div>
+    );
+  }
+
+  if (isEdit && loadItemErrors.length > 0) {
+    return (
+      <div className="max-w-2xl space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+        <p className="font-semibold">Could not load this item</p>
+        <ul className="list-disc space-y-1 pl-5">
+          {loadItemErrors.map((msg, idx) => (
+            <li key={idx}>{msg}</li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-rose-800 hover:bg-rose-100"
+          onClick={() => navigate("/designer/inventory")}
+        >
+          Back to inventory
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl space-y-3">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">
-          {isEdit ? "Edit item" : "Create item"}
-        </h1>
-        <p className="text-xs text-gray-500">
-          All fields sync with designer inventory on the server. Pick a category
-          code for product type; the display name is taken from inventory codes.
-        </p>
+      <div className="flex items-start gap-2">
+        {isEdit ? (
+          <button
+            type="button"
+            onClick={() => navigate("/designer/inventory")}
+            className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-800 shadow-sm hover:bg-indigo-50"
+            aria-label="Back to inventory"
+            title="Back to inventory"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-bold tracking-tight">
+            {isEdit ? "Edit item" : "Create item"}
+          </h1>
+          <p className="text-xs text-gray-500">
+            All fields sync with designer inventory on the server. Use product type
+            codes for SKU generation and store categories for catalog navigation
+            (primary plus optional secondary).
+          </p>
+        </div>
       </div>
 
       <form
@@ -1843,6 +2319,338 @@ const DesignerInventoryForm = () => {
                 setForm((s) => ({ ...s, discountPrice: e.target.value }))
               }
             />
+          </div>
+
+          <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+            <h3 className="mb-2 text-xs font-semibold text-indigo-900">
+              Store categories
+            </h3>
+            <p className="mb-2 text-[11px] leading-snug text-gray-600">
+              Choose one primary category and subcategory for navigation. Add
+              optional secondary categories and subcategories for cross-listing.
+            </p>
+            <div>
+              <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                Search categories
+              </label>
+              <input
+                type="search"
+                className={fieldClass}
+                placeholder="Search by name…"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+              />
+            </div>
+            <div className="mt-2">
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Primary category (pick one)
+              </label>
+              <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                {catalogCategoriesLoading ? (
+                  <p className="text-[11px] text-gray-500">Loading categories…</p>
+                ) : categorySelectOptions.length === 0 ? (
+                  <p className="text-[11px] text-gray-500">
+                    No categories found. Try another search or page.
+                  </p>
+                ) : (
+                  categorySelectOptions.map((cat) => (
+                    <label
+                      key={cat._id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-indigo-50"
+                    >
+                      <input
+                        type="radio"
+                        name="primaryCategory"
+                        checked={String(form.categoryId) === String(cat._id)}
+                        disabled={catalogCategoriesLoading}
+                        onChange={() => {
+                          const nextId = String(cat._id);
+                          setActiveSubcategoryTab("primary");
+                          setSubcategoryPage(1);
+                          setForm((s) => ({
+                            ...s,
+                            categoryId: nextId,
+                            subcategoryId: "",
+                            secondaryCategoryId: (
+                              s.secondaryCategoryId || []
+                            ).filter((id) => String(id) !== nextId),
+                          }));
+                        }}
+                      />
+                      <span>{catalogCategoryLabel(cat)}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <CatalogListPager
+                page={categoryPage}
+                totalPages={categoryTotalPages}
+                disabled={catalogCategoriesLoading}
+                onPageChange={setCategoryPage}
+              />
+            </div>
+
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Secondary categories (optional)
+              </label>
+              {form.secondaryCategoryId?.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-1">
+                  {form.secondaryCategoryId.map((cid) => {
+                    const cat = categorySelectOptions.find(
+                      (c) => String(c._id) === String(cid),
+                    );
+                    return (
+                      <button
+                        key={cid}
+                        type="button"
+                        onClick={() => toggleSecondaryCategory(cid)}
+                        className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[11px] text-indigo-800 hover:bg-indigo-100"
+                      >
+                        {cat ? catalogCategoryLabel(cat) : cid} ×
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                {catalogCategoriesLoading ? (
+                  <p className="text-[11px] text-gray-500">Loading…</p>
+                ) : secondaryCategoryCheckboxOptions.length === 0 ? (
+                  <p className="text-[11px] text-gray-500">
+                    {form.categoryId
+                      ? "No other categories on this page. Try search or another page."
+                      : "Select a primary category to pick secondaries."}
+                  </p>
+                ) : (
+                  secondaryCategoryCheckboxOptions.map((cat) => (
+                    <label
+                      key={cat._id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-indigo-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(form.secondaryCategoryId || []).includes(cat._id)}
+                        onChange={() => toggleSecondaryCategory(cat._id)}
+                      />
+                      <span>{catalogCategoryLabel(cat)}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <CatalogListPager
+                page={categoryPage}
+                totalPages={categoryTotalPages}
+                disabled={catalogCategoriesLoading}
+                onPageChange={setCategoryPage}
+              />
+            </div>
+
+            {subcategoryTabs.length > 0 ? (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-gray-700">
+                  Subcategories
+                </label>
+                <p className="mb-2 text-[11px] leading-snug text-gray-600">
+                  Use a tab for each category (e.g. Men, Women). Pick one subcategory on the
+                  primary tab; you can select multiple on other tabs.
+                </p>
+                <div
+                  className="flex flex-wrap gap-1 border-b border-indigo-100 pb-1"
+                  role="tablist"
+                  aria-label="Subcategories by category"
+                >
+                  {subcategoryTabs.map((tab) => {
+                    const active = activeSubcategoryTab === tab.key;
+                    const count = countSubsOnTab(tab);
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setActiveSubcategoryTab(tab.key)}
+                        className={`rounded-t-lg px-2.5 py-1.5 text-[11px] font-medium transition sm:text-xs ${
+                          active
+                            ? "bg-white text-indigo-900 shadow-sm ring-1 ring-indigo-200"
+                            : "text-indigo-700 hover:bg-indigo-100/80"
+                        }`}
+                      >
+                        {tab.label}
+                        {count > 0 ? (
+                          <span className="ml-1 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] text-white">
+                            {count}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="rounded-b-lg rounded-tr-lg border border-indigo-100 bg-white p-3">
+                  {subcategoryTabs.map((tab) => {
+                    if (activeSubcategoryTab !== tab.key) return null;
+                    if (tab.mode === "single") {
+                      return (
+                        <div key={tab.key} role="tabpanel">
+                          <label className="mb-0.5 block text-xs font-medium text-gray-700">
+                            Search subcategories
+                          </label>
+                          <input
+                            type="search"
+                            className={`${fieldClass} mb-2`}
+                            placeholder="Search by name…"
+                            value={subcategorySearch}
+                            onChange={(e) => setSubcategorySearch(e.target.value)}
+                          />
+                          <label className="mb-1 block text-xs font-medium text-gray-700">
+                            Primary subcategory (pick one)
+                          </label>
+                          <div className="max-h-36 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+                            {primarySubcategoriesLoading ? (
+                              <p className="text-[11px] text-gray-500">
+                                Loading subcategories…
+                              </p>
+                            ) : primarySubcategoryRadioOptions.length === 0 ? (
+                              <p className="text-[11px] text-gray-500">
+                                No subcategories on this page. Try search or another page.
+                              </p>
+                            ) : (
+                              primarySubcategoryRadioOptions.map((sub) => (
+                                <label
+                                  key={sub._id}
+                                  className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-indigo-50"
+                                >
+                                  <input
+                                    type="radio"
+                                    name="primarySubcategory"
+                                    checked={
+                                      String(form.subcategoryId) === String(sub._id)
+                                    }
+                                    disabled={
+                                      primarySubcategoriesLoading ||
+                                      catalogCategoriesLoading
+                                    }
+                                    onChange={() => {
+                                      const nextId = String(sub._id);
+                                      setForm((s) => ({
+                                        ...s,
+                                        subcategoryId: nextId,
+                                        secondarySubcategoryId: (
+                                          s.secondarySubcategoryId || []
+                                        ).filter((id) => String(id) !== nextId),
+                                      }));
+                                    }}
+                                  />
+                                  <span>{catalogSubcategoryLabel(sub)}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                          <CatalogListPager
+                            page={subcategoryPage}
+                            totalPages={subcategoryTotalPages}
+                            disabled={primarySubcategoriesLoading}
+                            onPageChange={setSubcategoryPage}
+                          />
+                        </div>
+                      );
+                    }
+                    const subs = activeSecondarySubcategoryOptions;
+                    const cat = categorySelectOptions.find(
+                      (c) => String(c._id) === tab.categoryId,
+                    );
+                    return (
+                      <div key={tab.key} role="tabpanel">
+                        <p className="mb-2 text-[11px] text-gray-600">
+                          Optional: select one or more subcategories under{" "}
+                          <span className="font-medium text-indigo-900">
+                            {cat ? catalogCategoryLabel(cat) : tab.label}
+                          </span>
+                          .
+                        </p>
+                        <input
+                          type="search"
+                          className={`${fieldClass} mb-2`}
+                          placeholder="Search subcategories…"
+                          value={tabSubcategorySearch}
+                          onChange={(e) => setTabSubcategorySearch(e.target.value)}
+                        />
+                        {tabSubcategoriesLoading ? (
+                          <p className="text-xs text-gray-500">Loading subcategories…</p>
+                        ) : subs.length === 0 ? (
+                          <p className="text-xs text-gray-500">
+                            {debouncedTabSubcategorySearch
+                              ? "No subcategories match your search."
+                              : "No subcategories on this page."}
+                          </p>
+                        ) : (
+                          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-gray-100 p-1">
+                            {subs.map((sub) => (
+                              <label
+                                key={sub._id}
+                                className="flex cursor-pointer items-center gap-2 rounded px-1 py-1.5 text-sm hover:bg-indigo-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={(form.secondarySubcategoryId || []).some(
+                                    (id) => String(id) === String(sub._id),
+                                  )}
+                                  onChange={() => toggleSecondarySubcategory(sub._id)}
+                                />
+                                <span>{catalogSubcategoryLabel(sub)}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        <CatalogListPager
+                          page={tabSubcategoryPage}
+                          totalPages={tabSubcategoryTotalPages}
+                          disabled={tabSubcategoriesLoading}
+                          onPageChange={setTabSubcategoryPage}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                {(form.secondarySubcategoryId || []).length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="w-full text-[11px] font-medium text-gray-600">
+                      Selected secondary subcategories:
+                    </span>
+                    {form.secondarySubcategoryId.map((sid) => {
+                      let label = sid;
+                      for (const catId of form.secondaryCategoryId || []) {
+                        const sub = (secondarySubcategoriesByCategory[catId] || []).find(
+                          (x) => String(x._id) === String(sid),
+                        );
+                        if (sub) {
+                          label = catalogSubcategoryLabel(sub);
+                          break;
+                        }
+                      }
+                      return (
+                        <button
+                          key={sid}
+                          type="button"
+                          onClick={() => toggleSecondarySubcategory(sid)}
+                          className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[11px] text-indigo-800 hover:bg-indigo-100"
+                        >
+                          {label} ×
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : form.categoryId ? (
+              <p className="mt-2 text-[11px] text-amber-800">
+                Loading subcategory tabs…
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-gray-500">
+                Select a primary category to choose a subcategory.
+              </p>
+            )}
           </div>
 
           <div className="sm:col-span-2 lg:col-span-3">

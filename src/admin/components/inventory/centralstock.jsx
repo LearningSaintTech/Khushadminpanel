@@ -6,10 +6,47 @@ import {
   updateItem,
   setAllCentralStockUniform,
   SET_ALL_CENTRAL_STOCK_URLS,
-} from '../../apis/Skuapi'; // ← adjust import path
+} from '../../apis/Skuapi';
 import { getSingleItem } from '../../apis/itemapi';
 import { bulkUploadStockFile } from '../../apis/Warehouseapi';
-import toast from 'react-hot-toast'; // or your preferred toast library
+import toast from 'react-hot-toast';
+import {
+  Search,
+  Package,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  AlertTriangle,
+  Layers,
+} from 'lucide-react';
+
+const inputClass =
+  'w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition disabled:opacity-50 disabled:cursor-not-allowed';
+const labelClass = 'mb-1 block text-[11px] font-medium text-slate-700';
+const btnPrimary =
+  'inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors';
+const btnOutline =
+  'inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors';
+
+function normalizeItemId(item) {
+  const id = item?.itemId ?? item?._id;
+  return id != null ? String(id) : '';
+}
+
+function stopRowToggle(e) {
+  e.stopPropagation();
+}
+
+function isUpdateItemResponseOk(res) {
+  return (
+    res?.success === true ||
+    (res &&
+      typeof res === 'object' &&
+      res.success !== false &&
+      (res.data != null || res.message))
+  );
+}
 
 const MIN_THRESHOLD_STORAGE_KEY = 'centralStockMinThreshold';
 const DEFAULT_MIN_CENTRAL = 10;
@@ -278,7 +315,8 @@ const ItemInventory = () => {
   };
 
   const toggleExpand = (itemId) => {
-    setExpandedItemId((prev) => (prev === itemId ? null : itemId));
+    const id = String(itemId);
+    setExpandedItemId((prev) => (prev === id ? null : id));
   };
 
   const toggleLowDetail = (e, itemId) => {
@@ -291,10 +329,14 @@ const ItemInventory = () => {
     return items.filter((item) => getLowStockSkus(item, minCentralStock).length > 0);
   }, [items, showLowStockOnly, minCentralStock]);
 
-  const startEditing = (itemId, skuCode, currentStock) => {
-    console.log("[CentralStock] startEditing", { itemId, skuCode, currentStock });
-    const key = `${itemId}-${skuCode}`;
-    setEditingStock(prev => ({
+  const startEditing = (e, itemId, skuCode, currentStock) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    const id = String(itemId);
+    const code = String(skuCode || '').trim();
+    if (!id || !code) return;
+    const key = `${id}-${code}`;
+    setEditingStock((prev) => ({
       ...prev,
       [key]: currentStock ?? 0,
     }));
@@ -311,7 +353,13 @@ const ItemInventory = () => {
       return;
     }
 
-    const key = `${itemId}-${sku.sku}`;
+    const id = String(itemId);
+    const skuCode = String(sku?.sku || '').trim();
+    if (!skuCode) {
+      toast.error('SKU code is missing');
+      return;
+    }
+    const key = `${id}-${skuCode}`;
     const newStock = Number(editingStock[key]);
     console.log("[CentralStock] saveStock parsed stock", {
       key,
@@ -340,49 +388,48 @@ const ItemInventory = () => {
       const res = await updateItem(itemId, payload);
       console.log('Update response:', res);
 
-      if (res?.success) {
-        console.log("[CentralStock] updateItem success", {
-          itemId,
-          sku: sku.sku,
-          stock: newStock,
-        });
+      if (isUpdateItemResponseOk(res)) {
         toast.success('Stock updated');
-        fetchItems(); // refresh list
-      } else {
-        console.warn("[CentralStock] updateItem failed response", {
-          itemId,
-          response: res,
+        setItems((prev) =>
+          prev.map((it) => {
+            const itId = normalizeItemId(it);
+            if (itId !== id) return it;
+            return {
+              ...it,
+              skus: (it.skus || []).map((s) =>
+                String(s?.sku || '').trim() === skuCode
+                  ? { ...s, stock: newStock }
+                  : s,
+              ),
+            };
+          }),
+        );
+        setEditingStock((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
         });
+        fetchItems().catch(() => {});
+      } else {
         toast.error(res?.message || 'Update failed');
       }
     } catch (err) {
       console.error('Update error:', err);
-      toast.error('Failed to save stock');
-    } finally {
-      setEditingStock(prev => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      toast.error(
+        (err && typeof err === 'object' && err.message) || 'Failed to save stock',
+      );
     }
   };
 
-  const cancelEdit = (itemId, skuCode) => {
-    console.log("[CentralStock] cancelEdit", { itemId, skuCode });
-    const key = `${itemId}-${skuCode}`;
+  const cancelEdit = (e, itemId, skuCode) => {
+    e?.stopPropagation?.();
+    const key = `${String(itemId)}-${String(skuCode || '').trim()}`;
     setEditingStock(prev => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
   };
-
-  const isUpdateItemResponseOk = (res) =>
-    res?.success === true ||
-    (res &&
-      typeof res === "object" &&
-      res.success !== false &&
-      (res.data != null || res.message));
 
   const applyStockToAllLoadedSkus = async (item) => {
     const itemId = item.itemId || item._id;
@@ -675,7 +722,7 @@ const ItemInventory = () => {
   };
 
   return (
-    <div className="min-h-screen  py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50/80">
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -686,7 +733,74 @@ const ItemInventory = () => {
 `,
         }}
       />
-      <div className="max-w-7xl mx-auto">
+
+      <div className="mx-auto max-w-[1600px]">
+            <div className="mb-3 grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-3xl lg:grid-cols-4 lg:ml-auto">
+              <label className="block min-w-0">
+                <span className={labelClass}>Min central stock</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={minCentralStock}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setMinCentralStock(Number.isFinite(n) && n >= 0 ? n : 0);
+                  }}
+                  className={inputClass}
+                />
+              </label>
+              <label className="block min-w-0">
+                <span className={labelClass}>Products per page</span>
+                <select
+                  value={itemsPerPage === 'all' ? 'all' : String(itemsPerPage)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setItemsPerPage(v === 'all' ? 'all' : Number(v));
+                    setPagination((p) => ({ ...p, page: 1 }));
+                    try {
+                      localStorage.setItem(ITEMS_PER_PAGE_STORAGE_KEY, v);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  disabled={loading}
+                  className={inputClass}
+                >
+                  {ITEMS_PER_PAGE_CHOICES.map((n) => (
+                    <option key={n} value={String(n)}>
+                      {n} per page
+                    </option>
+                  ))}
+                  <option value="all">All results</option>
+                </select>
+              </label>
+              <div className="relative min-w-0 sm:col-span-2">
+                <span className={labelClass}>Search</span>
+                <Search className="pointer-events-none absolute left-2.5 top-[1.65rem] h-3.5 w-3.5 text-slate-400" />
+                <input
+                  type="search"
+                  placeholder="Name, product ID, SKU…"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                  className={`${inputClass} pl-8`}
+                />
+              </div>
+            </div>
+
+        <label className="mb-3 mt-2 inline-flex cursor-pointer items-center gap-2 text-[11px] text-slate-600">
+          <input
+            type="checkbox"
+            checked={showLowStockOnly}
+            onChange={(e) => setShowLowStockOnly(e.target.checked)}
+            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          Only products with low SKUs (on loaded lines)
+        </label>
+
         {loading && loadProgress != null ? (
           <div
             className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 shadow-sm"
@@ -740,101 +854,14 @@ const ItemInventory = () => {
           </div>
         ) : null}
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-            <p className="mt-1 text-gray-600">Manage items and SKU stock levels</p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:flex-wrap sm:justify-end sm:items-end">
-            <label className="flex flex-col gap-1 text-xs text-gray-600 w-full sm:w-40">
-              <span className="font-medium text-gray-800">Minimum central stock</span>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={minCentralStock}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  setMinCentralStock(Number.isFinite(n) && n >= 0 ? n : 0);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                title="SKUs with central stock below this value are treated as low"
-              />
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none mt-2 sm:mt-0">
-              <input
-                type="checkbox"
-                checked={showLowStockOnly}
-                onChange={(e) => setShowLowStockOnly(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              Only products with low SKUs
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-gray-600 w-full sm:w-44">
-              <span className="font-medium text-gray-800">Products per page</span>
-              <select
-                value={itemsPerPage === 'all' ? 'all' : String(itemsPerPage)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === 'all') {
-                    setItemsPerPage('all');
-                  } else {
-                    setItemsPerPage(Number(v));
-                  }
-                  setPagination((p) => ({ ...p, page: 1 }));
-                  try {
-                    localStorage.setItem(ITEMS_PER_PAGE_STORAGE_KEY, v);
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                disabled={loading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50"
-                title="All = merge every API page (100 items per request) until the full result set is loaded"
-              >
-                {ITEMS_PER_PAGE_CHOICES.map((n) => (
-                  <option key={n} value={String(n)}>
-                    {n} per page
-                  </option>
-                ))}
-                <option value="all">All results (all pages)</option>
-              </select>
-            </label>
-            <div className="relative w-full sm:w-80">
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
-              />
-              <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-violet-50/80 rounded-xl border border-violet-200 p-5 sm:p-6 mb-6">
-          <h2 className="text-sm font-semibold text-violet-950">
-            Set all central stock on this page
-          </h2>
-          <p className="mt-1 text-xs text-violet-900/80 max-w-3xl">
+        <div className="mb-3 space-y-2">
+        <details className="group rounded-lg border border-violet-200 bg-violet-50/60 open:shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-violet-950 [&::-webkit-details-marker]:hidden">
+            <span>Page-wide bulk update</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-violet-700 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-violet-200/80 px-3 py-3 sm:px-4">
+          <p className="text-[11px] text-violet-900/85 max-w-3xl">
             Applies the <strong>same</strong> central quantity to SKUs for{" "}
             <strong>every product in the list below</strong>
             {itemsPerPage === 'all'
@@ -888,7 +915,7 @@ const ItemInventory = () => {
                 !items.length ||
                 String(pageWideBulkValue).trim() === ""
               }
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-violet-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {pageWideBulkApplying ? (
                 <>
@@ -904,13 +931,19 @@ const ItemInventory = () => {
               )}
             </button>
           </div>
-        </div>
+          </div>
+        </details>
 
-        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-5 sm:p-6 mb-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-amber-950">
-            Fast: entire catalog (server bulk)
-          </h2>
-          <p className="mt-1 text-xs text-amber-950/85 max-w-3xl">
+        <details className="group rounded-lg border border-amber-200 bg-amber-50/70 open:shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-amber-950 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Entire catalog (server bulk)
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-amber-200/80 px-3 py-3 sm:px-4">
+          <p className="text-[11px] text-amber-950/85 max-w-3xl">
             Sets the <strong>same</strong> central stock on <strong>every SKU line</strong> for{" "}
             <strong>all products</strong> in MongoDB in one server pass (bulkWrite — same logic as{" "}
             <code className="rounded bg-amber-100/80 px-1 text-[11px]">
@@ -953,7 +986,7 @@ const ItemInventory = () => {
                 loading ||
                 String(fastCatalogValue).trim() === ""
               }
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-800 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-800 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {fastCatalogApplying ? (
                 <>
@@ -996,11 +1029,19 @@ const ItemInventory = () => {
               </dl>
             </div>
           ) : null}
-        </div>
+          </div>
+        </details>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6 mb-6">
-          <h2 className="text-sm font-semibold text-gray-900">Bulk stock upload</h2>
-          <p className="mt-1 text-xs text-gray-500 max-w-3xl">
+        <details className="group rounded-lg border border-slate-200 bg-white open:shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-slate-800 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5 text-indigo-600" />
+              Bulk stock file upload
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-slate-100 px-3 py-3 sm:px-4">
+          <p className="text-[11px] text-slate-500 max-w-3xl">
             Upload a file to update <strong>central</strong> stock and/or <strong>warehouse</strong> stock by SKU.
             Formats: JSON, CSV, Excel (.xlsx). Use columns <code className="text-indigo-700 bg-indigo-50 px-1 rounded">sku</code>,{' '}
             <code className="text-indigo-700 bg-indigo-50 px-1 rounded">central_stock</code> (optional),{' '}
@@ -1070,18 +1111,21 @@ const ItemInventory = () => {
               </ul>
             </div>
           ) : null}
+          </div>
+        </details>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        {loading && loadProgress == null ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+            Loading inventory…
           </div>
         ) : items.length === 0 ? (
-          <div className="bg-white rounded-xl shadow p-12 text-center text-gray-500">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-12 text-center text-xs text-slate-500 shadow-sm">
             No items found {search && `for "${search}"`}
           </div>
         ) : visibleItems.length === 0 ? (
-          <div className="bg-white rounded-xl shadow p-12 text-center text-gray-500">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-12 text-center text-xs text-slate-500 shadow-sm">
             No products have SKUs below the minimum ({minCentralStock}) on the loaded SKU page.
             <button
               type="button"
@@ -1092,9 +1136,9 @@ const ItemInventory = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-2">
             {visibleItems.map((item) => {
-              const itemId = item.itemId || item._id || 'no-id';
+              const itemId = normalizeItemId(item) || 'no-id';
               const isExpanded = expandedItemId === itemId;
               const skuCount = item.skuPagination?.total || item.skus?.length || 0;
               const loadedSkuCount = item.skus?.length || 0;
@@ -1108,16 +1152,28 @@ const ItemInventory = () => {
               return (
                 <div
                   key={itemId}
-                  className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow transition-shadow"
+                  className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
                 >
-                  {/* Item header - clickable */}
                   <div
-                    className={`px-6 py-5 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
-                    onClick={() => toggleExpand(itemId)}
+                    role="button"
+                    tabIndex={0}
+                    className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-3 transition-colors sm:px-4 ${
+                      isExpanded ? 'bg-indigo-50/80' : 'hover:bg-slate-50'
+                    }`}
+                    onClick={(e) => {
+                      if (e.target.closest('button, input, a, label, select, textarea')) return;
+                      toggleExpand(itemId);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleExpand(itemId);
+                      }
+                    }}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                        <h3 className="text-lg font-semibold text-gray-900 truncate">
+                        <h3 className="truncate text-sm font-semibold text-slate-900">
                           {item.name || 'Unnamed Item'}
                         </h3>
                         {lowCount > 0 ? (
@@ -1138,8 +1194,8 @@ const ItemInventory = () => {
                           </span>
                         ) : null}
                       </div>
-                      <p className="text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span>ID: {itemId.slice(-8) || '—'}</span>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                        <span className="font-mono">ID …{itemId.slice(-8) || '—'}</span>
                         <span>
                           • {skuCount} SKU{skuCount !== 1 ? 's' : ''}
                           {partialSkus ? ` (showing ${loadedSkuCount})` : ''}
@@ -1240,13 +1296,14 @@ const ItemInventory = () => {
 
                   {/* SKUs table */}
                   {isExpanded && (
-                    <div className="border-t border-gray-100">
+                    <div
+                      className="border-t border-slate-100"
+                      onClick={stopRowToggle}
+                      onMouseDown={stopRowToggle}
+                    >
                       {item.skus?.length > 0 ? (
                         <>
-                        <div
-                          className="px-6 py-4 bg-indigo-50/40 border-b border-indigo-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <div className="border-b border-indigo-100 bg-indigo-50/40 px-3 py-3 sm:px-4">
                           <p className="text-xs font-semibold text-indigo-900 uppercase tracking-wide mb-2">
                             Update all loaded SKUs at once
                           </p>
@@ -1298,20 +1355,20 @@ const ItemInventory = () => {
                           </div>
                         </div>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                          <table className="min-w-full border-collapse text-left">
+                            <thead className="bg-slate-50/90">
                               <tr>
-                                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">SKU</th>
-                                <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
-                                <th className="px-6 py-3.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                  vs threshold ({minCentralStock})
+                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">SKU</th>
+                                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">Central stock</th>
+                                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                  vs min ({minCentralStock})
                                 </th>
-                                <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500">Action</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-slate-100">
                               {item.skus.map((sku, idx) => {
-                                const skuCode = sku.sku || `sku-${idx}`;
+                                const skuCode = String(sku.sku || `sku-${idx}`).trim();
                                 const editKey = `${itemId}-${skuCode}`;
                                 const isEditing = editKey in editingStock;
                                 const st = Number(sku.stock ?? 0);
@@ -1326,20 +1383,24 @@ const ItemInventory = () => {
                                     key={skuCode}
                                     className={`hover:bg-gray-50 ${isLow && !isEditing ? 'bg-amber-50/70' : ''} ${atProductMin && !isEditing ? 'ring-1 ring-inset ring-indigo-200' : ''}`}
                                   >
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <td className="px-3 py-2 whitespace-nowrap text-[11px] font-mono font-medium text-slate-900">
                                       {sku.sku || '—'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <td className="px-3 py-2 whitespace-nowrap text-[11px]">
                                       {isEditing ? (
                                         <input
                                           type="number"
                                           min="0"
                                           value={editingStock[editKey] ?? ''}
-                                          onChange={e => setEditingStock(prev => ({
-                                            ...prev,
-                                            [editKey]: e.target.value
-                                          }))}
-                                          className="w-24 px-3 py-1.5 border border-indigo-400 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                          onClick={stopRowToggle}
+                                          onMouseDown={stopRowToggle}
+                                          onChange={(e) =>
+                                            setEditingStock((prev) => ({
+                                              ...prev,
+                                              [editKey]: e.target.value,
+                                            }))
+                                          }
+                                          className="w-20 rounded-md border border-indigo-300 px-2 py-1 text-[11px] focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                         />
                                       ) : (
                                         <span
@@ -1355,7 +1416,7 @@ const ItemInventory = () => {
                                         </span>
                                       )}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                    <td className="px-3 py-2 whitespace-nowrap text-center text-[11px]">
                                       {isEditing ? (
                                         <span className="text-gray-400">—</span>
                                       ) : (
@@ -1377,26 +1438,34 @@ const ItemInventory = () => {
                                         </div>
                                       )}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <td className="px-3 py-2 whitespace-nowrap text-right text-[11px] font-medium">
                                       {isEditing ? (
-                                        <div className="flex justify-end gap-4">
+                                        <div className="flex justify-end gap-1.5">
                                           <button
-                                            onClick={() => saveStock(itemId, sku)}
-                                            className="text-green-600 hover:text-green-800"
+                                            type="button"
+                                            onClick={(e) => {
+                                              stopRowToggle(e);
+                                              saveStock(itemId, sku);
+                                            }}
+                                            className="rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-700"
                                           >
                                             Save
                                           </button>
                                           <button
-                                            onClick={() => cancelEdit(itemId, skuCode)}
-                                            className="text-gray-500 hover:text-gray-700"
+                                            type="button"
+                                            onClick={(e) => cancelEdit(e, itemId, skuCode)}
+                                            className="rounded-md border border-slate-200 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-50"
                                           >
                                             Cancel
                                           </button>
                                         </div>
                                       ) : (
                                         <button
-                                          onClick={() => startEditing(itemId, skuCode, sku.stock)}
-                                          className="text-indigo-600 hover:text-indigo-800"
+                                          type="button"
+                                          onClick={(e) =>
+                                            startEditing(e, itemId, skuCode, sku.stock)
+                                          }
+                                          className="rounded-md px-2 py-1 text-[10px] font-medium text-indigo-600 hover:bg-indigo-50"
                                         >
                                           Edit
                                         </button>
@@ -1434,33 +1503,28 @@ const ItemInventory = () => {
           </div>
         ) : null}
         {!loading && pagination.totalPages > 1 && itemsPerPage !== 'all' ? (
-          <div className="mt-10 flex flex-col sm:flex-row justify-center items-center gap-4">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page === 1}
-                className="px-6 py-2.5 rounded-lg border disabled:opacity-50 hover:bg-gray-50 transition"
-              >
-                Previous
-              </button>
-
-              <span className="text-sm font-medium text-gray-700 tabular-nums">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page === pagination.totalPages}
-                className="px-6 py-2.5 rounded-lg border disabled:opacity-50 hover:bg-gray-50 transition"
-              >
-                Next
-              </button>
-            </div>
-            <span className="text-xs text-gray-500">
-              {itemsPerPage} products per page
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => handlePageChange(pagination.page - 1)}
+              disabled={pagination.page === 1}
+              className={btnOutline}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </button>
+            <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200 tabular-nums">
+              {pagination.page} / {pagination.totalPages}
             </span>
+            <button
+              type="button"
+              onClick={() => handlePageChange(pagination.page + 1)}
+              disabled={pagination.page === pagination.totalPages}
+              className={btnOutline}
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         ) : null}
       </div>

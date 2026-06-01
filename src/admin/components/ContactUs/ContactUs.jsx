@@ -20,7 +20,6 @@ const ContactUs = () => {
   const fetchRequests = async (pageToLoad = 1, filters = {}) => {
     try {
       setLoading(true);
-
       const res = await apiConnector(
         "GET",
         "/contact-us/getAll",
@@ -93,8 +92,8 @@ const ContactUs = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Contact Requests</h1>
-            <p className="text-gray-600 mt-1">Manage and track all incoming inquiries</p>
+            <h1 className="text-2xl font-semibold text-gray-900">Contact Requests</h1>
+            <p className="text-gray-600 text-sm mt-1">Manage and track all incoming inquiries</p>
           </div>
           <div className="text-sm text-gray-500">
             Total: <span className="font-medium text-gray-700">{requests.length}</span>
@@ -102,25 +101,25 @@ const ContactUs = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Search</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">Search</label>
               <input
                 type="text"
                 placeholder="Search by name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">Status</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">Status</label>
               <select
                 value={isResolved}
                 onChange={(e) => setIsResolved(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
               >
                 <option value="">All Status</option>
                 <option value="true">Resolved</option>
@@ -129,35 +128,35 @@ const ContactUs = () => {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">From Date</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">From Date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">To Date</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">To Date</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600"
               />
             </div>
 
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2 pt-1">
               <button
                 onClick={applyFilters}
-                className="flex-1 bg-gray-900 hover:bg-black text-white  px-4 rounded-xl font-medium transition-all active:scale-95"
+                className="flex-1 bg-gray-900 hover:bg-black text-white text-sm py-2 px-5 rounded-xl font-medium transition-all active:scale-95"
               >
-                Apply Filters
+                Apply
               </button>
               <button
                 onClick={resetFilters}
-                className="flex-1 border border-gray-300 hover:bg-gray-50 py-3 px-6 rounded-xl font-medium transition-all"
+                className="flex-1 border border-gray-300 hover:bg-gray-50 text-sm py-2 px-5 rounded-xl font-medium text-gray-700 transition-all"
               >
                 Reset
               </button>
@@ -165,7 +164,7 @@ const ContactUs = () => {
           </div>
         </div>
 
-        {/* Table Card */}
+        {/* Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full">
@@ -180,39 +179,38 @@ const ContactUs = () => {
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 text-sm">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-gray-500">
-                      <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-gray-800 rounded-full mx-auto mb-3"></div>
-                      Loading requests...
+                    <td colSpan={6} className="text-center py-20 text-gray-500">
+                      <div className="animate-spin w-7 h-7 border-4 border-gray-300 border-t-gray-800 rounded-full mx-auto mb-3"></div>
+                      Loading...
                     </td>
                   </tr>
                 ) : requests.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-gray-500">
+                    <td colSpan={6} className="text-center py-20 text-gray-500">
                       No contact requests found
                     </td>
                   </tr>
                 ) : (
                   requests.map((item) => (
                     <tr key={item._id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="px-6 py-5 font-medium text-gray-900">{item.name}</td>
-                      <td className="px-6 py-5 text-gray-600">{item.email}</td>
-                      <td className="px-6 py-5 text-gray-600">
+                      <td className="px-6 py-4 font-medium text-gray-900">{item.name}</td>
+                      <td className="px-6 py-4 text-gray-600">{item.email}</td>
+                      <td className="px-6 py-4 text-gray-600">
                         {item.subject || <span className="text-gray-400">—</span>}
                       </td>
 
-                      {/* Message */}
-                      <td className="px-6 py-5 max-w-xs">
+                      <td className="px-6 py-4 max-w-xs">
                         <div className="flex items-start gap-3">
                           <div className="line-clamp-2 text-gray-700 flex-1">
                             {item.message}
                           </div>
-                          {item.message?.length > 85 && (
+                          {item.message?.length > 80 && (
                             <button
                               onClick={() => setSelectedMessage(item)}
-                              className="text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-all text-xl"
+                              className="text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 text-xl mt-0.5 transition-all"
                             >
                               ↗
                             </button>
@@ -220,8 +218,7 @@ const ContactUs = () => {
                         </div>
                       </td>
 
-                      {/* Status */}
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <span
                             className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
@@ -235,14 +232,14 @@ const ContactUs = () => {
 
                           <button
                             onClick={() => toggleResolve(item._id, item.isResolved)}
-                            className="text-xs font-medium text-gray-500 hover:text-gray-700 underline decoration-dotted hover:decoration-solid transition-all"
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-all underline decoration-dotted hover:decoration-solid"
                           >
-                            {item.isResolved ? "Mark Pending" : "Mark Resolved"}
+                            {item.isResolved ? "Undo" : "Resolve"}
                           </button>
                         </div>
                       </td>
 
-                      <td className="px-6 py-5 text-sm text-gray-500">
+                      <td className="px-6 py-4 text-sm text-gray-500">
                         {formatDate(item.createdAt)}
                       </td>
                     </tr>
@@ -252,7 +249,7 @@ const ContactUs = () => {
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Pagination - Smaller Buttons */}
           <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
             <p className="text-sm text-gray-600">
               Page <span className="font-semibold text-gray-900">{page}</span> of {totalPages}
@@ -262,14 +259,14 @@ const ContactUs = () => {
               <button
                 onClick={() => fetchRequests(page - 1)}
                 disabled={page <= 1}
-                className="px-5 py-2 border border-gray-300 rounded-xl text-sm font-medium hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="px-4 py-1.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-white disabled:opacity-50 transition-all"
               >
                 Previous
               </button>
               <button
                 onClick={() => fetchRequests(page + 1)}
                 disabled={page >= totalPages}
-                className="px-5 py-2 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="px-4 py-1.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50 transition-all"
               >
                 Next
               </button>
@@ -278,16 +275,16 @@ const ContactUs = () => {
         </div>
       </div>
 
-      {/* Enhanced Modal */}
+      {/* Modal */}
       {selectedMessage && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden">
             <div className="px-8 pt-8 pb-6">
               <div className="flex justify-between items-start mb-6">
-                <h2 className="text-2xl font-semibold text-gray-900">Contact Details</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Contact Details</h2>
                 <button
                   onClick={() => setSelectedMessage(null)}
-                  className="text-3xl text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-3xl leading-none text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   ×
                 </button>
@@ -298,22 +295,18 @@ const ContactUs = () => {
                   <p className="text-gray-500 text-xs mb-1">NAME</p>
                   <p className="font-medium">{selectedMessage.name}</p>
                 </div>
-
                 <div>
                   <p className="text-gray-500 text-xs mb-1">EMAIL</p>
                   <p className="font-medium text-blue-600">{selectedMessage.email}</p>
                 </div>
-
                 <div>
                   <p className="text-gray-500 text-xs mb-1">PHONE</p>
                   <p className="font-medium">{selectedMessage.phone || "—"}</p>
                 </div>
-
                 <div>
                   <p className="text-gray-500 text-xs mb-1">SUBJECT</p>
                   <p className="font-medium">{selectedMessage.subject || "—"}</p>
                 </div>
-
                 <div>
                   <p className="text-gray-500 text-xs mb-1">DATE</p>
                   <p className="font-medium">{formatDate(selectedMessage.createdAt)}</p>
@@ -321,17 +314,17 @@ const ContactUs = () => {
 
                 <div>
                   <p className="text-gray-500 text-xs mb-2">MESSAGE</p>
-                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 whitespace-pre-wrap leading-relaxed">
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 whitespace-pre-wrap leading-relaxed text-gray-700">
                     {selectedMessage.message}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gray-50 px-8 py-4 flex justify-end border-t">
+            <div className="bg-gray-50 px-8 py-5 flex justify-end border-t">
               <button
                 onClick={() => setSelectedMessage(null)}
-                className="px-6 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 font-medium"
+                className="px-6 py-2 text-sm border border-gray-300 rounded-xl hover:bg-gray-50 font-medium"
               >
                 Close
               </button>

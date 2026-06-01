@@ -47,10 +47,42 @@ export const getDesignerInventoryById = (id) =>
   apiConnector("GET", `${ADMIN_BASE}/inventory/${id}`);
 export const updateDesignerInventory = (id, data) =>
   apiConnector("PUT", `${ADMIN_BASE}/inventory/${id}/update`, data);
-export const changeDesignerInventoryStatus = (id, status) =>
-  apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/status`, { status });
-export const patchDesignerInventoryListed = (id, body) =>
-  apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/listed`, body);
+/** Admin PATCH …/inventory/:id/status — body `{ status }`. */
+export const changeDesignerInventoryStatus = async (id, status) => {
+  const body = { status: String(status || "").trim() };
+  console.log("[DesignerAPI] PATCH inventory/status", { id, url: `${ADMIN_BASE}/inventory/${id}/status`, body });
+  const res = await apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/status`, body);
+  console.log("[DesignerAPI] PATCH inventory/status response", res);
+  return res;
+};
+
+/** Admin PATCH …/inventory/:id/listed — body `{ isListed }` (+ optional `catalogItemId`). */
+export const patchDesignerInventoryListed = async (id, body) => {
+  const payload =
+    body && typeof body === "object"
+      ? {
+          isListed: Boolean(body.isListed),
+          ...(body.catalogItemId != null && String(body.catalogItemId).trim()
+            ? { catalogItemId: String(body.catalogItemId).trim() }
+            : {}),
+        }
+      : { isListed: Boolean(body) };
+  console.log("[DesignerAPI] PATCH inventory/listed", {
+    id,
+    url: `${ADMIN_BASE}/inventory/${id}/listed`,
+    body: payload,
+  });
+  const res = await apiConnector("PATCH", `${ADMIN_BASE}/inventory/${id}/listed`, payload);
+  console.log("[DesignerAPI] PATCH inventory/listed response", res);
+  return res;
+};
+
+/** Normalize item from admin inventory PATCH/GET responses. */
+export function unwrapDesignerInventoryItem(res) {
+  if (res?.success && res?.data && typeof res.data === "object") return res.data;
+  if (res?.data && typeof res.data === "object") return res.data;
+  return res;
+}
 export const approveDesignerCatalogSync = (id) =>
   apiConnector("POST", `${ADMIN_BASE}/inventory/${id}/approve-catalog-sync`, {});
 export const dismissDesignerCatalogPending = (id) =>

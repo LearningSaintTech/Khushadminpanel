@@ -1,6 +1,7 @@
 // Sidebar.jsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import SidebarMainNav from "./sidebarMainNav";
+import SidebarTooltip from "./SidebarTooltip";
 import Khush from "../../../assets/images/khushh.svg";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useNotification } from "../../../context/NotificationContext";
@@ -9,6 +10,7 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Settings,
   LogOut,
   Menu,
@@ -22,11 +24,14 @@ import {
   Coins,
   PanelLeftClose,
   PanelLeftOpen,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { logoutUser } from "../../apis/Authapi";
 import { logout } from "../../../redux/GlobalSlice";
 import { subadminApi } from "../../../subadmin/apis/subadminApi";
+import { useTheme } from "../../../context/ThemeContext";
 
 const Sidebar = ({
   basePath = "/admin",
@@ -52,11 +57,14 @@ const Sidebar = ({
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [isMoneyFeaturesOpen, setIsMoneyFeaturesOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
   const bellRef = useRef(null);
+  const navScrollRef = useRef(null);
+  const [scrollHints, setScrollHints] = useState({ top: false, bottom: false });
 
   const rawRole = useSelector((s) => s.global?.role);
   const isFullAdminUser = String(rawRole || "").toUpperCase() === "ADMIN";
@@ -70,6 +78,8 @@ const Sidebar = ({
     refreshUnreadCount,
     refreshList,
   } = useNotification();
+
+  const { toggleTheme, isDark } = useTheme();
 
   useEffect(() => {
     if (!filterByModules || isFullAdminUser) {
@@ -112,6 +122,10 @@ const Sidebar = ({
     location.pathname.includes("/money-features") ||
     location.pathname.startsWith(ap("referral")) ||
     location.pathname.startsWith(ap("rewards"));
+
+  const isOrdersSectionActive = () =>
+    location.pathname.startsWith(ap("orders")) ||
+    location.pathname.startsWith(ap("exchange-orders"));
 
   const isReferralsActive = () =>
     location.pathname.startsWith(ap("referral")) ||
@@ -174,8 +188,79 @@ const Sidebar = ({
     }
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (isOrdersSectionActive()) {
+      setIsOrdersOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
+
+  const updateScrollHints = useCallback(() => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const overflow = scrollHeight - clientHeight > 6;
+    setScrollHints({
+      top: overflow && scrollTop > 6,
+      bottom: overflow && scrollTop + clientHeight < scrollHeight - 6,
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = navScrollRef.current;
+    if (!el) return undefined;
+
+    updateScrollHints();
+    el.addEventListener("scroll", updateScrollHints, { passive: true });
+    const ro = new ResizeObserver(updateScrollHints);
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", updateScrollHints);
+      ro.disconnect();
+    };
+  }, [
+    updateScrollHints,
+    collapsed,
+    searchQuery,
+    isInventoryOpen,
+    isNotificationOpen,
+    isTemplatesOpen,
+    isCouponOpen,
+    isAnalyticsOpen,
+    isPolicyOpen,
+    isInfluencerOpen,
+    isDesignerOpen,
+    isUsersOpen,
+    isMoneyFeaturesOpen,
+    isOrdersOpen,
+  ]);
+
   const showMoneyFeatures =
     isFullAdminUser || canUse(["coupons", "referral", "rewards"]);
+
+  const panelItemClass = (active) => {
+    const base = collapsed
+      ? "flex items-center justify-center rounded-xl px-2 py-2 transition-colors"
+      : "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors";
+    if (active) {
+      return `${base} ${
+        isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+      }`;
+    }
+    return `${base} ${
+      isDark
+        ? "text-gray-300 hover:bg-white/10 hover:text-white"
+        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+    }`;
+  };
+
+  const panelIconClass = isDark
+    ? "text-gray-400 group-hover:text-white shrink-0"
+    : "text-slate-400 group-hover:text-slate-700 shrink-0";
 
   const handleLogout = async () => {
     console.log("ðŸšª Logout button clicked");
@@ -218,29 +303,49 @@ const Sidebar = ({
 
   return (
     <>
-      {/* Mobile Hamburger */}
+      {/* Mobile menu toggle */}
       <button
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-black text-white shadow-lg rounded-lg"
-        onClick={() => setIsOpen(!isOpen)}
+        type="button"
+        className={`fixed top-4 left-4 z-50 rounded-xl p-2 shadow-lg transition-all duration-300 lg:hidden ${
+          isDark ? "bg-[#140034] text-white" : "border border-slate-200 bg-white text-slate-800"
+        } ${isOpen ? "scale-95 opacity-90" : "scale-100 opacity-100"}`}
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "Close menu" : "Open menu"}
       >
-        <Menu size={24} />
+        {isOpen ? <X size={22} /> : <Menu size={22} />}
       </button>
+
+      {/* Mobile backdrop */}
+      <div
+        className={`fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ease-out lg:hidden ${
+          isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsOpen(false)}
+        aria-hidden={!isOpen}
+      />
 
       <aside
         className={`
-          fixed inset-y-0 left-0 z-40 bg-gradient-to-r from-[#4B0082] to-[#6C47FF] text-gray-100 flex flex-col
-          transform transition-all duration-300 ease-in-out
-          lg:translate-x-0
-          ${isOpen ? "translate-x-0" : "-translate-x-full"}
-          ${collapsed ? "w-16" : "w-60"}
-          lg:shadow-2xl
+          fixed inset-y-0 left-0 z-40 flex flex-col overflow-visible
+          will-change-[width,transform]
+          transition-[width,transform] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
+          lg:static lg:z-auto lg:h-full lg:shrink-0 lg:translate-x-0
+          lg:rounded-lg lg:border lg:shadow-sm
+          ${isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"}
+          ${collapsed ? "w-[4.25rem]" : "w-60"}
+          ${
+            isDark
+              ? "border-transparent bg-gradient-to-b from-[#4B0082] to-[#140034] text-gray-100"
+              : "border-slate-200/80 bg-white text-slate-700"
+          }
         `}
       >
         {/* Logo + Notification icon */}
         <div
-          className={`h-16 flex items-center border-b border-gray-800 shrink-0 ${
-            collapsed ? "justify-center px-2" : "justify-between px-4"
-          }`}
+          className={`flex h-14 shrink-0 items-center border-b ${
+            isDark ? "border-gray-800" : "border-slate-200"
+          } ${collapsed ? "justify-center px-2" : "justify-between px-4"}`}
         >
           {/* <div className="flex items-center gap-2 min-w-0">
             <div className="w-14 h-10 rounded-xl flex items-center justify-center shadow-md shrink-0">
@@ -251,15 +356,24 @@ const Sidebar = ({
               />
             </div>
           </div> */}
+          <SidebarTooltip
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            show={collapsed}
+            lightMode={!isDark}
+          >
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition"
+            className={`hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-xl transition ${
+              isDark
+                ? "text-gray-400 hover:bg-white/10 hover:text-white"
+                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            }`}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
+          </SidebarTooltip>
           {canUse(["admin"]) && (
             <div className={`relative shrink-0 ${collapsed ? "hidden" : ""}`} ref={bellRef}>
               <button
@@ -268,7 +382,11 @@ const Sidebar = ({
                   setIsBellOpen((o) => !o);
                   refreshList(1).catch(() => {});
                 }}
-                className="relative p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition"
+                className={`relative rounded-xl p-2 transition ${
+                  isDark
+                    ? "text-gray-300 hover:bg-white/10 hover:text-white"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                }`}
                 aria-label="Notifications"
               >
                 <Bell size={22} />
@@ -352,7 +470,11 @@ const Sidebar = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search menu..."
-                className="w-full rounded-lg border border-gray-700 bg-gray-900/80 py-2 pl-8 pr-8 text-xs text-gray-100 placeholder:text-gray-500 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600"
+                className={`w-full rounded-xl border py-2 pl-8 pr-8 text-xs focus:outline-none focus:ring-1 ${
+                  isDark
+                    ? "border-gray-700 bg-gray-900/80 text-gray-100 placeholder:text-gray-500 focus:border-gray-500 focus:ring-gray-600"
+                    : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:ring-indigo-200"
+                }`}
                 aria-label="Search sidebar menu"
               />
               {searchQuery && (
@@ -407,13 +529,34 @@ const Sidebar = ({
             </div>
           )} */}
 
-          <div className="flex-1 overflow-y-auto scrollbar-hide pr-0.5">
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            {scrollHints.top && (
+              <div
+                className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex h-7 items-start justify-center pt-0.5 ${
+                  isDark
+                    ? "bg-gradient-to-b from-[#4B0082] via-[#4B0082]/80 to-transparent"
+                    : "bg-gradient-to-b from-white via-white/90 to-transparent"
+                }`}
+                aria-hidden
+              >
+                <ChevronUp
+                  size={14}
+                  className={isDark ? "text-white/40" : "text-slate-400"}
+                />
+              </div>
+            )}
+
+            <div
+              ref={navScrollRef}
+              className="scrollbar-hide min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth"
+            >
             <SidebarMainNav
               ap={ap}
               location={location}
               canUse={canUse}
               isActive={isActive}
               searchQuery={searchQuery}
+              lightMode={!isDark}
               isNotificationSectionActive={isNotificationSectionActive}
               isAnalyticsSectionActive={isAnalyticsSectionActive}
               isAnalyticsOpen={isAnalyticsOpen}
@@ -434,160 +577,174 @@ const Sidebar = ({
               isMoneyFeaturesOpen={isMoneyFeaturesOpen}
               setIsMoneyFeaturesOpen={setIsMoneyFeaturesOpen}
               isMoneyFeaturesSectionActive={isMoneyFeaturesSectionActive}
+              isOrdersOpen={isOrdersOpen}
+              setIsOrdersOpen={setIsOrdersOpen}
+              isOrdersSectionActive={isOrdersSectionActive}
               showMoneyFeatures={showMoneyFeatures}
               isFullAdminUser={isFullAdminUser}
               compact={collapsed}
             />
 
-            {/* Panel Management Section */}
-            {!collapsed && canUse(["admin"]) && (
-            <div className="pt-4 mt-4 border-t border-gray-800">
-              <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            {/* Panel Management */}
+            {canUse(["admin"]) && (
+            <div className={`mt-3 space-y-0.5 border-t pt-3 ${isDark ? "border-gray-800" : "border-slate-200"}`}>
+              {!collapsed && (
+              <div className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                isDark ? "text-gray-500" : "text-slate-400"
+              }`}>
                 Panel Management
               </div>
-
-              <Link
-                to={ap("subadmin")}
-                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive(ap("subadmin")) ? "bg-white/10 text-white" : ""
-                }`}
-              >
-                <UserPlus
-                  size={20}
-                  className="text-gray-400 group-hover:text-black"
-                />
-                <span>Sub Admin</span>
-              </Link>
-
-              <Link
-                to={ap("subadmin/module-access")}
-                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive(ap("subadmin/module-access")) ? "bg-white/10 text-white" : ""
-                }`}
-              >
-                <ShieldCheck size={20} className="text-gray-400 group-hover:text-black" />
-                <span>Module Access</span>
-              </Link>
-
-              {!filterByModules && (
-                <Link
-                  to={ap("audit-logs")}
-                  className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                    isActive(ap("audit-logs")) ? "bg-white/10 text-white" : ""
-                  }`}
-                >
-                  <History size={20} className="text-gray-400 group-hover:text-black" />
-                  <span>Audit Logs</span>
-                </Link>
               )}
 
-              {/* Influencer Dropdown */}
+              <SidebarTooltip label="Sub Admin" show={collapsed} lightMode={!isDark}>
+                <Link
+                  to={ap("subadmin")}
+                  className={`group ${panelItemClass(isActive(ap("subadmin")))}`}
+                >
+                  <UserPlus size={16} className={panelIconClass} />
+                  {!collapsed && <span className="truncate">Sub Admin</span>}
+                </Link>
+              </SidebarTooltip>
+
+              <SidebarTooltip label="Module Access" show={collapsed} lightMode={!isDark}>
+                <Link
+                  to={ap("subadmin/module-access")}
+                  className={`group ${panelItemClass(isActive(ap("subadmin/module-access")))}`}
+                >
+                  <ShieldCheck size={16} className={panelIconClass} />
+                  {!collapsed && <span className="truncate">Module Access</span>}
+                </Link>
+              </SidebarTooltip>
+
+              {!filterByModules && (
+                <SidebarTooltip label="Audit Logs" show={collapsed} lightMode={!isDark}>
+                  <Link
+                    to={ap("audit-logs")}
+                    className={`group ${panelItemClass(isActive(ap("audit-logs")))}`}
+                  >
+                    <History size={16} className={panelIconClass} />
+                    {!collapsed && <span className="truncate">Audit Logs</span>}
+                  </Link>
+                </SidebarTooltip>
+              )}
+
+              {collapsed ? (
+                <SidebarTooltip label="Influencer" show={collapsed} lightMode={!isDark}>
+                  <Link
+                    to={ap("influencer")}
+                    className={`group ${panelItemClass(location.pathname.startsWith(ap("influencer")))}`}
+                  >
+                    <Users size={16} className={panelIconClass} />
+                  </Link>
+                </SidebarTooltip>
+              ) : (
               <div>
                 <button
+                  type="button"
                   onClick={() => setIsInfluencerOpen(!isInfluencerOpen)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group"
+                  className={`group w-full ${panelItemClass(location.pathname.startsWith(ap("influencer")))} justify-between`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Users
-                      size={20}
-                      className="text-gray-400 group-hover:text-black"
-                    />
-                    <span>Influencer</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Users size={16} className={panelIconClass} />
+                    <span className="truncate">Influencer</span>
                   </div>
                   {isInfluencerOpen ? (
-                    <ChevronDown size={18} className="text-gray-400" />
+                    <ChevronDown size={14} className={isDark ? "text-gray-400" : "text-slate-400"} />
                   ) : (
-                    <ChevronRight size={18} className="text-gray-400" />
+                    <ChevronRight size={14} className={isDark ? "text-gray-400" : "text-slate-400"} />
                   )}
                 </button>
 
                 <div
                   className={`overflow-hidden transition-all duration-300 ${
-                    isInfluencerOpen
-                      ? "max-h-40 opacity-100 mt-1"
-                      : "max-h-0 opacity-0"
+                    isInfluencerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <div className="pl-10 pr-4 py-2 space-y-1">
+                  <div className="space-y-0.5 py-1 pl-7 pr-2">
                     <Link
                       to={ap("influencer")}
-                      className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
+                      className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                        isActive(ap("influencer"))
+                          ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+                          : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                      }`}
                     >
                       Influencer List
                     </Link>
-
                     <Link
                       to={ap("influencer/coupons")}
-                      className="block px-4 py-2 text-sm text-gray-400 hover:bg-white hover:text-black"
+                      className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                        isActive(ap("influencer/coupons"))
+                          ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+                          : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                      }`}
                     >
                       Influencer Coupons
                     </Link>
                   </div>
                 </div>
               </div>
+              )}
 
-              <Link
-                to={ap("driver")}
-                className={`flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-white hover:text-black transition-all duration-200 font-medium group ${
-                  isActive(ap("driver")) ? "bg-white/10 text-white" : ""
-                }`}
-              >
-                <Truck
-                  size={20}
-                  className="text-gray-400 group-hover:text-black"
-                />
-                <span>Driver</span>
-              </Link>
+              <SidebarTooltip label="Driver" show={collapsed} lightMode={!isDark}>
+                <Link
+                  to={ap("driver")}
+                  className={`group ${panelItemClass(isActive(ap("driver")))}`}
+                >
+                  <Truck size={16} className={panelIconClass} />
+                  {!collapsed && <span className="truncate">Driver</span>}
+                </Link>
+              </SidebarTooltip>
 
+              {collapsed ? (
+                <SidebarTooltip label="Designer" show={collapsed} lightMode={!isDark}>
+                  <Link
+                    to={ap("designer")}
+                    className={`group ${panelItemClass(isDesignerSectionActive())}`}
+                  >
+                    <Users size={16} className={panelIconClass} />
+                  </Link>
+                </SidebarTooltip>
+              ) : (
                 <div>
                   <button
                     type="button"
                     onClick={() => setIsDesignerOpen(!isDesignerOpen)}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-md transition-colors group ${
-                      isDesignerSectionActive()
-                        ? "bg-white/10 text-white"
-                        : "text-gray-300 hover:bg-white hover:text-black"
-                    }`}
+                    className={`group w-full ${panelItemClass(isDesignerSectionActive())} justify-between`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Users
-                        size={16}
-                        className="text-gray-400 group-hover:text-black shrink-0"
-                      />
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Users size={16} className={panelIconClass} />
                       <span className="truncate">Designer</span>
                     </div>
                     {isDesignerOpen ? (
-                      <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                      <ChevronDown size={14} className={isDark ? "text-gray-400 shrink-0" : "text-slate-400 shrink-0"} />
                     ) : (
-                      <ChevronRight size={14} className="text-gray-400 shrink-0" />
+                      <ChevronRight size={14} className={isDark ? "text-gray-400 shrink-0" : "text-slate-400 shrink-0"} />
                     )}
                   </button>
 
                   <div
                     className={`overflow-hidden transition-all duration-300 ${
-                      isDesignerOpen
-                        ? "max-h-40 opacity-100 mt-0.5"
-                        : "max-h-0 opacity-0"
+                      isDesignerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
                     }`}
                   >
-                    <div className="pl-7 pr-2 py-1 space-y-0.5">
+                    <div className="space-y-0.5 py-1 pl-7 pr-2">
                       <Link
                         to={ap("designer")}
-                        className={`block px-3 py-1.5 rounded-md text-[11px] font-medium ${
+                        className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                           isActive(ap("designer"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white hover:text-black"
+                            ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+                            : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
                         }`}
                       >
                         Management
                       </Link>
-
                       <Link
                         to={ap("designer/inventory")}
-                        className={`block px-3 py-1.5 rounded-md text-[11px] font-medium ${
+                        className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                           isActive(ap("designer/inventory"))
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:bg-white hover:text-black"
+                            ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+                            : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
                         }`}
                       >
                         Inventory
@@ -595,59 +752,146 @@ const Sidebar = ({
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+            )}
+            </div>
+
+            {scrollHints.bottom && (
+              <div
+                className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center justify-end pb-1 pt-6 ${
+                  isDark
+                    ? "bg-gradient-to-t from-[#140034] via-[#140034]/85 to-transparent"
+                    : "bg-gradient-to-t from-white via-white/90 to-transparent"
+                }`}
+                aria-hidden
+              >
+                <span
+                  className={`mb-0.5 flex items-center gap-0.5 text-[9px] font-medium uppercase tracking-wide ${
+                    isDark ? "text-white/50" : "text-slate-400"
+                  }`}
+                >
+                  <ChevronDown size={12} className="animate-bounce" />
+                  More
+                </span>
               </div>
             )}
           </div>
         </nav>
 
         {/* Bottom */}
-        <div className={`border-t border-gray-800 shrink-0 ${collapsed ? "p-2" : "p-3"}`}>
+        <div
+          className={`shrink-0 border-t ${isDark ? "border-gray-800" : "border-slate-200"} ${
+            collapsed ? "p-2" : "p-3"
+          }`}
+        >
+          <SidebarTooltip
+            label={isDark ? "Light mode" : "Dark mode"}
+            show={collapsed}
+            lightMode={!isDark}
+          >
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`mb-1 flex w-full items-center rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+              collapsed ? "justify-center" : "justify-between gap-2"
+            } ${
+              isDark
+                ? "text-gray-300 hover:bg-white/10 hover:text-white"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {collapsed ? (
+              isDark ? <Moon size={16} className="shrink-0" /> : <Sun size={16} className="shrink-0" />
+            ) : (
+              <>
+                <span className="flex items-center gap-2">
+                  {isDark ? (
+                    <Moon size={16} className="shrink-0 text-indigo-300" />
+                  ) : (
+                    <Sun size={16} className="shrink-0 text-amber-300" />
+                  )}
+                  <span>{isDark ? "Dark mode" : "Light mode"}</span>
+                </span>
+                <span
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    isDark ? "bg-indigo-500" : "bg-white/25"
+                  }`}
+                  aria-hidden
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      isDark ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </>
+            )}
+          </button>
+          </SidebarTooltip>
+
+          <SidebarTooltip label="Settings" show={collapsed} lightMode={!isDark}>
           <Link
             to={ap("settings")}
-            className={`flex items-center px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1 ${
+            className={`mb-1 flex items-center rounded-xl px-3 py-2 text-xs font-medium transition-colors group ${
               collapsed ? "justify-center" : "gap-2"
+            } ${
+              isDark
+                ? "text-gray-300 hover:bg-white/10 hover:text-white"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
             <Settings
               size={16}
-              className="text-gray-400 group-hover:text-white shrink-0"
+              className={`shrink-0 ${
+                isDark ? "text-gray-400 group-hover:text-white" : "text-slate-400 group-hover:text-slate-700"
+              }`}
             />
             {!collapsed && <span>Settings</span>}
           </Link>
+          </SidebarTooltip>
+
+          <SidebarTooltip label="Profile" show={collapsed} lightMode={!isDark}>
           <Link
             to={ap("profile")}
-            className={`flex items-center px-3 py-2 text-xs font-medium rounded-md text-gray-300 hover:bg-white/10 hover:text-white transition-colors group mb-1 ${
+            className={`mb-1 flex items-center rounded-xl px-3 py-2 text-xs font-medium transition-colors group ${
               collapsed ? "justify-center" : "gap-2"
+            } ${
+              isDark
+                ? "text-gray-300 hover:bg-white/10 hover:text-white"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
             <Settings
               size={16}
-              className="text-gray-400 group-hover:text-white shrink-0"
+              className={`shrink-0 ${
+                isDark ? "text-gray-400 group-hover:text-white" : "text-slate-400 group-hover:text-slate-700"
+              }`}
             />
             {!collapsed && <span>Profile</span>}
           </Link>
+          </SidebarTooltip>
 
+          <SidebarTooltip label={isLoggingOut ? "Logging out…" : "Logout"} show={collapsed} lightMode={!isDark}>
           <button
             type="button"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className={`w-full flex items-center px-3 py-2 text-xs font-medium rounded-md text-red-400 hover:bg-red-950/40 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`flex w-full items-center rounded-xl px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               collapsed ? "justify-center" : "gap-2"
+            } ${
+              isDark
+                ? "text-red-400 hover:bg-red-950/40 hover:text-red-300"
+                : "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
             }`}
           >
             <LogOut size={16} className="shrink-0" />
             {!collapsed && <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>}
           </button>
+          </SidebarTooltip>
         </div>
       </aside>
-
-      {/* Overlay for mobile when sidebar is open */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
     </>
   );
 };

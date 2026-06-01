@@ -165,18 +165,8 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-[1400px] mx-auto px-6">
-        {/* Header */}
-        <div className="mb-8 border-b border-gray-200 pb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Overview of your store's key metrics
-          </p>
-        </div>
-
-        {/* Stats Grid - Smaller Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-10">
+    <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
           {Object.entries(counts).map(([key, value]) => (
             <StatCard key={key} title={key} data={value} />
           ))}
@@ -184,7 +174,7 @@ export default function Dashboard() {
 
         {/* Important Analytics */}
         <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <FiActivity className="w-4 h-4 text-gray-700" />
               <h2 className="text-sm font-medium text-gray-900">Important Analytics Numbers</h2>
@@ -197,7 +187,7 @@ export default function Dashboard() {
             </button>
           </div>
 
-          <div className="p-6 rounded-xl">
+          <div className="p-4">
             {analyticsLoading ? (
               <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
                 {Array.from({ length: 7 }).map((_, idx) => (
@@ -224,7 +214,6 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </div>
     </div>
   );
 }

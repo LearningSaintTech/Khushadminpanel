@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
@@ -13,6 +13,7 @@ import {
   Warehouse,
   Loader2,
   Package,
+  Columns3,
 } from "lucide-react";
 import {
   searchItems,
@@ -79,6 +80,131 @@ const badgeActive =
 const badgeInactive =
   "inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-200/60";
 
+const ITEM_LIST_COLUMNS_STORAGE_KEY = "khush_admin_show_items_visible_columns";
+
+const ITEM_LIST_TABLE_COLUMNS = [
+  { key: "index", label: "#", defaultVisible: true },
+  { key: "image", label: "Image", defaultVisible: true },
+  { key: "name", label: "Name", defaultVisible: true, alwaysVisible: true },
+  { key: "productId", label: "Product ID", defaultVisible: true },
+  { key: "description", label: "Description", defaultVisible: true },
+  { key: "seo", label: "SEO", defaultVisible: false },
+  { key: "sizeChart", label: "Size chart", defaultVisible: true },
+  { key: "warehouse", label: "Warehouse", defaultVisible: true },
+  { key: "mrp", label: "MRP", defaultVisible: true },
+  { key: "discount", label: "Discount", defaultVisible: true },
+  { key: "status", label: "Status", defaultVisible: true },
+];
+
+const tableScrollShell =
+  "w-full min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
+
+function defaultVisibleKeysFor(columns) {
+  return columns.filter((c) => c.defaultVisible).map((c) => c.key);
+}
+
+function loadVisibleColumnsFromStorage(storageKey, columns) {
+  const fallback = defaultVisibleKeysFor(columns);
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const validKeys = new Set(columns.map((c) => c.key));
+    const keys = [...new Set(parsed.filter((k) => validKeys.has(k)))];
+    columns.filter((c) => c.alwaysVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.unshift(c.key);
+    });
+    columns.filter((c) => c.defaultVisible).forEach((c) => {
+      if (!keys.includes(c.key)) keys.push(c.key);
+    });
+    return keys.length ? keys : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistVisibleColumns(storageKey, keys) {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(keys));
+  } catch {
+    /* ignore */
+  }
+}
+
+function ColumnPickerDropdown({
+  columns,
+  visibleKeys,
+  onToggle,
+  onReset,
+  onSelectAll,
+  open,
+  onOpenChange,
+}) {
+  const activeCount = columns.filter((c) => visibleKeys.includes(c.key)).length;
+  return (
+    <div className="relative shrink-0" data-showitems-column-picker>
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className={`${btnOutline} gap-1`}
+        aria-expanded={open}
+      >
+        <Columns3 className="h-3.5 w-3.5 shrink-0" />
+        Columns
+        <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-800">
+          {activeCount}
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-[min(100vw-1.5rem,20rem)] rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg ring-1 ring-black/5">
+          <p className="mb-2 text-[11px] font-semibold text-slate-700">Choose columns to show</p>
+          <div className="max-h-52 overflow-y-auto space-y-1 pr-0.5">
+            {columns.map((col) => {
+              const checked = visibleKeys.includes(col.key);
+              const locked = !!col.alwaysVisible;
+              return (
+                <label
+                  key={col.key}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] ${
+                    locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={locked}
+                    onChange={() => onToggle(col.key)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-slate-800">{col.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex gap-3 border-t border-slate-100 pt-2">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="text-[10px] font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              Show all
+            </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-[10px] font-medium text-slate-600 hover:text-slate-800"
+            >
+              Reset default
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ShowItems = () => {
   const navigate = useNavigate();
   const categoryDropdownRef = useRef(null);
@@ -109,6 +235,52 @@ const ShowItems = () => {
   const [editingPriceValue, setEditingPriceValue] = useState("");
   const [editingDiscountValue, setEditingDiscountValue] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState(() =>
+    loadVisibleColumnsFromStorage(ITEM_LIST_COLUMNS_STORAGE_KEY, ITEM_LIST_TABLE_COLUMNS),
+  );
+
+  const activeColumns = useMemo(
+    () => ITEM_LIST_TABLE_COLUMNS.filter((c) => visibleColumns.includes(c.key)),
+    [visibleColumns],
+  );
+
+  const tableColSpan = activeColumns.length + 1;
+
+  const toggleColumn = useCallback((key) => {
+    const def = ITEM_LIST_TABLE_COLUMNS.find((c) => c.key === key);
+    if (def?.alwaysVisible) return;
+    setVisibleColumns((prev) => {
+      const has = prev.includes(key);
+      const without = has ? prev.filter((k) => k !== key) : [...prev, key];
+      const always = ITEM_LIST_TABLE_COLUMNS.filter((c) => c.alwaysVisible).map((c) => c.key);
+      const next = [...new Set([...always, ...without])];
+      if (next.length <= always.length && has) return prev;
+      persistVisibleColumns(ITEM_LIST_COLUMNS_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
+  const resetColumns = useCallback(() => {
+    const next = defaultVisibleKeysFor(ITEM_LIST_TABLE_COLUMNS);
+    setVisibleColumns(next);
+    persistVisibleColumns(ITEM_LIST_COLUMNS_STORAGE_KEY, next);
+  }, []);
+
+  const selectAllColumns = useCallback(() => {
+    const next = ITEM_LIST_TABLE_COLUMNS.map((c) => c.key);
+    setVisibleColumns(next);
+    persistVisibleColumns(ITEM_LIST_COLUMNS_STORAGE_KEY, next);
+  }, []);
+
+  useEffect(() => {
+    if (!columnsOpen) return;
+    const onDocClick = (e) => {
+      if (!e.target.closest?.("[data-showitems-column-picker]")) setColumnsOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [columnsOpen]);
 
   /** Per-row warehouse summary for current table page */
   const [warehouseColLoading, setWarehouseColLoading] = useState(false);
@@ -945,33 +1117,273 @@ const ShowItems = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50/80">
-      {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto max-w-[1600px] px-3 py-2.5 sm:px-4">
-          <div className="flex items-start gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
-              <Package className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-sm font-semibold text-slate-900">All items</h1>
-              <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500 max-w-2xl">
-                Move central stock to a warehouse via{" "}
-                <Link
-                  to="/admin/inventory/stock-management"
-                  className="font-medium text-indigo-600 hover:text-indigo-800 underline-offset-2 hover:underline"
-                >
-                  Stock management
-                </Link>
-                {" "}→ pick warehouse, search item, use &quot;Add all SKUs from one item&quot;.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+  const tableMinWidth = Math.max(420, activeColumns.length * 100 + 72);
 
-      <div className="mx-auto max-w-[1600px] px-3 py-3 sm:px-4">
+  const renderItemCell = (key, item, index) => {
+    const rowId = item._id || item.productId;
+    switch (key) {
+      case "index":
+        return (
+          <td className={`${tdClass} text-slate-400 tabular-nums`}>
+            {(currentPage - 1) * limit + index + 1}
+          </td>
+        );
+      case "image":
+        return (
+          <td className={tdClass}>
+            <img
+              src={
+                item?.thumbnail ||
+                item?.images?.[0] ||
+                "https://via.placeholder.com/50"
+              }
+              alt={item.name}
+              onClick={() =>
+                setZoomedImage(
+                  item?.thumbnail ||
+                    item?.images?.[0] ||
+                    "https://via.placeholder.com/50",
+                )
+              }
+              className="h-9 w-9 rounded-md border border-slate-200 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+            />
+          </td>
+        );
+      case "name":
+        return (
+          <td className={`${tdClass} font-medium text-slate-900 max-w-[140px]`}>
+            <span className="line-clamp-2 leading-snug" title={item.name}>
+              {item.name || "—"}
+            </span>
+          </td>
+        );
+      case "productId":
+        return (
+          <td className={`${tdClass} font-mono text-[10px] text-slate-500 max-w-[90px]`}>
+            <span className="line-clamp-2 break-all" title={item.productId}>
+              {item.productId || "—"}
+            </span>
+          </td>
+        );
+      case "description":
+        return (
+          <td
+            className={`${tdClass} max-w-[120px]`}
+            title={item.shortDescription || item.description}
+          >
+            <span className="line-clamp-2 text-slate-500">
+              {item.shortDescription || item.description || "—"}
+            </span>
+          </td>
+        );
+      case "seo":
+        return (
+          <td
+            className={`${tdClass} max-w-[120px]`}
+            title={[
+              item.metaTitle && `Title: ${item.metaTitle}`,
+              item.metaDescription && `Desc: ${item.metaDescription}`,
+              Array.isArray(item.metaTags) &&
+                item.metaTags.length &&
+                `Tags: ${item.metaTags.join(", ")}`,
+            ]
+              .filter(Boolean)
+              .join("\n")}
+          >
+            <div className="font-medium text-slate-800 line-clamp-1 text-[10px]">
+              {String(item.metaTitle || "").trim() || "—"}
+            </div>
+            <div className="mt-0.5 text-[10px] text-slate-400 line-clamp-1">
+              {Array.isArray(item.metaTags) && item.metaTags.length > 0
+                ? item.metaTags.join(", ")
+                : ""}
+            </div>
+          </td>
+        );
+      case "sizeChart":
+        return (
+          <td className={`${tdClass} text-center`}>
+            {itemHasSizeChartContent(item) ? (
+              <span className={badgeActive}>Yes</span>
+            ) : (
+              <span className="text-slate-300">—</span>
+            )}
+          </td>
+        );
+      case "warehouse":
+        return (
+          <td className={`${tdClass} align-top`}>
+            <div className="flex flex-col gap-1 max-w-[160px]">
+              {warehouseColLoading ? (
+                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                  …
+                </span>
+              ) : !(item.name || "").trim() ? (
+                <span className="text-[10px] text-amber-700" title="Product name required">
+                  No name
+                </span>
+              ) : (
+                <>
+                  {warehouseSummaries[itemRowKey(item)]?.hasAny ? (
+                    <span
+                      className="text-[10px] font-medium text-emerald-700 line-clamp-2 leading-snug"
+                      title={warehouseSummaries[itemRowKey(item)]?.summary || ""}
+                    >
+                      {warehouseSummaries[itemRowKey(item)]?.summary}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">
+                      {warehouseSummaries[itemRowKey(item)]?.summary || "—"}
+                    </span>
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openWarehouseStockModal(item);
+                }}
+                className="inline-flex items-center gap-0.5 self-start rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-colors"
+                title="Warehouse stock"
+              >
+                <Warehouse className="h-3 w-3" />
+                Manage
+              </button>
+            </div>
+          </td>
+        );
+      case "mrp":
+        return (
+          <td className={`${tdClass} text-right font-medium text-slate-800`}>
+            {editingPriceItemId === rowId ? (
+              <div className="flex items-center justify-end gap-2">
+                <input
+                  autoFocus
+                  value={editingPriceValue}
+                  onChange={(e) => setEditingPriceValue(e.target.value)}
+                  className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
+                  placeholder="MRP"
+                />
+                <button
+                  type="button"
+                  onClick={() => saveInlinePrice(rowId)}
+                  disabled={savingPrice}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelInlineEdit}
+                  disabled={savingPrice}
+                  className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-0.5">
+                <span className="tabular-nums">₹{item.price || 0}</span>
+                <button
+                  type="button"
+                  onClick={() => startPriceEdit(item)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                  title="Edit MRP"
+                >
+                  <Edit className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </td>
+        );
+      case "discount":
+        return (
+          <td className={`${tdClass} text-right`}>
+            {editingDiscountItemId === rowId ? (
+              <div className="flex items-center justify-end gap-2">
+                <input
+                  autoFocus
+                  value={editingDiscountValue}
+                  onChange={(e) => setEditingDiscountValue(e.target.value)}
+                  className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
+                  placeholder="Disc."
+                />
+                <button
+                  type="button"
+                  onClick={() => saveInlineDiscount(rowId)}
+                  disabled={savingPrice}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelInlineEdit}
+                  disabled={savingPrice}
+                  className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-0.5">
+                {item.discountedPrice ? (
+                  <span className="font-medium text-emerald-700 tabular-nums">
+                    ₹{item.discountedPrice}
+                  </span>
+                ) : (
+                  <span className="text-slate-300">—</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => startDiscountEdit(item)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                  title="Edit discount"
+                >
+                  <Edit className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </td>
+        );
+      case "status":
+        return (
+          <td className={`${tdClass} text-center`}>
+            {item.isActive ? (
+              <span className={badgeActive}>Active</span>
+            ) : (
+              <span className={badgeInactive}>Off</span>
+            )}
+          </td>
+        );
+      default:
+        return <td className={tdClass}>—</td>;
+    }
+  };
+
+  const thAlign = (key) => {
+    if (key === "sizeChart" || key === "status") return "text-center";
+    if (key === "mrp" || key === "discount") return "text-right";
+    return "text-left";
+  };
+
+  return (
+    <div>
+      <div className="mx-auto max-w-[1600px]">
+        <p className="mb-3 text-[10px] leading-relaxed text-slate-500 max-w-2xl">
+          Move central stock to a warehouse via{" "}
+          <Link
+            to="/admin/inventory/stock-management"
+            className="font-medium text-indigo-600 hover:text-indigo-800 underline-offset-2 hover:underline"
+          >
+            Stock management
+          </Link>
+          {" "}→ pick warehouse, search item, use &quot;Add all SKUs from one item&quot;.
+        </p>
+
+      <div className="py-1">
         {/* Filters */}
         <div className="mb-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -1375,7 +1787,16 @@ const ShowItems = () => {
             )}{" "}
             items
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ColumnPickerDropdown
+              columns={ITEM_LIST_TABLE_COLUMNS}
+              visibleKeys={visibleColumns}
+              onToggle={toggleColumn}
+              onReset={resetColumns}
+              onSelectAll={selectAllColumns}
+              open={columnsOpen}
+              onOpenChange={setColumnsOpen}
+            />
             <button
               type="button"
               onClick={() => setShowBulkUpload(true)}
@@ -1395,6 +1816,11 @@ const ShowItems = () => {
           </div>
         </div>
 
+        <p className="mb-1.5 text-[10px] text-slate-400">
+          {activeColumns.length} column{activeColumns.length === 1 ? "" : "s"} visible · scroll
+          horizontally for more
+        </p>
+
         {error && (
           <div className="mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
             {error}
@@ -1403,29 +1829,39 @@ const ShowItems = () => {
 
         {/* Items table */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-left">
+          <div className={tableScrollShell}>
+            <table
+              className="w-full border-collapse text-left"
+              style={{ minWidth: `${tableMinWidth}px` }}
+            >
               <thead>
                 <tr>
-                  <th className={`${thClass} text-left w-8`}>#</th>
-                  <th className={`${thClass} text-left`}>Img</th>
-                  <th className={`${thClass} text-left min-w-[120px]`}>Name</th>
-                  <th className={`${thClass} text-left`}>Product ID</th>
-                  <th className={`${thClass} text-left min-w-[100px]`}>Desc</th>
-                  <th className={`${thClass} text-left min-w-[100px]`}>SEO</th>
-                  <th className={`${thClass} text-center`}>Chart</th>
-                  <th className={`${thClass} text-left min-w-[120px]`}>Warehouse</th>
-                  <th className={`${thClass} text-right`}>MRP</th>
-                  <th className={`${thClass} text-right`}>Disc.</th>
-                  <th className={`${thClass} text-center`}>Status</th>
-                  <th className={`${thClass} text-right`}>Actions</th>
+                  {activeColumns.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`${thClass} ${thAlign(col.key)} ${
+                        col.key === "index" ? "w-8" : ""
+                      } ${col.key === "name" ? "min-w-[120px]" : ""} ${
+                        col.key === "description" || col.key === "seo"
+                          ? "min-w-[100px]"
+                          : ""
+                      } ${col.key === "warehouse" ? "min-w-[120px]" : ""}`}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
+                  <th
+                    className={`${thClass} sticky right-0 text-right bg-slate-50/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]`}
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={tableColSpan}
                       className="px-2 py-10 text-center text-xs text-slate-500"
                     >
                       <span className="inline-flex items-center gap-2">
@@ -1437,7 +1873,7 @@ const ShowItems = () => {
                 ) : filteredItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={tableColSpan}
                       className="px-2 py-10 text-center text-xs text-slate-500"
                     >
                       No items found
@@ -1447,223 +1883,16 @@ const ShowItems = () => {
                   filteredItems.map((item, index) => (
                     <tr
                       key={item._id || item.productId}
-                      className="border-t border-slate-100 transition-colors hover:bg-indigo-50/25"
+                      className="group border-t border-slate-100 transition-colors hover:bg-indigo-50/25"
                     >
-                      <td className={`${tdClass} text-slate-400 tabular-nums`}>
-                        {(currentPage - 1) * limit + index + 1}
-                      </td>
-                      <td className={tdClass}>
-                        <img
-                          src={
-                            item?.thumbnail ||
-                            item?.images?.[0] ||
-                            "https://via.placeholder.com/50"
-                          }
-                          alt={item.name}
-                          onClick={() =>
-                            setZoomedImage(
-                              item?.thumbnail ||
-                                item?.images?.[0] ||
-                                "https://via.placeholder.com/50",
-                            )
-                          }
-                          className="h-9 w-9 rounded-md border border-slate-200 object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                        />
-                      </td>
-                      <td className={`${tdClass} font-medium text-slate-900 max-w-[140px]`}>
-                        <span className="line-clamp-2 leading-snug" title={item.name}>
-                          {item.name || "—"}
-                        </span>
-                      </td>
-                      <td className={`${tdClass} font-mono text-[10px] text-slate-500 max-w-[90px]`}>
-                        <span className="line-clamp-2 break-all" title={item.productId}>
-                          {item.productId || "—"}
-                        </span>
-                      </td>
+                      {activeColumns.map((col) => (
+                        <React.Fragment key={col.key}>
+                          {renderItemCell(col.key, item, index)}
+                        </React.Fragment>
+                      ))}
                       <td
-                        className={`${tdClass} max-w-[120px]`}
-                        title={item.shortDescription || item.description}
+                        className={`${tdClass} sticky right-0 bg-white text-right group-hover:bg-indigo-50/25 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.06)]`}
                       >
-                        <span className="line-clamp-2 text-slate-500">
-                          {item.shortDescription || item.description || "—"}
-                        </span>
-                      </td>
-                      <td
-                        className={`${tdClass} max-w-[120px]`}
-                        title={[
-                          item.metaTitle && `Title: ${item.metaTitle}`,
-                          item.metaDescription && `Desc: ${item.metaDescription}`,
-                          Array.isArray(item.metaTags) &&
-                            item.metaTags.length &&
-                            `Tags: ${item.metaTags.join(", ")}`,
-                        ]
-                          .filter(Boolean)
-                          .join("\n")}
-                      >
-                        <div className="font-medium text-slate-800 line-clamp-1 text-[10px]">
-                          {String(item.metaTitle || "").trim() || "—"}
-                        </div>
-                        <div className="mt-0.5 text-[10px] text-slate-400 line-clamp-1">
-                          {Array.isArray(item.metaTags) && item.metaTags.length > 0
-                            ? item.metaTags.join(", ")
-                            : ""}
-                        </div>
-                      </td>
-                      <td className={`${tdClass} text-center`}>
-                        {itemHasSizeChartContent(item) ? (
-                          <span className={badgeActive}>Yes</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                      <td className={`${tdClass} align-top`}>
-                        <div className="flex flex-col gap-1 max-w-[160px]">
-                          {warehouseColLoading ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                              …
-                            </span>
-                          ) : !(item.name || "").trim() ? (
-                            <span className="text-[10px] text-amber-700" title="Product name required">
-                              No name
-                            </span>
-                          ) : (
-                            <>
-                              {warehouseSummaries[itemRowKey(item)]?.hasAny ? (
-                                <span
-                                  className="text-[10px] font-medium text-emerald-700 line-clamp-2 leading-snug"
-                                  title={
-                                    warehouseSummaries[itemRowKey(item)]
-                                      ?.summary || ""
-                                  }
-                                >
-                                  {
-                                    warehouseSummaries[itemRowKey(item)]
-                                      ?.summary
-                                  }
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">
-                                  {warehouseSummaries[itemRowKey(item)]
-                                    ?.summary || "—"}
-                                </span>
-                              )}
-                            </>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWarehouseStockModal(item);
-                            }}
-                            className="inline-flex items-center gap-0.5 self-start rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-colors"
-                            title="Warehouse stock"
-                          >
-                            <Warehouse className="h-3 w-3" />
-                            Manage
-                          </button>
-                        </div>
-                      </td>
-                      <td className={`${tdClass} text-right font-medium text-slate-800`}>
-                        {editingPriceItemId === (item._id || item.productId) ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <input
-                              autoFocus
-                              value={editingPriceValue}
-                              onChange={(e) => setEditingPriceValue(e.target.value)}
-                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
-                              placeholder="MRP"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => saveInlinePrice(item._id || item.productId)}
-                              disabled={savingPrice}
-                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelInlineEdit}
-                              disabled={savingPrice}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-0.5">
-                            <span className="tabular-nums">₹{item.price || 0}</span>
-                            <button
-                              type="button"
-                              onClick={() => startPriceEdit(item)}
-                              className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                              title="Edit MRP"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                      <td className={`${tdClass} text-right`}>
-                        {editingDiscountItemId === (item._id || item.productId) ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <input
-                              autoFocus
-                              value={editingDiscountValue}
-                              onChange={(e) =>
-                                setEditingDiscountValue(e.target.value)
-                              }
-                              className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right text-[11px]"
-                              placeholder="Disc."
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                saveInlineDiscount(item._id || item.productId)
-                              }
-                              disabled={savingPrice}
-                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelInlineEdit}
-                              disabled={savingPrice}
-                              className="rounded px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100 disabled:opacity-40"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-0.5">
-                            {item.discountedPrice ? (
-                              <span className="font-medium text-emerald-700 tabular-nums">
-                                ₹{item.discountedPrice}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => startDiscountEdit(item)}
-                              className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                              title="Edit discount"
-                            >
-                              <Edit className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                      <td className={`${tdClass} text-center`}>
-                        {item.isActive ? (
-                          <span className={badgeActive}>Active</span>
-                        ) : (
-                          <span className={badgeInactive}>Off</span>
-                        )}
-                      </td>
-                      <td className={`${tdClass} text-right`}>
                         <div className="flex items-center justify-end gap-0.5">
                           <button
                             type="button"
@@ -1997,6 +2226,7 @@ const ShowItems = () => {
             />
           </div>
         )}
+      </div>
       </div>
     </div>
   );
