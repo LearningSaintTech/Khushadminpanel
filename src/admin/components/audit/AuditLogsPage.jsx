@@ -1,8 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditLogApi } from "../../apis/AuditLogapi";
-import { Filter, Shield, Search, X } from "lucide-react";
+import { Shield, Search, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  alertDanger,
+  btnOutline,
+  btnPrimary,
+  inputClass,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./auditShared";
 
-const PAGE_SIZE_DEFAULT = 20;
+const LIMIT_OPTIONS = [20, 50, 100, 200];
+const EMPTY_FILTERS = {
+  role: "",
+  moduleKey: "",
+  operation: "",
+  statusCode: "",
+  from: "",
+  to: "",
+};
 
 function formatDate(val) {
   if (!val) return "—";
@@ -30,8 +48,7 @@ function prettyJson(val) {
 function describeTask(row) {
   const moduleKey = row?.moduleKey || "unknown-module";
   const method = (row?.method || "").toUpperCase();
-  const routePath = row?.routePath || row?.path || "";
-  const routeLower = String(routePath).toLowerCase();
+  const routeLower = String(row?.routePath || row?.path || "").toLowerCase();
 
   let action = "Access";
   if (method === "GET") action = "Read";
@@ -39,14 +56,12 @@ function describeTask(row) {
   else if (method === "PUT" || method === "PATCH") action = "Update";
   else if (method === "DELETE") action = "Delete";
 
-  // Human-friendly overrides for common patterns
   if (routeLower.includes("audit-logs")) action = "View";
   if (routeLower.includes("module-access")) action = "Manage module access";
   if (routeLower.includes("toggle")) action = "Toggle status";
   if (routeLower.includes("read-all") || routeLower.includes("read/")) action = "Mark as read";
   if (routeLower.includes("webhook")) action = "Webhook";
 
-  // If we already have a specific override, don't append redundant action verbs.
   const specific =
     action === "Manage module access" ||
     action === "Toggle status" ||
@@ -54,12 +69,9 @@ function describeTask(row) {
     action === "Webhook" ||
     action === "View";
 
-  return specific
-    ? `${action} (${moduleKey})`
-    : `${action} (${moduleKey})`;
+  return specific ? `${action} (${moduleKey})` : `${action} (${moduleKey})`;
 }
 
-/** Prefer server-stored plain-language text; older rows fall back to technical summary. */
 function displayTask(row) {
   const d = row?.description;
   if (d && String(d).trim()) return String(d).trim();
@@ -68,414 +80,453 @@ function displayTask(row) {
 
 export default function AuditLogsPage() {
   const [list, setList] = useState([]);
-  const [pagination, setPagination] = useState({
-    total: 0,
-    page: 1,
-    limit: PAGE_SIZE_DEFAULT,
-    totalPages: 1,
-  });
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedLog, setSelectedLog] = useState(null);
-
-  const [filters, setFilters] = useState({
-    role: "",
-    moduleKey: "",
-    operation: "",
-    statusCode: "",
-    from: "",
-    to: "",
-  });
+  const [selectedDetailsTab, setSelectedDetailsTab] = useState("summary");
+  const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
 
   const roleOptions = useMemo(
     () => [
       { value: "", label: "All roles" },
       { value: "admin", label: "Admin" },
       { value: "subadmin", label: "Subadmin" },
-      { value: "super_subadmin", label: "Super Subadmin" },
+      { value: "super_subadmin", label: "Super subadmin" },
     ],
-    []
+    [],
   );
 
   const crudOptions = useMemo(
     () => [
       { value: "", label: "All operations" },
-      { value: "read", label: "Read (GET)" },
-      { value: "create", label: "Create (POST)" },
-      { value: "update", label: "Update (PUT/PATCH)" },
-      { value: "delete", label: "Delete (DELETE)" },
+      { value: "read", label: "Read" },
+      { value: "create", label: "Create" },
+      { value: "update", label: "Update" },
+      { value: "delete", label: "Delete" },
     ],
-    []
+    [],
   );
 
   const loadPage = useCallback(
-    async (pageNum = 1, append = false) => {
+    async (pageNum = 1) => {
       setLoading(true);
       setError("");
-
-      const params = {
-        page: pageNum,
-        limit: pagination.limit || PAGE_SIZE_DEFAULT,
-      };
-
-      if (filters.role) params.role = filters.role;
-      if (filters.moduleKey) params.moduleKey = filters.moduleKey;
-      if (filters.operation) params.operation = filters.operation;
-      if (filters.statusCode) params.statusCode = filters.statusCode;
-      if (filters.from) params.from = filters.from;
-      if (filters.to) params.to = filters.to;
+      const params = { page: pageNum, limit };
+      if (appliedFilters.role) params.role = appliedFilters.role;
+      if (appliedFilters.moduleKey) params.moduleKey = appliedFilters.moduleKey;
+      if (appliedFilters.operation) params.operation = appliedFilters.operation;
+      if (appliedFilters.statusCode) params.statusCode = appliedFilters.statusCode;
+      if (appliedFilters.from) params.from = appliedFilters.from;
+      if (appliedFilters.to) params.to = appliedFilters.to;
 
       try {
         const data = await auditLogApi.listAuditLogs(params);
         const items = data?.data ?? [];
         const p = data?.pagination ?? {};
-
-        setList((prev) => (append ? [...prev, ...items] : items));
-        setPagination({
-          total: p.total ?? 0,
-          page: p.page ?? pageNum,
-          limit: p.limit ?? params.limit,
-          totalPages: p.totalPages ?? 1,
-        });
+        setList(items);
+        setTotal(p.total ?? 0);
+        setPage(p.page ?? pageNum);
+        setTotalPages(p.totalPages ?? 1);
       } catch (e) {
         setError(e?.message || "Failed to load audit logs");
         setList([]);
-        setPagination((p) => ({ ...p, total: 0, totalPages: 1 }));
+        setTotal(0);
+        setTotalPages(1);
       } finally {
         setLoading(false);
       }
     },
-    [filters, pagination.limit]
+    [appliedFilters, limit],
   );
 
   useEffect(() => {
-    loadPage(1, false);
-  }, [loadPage]);
+    loadPage(1);
+  }, [appliedFilters, limit]);
 
-  const applyFilters = () => loadPage(1, false);
+  const applyFilters = () => {
+    setAppliedFilters({ ...draftFilters });
+    setPage(1);
+  };
+
+  const resetFilters = () => {
+    setDraftFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
+    setPage(1);
+  };
+
+  const goToPage = (next) => {
+    const safe = Math.max(1, Math.min(totalPages, next));
+    if (safe === page) return;
+    setPage(safe);
+    loadPage(safe);
+  };
+
+  const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * limit, total);
+
+  const tabActive = "rounded-md bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white";
+  const tabInactive =
+    "rounded-md border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-stone-600 hover:bg-canvas-muted";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Shield size={22} className="text-gray-700" />
-        <h1 className="text-2xl font-semibold text-gray-900">Audit Logs</h1>
-      </div>
-
-      <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 flex flex-col gap-4">
-        <div className="flex items-center gap-2 text-gray-600">
-          <Filter size={18} />
-          <span className="text-sm font-medium">Filters</span>
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          applyFilters();
+        }}
+      >
+        <Shield className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+        <div className="mr-auto shrink-0 min-w-0">
+          <h1 className="whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+            Audit logs
+          </h1>
+          <p className="whitespace-nowrap text-[10px] text-stone-500">
+            Admin activity across modules
+          </p>
         </div>
-
-        <div className="flex flex-wrap gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
-            <select
-              value={filters.role}
-              onChange={(e) => setFilters((f) => ({ ...f, role: e.target.value }))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              {roleOptions.map((o) => (
-                <option key={o.value || "all"} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Module Key</label>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                value={filters.moduleKey}
-                onChange={(e) => setFilters((f) => ({ ...f, moduleKey: e.target.value }))}
-                placeholder="e.g. order"
-                className="border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">CRUD / operation</label>
-            <select
-              value={filters.operation}
-              onChange={(e) => setFilters((f) => ({ ...f, operation: e.target.value }))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[200px]"
-            >
-              {crudOptions.map((o) => (
-                <option key={o.value || "all-crud"} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Status Code</label>
-            <input
-              value={filters.statusCode}
-              onChange={(e) => setFilters((f) => ({ ...f, statusCode: e.target.value }))}
-              placeholder="e.g. 403"
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[120px]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-            <input
-              type="date"
-              value={filters.from}
-              onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-            <input
-              type="date"
-              value={filters.to}
-              onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
+        <select
+          value={draftFilters.role}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, role: e.target.value }))}
+          className={`${inputClass} w-[120px]`}
+          title="Role"
+          aria-label="Role"
+        >
+          {roleOptions.map((o) => (
+            <option key={o.value || "all"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <div className="relative w-[120px] shrink-0">
+          <Search
+            className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+          <input
+            value={draftFilters.moduleKey}
+            onChange={(e) => setDraftFilters((f) => ({ ...f, moduleKey: e.target.value }))}
+            placeholder="Module"
+            className="w-full rounded-lg border border-border bg-white py-1.5 pl-7 pr-2 text-[11px] outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            title="Module"
+          />
         </div>
+        <select
+          value={draftFilters.operation}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, operation: e.target.value }))}
+          className={`${inputClass} w-[108px]`}
+          title="Operation"
+          aria-label="Operation"
+        >
+          {crudOptions.map((o) => (
+            <option key={o.value || "all"} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <input
+          value={draftFilters.statusCode}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, statusCode: e.target.value }))}
+          placeholder="Status"
+          className={`${inputClass} w-[72px]`}
+          title="HTTP status"
+        />
+        <input
+          type="date"
+          value={draftFilters.from}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, from: e.target.value }))}
+          className={`${inputClass} w-[132px]`}
+          title="From"
+          aria-label="From date"
+        />
+        <input
+          type="date"
+          value={draftFilters.to}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, to: e.target.value }))}
+          className={`${inputClass} w-[132px]`}
+          title="To"
+          aria-label="To date"
+        />
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(parseInt(e.target.value, 10) || 20);
+            setPage(1);
+          }}
+          className={`${inputClass} w-[108px]`}
+          title="Per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+        <button type="submit" className={btnPrimary}>
+          Apply
+        </button>
+        <button type="button" onClick={resetFilters} className={btnOutline}>
+          Reset
+        </button>
+      </form>
 
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={applyFilters}
-            className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800"
-          >
-            Apply
-          </button>
+      {error ? <div className={`${alertDanger} mb-2`}>{error}</div> : null}
 
-          <button
-            type="button"
-            onClick={() =>
-              setFilters({
-                role: "",
-                moduleKey: "",
-                operation: "",
-                statusCode: "",
-                from: "",
-                to: "",
-              })
-            }
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      ) : null}
-
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
-      ) : list.length === 0 ? (
-        <p className="text-gray-500 py-8">No audit logs found.</p>
-      ) : (
-        <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[920px]">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">Date</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">Role</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">Module</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">Method</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">What happened</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-sm font-semibold text-gray-700">IP</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {list.map((row) => (
-                  <tr
-                    key={row._id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => setSelectedLog(row)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") setSelectedLog(row);
-                    }}
+      <div className={tableScrollShell}>
+        <table className="min-w-[920px] w-full text-[11px]">
+          <thead className={tableHeadClass}>
+            <tr>
+              <th className={thClass}>Date</th>
+              <th className={thClass}>Role</th>
+              <th className={thClass}>Module</th>
+              <th className={thClass}>Method</th>
+              <th className={thClass}>Task</th>
+              <th className={thClass}>Status</th>
+              <th className={thClass}>IP</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && list.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
+              </tr>
+            ) : list.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-10 text-center text-stone-500">
+                  No audit logs found.
+                </td>
+              </tr>
+            ) : (
+              list.map((row) => (
+                <tr
+                  key={row._id}
+                  className="cursor-pointer hover:bg-canvas-muted/50"
+                  onClick={() => {
+                    setSelectedLog(row);
+                    setSelectedDetailsTab("summary");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setSelectedLog(row);
+                      setSelectedDetailsTab("summary");
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-500">
+                    {formatDate(row.createdAt)}
+                  </td>
+                  <td className="px-2 py-2 font-medium text-stone-900">{row.role || "—"}</td>
+                  <td className="px-2 py-2 text-stone-700">{row.moduleKey || "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-700">{row.method || "—"}</td>
+                  <td
+                    className="max-w-[360px] truncate px-2 py-2 text-stone-700"
+                    title={displayTask(row)}
                   >
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {formatDate(row.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      {row.role || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{row.moduleKey || "—"}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {row.method || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[420px] truncate" title={displayTask(row)}>
-                      {displayTask(row)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {row.statusCode ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {row.ip || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    {displayTask(row)}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 tabular-nums text-stone-700">
+                    {row.statusCode ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-600">{row.ip || "—"}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-          <div className="p-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-gray-600">
-              Showing {list.length} • Total {pagination.total} • Page {pagination.page} of{" "}
-              {pagination.totalPages}
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-50"
-                disabled={pagination.page <= 1}
-                onClick={() => loadPage(pagination.page - 1)}
-              >
-                Prev
-              </button>
-              <button
-                type="button"
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm disabled:opacity-50"
-                disabled={pagination.page >= pagination.totalPages}
-                onClick={() => loadPage(pagination.page + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          {loading ? (
+            "Loading…"
+          ) : total === 0 ? (
+            "0 logs"
+          ) : (
+            <>
+              Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+              <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+              <span className="font-medium text-stone-700">{total}</span> total · Page{" "}
+              <span className="font-medium text-stone-700">{page}</span> of{" "}
+              <span className="font-medium text-stone-700">{totalPages}</span>
+            </>
+          )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={loading || page <= 1}
+            onClick={() => goToPage(page - 1)}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={loading || page >= totalPages}
+            onClick={() => goToPage(page + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Details modal */}
-      {selectedLog && (
+      {selectedLog ? (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setSelectedLog(null)}
-          role="dialog"
-          aria-modal="true"
+          role="presentation"
         >
           <div
-            className="bg-white rounded-2xl shadow-xl max-w-3xl w-full overflow-hidden"
+            className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Audit log details"
           >
-            <div className="flex items-start justify-between gap-4 p-5 border-b border-gray-200">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Audit Log Details
-                </h2>
-                <p className="text-sm text-gray-800 font-medium leading-snug">
-                  {displayTask(selectedLog)}
-                </p>
-                {!selectedLog?.description ? (
-                  <p className="text-xs text-gray-500 mt-1">Technical summary (older log — no plain summary stored).</p>
-                ) : null}
+            <div className="sticky top-0 z-10 border-b border-border bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-stone-900">Audit log details</h2>
+                  <p className="truncate text-[11px] font-medium text-stone-700">
+                    {displayTask(selectedLog)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 hover:bg-canvas-muted"
+                  onClick={() => setSelectedLog(null)}
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
               </div>
-              <button
-                type="button"
-                className="p-2 rounded-lg hover:bg-gray-100"
-                onClick={() => setSelectedLog(null)}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
+              <div className="mt-2 inline-flex rounded-lg border border-border bg-canvas-muted/50 p-0.5">
+                {[
+                  { key: "summary", label: "Summary" },
+                  { key: "meta", label: "Meta" },
+                  { key: "request", label: "Request" },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setSelectedDetailsTab(t.key)}
+                    className={
+                      selectedDetailsTab === t.key ? tabActive : tabInactive
+                    }
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="p-5 space-y-5 max-h-[70vh] overflow-auto">
-              {selectedLog.description ? (
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 px-4 py-3">
-                  <div className="text-xs font-semibold text-indigo-800 uppercase tracking-wide mb-1">
-                    Plain summary
+            <div className="max-h-[60vh] space-y-3 overflow-auto p-3 text-[11px]">
+              {selectedDetailsTab === "summary" ? (
+                <>
+                  {selectedLog.description ? (
+                    <div className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase text-brand-700">
+                        Plain summary
+                      </p>
+                      <p className="mt-1 font-medium text-stone-900">{selectedLog.description}</p>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-stone-500">
+                      Technical summary (no plain-language description stored).
+                    </p>
+                  )}
+                  <div className="rounded-lg border border-border bg-canvas-muted/30 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase text-stone-500">Task</p>
+                    <p className="font-medium text-stone-900">{displayTask(selectedLog)}</p>
                   </div>
-                  <p className="text-sm text-gray-900">{selectedLog.description}</p>
+                </>
+              ) : null}
+
+              {selectedDetailsTab === "meta" ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {[
+                    { label: "Role", value: selectedLog.role || "—" },
+                    { label: "Module", value: selectedLog.moduleKey || "—" },
+                    { label: "Method", value: selectedLog.method || "—" },
+                    { label: "Status", value: selectedLog.statusCode ?? "—" },
+                    { label: "IP", value: selectedLog.ip || "—" },
+                    {
+                      label: "Duration",
+                      value:
+                        selectedLog.durationMs != null
+                          ? `${selectedLog.durationMs} ms`
+                          : "—",
+                    },
+                  ].map((f) => (
+                    <div
+                      key={f.label}
+                      className="rounded-lg border border-border bg-white px-3 py-2"
+                    >
+                      <p className="text-[10px] font-semibold uppercase text-stone-500">
+                        {f.label}
+                      </p>
+                      <p className="font-medium text-stone-900">{f.value}</p>
+                    </div>
+                  ))}
+                  <div className="rounded-lg border border-border bg-white px-3 py-2 sm:col-span-2">
+                    <p className="text-[10px] font-semibold uppercase text-stone-500">
+                      User agent
+                    </p>
+                    <p className="break-all font-medium text-stone-900">
+                      {selectedLog.userAgent || "—"}
+                    </p>
+                  </div>
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">Role</div>
-                  <div className="font-medium text-gray-900">{selectedLog.role || "—"}</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">Module</div>
-                  <div className="font-medium text-gray-900">{selectedLog.moduleKey || "—"}</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">Method</div>
-                  <div className="font-medium text-gray-900">{selectedLog.method || "—"}</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">Status</div>
-                  <div className="font-medium text-gray-900">{selectedLog.statusCode ?? "—"}</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">IP</div>
-                  <div className="font-medium text-gray-900">{selectedLog.ip || "—"}</div>
-                </div>
-                <div className="text-sm">
-                  <div className="text-xs text-gray-500">Duration</div>
-                  <div className="font-medium text-gray-900">
-                    {selectedLog.durationMs != null ? `${selectedLog.durationMs} ms` : "—"}
+              {selectedDetailsTab === "request" ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
+                      Route path
+                    </p>
+                    <p className="break-all rounded-lg border border-border bg-canvas-muted px-2 py-1.5 font-mono text-[10px]">
+                      {selectedLog.routePath || "—"}
+                    </p>
                   </div>
-                </div>
-                <div className="text-sm sm:col-span-2">
-                  <div className="text-xs text-gray-500">User Agent</div>
-                  <div className="font-medium text-gray-900 break-all">
-                    {selectedLog.userAgent || "—"}
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
+                      Full path
+                    </p>
+                    <p className="break-all rounded-lg border border-border bg-canvas-muted px-2 py-1.5 font-mono text-[10px]">
+                      {selectedLog.path || "—"}
+                    </p>
                   </div>
+                  {["query", "params", "requestBody"].map((key) => (
+                    <div key={key}>
+                      <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
+                        {key === "requestBody" ? "Request body" : key}
+                      </p>
+                      <pre className="max-h-40 overflow-auto rounded-lg border border-border bg-canvas-muted p-2 font-mono text-[10px]">
+                        {prettyJson(selectedLog[key])}
+                      </pre>
+                    </div>
+                  ))}
                 </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-gray-500 mb-2">Route Path Pattern</div>
-                <div className="text-sm text-gray-900 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                  {selectedLog.routePath || "—"}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-gray-500 mb-2">Full Request Path</div>
-                <div className="text-sm text-gray-900 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                  {selectedLog.path || "—"}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">Query</div>
-                  <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs overflow-auto">
-                    {prettyJson(selectedLog.query)}
-                  </pre>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">Params</div>
-                  <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs overflow-auto">
-                    {prettyJson(selectedLog.params)}
-                  </pre>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 mb-2">Request Body</div>
-                  <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs overflow-auto">
-                    {prettyJson(selectedLog.requestBody)}
-                  </pre>
-                </div>
-              </div>
+              ) : null}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
-

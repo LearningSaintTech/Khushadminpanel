@@ -23,7 +23,15 @@ const DriverRoutes = () => {
       <Route path="verify-otp" element={<DriverOTP />} />
 
       {/* Protected driver routes – header + bottom nav via layout */}
-      <Route element={<ProtectedRoute allowedRoles={["DRIVER"]} />}>
+      <Route
+        element={
+          <ProtectedRoute
+            allowedRoles={["DRIVER"]}
+            loginPath="/driver/login"
+            wrongRolePolicy="login"
+          />
+        }
+      >
         <Route element={<DriverAppLayout />}>
           <Route element={<BottomNavLayout />}>
             <Route path="dashboard" element={<DriverDashboard />} />

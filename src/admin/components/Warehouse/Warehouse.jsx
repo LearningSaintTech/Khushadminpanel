@@ -12,9 +12,28 @@ import {
   updateWarehouseStock,
 } from "../../apis/Warehouseapi";
 import { getPincodes } from "../../apis/Pincodeapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+const inputClass =
+  "rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
+const tableScrollShell =
+  "max-h-[calc(100vh-14rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]";
+
+const thClass =
+  "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500";
+
+const btnPrimary =
+  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50";
+
+const btnOutline =
+  "inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-white px-3 py-1.5 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted disabled:opacity-40";
 
 export default function Warehouse() {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -23,7 +42,7 @@ export default function Warehouse() {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
 
   // Pincode Modal State
   const [showPincodeModal, setShowPincodeModal] = useState(false);
@@ -102,7 +121,7 @@ export default function Warehouse() {
 
   useEffect(() => {
     fetchWarehouses();
-  }, [currentPage, debouncedSearchTerm]);
+  }, [currentPage, limit, debouncedSearchTerm]);
 
   useEffect(() => {
     if (!showPincodeModal || !selectedWarehouse?.id) return;
@@ -218,7 +237,7 @@ export default function Warehouse() {
   };
 
   const handleEdit = (warehouse) => {
-    navigate(`/admin/warehouse/edit/${warehouse.id}`);
+    navigate(ap(`warehouse/edit/${warehouse.id}`));
   };
 
   // ────────────────────────────────────────────────
@@ -515,179 +534,184 @@ export default function Warehouse() {
   );
 
   return (
-    <div className="w-full min-h-screen bg-white table-fixed">
-      {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
-        <div className="px-4 sm:px-6 py-3 sm:py-4">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-black">
-            Warehouses
-          </h1>
-        </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Warehouses
+        </h1>
+        <input
+          type="text"
+          placeholder="Search name / city / state…"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className={`${inputClass} min-w-[180px] flex-1 max-w-[280px]`}
+        />
+        <select
+          value={limit}
+          onChange={(e) => {
+            setCurrentPage(1);
+            setLimit(parseInt(e.target.value, 10) || 20);
+          }}
+          className={`${inputClass} shrink-0 min-w-[108px]`}
+          title="Rows per page"
+        >
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+          <option value={100}>100 / page</option>
+        </select>
+        <button type="button" onClick={() => navigate(ap("warehouse/create"))} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden /> Add
+        </button>
       </div>
 
-      <div className="px-4 sm:px-6 py-4 sm:py-6">
-        {/* Controls */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <input
-            type="text"
-            placeholder="Search by name, city or state..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 min-w-0 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-black focus:ring-1 focus:ring-black"
-          />
-          <button
-            onClick={() => navigate("/admin/warehouse/create")}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 w-full sm:w-auto"
-          >
-            <Plus size={16} /> Add Warehouse
-          </button>
+      {error ? (
+        <div className="mb-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
+          {error}
         </div>
+      ) : null}
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Main Table */}
-        <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
-          <div className="w-full table-fixed">
-            <table className="w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600">#</th>
-                  <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600">Name</th>
-                  <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Address
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">City</th>
-                  <th className="hidden sm:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    State
-                  </th>
-                  <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Pincode
-                  </th>
-                  <th className="hidden lg:table-cell px-4 py-3 text-left text-xs font-semibold text-gray-600">
-                    Phone
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+      <div className={tableScrollShell}>
+        <table className="min-w-[980px] w-full divide-y divide-border text-[11px]">
+          <thead className="sticky top-0 z-10 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Name</th>
+              <th className={`${thClass} hidden md:table-cell`}>Address</th>
+              <th className={thClass}>City</th>
+              <th className={`${thClass} hidden sm:table-cell`}>State</th>
+              <th className={`${thClass} hidden lg:table-cell`}>Pincode</th>
+              <th className={`${thClass} hidden lg:table-cell`}>Phone</th>
+              <th className={`${thClass} whitespace-nowrap`}>Status</th>
+              <th className={`${thClass} min-w-[180px] text-right whitespace-nowrap`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-gray-500">
-                      Loading warehouses...
+                    <td colSpan={9} className="py-10 text-center text-stone-500">
+                      Loading warehouses…
                     </td>
                   </tr>
                 ) : filteredWarehouses.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-gray-500">
+                    <td colSpan={9} className="py-10 text-center text-stone-500">
                       No warehouses found
                     </td>
                   </tr>
                 ) : (
                   filteredWarehouses.map((wh, idx) => (
-                    <tr key={wh.id} className="hover:bg-gray-50/60 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                    <tr key={wh.id} className="transition-colors hover:bg-canvas-muted/50">
+                      <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
                         {(currentPage - 1) * limit + idx + 1}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium">{wh.name}</td>
-                      <td className="hidden md:table-cell px-4 py-3 text-sm text-gray-600 truncate max-w-xs">
+                      <td className="px-2 py-2 whitespace-nowrap font-semibold text-stone-900">
+                        {wh.name}
+                      </td>
+                      <td className="hidden max-w-xs truncate px-2 py-2 text-stone-600 md:table-cell">
                         {wh.address}
                       </td>
-                      <td className="px-4 py-3 text-sm">{wh.city}</td>
-                      <td className="hidden sm:table-cell px-4 py-3 text-sm">{wh.state}</td>
-                      <td className="hidden lg:table-cell px-4 py-3 text-sm">{wh.pincode}</td>
-                      <td className="hidden lg:table-cell px-4 py-3 text-sm">{wh.phone}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2 whitespace-nowrap text-stone-700">{wh.city}</td>
+                      <td className="hidden px-2 py-2 whitespace-nowrap text-stone-700 sm:table-cell">
+                        {wh.state}
+                      </td>
+                      <td className="hidden px-2 py-2 whitespace-nowrap text-stone-700 lg:table-cell">
+                        {wh.pincode}
+                      </td>
+                      <td className="hidden px-2 py-2 whitespace-nowrap text-stone-700 lg:table-cell">
+                        {wh.phone}
+                      </td>
+                <td className="px-2 py-2 whitespace-nowrap">
                         <button
                           onClick={() => handleToggleActive(wh)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
                             wh.isActive
-                              ? "bg-green-100 text-green-800 hover:bg-green-200"
-                              : "bg-red-100 text-red-800 hover:bg-red-200"
+                        ? "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                        : "border-rose-200 bg-rose-100 text-rose-800 hover:bg-rose-200"
                           }`}
                         >
                           {wh.isActive ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        <div className="flex items-center justify-end gap-3 flex-wrap">
-                          <button
-                            onClick={() => handleManagePincodes(wh)}
-                            className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                          >
-                            <MapPin size={14} /> Pincodes
-                          </button>
-                          <button
-                            onClick={() => handleManageStock(wh)}
-                            className="text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"
-                          >
-                            <Package size={14} /> Stock
-                          </button>
-                          <button
-                            onClick={() => handleEdit(wh)}
-                            className="text-gray-700 hover:text-black font-medium"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(wh.id)}
-                            className="text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                <td className="px-2 py-2 text-right whitespace-nowrap min-w-[180px]">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => handleManagePincodes(wh)}
+                      className="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100"
+                      title="Manage pincodes"
+                    >
+                      <MapPin size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleManageStock(wh)}
+                      className="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100"
+                      title="Manage stock"
+                    >
+                      <Package size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleEdit(wh)}
+                      className="inline-flex items-center justify-center rounded-lg border border-border bg-canvas-muted px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-canvas-muted/80"
+                      title="Edit"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(wh.id)}
+                      className="inline-flex items-center justify-center rounded-lg border border-danger/30 bg-danger-bg px-2.5 py-1 text-[11px] font-semibold text-danger hover:bg-danger/10"
+                      title="Delete"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
         </div>
 
         {/* Main Pagination */}
         {warehouses.length > 0 && (
-          <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="text-sm text-gray-600">
-              Showing <strong>{filteredWarehouses.length}</strong> of{" "}
-              <strong>{totalPages * limit}</strong> warehouses
-            </div>
-            <div className="flex items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] text-stone-500">
+              Showing <span className="font-semibold text-stone-800">{filteredWarehouses.length}</span> · Page{" "}
+              <span className="font-semibold text-stone-800">{currentPage}</span> /{" "}
+              <span className="font-semibold text-stone-800">{totalPages}</span>
+            </p>
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1 || loading}
-                className="px-4 py-2 border rounded disabled:opacity-50 hover:bg-gray-50"
+                className={btnOutline}
               >
                 Previous
               </button>
-              <span className="px-5 py-2 bg-gray-100 rounded font-medium">
-                Page {currentPage} of {totalPages}
-              </span>
               <button
+                type="button"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages || loading}
-                className="px-4 py-2 border rounded disabled:opacity-50 hover:bg-gray-50"
+                className={btnOutline}
               >
                 Next
               </button>
             </div>
           </div>
         )}
-      </div>
 
       {/* Pincode Modal */}
       {showPincodeModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-xl font-bold">
-                Manage Pincodes — {selectedWarehouse?.name}
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-border">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-canvas-muted/40 px-3 py-2">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-stone-900">Pincodes</h2>
+                <p className="truncate text-[11px] text-stone-500">{selectedWarehouse?.name || "—"}</p>
+              </div>
               <button
+                type="button"
                 onClick={() => {
                   setShowPincodeModal(false);
                   setSelectedWarehouse(null);
@@ -699,16 +723,17 @@ export default function Warehouse() {
                   setPincodeModalMessage({ type: "success", text: "" });
                   setPincodePage(1);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="rounded-lg p-2 text-stone-600 transition hover:bg-canvas-muted"
+                title="Close"
               >
-                <X size={24} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-3 space-y-3 max-h-[calc(90vh-3rem)] overflow-auto">
               {(pincodeModalMessage?.text || "").trim() && (
                 <div
-                  className={`rounded-lg border p-3 text-sm ${
+                  className={`rounded-xl border px-3 py-2 text-[12px] ${
                     pincodeModalMessage.type === "error"
                       ? "bg-red-50 border-red-200 text-red-700"
                       : "bg-emerald-50 border-emerald-200 text-emerald-700"
@@ -719,7 +744,7 @@ export default function Warehouse() {
               )}
 
               <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={newPincode}
@@ -731,12 +756,13 @@ export default function Warehouse() {
                       }
                     }}
                     placeholder="Add by pincode (6 digits)"
-                    className="flex-1 px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                    className={`${inputClass} flex-1`}
                   />
                   <button
+                    type="button"
                     onClick={handleAddTypedPincode}
                     disabled={pincodeActionLoading}
-                    className="px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-900 flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={btnPrimary}
                   >
                     {pincodeActionLoading ? "Adding..." : "Add"}
                   </button>
@@ -750,31 +776,27 @@ export default function Warehouse() {
                     setPincodeSearch(e.target.value);
                     setPincodePage(1);
                   }}
-                  className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  className={`${inputClass} w-full`}
                 />
 
                 {pincodeLoading ? (
-                  <div className="text-center py-10 text-gray-500">Loading pincodes...</div>
+                  <div className="py-10 text-center text-stone-500">Loading pincodes…</div>
                 ) : pincodes.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">No pincodes added yet</div>
+                  <div className="py-10 text-center text-stone-500">No pincodes added yet</div>
                 ) : visiblePincodes.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">No matching pincodes</div>
+                  <div className="py-10 text-center text-stone-500">No matching pincodes</div>
                 ) : (
                   <>
-                    <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-hidden rounded-xl border border-border">
                       <div className="max-h-80 overflow-y-auto">
-                        <table className="w-full">
-                          <thead className="bg-gray-50 sticky top-0">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
                             <tr>
-                              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700">
-                                Pincode
-                              </th>
-                              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-700 w-28">
-                                Action
-                              </th>
+                              <th className={`${thClass} px-3`}>Pincode</th>
+                              <th className={`${thClass} w-28 px-3 text-right`}>Action</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y">
+                          <tbody className="divide-y divide-border/60">
                             {visiblePincodes.map((pin, i) => {
                               const value = getPinCodeValue(pin) || "—";
                               const pincodeId = getPinCodeId(pin);
@@ -782,20 +804,20 @@ export default function Warehouse() {
                                 (pincodeId && assignedPincodeIds.has(String(pincodeId))) ||
                                 assignedPinCodes.has(String(value));
                               return (
-                                <tr key={pincodeId || i} className="hover:bg-gray-50">
-                                  <td className="px-5 py-3.5 font-medium">{value}</td>
-                                  <td className="px-5 py-3.5 text-right">
+                                <tr key={pincodeId || i} className="hover:bg-canvas-muted/50">
+                                  <td className="px-3 py-2 font-semibold text-stone-900">{value}</td>
+                                  <td className="px-3 py-2 text-right">
                                     {isAssigned ? (
                                       <button
                                         onClick={() => handleDeletePincode(pincodeId)}
-                                        className="text-red-600 hover:text-red-800 font-medium"
+                                        className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100"
                                       >
                                         Remove
                                       </button>
                                     ) : (
                                       <button
                                         onClick={() => handleAddPincode(pin)}
-                                        className="text-green-600 hover:text-green-800 font-medium"
+                                        className="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
                                       >
                                         Add
                                       </button>
@@ -810,31 +832,30 @@ export default function Warehouse() {
                     </div>
 
                     {pincodeTotal > 0 && (
-                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-600">
+                      <div className="flex flex-col items-center justify-between gap-2 text-[11px] text-stone-500 sm:flex-row">
                         <div>
                           Showing {(pincodePage - 1) * PINCODE_LIMIT + 1} –{" "}
-                          {Math.min(pincodePage * PINCODE_LIMIT, pincodeTotal)} of{" "}
-                          {pincodeTotal}
+                          {Math.min(pincodePage * PINCODE_LIMIT, pincodeTotal)} of {pincodeTotal}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={() => setPincodePage((p) => Math.max(1, p - 1))}
                             disabled={pincodePage === 1}
-                            className="px-4 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+                            className={btnOutline}
                           >
                             Prev
                           </button>
-                          <span className="px-4 py-1.5 font-medium bg-gray-100 rounded">
+                          <span className="rounded-lg bg-canvas-muted px-3 py-1.5 font-semibold text-stone-700">
                             Page {pincodePage} of {pincodeTotalPages}
                           </span>
                           <button
+                            type="button"
                             onClick={() =>
-                              setPincodePage((p) =>
-                                Math.min(pincodeTotalPages, p + 1)
-                              )
+                              setPincodePage((p) => Math.min(pincodeTotalPages, p + 1))
                             }
                             disabled={pincodePage >= pincodeTotalPages}
-                            className="px-4 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+                            className={btnOutline}
                           >
                             Next
                           </button>
@@ -851,13 +872,15 @@ export default function Warehouse() {
 
       {/* Stock Modal */}
       {showStockModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-xl font-bold">
-                Manage Stock — {selectedWarehouse?.name}
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-border">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-canvas-muted/40 px-3 py-2">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-stone-900">Stock</h2>
+                <p className="truncate text-[11px] text-stone-500">{selectedWarehouse?.name || "—"}</p>
+              </div>
               <button
+                type="button"
                 onClick={() => {
                   setShowStockModal(false);
                   setSelectedWarehouse(null);
@@ -866,22 +889,23 @@ export default function Warehouse() {
                   setStockSearch("");
                   setStockPage(1);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="rounded-lg p-2 text-stone-600 transition hover:bg-canvas-muted"
+                title="Close"
               >
-                <X size={24} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              <div className="bg-gray-50 p-5 rounded-xl space-y-4">
-                <h3 className="font-semibold text-gray-700">Update Stock</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-3 space-y-3 max-h-[calc(90vh-3rem)] overflow-auto">
+              <div className="space-y-2 rounded-xl border border-border bg-canvas-muted/40 p-3">
+                <h3 className="text-xs font-semibold text-stone-800">Update stock</h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <input
                     type="text"
                     value={stockForm.sku}
                     onChange={(e) => setStockForm({ ...stockForm, sku: e.target.value })}
                     placeholder="SKU (e.g. PROD-RED-XL)"
-                    className="px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                    className={inputClass}
                   />
                   <input
                     type="number"
@@ -889,13 +913,14 @@ export default function Warehouse() {
                     onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })}
                     placeholder="Quantity"
                     min="0"
-                    className="px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                    className={inputClass}
                   />
                   <button
+                    type="button"
                     onClick={handleUpdateStock}
-                    className="px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-900 flex items-center justify-center gap-2 whitespace-nowrap"
+                    className={`${btnPrimary} justify-center`}
                   >
-                    <Plus size={16} /> Update
+                    <Plus className="h-3.5 w-3.5" aria-hidden /> Update
                   </button>
                 </div>
               </div>
@@ -909,43 +934,37 @@ export default function Warehouse() {
                     setStockSearch(e.target.value);
                     setStockPage(1);
                   }}
-                  className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  className={`${inputClass} w-full`}
                 />
 
                 {stockLoading ? (
-                  <div className="text-center py-10 text-gray-500">Loading stock...</div>
+                  <div className="py-10 text-center text-stone-500">Loading stock…</div>
                 ) : stock.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">No stock items found</div>
+                  <div className="py-10 text-center text-stone-500">No stock items found</div>
                 ) : filteredStock.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">No matching items</div>
+                  <div className="py-10 text-center text-stone-500">No matching items</div>
                 ) : (
                   <>
-                    <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-hidden rounded-xl border border-border">
                       <div className="max-h-80 overflow-y-auto">
-                        <table className="w-full">
-                          <thead className="bg-gray-50 sticky top-0">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
                             <tr>
-                              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700">
-                                SKU
-                              </th>
-                              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-700">
-                                Product
-                              </th>
-                              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-700 w-32">
-                                Quantity
-                              </th>
+                              <th className={`${thClass} px-3`}>SKU</th>
+                              <th className={`${thClass} px-3`}>Product</th>
+                              <th className={`${thClass} w-32 px-3 text-right`}>Quantity</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y">
+                          <tbody className="divide-y divide-border/60">
                             {paginatedStock.map((item, i) => (
-                              <tr key={item._id || item.id || i} className="hover:bg-gray-50">
-                                <td className="px-5 py-3.5 font-medium">
+                              <tr key={item._id || item.id || i} className="hover:bg-canvas-muted/50">
+                                <td className="px-3 py-2 font-semibold text-stone-900">
                                   {item.sku || item.SKU || "—"}
                                 </td>
-                                <td className="px-5 py-3.5 text-gray-600">
+                                <td className="px-3 py-2 text-stone-600">
                                   {item.productName || item.name || "—"}
                                 </td>
-                                <td className="px-5 py-3.5 text-right font-semibold">
+                                <td className="px-3 py-2 text-right font-semibold text-stone-900">
                                   {item.quantity ?? 0}
                                 </td>
                               </tr>
@@ -956,7 +975,7 @@ export default function Warehouse() {
                     </div>
 
                     {filteredStock.length > STOCK_LIMIT && (
-                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-600">
+                      <div className="flex flex-col items-center justify-between gap-2 text-[11px] text-stone-500 sm:flex-row">
                         <div>
                           Showing {(stockPage - 1) * STOCK_LIMIT + 1} –{" "}
                           {Math.min(stockPage * STOCK_LIMIT, filteredStock.length)} of{" "}
@@ -964,23 +983,25 @@ export default function Warehouse() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={() => setStockPage((p) => Math.max(1, p - 1))}
                             disabled={stockPage === 1}
-                            className="px-4 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+                            className={btnOutline}
                           >
                             Prev
                           </button>
-                          <span className="px-4 py-1.5 font-medium bg-gray-100 rounded">
+                          <span className="rounded-lg bg-canvas-muted px-3 py-1.5 font-semibold text-stone-700">
                             Page {stockPage} of {Math.ceil(filteredStock.length / STOCK_LIMIT)}
                           </span>
                           <button
+                            type="button"
                             onClick={() =>
                               setStockPage((p) =>
                                 Math.min(Math.ceil(filteredStock.length / STOCK_LIMIT), p + 1)
                               )
                             }
                             disabled={stockPage >= Math.ceil(filteredStock.length / STOCK_LIMIT)}
-                            className="px-4 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+                            className={btnOutline}
                           >
                             Next
                           </button>

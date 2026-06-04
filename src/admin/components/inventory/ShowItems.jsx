@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+﻿import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
@@ -65,7 +65,7 @@ function normalizeWarehouseRows(res) {
 }
 
 const inputClass =
-  "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition disabled:bg-slate-50 disabled:cursor-not-allowed";
+  "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-brand-500/15 transition disabled:bg-slate-50 disabled:cursor-not-allowed";
 const labelClass = "mb-1 block text-[11px] font-medium text-slate-700";
 const dropdownBtnClass = `${inputClass} flex items-center justify-between gap-2`;
 const btnPrimary =
@@ -176,7 +176,7 @@ function ColumnPickerDropdown({
                     checked={checked}
                     disabled={locked}
                     onChange={() => onToggle(col.key)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                   />
                   <span className="text-slate-800">{col.label}</span>
                 </label>
@@ -187,7 +187,7 @@ function ColumnPickerDropdown({
             <button
               type="button"
               onClick={onSelectAll}
-              className="text-[10px] font-medium text-indigo-600 hover:text-indigo-800"
+              className="text-[10px] font-medium text-brand-600 hover:text-indigo-800"
             >
               Show all
             </button>
@@ -1289,7 +1289,7 @@ const ShowItems = () => {
                 <button
                   type="button"
                   onClick={() => startPriceEdit(item)}
-                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-brand-600 transition-colors"
                   title="Edit MRP"
                 >
                   <Edit className="h-3 w-3" />
@@ -1339,7 +1339,7 @@ const ShowItems = () => {
                 <button
                   type="button"
                   onClick={() => startDiscountEdit(item)}
-                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                  className="rounded p-0.5 text-slate-400 hover:bg-indigo-50 hover:text-brand-600 transition-colors"
                   title="Edit discount"
                 >
                   <Edit className="h-3 w-3" />
@@ -1376,7 +1376,7 @@ const ShowItems = () => {
           Move central stock to a warehouse via{" "}
           <Link
             to="/admin/inventory/stock-management"
-            className="font-medium text-indigo-600 hover:text-indigo-800 underline-offset-2 hover:underline"
+            className="font-medium text-brand-600 hover:text-indigo-800 underline-offset-2 hover:underline"
           >
             Stock management
           </Link>
@@ -1406,18 +1406,18 @@ const ShowItems = () => {
                   </span>
                   <ChevronDown
                     size={14}
-                    className={`text-gray-500 transition-transform flex-shrink-0 ml-2 ${
+                    className={`text-stone-500 transition-transform flex-shrink-0 ml-2 ${
                       isCategoryDropdownOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
                 {isCategoryDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-2 bg-white border-2 border-gray-300 rounded-lg shadow-lg max-h-96 flex flex-col">
-                    <div className="p-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+                  <div className="absolute z-50 w-full mt-2 bg-white border-2 border-border rounded-lg shadow-lg max-h-96 flex flex-col">
+                    <div className="p-3 border-b border-border sticky top-0 bg-white z-10">
                       <div className="relative">
                         <Search
-                          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400"
                           size={16}
                         />
                         <input
@@ -1429,7 +1429,7 @@ const ShowItems = () => {
                             setCategoryCurrentPage(1);
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black"
+                          className="w-full pl-10 pr-4 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100/20 focus:border-brand-500"
                           autoFocus
                         />
                       </div>
@@ -1437,11 +1437,11 @@ const ShowItems = () => {
 
                     <div className="overflow-y-auto flex-1 min-h-0">
                       {loadingCategories && allCategories.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">
+                        <div className="p-4 text-center text-stone-500 text-sm">
                           Loading categories...
                         </div>
                       ) : getDisplayedCategories().length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">
+                        <div className="p-4 text-center text-stone-500 text-sm">
                           {categorySearchTerm
                             ? "No categories found matching your search"
                             : "No categories available"}
@@ -1451,10 +1451,10 @@ const ShowItems = () => {
                           <button
                             type="button"
                             onClick={() => handleCategorySelect("")}
-                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50/30 transition-colors ${
                               selectedCategoryId === ""
-                                ? "bg-gray-100 font-semibold text-black"
-                                : "text-gray-700"
+                                ? "bg-canvas-muted font-semibold text-black"
+                                : "text-stone-700"
                             }`}
                           >
                             All Categories
@@ -1464,10 +1464,10 @@ const ShowItems = () => {
                               key={cat._id}
                               type="button"
                               onClick={() => handleCategorySelect(cat._id)}
-                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors border-t border-gray-100 ${
+                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50/30 transition-colors border-t border-gray-100 ${
                                 selectedCategoryId === cat._id
-                                  ? "bg-gray-100 font-semibold text-black"
-                                  : "text-gray-700"
+                                  ? "bg-canvas-muted font-semibold text-black"
+                                  : "text-stone-700"
                               }`}
                             >
                               {cat.name || cat.title || "Unnamed Category"}
@@ -1484,7 +1484,7 @@ const ShowItems = () => {
                                   setCategoryCurrentPage((prev) => prev + 1);
                                 }}
                                 disabled={loadingCategories}
-                                className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-4 py-2.5 text-sm text-stone-600 hover:bg-brand-50/30 border-t border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {loadingCategories
                                   ? "Loading..."
@@ -1496,8 +1496,8 @@ const ShowItems = () => {
                     </div>
 
                     {getDisplayedCategories().length > 0 && (
-                      <div className="p-3 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-                        <div className="flex items-center justify-between text-xs text-gray-600">
+                      <div className="p-3 border-t border-border bg-canvas-muted sticky bottom-0">
+                        <div className="flex items-center justify-between text-xs text-stone-600">
                           <span>
                             {debouncedCategorySearchTerm
                               ? `Found ${getDisplayedCategories().length} result${getDisplayedCategories().length !== 1 ? "s" : ""}`
@@ -1523,7 +1523,7 @@ const ShowItems = () => {
                                     categoryCurrentPage === 1 ||
                                     loadingCategories
                                   }
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-2 py-1 text-xs border border-border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Prev
                                 </button>
@@ -1543,7 +1543,7 @@ const ShowItems = () => {
                                     categoryCurrentPage >= categoryTotalPages ||
                                     loadingCategories
                                   }
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-2 py-1 text-xs border border-border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Next
                                 </button>
@@ -1582,18 +1582,18 @@ const ShowItems = () => {
                   </span>
                   <ChevronDown
                     size={14}
-                    className={`text-gray-500 transition-transform flex-shrink-0 ml-2 ${
+                    className={`text-stone-500 transition-transform flex-shrink-0 ml-2 ${
                       isSubcategoryDropdownOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
                 {isSubcategoryDropdownOpen && selectedCategoryId && (
-                  <div className="absolute z-50 w-full mt-2 bg-white border-2 border-gray-300 rounded-lg shadow-lg max-h-96 flex flex-col">
-                    <div className="p-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+                  <div className="absolute z-50 w-full mt-2 bg-white border-2 border-border rounded-lg shadow-lg max-h-96 flex flex-col">
+                    <div className="p-3 border-b border-border sticky top-0 bg-white z-10">
                       <div className="relative">
                         <Search
-                          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400"
                           size={16}
                         />
                         <input
@@ -1605,7 +1605,7 @@ const ShowItems = () => {
                             setSubcategoryCurrentPage(1);
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black"
+                          className="w-full pl-10 pr-4 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100/20 focus:border-brand-500"
                           autoFocus
                         />
                       </div>
@@ -1613,11 +1613,11 @@ const ShowItems = () => {
 
                     <div className="overflow-y-auto flex-1 min-h-0">
                       {loadingSubcategories && allSubcategories.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">
+                        <div className="p-4 text-center text-stone-500 text-sm">
                           Loading subcategories...
                         </div>
                       ) : getDisplayedSubcategories().length === 0 ? (
-                        <div className="p-4 text-center text-gray-500 text-sm">
+                        <div className="p-4 text-center text-stone-500 text-sm">
                           {subcategorySearchTerm
                             ? "No subcategories found matching your search"
                             : "No subcategories available"}
@@ -1627,10 +1627,10 @@ const ShowItems = () => {
                           <button
                             type="button"
                             onClick={() => handleSubcategorySelect("")}
-                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            className={`w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50/30 transition-colors ${
                               selectedSubcategoryId === ""
-                                ? "bg-gray-100 font-semibold text-black"
-                                : "text-gray-700"
+                                ? "bg-canvas-muted font-semibold text-black"
+                                : "text-stone-700"
                             }`}
                           >
                             All Subcategories
@@ -1640,10 +1640,10 @@ const ShowItems = () => {
                               key={sub._id}
                               type="button"
                               onClick={() => handleSubcategorySelect(sub._id)}
-                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors border-t border-gray-100 ${
+                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-brand-50/30 transition-colors border-t border-gray-100 ${
                                 selectedSubcategoryId === sub._id
-                                  ? "bg-gray-100 font-semibold text-black"
-                                  : "text-gray-700"
+                                  ? "bg-canvas-muted font-semibold text-black"
+                                  : "text-stone-700"
                               }`}
                             >
                               {sub.name || sub.title || "Unnamed Subcategory"}
@@ -1660,7 +1660,7 @@ const ShowItems = () => {
                                   setSubcategoryCurrentPage((prev) => prev + 1);
                                 }}
                                 disabled={loadingSubcategories}
-                                className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 border-t border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-4 py-2.5 text-sm text-stone-600 hover:bg-brand-50/30 border-t border-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {loadingSubcategories
                                   ? "Loading..."
@@ -1672,8 +1672,8 @@ const ShowItems = () => {
                     </div>
 
                     {getDisplayedSubcategories().length > 0 && (
-                      <div className="p-3 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-                        <div className="flex items-center justify-between text-xs text-gray-600">
+                      <div className="p-3 border-t border-border bg-canvas-muted sticky bottom-0">
+                        <div className="flex items-center justify-between text-xs text-stone-600">
                           <span>
                             {debouncedSubcategorySearchTerm
                               ? `Found ${getDisplayedSubcategories().length} result${getDisplayedSubcategories().length !== 1 ? "s" : ""}`
@@ -1699,7 +1699,7 @@ const ShowItems = () => {
                                     subcategoryCurrentPage === 1 ||
                                     loadingSubcategories
                                   }
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-2 py-1 text-xs border border-border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Prev
                                 </button>
@@ -1721,7 +1721,7 @@ const ShowItems = () => {
                                       subcategoryTotalPages ||
                                     loadingSubcategories
                                   }
-                                  className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="px-2 py-1 text-xs border border-border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Next
                                 </button>
@@ -1905,7 +1905,7 @@ const ShowItems = () => {
                           <button
                             type="button"
                             onClick={() => openEdit(item)}
-                            className="rounded p-1 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            className="rounded p-1 text-slate-500 hover:bg-indigo-50 hover:text-brand-600 transition-colors"
                             title="Edit"
                           >
                             <Edit className="h-3.5 w-3.5" />
@@ -1929,7 +1929,7 @@ const ShowItems = () => {
               onClick={() => setWarehouseUiItem(null)}
             />
             <div
-              className="relative w-full max-w-4xl mt-4 sm:mt-8 rounded-xl border border-gray-200 bg-white shadow-2xl max-h-[90vh] flex flex-col overflow-hidden"
+              className="relative w-full max-w-4xl mt-4 sm:mt-8 rounded-xl border border-border bg-white shadow-2xl max-h-[90vh] flex flex-col overflow-hidden"
               role="dialog"
               aria-modal="true"
               aria-labelledby="showitems-wh-title"
@@ -1956,7 +1956,7 @@ const ShowItems = () => {
                 <button
                   type="button"
                   onClick={() => setWarehouseUiItem(null)}
-                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors shrink-0"
+                  className="p-2 rounded-lg border border-border hover:bg-canvas-muted transition-colors shrink-0"
                   aria-label="Close"
                 >
                   <X size={18} />
@@ -1964,22 +1964,22 @@ const ShowItems = () => {
               </div>
 
               <div className="overflow-y-auto flex-1 px-5 py-4 space-y-6">
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <h3 className="text-sm font-semibold text-gray-900">
+                <div className="rounded-xl border border-border bg-canvas-muted p-4">
+                  <h3 className="text-sm font-semibold text-stone-900">
                     Add all SKUs to a warehouse
                   </h3>
-                  <p className="text-xs text-gray-600 mt-1 max-w-2xl">
+                  <p className="text-xs text-stone-600 mt-1 max-w-2xl">
                     Moves the same quantity from <strong>central</strong> catalog
                     stock into the chosen warehouse for every SKU on this product.
                   </p>
                   <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-gray-600 min-w-[200px] flex-1">
+                    <label className="flex flex-col gap-1 text-xs text-stone-600 min-w-[200px] flex-1">
                       <span className="font-medium text-gray-800">Warehouse</span>
                       <select
                         value={pickWarehouseId}
                         onChange={(e) => setPickWarehouseId(e.target.value)}
                         disabled={warehouseListLoading || whApplyLoading}
-                        className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white disabled:opacity-50"
+                        className="rounded-lg border border-border px-3 py-2.5 text-sm bg-white disabled:opacity-50"
                       >
                         {warehouseListOpts.length === 0 ? (
                           <option value="">
@@ -1996,7 +1996,7 @@ const ShowItems = () => {
                         )}
                       </select>
                     </label>
-                    <label className="flex flex-col gap-1 text-xs text-gray-600 w-full sm:w-28">
+                    <label className="flex flex-col gap-1 text-xs text-stone-600 w-full sm:w-28">
                       <span className="font-medium text-gray-800">Qty / SKU</span>
                       <input
                         type="number"
@@ -2005,7 +2005,7 @@ const ShowItems = () => {
                         value={whQtyPerSku}
                         onChange={(e) => setWhQtyPerSku(e.target.value)}
                         disabled={whApplyLoading}
-                        className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm disabled:opacity-50"
+                        className="rounded-lg border border-border px-3 py-2.5 text-sm disabled:opacity-50"
                       />
                     </label>
                     <button
@@ -2018,7 +2018,7 @@ const ShowItems = () => {
                         !Number.isInteger(Number(whQtyPerSku)) ||
                         Number(whQtyPerSku) < 1
                       }
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-black text-white px-5 py-2.5 text-sm font-medium hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 text-white px-5 py-2.5 text-sm font-medium hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {whApplyLoading ? (
                         <>
@@ -2034,7 +2034,7 @@ const ShowItems = () => {
 
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <h3 className="text-sm font-semibold text-gray-900">
+                    <h3 className="text-sm font-semibold text-stone-900">
                       Stock by warehouse
                     </h3>
                     <button
@@ -2043,14 +2043,14 @@ const ShowItems = () => {
                       disabled={
                         whPresenceLoading || warehouseListOpts.length === 0
                       }
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-40"
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-canvas-muted transition-colors disabled:opacity-40"
                     >
                       Refresh
                     </button>
                   </div>
-                  <div className="rounded-xl border border-gray-200 overflow-x-auto">
+                  <div className="rounded-xl border border-border overflow-x-auto">
                     <table className="w-full text-sm min-w-[520px]">
-                      <thead className="bg-gray-100 text-left text-xs uppercase tracking-wide text-gray-600">
+                      <thead className="bg-canvas-muted text-left text-xs uppercase tracking-wide text-stone-600">
                         <tr>
                           <th className="px-3 py-2.5 font-medium">Warehouse</th>
                           <th className="px-3 py-2.5 font-medium">Code</th>
@@ -2068,7 +2068,7 @@ const ShowItems = () => {
                           <tr>
                             <td
                               colSpan={5}
-                              className="px-3 py-8 text-center text-gray-500"
+                              className="px-3 py-8 text-center text-stone-500"
                             >
                               <span className="inline-flex items-center gap-2 justify-center">
                                 <Loader2 className="animate-spin" size={16} />
@@ -2080,7 +2080,7 @@ const ShowItems = () => {
                           <tr>
                             <td
                               colSpan={5}
-                              className="px-3 py-6 text-center text-gray-500 text-sm"
+                              className="px-3 py-6 text-center text-stone-500 text-sm"
                             >
                               No warehouses loaded, or this product has no name to
                               match stock.
@@ -2096,7 +2096,7 @@ const ShowItems = () => {
                                   : "bg-white"
                               }`}
                             >
-                              <td className="px-3 py-2.5 font-medium text-gray-900">
+                              <td className="px-3 py-2.5 font-medium text-stone-900">
                                 {row.name}
                                 {row.fetchError ? (
                                   <span className="ml-1 text-xs text-amber-700">
@@ -2104,10 +2104,10 @@ const ShowItems = () => {
                                   </span>
                                 ) : null}
                               </td>
-                              <td className="px-3 py-2.5 text-gray-700">
+                              <td className="px-3 py-2.5 text-stone-700">
                                 {row.code || "—"}
                               </td>
-                              <td className="px-3 py-2.5 text-gray-700">
+                              <td className="px-3 py-2.5 text-stone-700">
                                 {row.city || "—"}
                               </td>
                               <td className="px-3 py-2.5 text-right tabular-nums">

@@ -1,33 +1,80 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Pencil } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Plus,
+  Search,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+} from "lucide-react";
 import { getDesigners, toggleDesignerStatus } from "../../apis/Designerapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  alertDanger,
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./designerShared";
+
+const LIMIT_OPTIONS = [10, 20, 50, 100];
 
 const DesignerList = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
-  const [pagination, setPagination] = useState({ totalPages: 1 });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [pagination, setPagination] = useState({ totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [selectedDesigner, setSelectedDesigner] = useState(null);
 
+  const rowIndexBase = useMemo(() => (page - 1) * limit, [page, limit]);
+  const total = pagination.total ?? 0;
+  const totalPages = pagination.totalPages || 1;
+  const rangeStart = total === 0 ? 0 : rowIndexBase + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * limit, total);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, limit]);
+
   const fetchRows = async () => {
     setLoading(true);
     setError("");
     try {
-      console.log("[DesignerList] fetch", { page, limit, search });
-      const res = await getDesigners(page, limit, search);
-      console.log("[DesignerList] fetch response", res);
+      const res = await getDesigners(page, limit, debouncedSearch);
       if (res?.success) {
         setRows(res.data?.designers || []);
-        setPagination(res.data?.pagination || { totalPages: 1 });
+        const pag = res.data?.pagination || {};
+        setPagination({
+          totalPages: pag.totalPages || 1,
+          total: pag.total ?? res.data?.designers?.length ?? 0,
+        });
+      } else {
+        setRows([]);
       }
     } catch (err) {
       setError(err?.message || "Failed to fetch designers.");
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -35,9 +82,10 @@ const DesignerList = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [page, search]);
+  }, [page, limit, debouncedSearch]);
 
   const onToggle = async (id) => {
+    if (!window.confirm("Change this designer's active status?")) return;
     setBusyId(id);
     setError("");
     try {
@@ -51,94 +99,152 @@ const DesignerList = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black p-4 sm:p-6">
-      <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Designers</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage designer accounts and inventory access.</p>
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Designers
+        </h1>
+        <div className="relative min-w-[140px] flex-1 sm:max-w-[220px]">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            placeholder="Search name / email / phone…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
-        <button className="inline-flex items-center justify-center rounded-full bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-900 transition-colors" onClick={() => navigate("/admin/designer/create")}>
-          Create Designer
+        <select
+          className="w-[108px] shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          title="Rows per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => navigate(ap("designer/create"))} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Create
         </button>
-      </div>
+      </form>
 
-      <div className="mb-4 sm:mb-5">
-        <input
-          className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5"
-          placeholder="Search by name/email/phone"
-          value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
-          }}
-        />
-      </div>
-      {error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className={alertDanger}>{error}</div> : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50/80">
+      <div className={tableScrollShell}>
+        <table className="min-w-[900px] w-full text-[11px]">
+          <thead className={tableHeadClass}>
             <tr>
-              <th className="text-left p-3.5 font-semibold text-gray-700">Name</th>
-              <th className="text-left p-3.5 font-semibold text-gray-700">Phone</th>
-              <th className="text-left p-3.5 font-semibold text-gray-700">Email</th>
-              <th className="text-left p-3.5 font-semibold text-gray-700">City</th>
-              <th className="text-left p-3.5 font-semibold text-gray-700">Status</th>
-              <th className="text-left p-3.5 font-semibold text-gray-700">Verified</th>
-              <th className="text-right p-3.5 font-semibold text-gray-700">Actions</th>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Name</th>
+              <th className={thClass}>Phone</th>
+              <th className={thClass}>Email</th>
+              <th className={thClass}>City</th>
+              <th className={`${thClass} text-center`}>Status</th>
+              <th className={`${thClass} text-center`}>Verified</th>
+              <th className={`${thClass} min-w-[120px] text-right`}>Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {loading ? (
-              <tr><td className="p-4 text-gray-500" colSpan={7}>Loading...</td></tr>
+          <tbody className="divide-y divide-border/60">
+            {loading && rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
+              </tr>
             ) : rows.length === 0 ? (
-              <tr><td className="p-4 text-gray-500" colSpan={7}>No designers found.</td></tr>
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
+                  No designers found.{" "}
+                  <button
+                    type="button"
+                    onClick={() => navigate(ap("designer/create"))}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    Create one
+                  </button>
+                </td>
+              </tr>
             ) : (
-              rows.map((d) => (
-                <tr key={d._id} className="border-t border-black/5">
-                  <td className="p-3.5 font-medium text-gray-900">{d.name}</td>
-                  <td className="p-3.5 text-gray-700">{d.countryCode} {d.phoneNumber}</td>
-                  <td className="p-3.5 text-gray-700">{d.email || "-"}</td>
-                  <td className="p-3.5 text-gray-700">{d.city || "-"}</td>
-                  <td className="p-3.5">
-                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${d.isActive ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>
+              rows.map((d, idx) => (
+                <tr key={d._id} className="hover:bg-canvas-muted/50">
+                  <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                    {rowIndexBase + idx + 1}
+                  </td>
+                  <td className="px-2 py-2 font-medium text-stone-900">{d.name}</td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-700">
+                    {d.countryCode} {d.phoneNumber}
+                  </td>
+                  <td className="px-2 py-2 text-stone-700">{d.email || "—"}</td>
+                  <td className="px-2 py-2 text-stone-700">{d.city || "—"}</td>
+                  <td className="px-2 py-2 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        d.isActive ? "bg-success-bg text-success" : "bg-canvas-muted text-stone-600"
+                      }`}
+                    >
                       {d.isActive ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="p-3.5">
-                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${d.isNumberVerified ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                  <td className="px-2 py-2 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        d.isNumberVerified
+                          ? "bg-brand-50 text-brand-700"
+                          : "bg-warning/10 text-warning"
+                      }`}
+                    >
                       {d.isNumberVerified ? "Verified" : "Pending"}
                     </span>
                   </td>
-                  <td className="p-3.5">
-                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-2 py-2 text-right">
                     <button
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                      type="button"
                       onClick={() => setSelectedDesigner(d)}
-                      title="View designer"
+                      className={btnIconEdit}
+                      title="View"
                       aria-label="View designer"
                     >
-                      <Eye size={14} />
+                      <Eye className="h-3.5 w-3.5" aria-hidden />
                     </button>
                     <button
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors"
-                      onClick={() => navigate(`/admin/designer/edit/${d._id}`)}
-                      title="Edit designer"
+                      type="button"
+                      onClick={() => navigate(ap(`designer/edit/${d._id}`))}
+                      className={`${btnIconEdit} ml-1.5`}
+                      title="Edit"
                       aria-label="Edit designer"
                     >
-                      <Pencil size={14} />
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
                     </button>
-                    <button className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={busyId === d._id} onClick={() => onToggle(d._id)}>
-                      {busyId === d._id ? "Updating..." : d.isActive ? "Deactivate" : "Activate"}
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`designer/inventory?designerId=${d._id}`))}
+                      className={`${btnIconEdit} ml-1.5`}
+                      title="Inventory"
+                      aria-label="Inventory"
+                    >
+                      <Package className="h-3.5 w-3.5" aria-hidden />
                     </button>
-                    <button className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors" onClick={() => navigate(`/admin/designer/inventory?designerId=${d._id}`)}>
-                      Inventory
+                    <button
+                      type="button"
+                      disabled={busyId === d._id}
+                      onClick={() => onToggle(d._id)}
+                      className={`${btnOutline} ml-1.5 !px-2 !py-1 text-[10px]`}
+                    >
+                      {busyId === d._id ? "…" : d.isActive ? "Off" : "On"}
                     </button>
-                    </div>
                   </td>
                 </tr>
               ))
@@ -147,44 +253,105 @@ const DesignerList = () => {
         </table>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm text-gray-700 hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
-        <span className="rounded-lg bg-gray-50 px-3 py-1.5 text-sm text-gray-700">Page {page} / {pagination.totalPages || 1}</span>
-        <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm text-gray-700 hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((p) => p + 1)}>Next</button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          {loading ? (
+            "Loading…"
+          ) : total === 0 ? (
+            "0 designers"
+          ) : (
+            <>
+              Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+              <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+              <span className="font-medium text-stone-700">{total}</span> total · Page{" "}
+              <span className="font-medium text-stone-700">{page}</span> of{" "}
+              <span className="font-medium text-stone-700">{totalPages}</span>
+            </>
+          )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => p - 1)}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
       </div>
 
       {selectedDesigner ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-black/10 bg-white p-5 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Designer Details</h2>
-              <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-black hover:text-white transition-colors" onClick={() => setSelectedDesigner(null)}>Close</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onClick={() => setSelectedDesigner(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl border border-border bg-white p-4 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-stone-900">Designer details</h2>
+              <button type="button" onClick={() => setSelectedDesigner(null)} className={btnOutline}>
+                Close
+              </button>
             </div>
-            <p className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-950">
-              Open <strong>Inventory</strong> to review submissions: approve status (PATCH …/status), then
-              list on catalog (PATCH …/listed).
+            <p className="mb-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-[11px] text-brand-800">
+              Open <strong>Inventory</strong> to review submissions, approve status, and list on
+              catalog.
             </p>
-            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <div><span className="font-medium">Name:</span> {selectedDesigner.name || "-"}</div>
-              <div><span className="font-medium">Phone:</span> {(selectedDesigner.countryCode || "")} {selectedDesigner.phoneNumber || "-"}</div>
-              <div><span className="font-medium">Email:</span> {selectedDesigner.email || "-"}</div>
-              <div><span className="font-medium">City:</span> {selectedDesigner.city || "-"}</div>
-              <div><span className="font-medium">Address:</span> {selectedDesigner.address || "-"}</div>
-              <div><span className="font-medium">Pin Code:</span> {selectedDesigner.pinCode || "-"}</div>
-              <div><span className="font-medium">Active:</span> {selectedDesigner.isActive ? "Yes" : "No"}</div>
-              <div><span className="font-medium">Verified:</span> {selectedDesigner.isNumberVerified ? "Yes" : "No"}</div>
-              <div className="sm:col-span-2"><span className="font-medium">Profile Image:</span> {selectedDesigner.profileImage || "-"}</div>
+            <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+              <div>
+                <span className="font-medium text-stone-500">Name:</span> {selectedDesigner.name || "—"}
+              </div>
+              <div>
+                <span className="font-medium text-stone-500">Phone:</span>{" "}
+                {selectedDesigner.countryCode} {selectedDesigner.phoneNumber || "—"}
+              </div>
+              <div>
+                <span className="font-medium text-stone-500">Email:</span>{" "}
+                {selectedDesigner.email || "—"}
+              </div>
+              <div>
+                <span className="font-medium text-stone-500">City:</span>{" "}
+                {selectedDesigner.city || "—"}
+              </div>
+              <div className="sm:col-span-2">
+                <span className="font-medium text-stone-500">Address:</span>{" "}
+                {selectedDesigner.address || "—"}
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                className={btnPrimary}
                 onClick={() => {
                   setSelectedDesigner(null);
-                  navigate(`/admin/designer/inventory?designerId=${selectedDesigner._id}`);
+                  navigate(ap(`designer/inventory?designerId=${selectedDesigner._id}`));
                 }}
               >
                 View inventory
+              </button>
+              <button
+                type="button"
+                className={btnOutline}
+                onClick={() => {
+                  setSelectedDesigner(null);
+                  navigate(ap(`designer/edit/${selectedDesigner._id}`));
+                }}
+              >
+                Edit
               </button>
             </div>
           </div>
@@ -195,4 +362,3 @@ const DesignerList = () => {
 };
 
 export default DesignerList;
-

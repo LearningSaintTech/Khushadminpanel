@@ -10,18 +10,18 @@ import { RefreshCw, Wallet, Coins, ArrowLeftRight } from "lucide-react";
 
 function StatCard({ label, value, sub }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub ? <p className="mt-0.5 text-xs text-gray-500">{sub}</p> : null}
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 text-base font-bold text-slate-900">{value}</p>
+      {sub ? <p className="mt-0.5 text-[10px] text-slate-500">{sub}</p> : null}
     </div>
   );
 }
 
 function Pagination({ page, totalPages, onPage, disabled }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-sm">
-      <span className="text-gray-600">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+      <span className="text-slate-600">
         Page {page} of {totalPages || 1}
       </span>
       <div className="flex gap-2">
@@ -29,7 +29,7 @@ function Pagination({ page, totalPages, onPage, disabled }) {
           type="button"
           disabled={disabled || page <= 1}
           onClick={() => onPage(page - 1)}
-          className="rounded border border-gray-300 px-3 py-1 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
         >
           Prev
         </button>
@@ -37,7 +37,7 @@ function Pagination({ page, totalPages, onPage, disabled }) {
           type="button"
           disabled={disabled || page >= totalPages}
           onClick={() => onPage(page + 1)}
-          className="rounded border border-gray-300 px-3 py-1 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
         >
           Next
         </button>
@@ -138,15 +138,16 @@ const MoneyFeaturesWallet = () => {
   const rewardTypes = overview?.last30Days?.rewardTransactions ?? [];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Wallet className="text-indigo-600" />
-            Cash wallet
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-[1600px] px-3 pb-4 pt-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 truncate text-sm font-semibold text-slate-900">
+            <Wallet className="h-4 w-4 text-indigo-600" />
+            Wallets & coins
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            INR balance, recharges, order payments, refunds, and reward redemptions to cash.
+          <p className="mt-0.5 truncate text-[11px] text-slate-500">
+            INR wallets + reward points balances and transactions.
           </p>
         </div>
         <button
@@ -155,17 +156,19 @@ const MoneyFeaturesWallet = () => {
             loadOverview();
             loadTab(1);
           }}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
 
       {loading && !overview ? (
-        <p className="text-gray-500">Loading overview…</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-xs text-slate-500 shadow-sm">
+          Loading overview…
+        </div>
       ) : overview ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3">
           <StatCard
             label="Total cash in wallets"
             value={fmtInr(overview.cash?.totalBalanceInr)}
@@ -198,10 +201,10 @@ const MoneyFeaturesWallet = () => {
       ) : null}
 
       {(cashSources.length > 0 || rewardTypes.length > 0) && (
-        <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2">Cash activity (30 days)</h3>
-            <ul className="text-xs space-y-1 text-gray-600">
+        <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <h3 className="mb-2 text-xs font-semibold text-slate-800">Cash activity (30 days)</h3>
+            <ul className="space-y-1 text-[11px] text-slate-600">
               {cashSources.map((row, i) => (
                 <li key={i} className="flex justify-between">
                   <span>
@@ -215,11 +218,11 @@ const MoneyFeaturesWallet = () => {
               {cashSources.length === 0 && <li>—</li>}
             </ul>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-800">
               <Coins size={14} /> Reward points activity (30 days)
             </h3>
-            <ul className="text-xs space-y-1 text-gray-600">
+            <ul className="space-y-1 text-[11px] text-slate-600">
               {rewardTypes.map((row, i) => (
                 <li key={i} className="flex justify-between">
                   <span>
@@ -236,8 +239,8 @@ const MoneyFeaturesWallet = () => {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex flex-wrap gap-1 border-b border-gray-100 p-2 bg-gray-50">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-wrap gap-1 border-b border-slate-100 p-1.5 bg-slate-50/80">
           {[
             ["cash-wallets", "Cash wallets"],
             ["cash-tx", "Cash transactions"],
@@ -248,8 +251,8 @@ const MoneyFeaturesWallet = () => {
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                tab === key ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
+              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                tab === key ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-white"
               }`}
             >
               {label}
@@ -257,14 +260,14 @@ const MoneyFeaturesWallet = () => {
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-3 p-4 border-b border-gray-100">
+        <div className="flex flex-wrap items-end gap-2 p-3 border-b border-slate-100">
           {(tab === "cash-wallets" || tab === "reward-wallets") && (
             <input
               type="search"
               placeholder="Search name, phone, email, user ID…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[220px]"
+              className="min-w-[220px] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
             />
           )}
           {tab === "cash-tx" && (
@@ -272,7 +275,7 @@ const MoneyFeaturesWallet = () => {
               <select
                 value={txSource}
                 onChange={(e) => setTxSource(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
               >
                 <option value="">All sources</option>
                 <option value="RECHARGE">Recharge</option>
@@ -285,7 +288,7 @@ const MoneyFeaturesWallet = () => {
               <select
                 value={txType}
                 onChange={(e) => setTxType(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
               >
                 <option value="">Credit & debit</option>
                 <option value="CREDIT">Credit</option>
@@ -297,7 +300,7 @@ const MoneyFeaturesWallet = () => {
             <select
               value={rewardTxType}
               onChange={(e) => setRewardTxType(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
             >
               <option value="">All types</option>
               <option value="EARN">Earn</option>
@@ -310,53 +313,53 @@ const MoneyFeaturesWallet = () => {
           <button
             type="button"
             onClick={() => loadTab(1)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700"
           >
             Apply
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="max-h-[66vh] overflow-auto">
           {listLoading ? (
-            <p className="p-8 text-center text-gray-500">Loading…</p>
+            <p className="p-8 text-center text-xs text-slate-500">Loading…</p>
           ) : tab === "cash-wallets" ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[820px] text-[11px] text-left">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Phone</th>
-                  <th className="px-3 py-2">Balance</th>
-                  <th className="px-3 py-2">User ID</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Phone</th>
+                  <th className="px-2.5 py-1.5">Balance</th>
+                  <th className="px-2.5 py-1.5">User ID</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {cashWallets.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2">{row.userName || "—"}</td>
-                    <td className="px-3 py-2 tabular-nums">{row.userPhone || "—"}</td>
-                    <td className="px-3 py-2 font-semibold">{fmtInr(row.balance)}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500 break-all">{String(row.userId)}</td>
+                  <tr key={String(row._id)} className="hover:bg-slate-50/80">
+                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5 tabular-nums">{row.userPhone || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-semibold tabular-nums">{fmtInr(row.balance)}</td>
+                    <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500 break-all">{String(row.userId)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : tab === "cash-tx" ? (
-            <table className="w-full text-sm text-left min-w-[720px]">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[980px] text-[11px] text-left">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Amount</th>
-                  <th className="px-3 py-2">Balance after</th>
-                  <th className="px-3 py-2">Status</th>
+                  <th className="px-2.5 py-1.5">Date</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Type</th>
+                  <th className="px-2.5 py-1.5">Source</th>
+                  <th className="px-2.5 py-1.5">Amount</th>
+                  <th className="px-2.5 py-1.5">After</th>
+                  <th className="px-2.5 py-1.5">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {cashTx.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                  <tr key={String(row._id)} className="hover:bg-slate-50/80">
+                    <td className="px-2.5 py-1.5 whitespace-nowrap text-[10px] text-slate-600">
                       {row.createdAt
                         ? new Date(row.createdAt).toLocaleString("en-IN", {
                             dateStyle: "short",
@@ -364,55 +367,55 @@ const MoneyFeaturesWallet = () => {
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-2">{row.userName || row.userPhone || "—"}</td>
-                    <td className="px-3 py-2">{row.type}</td>
-                    <td className="px-3 py-2">{row.transaction_source || "—"}</td>
-                    <td className="px-3 py-2 font-medium">{fmtInr(row.amount)}</td>
-                    <td className="px-3 py-2">{fmtInr(row.balance_after_transaction)}</td>
-                    <td className="px-3 py-2">{row.status || "—"}</td>
+                    <td className="px-2.5 py-1.5">{row.userName || row.userPhone || "—"}</td>
+                    <td className="px-2.5 py-1.5">{row.type}</td>
+                    <td className="px-2.5 py-1.5">{row.transaction_source || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums">{fmtInr(row.amount)}</td>
+                    <td className="px-2.5 py-1.5 tabular-nums text-slate-600">{fmtInr(row.balance_after_transaction)}</td>
+                    <td className="px-2.5 py-1.5">{row.status || "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : tab === "reward-wallets" ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[820px] text-[11px] text-left">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Phone</th>
-                  <th className="px-3 py-2">Coins (points)</th>
-                  <th className="px-3 py-2">User ID</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Phone</th>
+                  <th className="px-2.5 py-1.5">Coins</th>
+                  <th className="px-2.5 py-1.5">User ID</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {rewardWallets.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2">{row.userName || "—"}</td>
-                    <td className="px-3 py-2">{row.userPhone || "—"}</td>
-                    <td className="px-3 py-2 font-semibold text-indigo-700">
+                  <tr key={String(row._id)} className="hover:bg-slate-50/80">
+                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5">{row.userPhone || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-semibold text-indigo-700 tabular-nums">
                       {Number(row.points_balance ?? 0).toLocaleString("en-IN")}
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500 break-all">{String(row.userId)}</td>
+                    <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500 break-all">{String(row.userId)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-sm text-left min-w-[640px]">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[900px] text-[11px] text-left">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Points</th>
-                  <th className="px-3 py-2">Balance after</th>
+                  <th className="px-2.5 py-1.5">Date</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Type</th>
+                  <th className="px-2.5 py-1.5">Source</th>
+                  <th className="px-2.5 py-1.5">Points</th>
+                  <th className="px-2.5 py-1.5">After</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {rewardTx.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                  <tr key={String(row._id)} className="hover:bg-slate-50/80">
+                    <td className="px-2.5 py-1.5 whitespace-nowrap text-[10px] text-slate-600">
                       {row.createdAt
                         ? new Date(row.createdAt).toLocaleString("en-IN", {
                             dateStyle: "short",
@@ -420,11 +423,11 @@ const MoneyFeaturesWallet = () => {
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-2">{row.userName || "—"}</td>
-                    <td className="px-3 py-2">{row.type}</td>
-                    <td className="px-3 py-2">{row.source || "—"}</td>
-                    <td className="px-3 py-2 font-medium">{row.points}</td>
-                    <td className="px-3 py-2">{row.points_balance_after}</td>
+                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5">{row.type}</td>
+                    <td className="px-2.5 py-1.5">{row.source || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums">{row.points}</td>
+                    <td className="px-2.5 py-1.5 tabular-nums text-slate-600">{row.points_balance_after}</td>
                   </tr>
                 ))}
               </tbody>
@@ -456,10 +459,11 @@ const MoneyFeaturesWallet = () => {
         />
       </div>
 
-      <p className="mt-4 text-xs text-gray-500 flex items-center gap-1">
+      <p className="mt-3 text-[11px] text-slate-500 flex items-center gap-1">
         <ArrowLeftRight size={12} />
         Users redeem coins to cash wallet via app; configure slabs and redemption under Redeem coins.
       </p>
+      </div>
     </div>
   );
 };

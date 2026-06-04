@@ -71,14 +71,14 @@ export default function SidebarMainNav({
     if (lightMode) {
       return `flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors duration-150 group ${
         active
-          ? "bg-indigo-50 text-indigo-700"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          ? "bg-brand-50 text-brand-700"
+          : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
       } ${compact ? "justify-center" : "gap-2"}`;
     }
     return `flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
-        : "text-gray-300 hover:bg-white hover:text-black"
+        : "text-stone-300 hover:bg-white/10 hover:text-white"
     } ${compact ? "justify-center" : "gap-2"}`;
   };
 
@@ -86,14 +86,14 @@ export default function SidebarMainNav({
     if (lightMode) {
       return `w-full flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors duration-150 group ${
         active
-          ? "bg-indigo-50 text-indigo-700"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          ? "bg-brand-50 text-brand-700"
+          : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
       } ${compact ? "justify-center" : "justify-between"}`;
     }
     return `w-full flex items-center px-3 py-2 text-xs font-medium rounded-md transition-colors duration-150 group ${
       active
         ? "bg-white/10 text-white"
-        : "text-gray-300 hover:bg-white hover:text-black"
+        : "text-stone-300 hover:bg-white/10 hover:text-white"
     } ${compact ? "justify-center" : "justify-between"}`;
   };
 
@@ -101,22 +101,22 @@ export default function SidebarMainNav({
     if (lightMode) {
       return `block px-3 py-1.5 text-[11px] font-medium rounded-lg transition-colors ${
         active
-          ? "bg-indigo-50 text-indigo-700"
-          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          ? "bg-brand-50 text-brand-700"
+          : "text-stone-500 hover:bg-canvas-muted hover:text-stone-900"
       }`;
     }
     return `block px-3 py-1.5 text-[11px] font-medium rounded-md transition-colors ${
       active
         ? "bg-white/10 text-white"
-        : "text-gray-400 hover:bg-white hover:text-black"
+        : "text-stone-400 hover:bg-white/10 hover:text-white"
     }`;
   };
 
   const iconClass = lightMode
-    ? "text-slate-400 group-hover:text-slate-700 shrink-0"
-    : "text-gray-400 group-hover:text-black shrink-0";
+    ? "text-stone-400 group-hover:text-stone-700 shrink-0"
+    : "text-stone-400 group-hover:text-white shrink-0";
 
-  const chevronClass = lightMode ? "text-slate-400 shrink-0" : "text-gray-400 shrink-0";
+  const chevronClass = lightMode ? "text-stone-400 shrink-0" : "text-stone-400 shrink-0";
 
   const entries = useMemo(() => {
     const list = [];
@@ -619,7 +619,7 @@ export default function SidebarMainNav({
               : "max-h-0 opacity-0"
           }`}
         >
-          <div className="pl-4 pr-1 py-1 space-y-0.5 border-l border-gray-700 ml-4">
+          <div className="pl-4 pr-1 py-1 space-y-0.5 border-l border-brand-800 ml-4">
             <Link
               to={ap("notifications")}
               className={subLinkClass(location.pathname === ap("notifications"))}
@@ -640,7 +640,7 @@ export default function SidebarMainNav({
                   isActive(ap("notifications/templates")) ||
                   isActive(ap("notifications/email-templates"))
                     ? "bg-white/10 text-white"
-                    : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                    : "text-stone-400 hover:bg-white/5 hover:text-stone-200"
                 }`}
               >
                 Templates
@@ -655,13 +655,13 @@ export default function SidebarMainNav({
               >
                 <Link
                   to={ap("notifications/templates")}
-                  className="block pl-3 py-1 text-[10px] text-gray-500 hover:text-gray-300"
+                  className="block pl-3 py-1 text-[10px] text-stone-500 hover:text-stone-300"
                 >
                   In-app
                 </Link>
                 <Link
                   to={ap("notifications/email-templates")}
-                  className="block pl-3 py-1 text-[10px] text-gray-500 hover:text-gray-300"
+                  className="block pl-3 py-1 text-[10px] text-stone-500 hover:text-stone-300"
                 >
                   Email
                 </Link>
@@ -675,13 +675,13 @@ export default function SidebarMainNav({
             </Link>
             <Link
               to={ap("notifications/history")}
-              className="block px-3 py-1.5 text-[11px] text-gray-500 hover:bg-white/5 hover:text-gray-400 rounded-md"
+              className="block px-3 py-1.5 text-[11px] text-stone-500 hover:bg-white/5 hover:text-stone-300 rounded-md"
             >
               History
             </Link>
             <Link
               to={ap("notifications/test")}
-              className="block px-3 py-1.5 text-[11px] text-gray-500 hover:bg-white/5 hover:text-gray-400 rounded-md"
+              className="block px-3 py-1.5 text-[11px] text-stone-500 hover:bg-white/5 hover:text-stone-300 rounded-md"
             >
               Test
             </Link>
@@ -1009,7 +1009,7 @@ export default function SidebarMainNav({
 
   if (entries.length === 0 && searchQuery.trim()) {
     return (
-      <p className="px-3 py-6 text-center text-[11px] text-gray-500">
+      <p className="px-3 py-6 text-center text-[11px] text-stone-500">
         No menu items match &ldquo;{searchQuery}&rdquo;
       </p>
     );

@@ -13,7 +13,11 @@ const SubAdminRoutes = () => {
 
       <Route
         element={
-          <ProtectedRoute allowedRoles={["SUBADMIN"]}>
+          <ProtectedRoute
+            allowedRoles={["SUBADMIN"]}
+            loginPath="/subadmin/login"
+            wrongRolePolicy="home"
+          >
             <Layout basePath="/subadmin" filterSidebar />
           </ProtectedRoute>
         }

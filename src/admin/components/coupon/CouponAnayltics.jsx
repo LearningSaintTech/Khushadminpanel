@@ -13,6 +13,13 @@ import {
 import { getOrders } from "../../apis/Orderapi";
 import { ExplorerPanel, InsightPanel, OverviewPanel } from "./AnalyticsPanels";
 import { FilterField, SegmentedTabs } from "./AnalyticsUiParts";
+import {
+  alertDanger,
+  btnOutline,
+  btnPrimary,
+  filterInputClass,
+  pageToolbar,
+} from "./analyticsShared";
 
 const PAGE_SIZE = 25;
 
@@ -738,62 +745,49 @@ const EventAnalyticsTab = () => {
         : "Empty";
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-14">
-      <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8 lg:pt-10">
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 lg:text-4xl">Analytics Workspace</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Cleaner flow for overview, insight queries, and event-level exploration.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SegmentedTabs
-              activeTab={activeTab}
-              onChange={setActiveTab}
-              tabs={[
-                { id: "overview", label: "Overview" },
-                { id: "insight", label: "Insight" },
-                { id: "event", label: "Event" },
-              ]}
-            />
-            <button
-              onClick={() => fetchEvents(currentPage)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <RefreshCw size={16} />
-              Refresh
-            </button>
-          </div>
+    <div className="text-stone-900">
+      <div className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}>
+        <h1 className="mr-auto shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Analytics
+        </h1>
+        <SegmentedTabs
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { id: "overview", label: "Overview" },
+            { id: "insight", label: "Insight" },
+            { id: "event", label: "Event" },
+          ]}
+        />
+        <button type="button" onClick={() => fetchEvents(currentPage)} className={btnOutline}>
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          Refresh
+        </button>
+      </div>
+
+      <div className={`${pageToolbar} mb-2 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap`}>
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="rounded-full bg-canvas-muted px-2 py-0.5 font-medium text-stone-700">
+            {activeTab === "overview" ? "Overview" : activeTab === "insight" ? "Insight" : "Event"}
+          </span>
+          {isPhase1SummaryMode ? (
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 font-medium text-brand-700">
+              Phase summary
+            </span>
+          ) : null}
+          {!hasActiveFilters ? (
+            <span className="rounded-full bg-warning/10 px-2 py-0.5 font-medium text-warning">
+              No filters
+            </span>
+          ) : null}
         </div>
 
-        <section className="sticky top-2 z-20 mb-6 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
-              {activeTab === "overview"
-                ? "Overview mode"
-                : activeTab === "insight"
-                  ? "Insight mode"
-                  : "Event mode"}
-            </span>
-            {isPhase1SummaryMode ? (
-              <span className="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700">
-                Phase summary mode enabled
-              </span>
-            ) : null}
-            {!hasActiveFilters ? (
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
-                No filters applied
-              </span>
-            ) : null}
-          </div>
-
-          <div className={`grid grid-cols-1 gap-3 ${isPhase1SummaryMode ? "md:grid-cols-4" : "md:grid-cols-6"}`}>
+        <div className="flex min-w-0 flex-1 flex-nowrap items-end gap-2 overflow-x-auto pb-0.5">
             <FilterField label="Source">
               <select
                 value={filters.channel}
                 onChange={(e) => setFilters((p) => ({ ...p, channel: e.target.value }))}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className={filterInputClass}
               >
                 {(isPhase1SummaryMode ? SOURCE_OPTIONS : SOURCE_OPTIONS.filter((opt) => opt !== "app")).map((opt) => (
                   <option key={opt} value={opt}>
@@ -808,7 +802,7 @@ const EventAnalyticsTab = () => {
                 <select
                   value={filters.platform}
                   onChange={(e) => setFilters((p) => ({ ...p, platform: e.target.value }))}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className={filterInputClass}
                 >
                   {PLATFORM_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>
@@ -824,7 +818,7 @@ const EventAnalyticsTab = () => {
                 <select
                   value={filters.eventType}
                   onChange={(e) => setFilters((p) => ({ ...p, eventType: e.target.value }))}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className={filterInputClass}
                 >
                   {EVENT_TYPE_OPTIONS.map((eventType) => (
                     <option key={eventType} value={eventType === "all" ? "" : eventType}>
@@ -838,7 +832,7 @@ const EventAnalyticsTab = () => {
                 <select
                   value={summaryModule}
                   onChange={(e) => setSummaryModule(e.target.value)}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className={filterInputClass}
                 >
                   {SUMMARY_MODULE_OPTIONS.map((opt) => (
                     <option key={opt.id} value={opt.id}>
@@ -854,7 +848,7 @@ const EventAnalyticsTab = () => {
                 type="date"
                 value={filters.from}
                 onChange={(e) => setFilters((p) => ({ ...p, from: e.target.value }))}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className={filterInputClass}
               />
             </FilterField>
 
@@ -863,7 +857,7 @@ const EventAnalyticsTab = () => {
                 type="date"
                 value={filters.to}
                 onChange={(e) => setFilters((p) => ({ ...p, to: e.target.value }))}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                className={filterInputClass}
               />
             </FilterField>
 
@@ -872,7 +866,7 @@ const EventAnalyticsTab = () => {
                 <select
                   value={summaryModule}
                   onChange={(e) => setSummaryModule(e.target.value)}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className={filterInputClass}
                 >
                   {SUMMARY_MODULE_OPTIONS.map((opt) => (
                     <option key={opt.id} value={opt.id}>
@@ -884,13 +878,13 @@ const EventAnalyticsTab = () => {
             ) : null}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="px-1 text-xs font-semibold text-slate-500">Rows/page</span>
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+            <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-canvas-muted/40 px-2 py-1">
+              <span className="text-[10px] font-semibold text-stone-500">Rows/page</span>
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value) || PAGE_SIZE)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700"
+                className={`${filterInputClass} !w-[72px] !py-1`}
               >
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -899,48 +893,37 @@ const EventAnalyticsTab = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="px-1 text-xs font-semibold text-slate-500">Date presets:</span>
-              <button
-                type="button"
-                onClick={() => applyDatePreset(6)}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Last 7d
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-stone-500">Presets</span>
+              <button type="button" onClick={() => applyDatePreset(6)} className={btnOutline}>
+                7d
               </button>
-              <button
-                type="button"
-                onClick={() => applyDatePreset(29)}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Last 30d
+              <button type="button" onClick={() => applyDatePreset(29)} className={btnOutline}>
+                30d
               </button>
-              <button
-                type="button"
-                onClick={() => applyDatePreset(89)}
-                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Last 90d
+              <button type="button" onClick={() => applyDatePreset(89)} className={btnOutline}>
+                90d
               </button>
             </div>
 
             <button
+              type="button"
               onClick={async () => {
                 await fetchEvents(1);
                 if (activeTab === "insight" && insightQuery) {
                   await runInsightQuery();
                 }
               }}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              className={btnPrimary}
             >
-              Apply Filters
+              Apply
             </button>
 
             {activeTab === "event" ? (
               <select
                 value={activePreset}
                 onChange={(e) => applyExplorerPreset(e.target.value)}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className={filterInputClass}
               >
                 {EXPLORER_FILTER_PRESETS.map((preset) => (
                   <option key={preset.id} value={preset.id}>
@@ -953,7 +936,7 @@ const EventAnalyticsTab = () => {
             {activeTab === "event" ? (
               <button
                 onClick={exportExplorerCsv}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className={btnOutline}
               >
                 Export CSV
               </button>
@@ -963,10 +946,10 @@ const EventAnalyticsTab = () => {
               <button
                 onClick={handleDeleteFiltered}
                 disabled={isDeleting}
-                className="inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                className={`${btnOutline} !text-danger`}
               >
-                <Trash2 size={14} />
-                Delete Filtered
+                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                Delete filtered
               </button>
             ) : null}
 
@@ -981,19 +964,17 @@ const EventAnalyticsTab = () => {
                 setInsightMeta({ source: "analytics_events", eventTypesScanned: [], totalEventsScanned: 0 });
                 setTimeout(() => fetchEvents(1), 0);
               }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className={btnOutline}
             >
               Reset
             </button>
-          </div>
-        </section>
+        </div>
+      </div>
 
         {error ? (
-          <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
-            <div className="flex items-center gap-2">
-              <AlertCircle size={18} />
-              <span>{error}</span>
-            </div>
+          <div className={`${alertDanger} mb-2 flex items-center gap-2`}>
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{error}</span>
           </div>
         ) : null}
 
@@ -1037,7 +1018,6 @@ const EventAnalyticsTab = () => {
             fetchEvents={fetchEvents}
           />
         ) : null}
-      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   getAllInventoryCodes,
@@ -105,28 +105,28 @@ const InventoryCodesPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-canvas-muted">
       <div className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl flex items-center gap-3">
-              <Hash className="h-8 w-8 text-indigo-600" />
+            <h1 className="text-2xl font-bold text-stone-900 sm:text-3xl flex items-center gap-3">
+              <Hash className="h-8 w-8 text-brand-600" />
               Inventory codes
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-stone-500">
               Category, fit, colour, and section codes for SKU / labelling. Managed per row.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
             <Link
               to={ap("inventory-codes/sku-formula")}
-              className="inline-flex items-center justify-center gap-2 border-2 border-gray-900 bg-white px-5 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 transition"
+              className="inline-flex items-center justify-center gap-2 border-2 border-gray-900 bg-white px-5 py-2.5 text-sm font-medium text-stone-900 hover:bg-brand-50/30 transition"
             >
               <Layers size={18} /> SKU &amp; sku_uid formula
             </Link>
             <Link
               to={ap("inventory-codes/create")}
-              className="inline-flex items-center justify-center gap-2 bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition"
+              className="inline-flex items-center justify-center gap-2 bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition"
             >
               <Plus size={18} /> Add code
             </Link>
@@ -140,16 +140,16 @@ const InventoryCodesPage = () => {
           </div>
         )}
 
-        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
           <div className="flex flex-col gap-1 min-w-[140px]">
-            <label className="text-xs font-medium text-gray-600">Type</label>
+            <label className="text-xs font-medium text-stone-600">Type</label>
             <select
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
                 setPagination((p) => ({ ...p, page: 1 }));
               }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-border px-3 py-2 text-sm"
             >
               <option value="">All</option>
               {INVENTORY_CODE_TYPES.map((t) => (
@@ -160,14 +160,14 @@ const InventoryCodesPage = () => {
             </select>
           </div>
           <div className="flex flex-col gap-1 min-w-[140px]">
-            <label className="text-xs font-medium text-gray-600">Active</label>
+            <label className="text-xs font-medium text-stone-600">Active</label>
             <select
               value={activeFilter}
               onChange={(e) => {
                 setActiveFilter(e.target.value);
                 setPagination((p) => ({ ...p, page: 1 }));
               }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-border px-3 py-2 text-sm"
             >
               <option value="">All</option>
               <option value="true">Active</option>
@@ -175,18 +175,18 @@ const InventoryCodesPage = () => {
             </select>
           </div>
           <form onSubmit={applySearch} className="flex flex-1 flex-col gap-1 min-w-[200px]">
-            <label className="text-xs font-medium text-gray-600">Search</label>
+            <label className="text-xs font-medium text-stone-600">Search</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Code or name"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="flex-1 rounded-lg border border-border px-3 py-2 text-sm"
               />
               <button
                 type="submit"
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
               >
                 Apply
               </button>
@@ -194,27 +194,27 @@ const InventoryCodesPage = () => {
           </form>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-canvas-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Type
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Code
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Name
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Sort
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Active
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-stone-600">
                     Actions
                   </th>
                 </tr>
@@ -222,40 +222,40 @@ const InventoryCodesPage = () => {
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-gray-500">
+                    <td colSpan={6} className="py-16 text-center text-stone-500">
                       Loading…
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-gray-500">
+                    <td colSpan={6} className="py-16 text-center text-stone-500">
                       No rows yet. Run backend seed or add a code.
                     </td>
                   </tr>
                 ) : (
                   items.map((row) => (
-                    <tr key={row._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        <span className="inline-flex rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">
+                    <tr key={row._id} className="hover:bg-brand-50/30 transition-colors">
+                      <td className="px-4 py-3 text-sm text-stone-700">
+                        <span className="inline-flex rounded-md bg-canvas-muted px-2 py-0.5 text-xs font-medium text-gray-800">
                           {typeLabels[row.type] || row.type}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900">
+                      <td className="px-4 py-3 font-mono text-sm font-medium text-stone-900">
                         {row.code}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 max-w-xs">
+                      <td className="px-4 py-3 text-sm text-stone-700 max-w-xs">
                         <div>{row.name}</div>
                         {row.remarks ? (
                           <div className="mt-0.5 text-xs text-amber-700">{row.remarks}</div>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{row.sortOrder ?? 0}</td>
+                      <td className="px-4 py-3 text-sm text-stone-600">{row.sortOrder ?? 0}</td>
                       <td className="px-4 py-3 text-center">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             row.isActive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-200 text-gray-600"
+                              ? "bg-success-bg text-success"
+                              : "bg-gray-200 text-stone-600"
                           }`}
                         >
                           {row.isActive ? "Yes" : "No"}
@@ -265,7 +265,7 @@ const InventoryCodesPage = () => {
                         <div className="flex items-center justify-center gap-2">
                           <Link
                             to={ap(`inventory-codes/edit/${row._id}`)}
-                            className="inline-flex rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                            className="inline-flex rounded-lg p-2 text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
                             title="Edit"
                           >
                             <Edit size={18} />
@@ -288,8 +288,8 @@ const InventoryCodesPage = () => {
           </div>
 
           {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3">
-              <p className="text-sm text-gray-600">
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
+              <p className="text-sm text-stone-600">
                 Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
               </p>
               <div className="flex gap-2">
@@ -297,7 +297,7 @@ const InventoryCodesPage = () => {
                   type="button"
                   disabled={pagination.page <= 1}
                   onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-40"
                 >
                   <ChevronLeft size={16} /> Prev
                 </button>
@@ -310,7 +310,7 @@ const InventoryCodesPage = () => {
                       page: Math.min(p.totalPages, p.page + 1),
                     }))
                   }
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-40"
                 >
                   Next <ChevronRight size={16} />
                 </button>

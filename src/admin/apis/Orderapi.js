@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "") => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "") => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -42,7 +42,36 @@ const orderEndpoints = {
       url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
     }
 
+    if (itemStatusConsistency) {
+      url += `&itemStatusConsistency=${encodeURIComponent(itemStatusConsistency)}`;
+    }
+
     return url;
+  },
+  GET_STATUS_ANALYTICS: ({
+    view = "order",
+    search = "",
+    startDate = "",
+    endDate = "",
+    deliveryType = "",
+    paymentStatus = "",
+    paymentMode = "",
+    itemStatusConsistency = "",
+    exchangeOnly = false,
+  } = {}) => {
+    const params = new URLSearchParams();
+    params.set("view", view || "order");
+    if (search) params.set("search", search);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    if (deliveryType) params.set("deliveryType", deliveryType);
+    if (paymentStatus) params.set("paymentStatus", paymentStatus);
+    if (paymentMode) params.set("paymentMode", paymentMode);
+    if (itemStatusConsistency) {
+      params.set("itemStatusConsistency", itemStatusConsistency);
+    }
+    if (exchangeOnly) params.set("exchangeOnly", "true");
+    return `/admin/orders/analytics/status-counts?${params.toString()}`;
   },
   GET_INVOICE: (orderId, itemId) =>
   `/order/invoice/${orderId}/${itemId}`,
@@ -172,11 +201,15 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode) => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency)
   );
+};
+
+export const getOrderStatusAnalytics = (params = {}) => {
+  return apiConnector("GET", orderEndpoints.GET_STATUS_ANALYTICS(params));
 };
 
 // ✅ Get All Order Items (item-based list)

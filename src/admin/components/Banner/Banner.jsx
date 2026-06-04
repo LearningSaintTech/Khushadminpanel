@@ -1,306 +1,259 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { getFeaturedImages, deleteFeaturedImage } from "../../apis/Bannerapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 
-export default function Featured() {
+function isVideoUrl(url = "", key = "") {
+  return (
+    /\.(mp4|webm|ogg|mov|avi|mkv)(\?.*)?$/i.test(url) ||
+    url.includes("video") ||
+    key?.includes("video")
+  );
+}
+
+const PAGE_LABELS = {
+  home: "Home",
+  lock: "Lock",
+  bottom: "Bottom",
+};
+
+export default function Banner() {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [images, setImages] = useState([]);
-  const [expandedTitles, setExpandedTitles] = useState({});
   const [loading, setLoading] = useState(false);
   const [filterPage, setFilterPage] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10);
-  const [pagination, setPagination] = useState(null);
+
+  const rowIndexBase = useMemo(() => (currentPage - 1) * limit, [currentPage, limit]);
 
   const fetchImages = async () => {
     try {
       setLoading(true);
-      // When filterPage is "all", pass empty string so API uses pagination
       const pageFilter = filterPage === "all" ? "" : filterPage;
       const response = await getFeaturedImages(pageFilter, currentPage, limit);
-
-      console.log("Banner API Response:", response);
-      console.log("Filter Page:", filterPage, "Current Page:", currentPage);
-
-      // Extract data from response
-      // apiConnector returns response.data from axios, so response structure is:
-      // { success: true, message: "...", data: { data: [...], pagination: {...} } }
-      // So response = { success: true, message: "...", data: { data: [...], pagination: {...} } }
-      // And response.data = { data: [...], pagination: {...} }
       const responseData = response?.data || {};
       const imagesArray = responseData.data || [];
       const paginationData = responseData.pagination || {};
 
-      console.log("Full Response:", response);
-      console.log("Response Data:", responseData);
-      console.log("Images Array:", imagesArray);
-      console.log("Pagination Data:", paginationData);
-
       setImages(Array.isArray(imagesArray) ? imagesArray : []);
-      setPagination(paginationData);
 
-      // Set total pages from pagination
       if (paginationData.totalPages) {
         setTotalPages(paginationData.totalPages);
       } else if (paginationData.total) {
-        setTotalPages(Math.ceil(paginationData.total / limit));
+        setTotalPages(Math.max(1, Math.ceil(paginationData.total / limit)));
       } else {
         setTotalPages(1);
       }
     } catch (err) {
-      console.error("[fetchImages] ERROR:", err);
-      alert(
-        "Failed to load featured images: " + (err?.message || "Unknown error"),
-      );
+      console.error("[Banner] fetch error:", err);
+      setImages([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Reset to page 1 when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterPage]);
+  }, [filterPage, limit]);
 
   useEffect(() => {
     fetchImages();
-  }, [filterPage, currentPage]);
+  }, [filterPage, currentPage, limit]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this image?")) return;
-
+    if (!window.confirm("Delete this banner?")) return;
     try {
       await deleteFeaturedImage(id);
-      fetchImages();
+      await fetchImages();
     } catch (err) {
-      console.error("[handleDelete] ERROR:", err);
-      alert("Delete failed");
+      console.error("[Banner] delete error:", err);
+      alert(err?.message || "Delete failed");
     }
   };
 
-  const toggleTitle = (id) => {
-    setExpandedTitles((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
+  const inputClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
   return (
-    <div
-      className={`
-        min-h-screen  text-gray-900 pb-10
-        transition-all duration-300
-      `}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Featured Images
-          </h1>
-          <div className="flex gap-3">
-            <select
-              value={filterPage}
-              onChange={(e) => setFilterPage(e.target.value)}
-              className="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30 shadow-sm min-w-[140px]"
-            >
-              <option value="all">All</option>
-              <option value="home">Home</option>
-              <option value="lock">Lock</option>
-              <option value="bottom">Bottom</option>
-            </select>
-            <button
-              onClick={() => navigate("/admin/banners/create")}
-              className="bg-black text-white font-medium py-2 px-6 rounded-lg hover:bg-gray-800 transition shadow-sm"
-            >
-              + Add Banners
-            </button>
-          </div>
-        </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Featured Banners
+        </h1>
+        <select
+          value={filterPage}
+          onChange={(e) => setFilterPage(e.target.value)}
+          className={`${inputClass} w-full min-w-[120px] max-w-[160px] sm:w-auto`}
+          title="Page location filter"
+        >
+          <option value="all">All pages</option>
+          <option value="home">Home</option>
+          <option value="lock">Lock screen</option>
+          <option value="bottom">Bottom</option>
+        </select>
+        <select
+          className={`${inputClass} min-w-[108px]`}
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          title="Rows per page"
+        >
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => navigate(ap("banners/create"))}
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700"
+        >
+          Create
+        </button>
+      </div>
 
-        {/* Gallery Section */}
-        <div className="space-y-6">
-          <h2 className="text-xl font-semibold">Current Featured Images</h2>
-
-          {loading ? (
-            <div className="text-gray-600 py-12 text-center text-lg">
-              Loading images...
-            </div>
-          ) : images.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-600">
-              <p className="text-lg font-medium mb-2">
-                {filterPage === "all"
-                  ? "No featured images found"
-                  : `No images for "${filterPage}" page`}
-              </p>
-              <button
-                onClick={() => navigate("/admin/banners/create")}
-                className="text-black hover:underline font-medium mt-2"
-              >
-                Create your first banner →
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className=" grid grid-cols-1  sm:grid-cols-2  md:grid-cols-3  lg:grid-cols-3  xl:grid-cols-4  2xl:grid-cols-5  gap-5 sm:gap-6 lg:gap-7 ">
-                {images.map((item) => {
-                  // Check if the URL is a video file
-                  const isVideo =
-                    /\.(mp4|webm|ogg|mov|avi|mkv)(\?.*)?$/i.test(item.url) ||
-                    item.url.includes("video") ||
-                    item.key?.includes("video");
-
-                  return (
-                    <div
-                      key={item._id}
-                      className="group bg-white border border-gray-200  overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-200"
-                    >
-                      <div className="relative">
-                        {isVideo ? (
+      <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 z-10 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className="w-10 px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                #
+              </th>
+              <th className="w-24 px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Preview
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Heading
+              </th>
+              <th className="hidden px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500 md:table-cell">
+                Subheading
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Page
+              </th>
+              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-2 py-4 text-center text-stone-500">
+                  Loading…
+                </td>
+              </tr>
+            ) : images.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-2 py-6 text-center">
+                  <p className="text-stone-500">No banners found.</p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(ap("banners/create"))}
+                    className="mt-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                  >
+                    Create your first banner →
+                  </button>
+                </td>
+              </tr>
+            ) : (
+              images.map((item, idx) => {
+                const video = isVideoUrl(item.url, item.key);
+                return (
+                  <tr key={item._id} className="border-t border-border/80 hover:bg-brand-50/30">
+                    <td className="px-2 py-2 text-center text-[10px] text-stone-500">
+                      {rowIndexBase + idx + 1}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="h-12 w-20 overflow-hidden rounded-md border border-border bg-canvas-muted">
+                        {video ? (
                           <video
                             src={item.url}
-                            className="w-full h-48 object-cover"
-                            controls={false}
+                            className="h-full w-full object-cover"
                             muted
-                            loop
                             playsInline
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              const fallback = document.createElement("img");
-                              fallback.src =
-                                "https://via.placeholder.com/400x240?text=Video+Error";
-                              fallback.className = "w-full h-48 object-cover";
-                              e.target.parentNode.appendChild(fallback);
-                            }}
                           />
                         ) : (
                           <img
                             src={item.url}
-                            alt={item.heading || "featured image"}
-                            className="w-full h-48 object-cover"
+                            alt=""
+                            className="h-full w-full object-cover"
                             onError={(e) => {
                               e.target.src =
-                                "https://via.placeholder.com/400x240?text=Image+Error";
+                                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='48'/%3E";
                             }}
                           />
                         )}
-                        <div className="absolute top-3 right-3 flex gap-2">
-                          <button
-                            onClick={() =>
-                              navigate(`/admin/banners/edit/${item._id}`)
-                            }
-                            className="bg-white/90 hover:bg-white text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-400 text-xs px-3 py-1 rounded-lg shadow-md opacity-90 hover:opacity-100 transition-all"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item._id)}
-                            className="bg-white/90 hover:bg-white text-red-600 hover:text-red-700 border border-red-200 hover:border-red-400 text-xs px-3 py-1 rounded-lg shadow-md opacity-90 hover:opacity-100 transition-all"
-                          >
-                            Delete
-                          </button>
-                        </div>
                       </div>
-
-                      <div className="p-4">
-                        <div className="mb-1">
-                          <h3
-                            className={`font-medium text-base ${
-                              expandedTitles[item._id] ? "" : "line-clamp-1"
-                            }`}
-                          >
-                            {item.heading || "No heading"}
-                          </h3>
-
-                          {item.heading && item.heading.length > 40 && (
-                            <button
-                              onClick={() => toggleTitle(item._id)}
-                              className="text-xs text-blue-600 hover:underline"
-                            >
-                              {expandedTitles[item._id]
-                                ? "Show less"
-                                : "See more"}
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-                          {item.subHeading || "No subheading"}
-                        </p>
-                        <span className="inline-block bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-full">
-                          {item.page}
-                        </span>
+                    </td>
+                    <td className="max-w-[180px] px-2 py-2">
+                      <p className="truncate font-medium text-stone-900">
+                        {item.heading || "—"}
+                      </p>
+                    </td>
+                    <td className="hidden max-w-[200px] truncate px-2 py-2 text-stone-600 md:table-cell">
+                      {item.subHeading || "—"}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      <span className="inline-flex rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700">
+                        {PAGE_LABELS[item.page] || item.page || "—"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => navigate(ap(`banners/edit/${item._id}`))}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 transition-colors hover:bg-brand-100"
+                          title="Edit"
+                          aria-label="Edit banner"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item._id)}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger transition-colors hover:opacity-90"
+                          title="Delete"
+                          aria-label="Delete banner"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
 
-              {/* Pagination */}
-              {images.length > 0 && (
-                <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="text-sm text-gray-600">
-                    Showing page {currentPage} of {totalPages} ({images.length}{" "}
-                    items)
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={currentPage === 1 || loading}
-                      className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                      <ChevronLeft size={18} />
-                      Previous
-                    </button>
-                    <div className="flex items-center gap-1">
-                      {Array.from(
-                        { length: Math.min(5, totalPages) },
-                        (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          return (
-                            <button
-                              key={pageNum}
-                              onClick={() => setCurrentPage(pageNum)}
-                              disabled={loading}
-                              className={`px-3 py-2 rounded-lg transition text-sm font-medium ${
-                                currentPage === pageNum
-                                  ? "bg-black text-white"
-                                  : "border border-gray-300 hover:bg-gray-50"
-                              } disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                              {pageNum}
-                            </button>
-                          );
-                        },
-                      )}
-                    </div>
-                    <button
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-                      }
-                      disabled={currentPage === totalPages || loading}
-                      className="flex items-center gap-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                      Next
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          disabled={currentPage === 1 || loading}
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <span className="rounded-lg bg-canvas-muted px-2.5 py-1 text-[11px] text-stone-700">
+          Page {currentPage} / {totalPages || 1}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage >= totalPages || loading}
+          onClick={() => setCurrentPage((p) => p + 1)}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );

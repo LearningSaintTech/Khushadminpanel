@@ -1,43 +1,56 @@
-// src/components/SubAdmin.jsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSubAdmins, toggleSubAdminStatus, updateSubAdmin } from "../../apis/subadminapi";
 import {
   Plus,
-  Edit,
-  Power,
+  Pencil,
+  ShieldCheck,
   Search,
   ChevronLeft,
   ChevronRight,
-  User,
-  Mail,
-  Phone,
-  MapPin,
   Loader2,
 } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./subadminShared";
+
+const LIMIT_OPTIONS = [10, 20, 50, 100];
 
 const SubAdmin = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [subAdmins, setSubAdmins] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
 
-  // Debounce search
+  const rowIndexBase = useMemo(() => (page - 1) * limit, [page, limit]);
+  const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * limit, total);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 500);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, limit]);
 
   const fetchSubAdmins = async () => {
     setLoading(true);
@@ -49,10 +62,18 @@ const SubAdmin = () => {
 
       if (res?.success) {
         setSubAdmins(res.data.subadmins || []);
-        setPagination(res.data.pagination || { page: 1, totalPages: 1 });
+        const pag = res.data.pagination || {};
+        setTotalPages(pag.totalPages || 1);
+        setTotal(pag.total ?? res.data.subadmins?.length ?? 0);
+      } else {
+        setSubAdmins([]);
+        setTotal(0);
+        setTotalPages(1);
       }
     } catch (err) {
       console.error("Failed to load sub-admins:", err);
+      setSubAdmins([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -60,36 +81,27 @@ const SubAdmin = () => {
 
   useEffect(() => {
     fetchSubAdmins();
-  }, [page, debouncedSearch, statusFilter]);
-
-  const handleCreate = () => navigate("/admin/subadmin/create");
-  const handleEdit = (id) => navigate(`/admin/subadmin/edit/${id}`);
-  const handleModuleAccess = (id) => navigate(`/admin/subadmin/${id}/module-access`);
+  }, [page, limit, debouncedSearch, statusFilter]);
 
   const handleToggle = async (id, currentStatus) => {
-    if (!window.confirm(`Really ${currentStatus ? "deactivate" : "activate"} this sub-admin?`)) return;
-
+    if (!window.confirm(`Really ${currentStatus ? "deactivate" : "activate"} this sub-admin?`))
+      return;
     try {
       await toggleSubAdminStatus(id);
       fetchSubAdmins();
-    } catch (err) {
+    } catch {
       alert("Failed to change status");
     }
   };
 
   const handleRoleChange = async (id, currentRole) => {
-    const nextRole =
-
-    
-      currentRole === "super_subadmin" ? "subadmin" : "super_subadmin";
-
+    const nextRole = currentRole === "super_subadmin" ? "subadmin" : "super_subadmin";
     if (
       !window.confirm(
-        `Change role to ${nextRole === "super_subadmin" ? "Super Subadmin" : "Subadmin"}?`
+        `Change role to ${nextRole === "super_subadmin" ? "Super Subadmin" : "Subadmin"}?`,
       )
     )
       return;
-
     try {
       await updateSubAdmin(id, { role: nextRole });
       fetchSubAdmins();
@@ -99,278 +111,210 @@ const SubAdmin = () => {
     }
   };
 
+  const inputClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
-        {/* Header + Create Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 mb-8">
-          <div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
-              Sub-Admin Management
-            </h1>
-            <p className="mt-2 text-gray-600">Manage your team of sub-admins</p>
-          </div>
-
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center px-6 py-3 bg-black text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Create Sub-Admin
-          </button>
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Sub-admins
+        </h1>
+        <div className="relative min-w-[140px] flex-1 sm:max-w-[220px]">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            placeholder="Search name / email / phone…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          />
         </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className={`${inputClass} w-[120px]`}
+          title="Status"
+          aria-label="Status"
+        >
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="all">All</option>
+        </select>
+        <select
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          className={`${inputClass} w-[108px]`}
+          title="Rows per page"
+          aria-label="Rows per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => navigate(ap("subadmin/module-access"))}
+          className={btnOutline}
+          title="Role module access"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+          Modules
+        </button>
+        <button type="button" onClick={() => navigate(ap("subadmin/create"))} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Create
+        </button>
+      </form>
 
-        {/* Filters */}
-        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/80 rounded-2xl shadow-sm p-5 mb-8">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name, email, phone..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm"
-              />
-            </div>
+      <div className={tableScrollShell}>
+        <table className="min-w-[980px] w-full text-[11px]">
+          <thead className={tableHeadClass}>
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Name</th>
+              <th className={thClass}>Email</th>
+              <th className={thClass}>Phone</th>
+              <th className={thClass}>City</th>
+              <th className={`${thClass} text-center`}>Status</th>
+              <th className={`${thClass} text-center`}>Role</th>
+              <th className={`${thClass} min-w-[90px] text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && subAdmins.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
+              </tr>
+            ) : subAdmins.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
+                  No sub-admins found.{" "}
+                  <button
+                    type="button"
+                    onClick={() => navigate(ap("subadmin/create"))}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    Create one
+                  </button>
+                </td>
+              </tr>
+            ) : (
+              subAdmins.map((admin, idx) => (
+                <tr key={admin._id} className="hover:bg-canvas-muted/50">
+                  <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                    {rowIndexBase + idx + 1}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-stone-900">
+                    {admin.name || "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-700">
+                    {admin.email || "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-700">
+                    {admin.countryCode} {admin.phoneNumber || "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-stone-700">{admin.city || "—"}</td>
+                  <td className="px-2 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleToggle(admin._id, admin.isActive)}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                        admin.isActive
+                          ? "bg-success-bg text-success hover:opacity-90"
+                          : "bg-danger-bg text-danger hover:opacity-90"
+                      }`}
+                    >
+                      {admin.isActive ? "Active" : "Inactive"}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRoleChange(admin._id, admin.role)}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                        admin.role === "super_subadmin"
+                          ? "bg-brand-50 text-brand-700 hover:bg-brand-100"
+                          : "bg-canvas-muted text-stone-700 hover:bg-stone-100"
+                      }`}
+                      title="Toggle role"
+                    >
+                      {admin.role === "super_subadmin" ? "Super" : "Subadmin"}
+                    </button>
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`subadmin/edit/${admin._id}`))}
+                      className={btnIconEdit}
+                      title="Edit"
+                      aria-label="Edit"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`subadmin/${admin._id}/module-access`))}
+                      className={`${btnIconEdit} ml-1.5`}
+                      title="Module access"
+                      aria-label="Module access"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-5 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm min-w-[180px]"
-            >
-              <option value="active">Active Only</option>
-              <option value="inactive">Inactive Only</option>
-              <option value="all">All Statuses</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="bg-white rounded-2xl shadow border border-gray-200/80 overflow-hidden">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
           {loading ? (
-            <div className="p-12 flex flex-col items-center justify-center text-gray-500">
-              <Loader2 className="w-10 h-10 animate-spin mb-4 text-indigo-600" />
-              <p>Loading sub-admins...</p>
-            </div>
-          ) : subAdmins.length === 0 ? (
-            <div className="p-16 text-center">
-              <div className="mx-auto w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                <User className="w-10 h-10 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No sub-admins found</h3>
-              <p className="text-gray-600">
-                {debouncedSearch || statusFilter !== "active"
-                  ? "Try adjusting your filters or search term"
-                  : "Get started by creating your first sub-admin"}
-              </p>
-            </div>
+            "Loading…"
+          ) : total === 0 ? (
+            "0 sub-admins"
           ) : (
             <>
-              {/* Desktop Table */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full table-fixed divide-y divide-gray-200">
-                  <thead className="bg-gray-50/80 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-4 py-4 text-left text-xs font-normal text-gray-600 uppercase tracking-wider">Name</th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Phone</th>
-                      <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">City</th>
-                      <th className="px-4 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Role</th>
-                      <th className="px-4 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-100">
-                    {subAdmins.map((admin) => (
-                      <tr key={admin._id} className="hover:bg-indigo-50/30 transition-colors duration-150">
-                        <td className="px-4 py-4 whitespace-normal break-words">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium flex-shrink-0">
-                              {admin.name?.[0]?.toUpperCase() || "?"}
-                            </div>
-                            <span className="ml-3 font-medium text-gray-900 break-words">{admin.name || "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 break-words text-gray-700">
-                          <div className="flex items-center min-w-0">
-                            <Mail className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                            <span className="truncate">{admin.email || "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-gray-700">
-                          <div className="flex items-center min-w-0">
-                            <Phone className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                            <span className="truncate">{admin.countryCode} {admin.phoneNumber || "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-gray-700">
-                          <div className="flex items-center min-w-0">
-                            <MapPin className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                            <span className="truncate">{admin.city || "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          <button
-                            onClick={() => handleToggle(admin._id, admin.isActive)}
-                            className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border transition-all ${
-                              admin.isActive
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200"
-                                : "bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-200"
-                            }`}
-                          >
-                            {admin.isActive ? "Active" : "Inactive"}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right">
-                          <span
-                            className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
-                              admin.role === "super_subadmin"
-                                ? "bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200"
-                                : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200"
-                            }`}
-                          >
-                            {admin.role === "super_subadmin" ? "Super" : "Subadmin"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => handleEdit(admin._id)}
-                            className="text-indigo-600 hover:text-indigo-800 mr-5 transition-colors"
-                            title="Edit sub-admin"
-                          >
-                            <Edit className="w-5 h-5 inline" />
-                          </button>
-                          <button
-                            onClick={() => handleRoleChange(admin._id, admin.role)}
-                            className="text-indigo-600 hover:text-indigo-800 transition-colors"
-                            title={admin.role === "super_subadmin" ? "Make Subadmin" : "Make Super Subadmin"}
-                          >
-                            {admin.role === "super_subadmin" ? "Make Sub" : "Make Super"}
-                          </button>
-                          <button
-                            onClick={() => handleModuleAccess(admin._id)}
-                            className="text-indigo-600 hover:text-indigo-800 ml-4 transition-colors"
-                            title="Manage module access"
-                          >
-                            Access
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="lg:hidden divide-y divide-gray-200">
-                {subAdmins.map((admin) => (
-                  <div key={admin._id} className="p-4 hover:bg-gray-50 transition-colors">
-                    {/* ... mobile card content remains the same ... */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center min-w-0 flex-1">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-medium flex-shrink-0">
-                          {admin.name?.[0]?.toUpperCase() || "?"}
-                        </div>
-                        <div className="ml-3 min-w-0 flex-1">
-                          <h3 className="font-medium text-gray-900 truncate">{admin.name || "—"}</h3>
-                          <p className="text-sm text-gray-500 flex items-center mt-1 truncate">
-                            <Mail className="w-3 h-3 mr-1 flex-shrink-0" />
-                            {admin.email || "—"}
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ml-2 ${
-                          admin.isActive ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-                        }`}
-                      >
-                        {admin.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 mb-3 text-sm">
-                      <div className="flex items-center text-gray-600 min-w-0">
-                        <Phone className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
-                        <span className="truncate">{admin.countryCode} {admin.phoneNumber || "—"}</span>
-                      </div>
-                      <div className="flex items-center text-gray-600 min-w-0">
-                        <MapPin className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0" />
-                        <span className="truncate">{admin.city || "—"}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-                      <button
-                        onClick={() => handleEdit(admin._id)}
-                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                      >
-                        <Edit className="w-4 h-4" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleRoleChange(admin._id, admin.role)}
-                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                      >
-                        {admin.role === "super_subadmin" ? "Make Sub" : "Make Super"}
-                      </button>
-                      <button
-                        onClick={() => handleModuleAccess(admin._id)}
-                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                      >
-                        Access
-                      </button>
-                      <button
-                        onClick={() => handleToggle(admin._id, admin.isActive)}
-                        className={`flex items-center gap-2 text-sm font-medium ${
-                          admin.isActive ? "text-amber-600 hover:text-amber-800" : "text-emerald-600 hover:text-emerald-800"
-                        }`}
-                      >
-                        <Power className="w-4 h-4" />
-                        {admin.isActive ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination – always shown when > 1 page */}
-              {(
-                <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-200 bg-gray-50/70">
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className={`inline-flex items-center px-6 py-3 rounded-xl text-sm font-medium border min-w-[130px] justify-center transition-colors ${
-                      page <= 1
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100"
-                    }`}
-                  >
-                    <ChevronLeft className="w-5 h-5 mr-2" />
-                    Previous
-                  </button>
-
-                  <span className="text-sm font-medium text-gray-700">
-                    Page <span className="font-bold text-gray-900">{page}</span> of{" "}
-                    <span className="font-bold text-gray-900">{pagination.totalPages}</span>
-                  </span>
-
-                  <button
-                    disabled={page >= pagination.totalPages}
-                    onClick={() => setPage(page + 1)}
-                    className={`inline-flex items-center px-6 py-3 rounded-xl text-sm font-medium border min-w-[130px] justify-center transition-colors ${
-                      page >= pagination.totalPages
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100"
-                    }`}
-                  >
-                    Next
-                    <ChevronRight className="w-5 h-5 ml-2" />
-                  </button>
-                </div>
-              )}
+              Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+              <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+              <span className="font-medium text-stone-700">{total}</span> total · Page{" "}
+              <span className="font-medium text-stone-700">{page}</span> of{" "}
+              <span className="font-medium text-stone-700">{totalPages}</span>
             </>
           )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
       </div>
     </div>

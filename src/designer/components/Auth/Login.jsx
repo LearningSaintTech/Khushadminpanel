@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { decodeTokenRole } from "../../../utils/authRole";
 import { designerApi } from "../../apis/designerApi";
 import { Smartphone } from "lucide-react";
 
@@ -7,7 +9,19 @@ const COUNTRY_CODE = "+91";
 
 export default function DesignerLogin() {
   const navigate = useNavigate();
+  const rehydrated = useSelector((state) => state._persist?.rehydrated);
+  const reduxToken = useSelector((state) => state.global?.token);
   const [phoneNumber, setPhoneNumber] = useState("");
+
+  useEffect(() => {
+    if (rehydrated !== true) return;
+    const token =
+      reduxToken ??
+      (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+    if (decodeTokenRole(token) === "DESIGNER") {
+      navigate("/designer/dashboard", { replace: true });
+    }
+  }, [rehydrated, reduxToken, navigate]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 

@@ -1,19 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  getBrands,
-  deleteBrand,
-} from "../../apis/Brandapi";
+import { Pencil, Trash2 } from "lucide-react";
+import { getBrands, deleteBrand } from "../../apis/Brandapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 
 const Brand = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10);
 
-  // ================= FETCH BRANDS =================
+  const rowIndexBase = useMemo(() => (currentPage - 1) * limit, [currentPage, limit]);
+
+  const filteredBrands = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return brands;
+    return brands.filter((b) => (b.name || "").toLowerCase().includes(q));
+  }, [brands, search]);
+
   const fetchBrands = async () => {
     try {
       setLoading(true);
@@ -21,174 +32,187 @@ const Brand = () => {
       const data = res?.data?.data || res?.data || {};
       const brandList = data.brands || data.items || data || [];
       const totalCount = data.total || brandList.length || 0;
-      
+
       setBrands(Array.isArray(brandList) ? brandList : []);
-      setTotalPages(data.totalPages || data.pages || Math.ceil(totalCount / limit) || 1);
+      setTotalPages(data.totalPages || data.pages || Math.max(1, Math.ceil(totalCount / limit)) || 1);
     } catch (err) {
-      console.error("❌ Fetch brands error:", err);
+      console.error("[Brands] fetch error:", err);
+      setBrands([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [limit, search]);
+
+  useEffect(() => {
     fetchBrands();
-  }, [currentPage]);
+  }, [currentPage, limit]);
 
-
-  // ================= DELETE BRAND =================
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this brand?")) return;
-
+    if (!window.confirm("Delete this brand?")) return;
     try {
       await deleteBrand(id);
-      // If deleting last item on page, go to previous page
       if (brands.length === 1 && currentPage > 1) {
-        setCurrentPage(currentPage - 1);
+        setCurrentPage((p) => p - 1);
       } else {
-        fetchBrands();
+        await fetchBrands();
       }
     } catch (err) {
-      console.error("❌ Delete error:", err);
-      alert("Failed to delete brand");
+      console.error("[Brands] delete error:", err);
+      alert(err?.message || "Failed to delete brand");
     }
   };
 
-  // ================= EDIT HANDLER =================
-  const handleEdit = (brand) => {
-    navigate(`/admin/brands/edit/${brand._id}`);
-  };
+  const inputClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-            Brand Management
-          </h1>
-          <button
-            onClick={() => navigate("/admin/brands/create")}
-            className="rounded-lg bg-indigo-600 px-6 py-2.5 font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            + Add Brand
-          </button>
-        </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Brands
+        </h1>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name…"
+          className={`${inputClass} w-full min-w-[140px] max-w-[220px] sm:w-auto`}
+          aria-label="Search brands"
+        />
+        <select
+          className={`${inputClass} min-w-[108px]`}
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          title="Rows per page"
+        >
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => navigate(ap("brands/create"))}
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700"
+        >
+          Create
+        </button>
+      </div>
 
-        {/* BRANDS TABLE */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
-            <h2 className="text-lg font-semibold text-gray-800">All Brands</h2>
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-            </div>
-          ) : brands.length === 0 ? (
-            <div className="py-12 text-center text-gray-500">
-              No brands found. Add your first brand above.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th
-                      scope="col"
-                      className="whitespace-nowrap px-6 py-3.5 text-left text-sm font-semibold text-gray-900"
+      <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 z-10 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className="w-10 px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                #
+              </th>
+              <th className="w-16 px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Logo
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Name
+              </th>
+              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-2 py-4 text-center text-stone-500">
+                  Loading…
+                </td>
+              </tr>
+            ) : filteredBrands.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-2 py-6 text-center">
+                  <p className="text-stone-500">
+                    {search ? "No brands match your search." : "No brands found."}
+                  </p>
+                  {!search ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap("brands/create"))}
+                      className="mt-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
                     >
-                      Logo
-                    </th>
-                    <th
-                      scope="col"
-                      className="whitespace-nowrap px-6 py-3.5 text-left text-sm font-semibold text-gray-900"
-                    >
-                      Name
-                    </th>
-                    <th
-                      scope="col"
-                      className="relative whitespace-nowrap px-6 py-3.5 text-right text-sm font-semibold text-gray-900"
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {brands.map((brand, idx) => (
-                    <tr
-                      key={brand._id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="whitespace-nowrap px-6 py-4">
-                        {brand.icon?.imageUrl ? (
-                          <img
-                            src={brand.icon.imageUrl}
-                            alt={brand.name}
-                            className="h-10 w-10 rounded-md object-contain ring-1 ring-gray-200"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                            No logo
-                          </div>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                        {brand.name}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleEdit(brand)}
-                          className="mr-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(brand._id)}
-                          className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                      Create your first brand →
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ) : (
+              filteredBrands.map((brand, idx) => (
+                <tr key={brand._id} className="border-t border-border/80 hover:bg-brand-50/30">
+                  <td className="px-2 py-2 text-center text-[10px] text-stone-500">
+                    {rowIndexBase + idx + 1}
+                  </td>
+                  <td className="px-2 py-2">
+                    {brand.icon?.imageUrl ? (
+                      <img
+                        src={brand.icon.imageUrl}
+                        alt=""
+                        className="h-9 w-9 rounded-md border border-border object-contain bg-white p-0.5"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-canvas-muted text-[9px] text-stone-400">
+                        —
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 font-medium text-stone-900">{brand.name}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => navigate(ap(`brands/edit/${brand._id}`))}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 transition-colors hover:bg-brand-100"
+                        title="Edit"
+                        aria-label="Edit brand"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(brand._id)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger transition-colors hover:opacity-90"
+                        title="Delete"
+                        aria-label="Delete brand"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 px-1">
-            <div className="text-sm text-gray-700 font-medium">
-              Showing <span className="font-bold">{brands.length}</span> of{" "}
-              <span className="font-bold">{totalPages * limit}</span> brands
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(currentPage - 1)}
-                className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
-              >
-                Previous
-              </button>
-
-              <span className="px-5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-700 min-w-[140px] text-center">
-                Page {currentPage} of {totalPages}
-              </span>
-
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(currentPage + 1)}
-                className="px-5 py-2.5 bg-white border-2 border-gray-300 rounded-lg font-semibold text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          disabled={currentPage === 1 || loading}
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <span className="rounded-lg bg-canvas-muted px-2.5 py-1 text-[11px] text-stone-700">
+          Page {currentPage} / {totalPages || 1}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage >= totalPages || loading}
+          onClick={() => setCurrentPage((p) => p + 1)}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );

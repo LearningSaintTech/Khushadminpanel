@@ -1,86 +1,121 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   getCartCharges,
   deleteCartCharges,
   toggleCartChargeStatus,
   deleteCartChargeRule,
-} from '../../apis/Cartapi';
+} from "../../apis/Cartapi";
 import toast from "react-hot-toast";
-import { Plus, Trash2, Edit, Power } from 'lucide-react';
+import { Pencil, Trash2, Power } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+function getChargeList(cartCharge) {
+  return Array.isArray(cartCharge) ? cartCharge : cartCharge ? [cartCharge] : [];
+}
+
+function getChargeSummary(cartCharge) {
+  const list = getChargeList(cartCharge);
+  if (list.length === 0) return "—";
+  return list
+    .map((c) => `${c.key || "—"}${c.isCODSpecial ? " (COD)" : ""}`)
+    .join(", ");
+}
 
 const CartChargesPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+  const listPath = ap("cart-charges");
+
   const [charges, setCharges] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(10);
+  const prevPathRef = useRef(location.pathname);
 
-  const fetchCharges = useCallback(async (page = 1) => {
-    try {
-      setLoading(true);
-      setError(null);
-      console.log('[CartList] fetchCharges', { page, limit });
-      const response = await getCartCharges(page, limit);
-      const responseData = response?.data || response || {};
-      console.log('[CartList] fetchCharges response', { responseData, keys: Object.keys(responseData || {}) });
+  const rowIndexBase = useMemo(() => (currentPage - 1) * limit, [currentPage, limit]);
 
-      const chargesArray =
-        responseData?.data ||
-        responseData?.cartCharges ||
-        (Array.isArray(responseData) ? responseData : []);
-      const total = responseData?.total ?? responseData?.pagination?.total ?? chargesArray?.length ?? 0;
+  const fetchCharges = useCallback(
+    async (page = 1) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await getCartCharges(page, limit);
+        const responseData = response?.data || response || {};
+        const chargesArray =
+          responseData?.data ||
+          responseData?.cartCharges ||
+          (Array.isArray(responseData) ? responseData : []);
+        const total =
+          responseData?.total ?? responseData?.pagination?.total ?? chargesArray?.length ?? 0;
 
-      if (Array.isArray(chargesArray)) {
-        setCharges(chargesArray);
-        const calculatedPages = Math.ceil((total || chargesArray.length) / limit);
-        setTotalPages(calculatedPages > 0 ? calculatedPages : 1);
-        console.log('[CartList] set charges', { count: chargesArray.length, total, totalPages: calculatedPages });
-      } else {
+        if (Array.isArray(chargesArray)) {
+          setCharges(chargesArray);
+          const calculatedPages = Math.ceil((total || chargesArray.length) / limit);
+          setTotalPages(calculatedPages > 0 ? calculatedPages : 1);
+        } else {
+          setCharges([]);
+          setTotalPages(1);
+        }
+      } catch (err) {
+        setError(
+          err?.response?.data?.message ||
+            (typeof err === "string" ? err : "Failed to load cart charges"),
+        );
         setCharges([]);
-        setTotalPages(1);
-        console.warn('[CartList] No array in response', { responseData });
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('[CartList] fetchCharges failed', err?.response?.data ?? err);
-      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to load cart charges'));
-      setCharges([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [limit]);
+    },
+    [limit],
+  );
+
+  const filteredCharges = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return charges.filter((charge) => {
+      if (statusFilter === "true" && !charge.isActive) return false;
+      if (statusFilter === "false" && charge.isActive) return false;
+      if (!q) return true;
+      const summary = getChargeSummary(charge.cartCharge).toLowerCase();
+      const idTail = (charge._id || "").slice(-8).toLowerCase();
+      return summary.includes(q) || idTail.includes(q);
+    });
+  }, [charges, search, statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [limit, search, statusFilter]);
 
   useEffect(() => {
     fetchCharges(currentPage);
   }, [currentPage, fetchCharges]);
 
-  // Refetch when user navigates back to list from edit/create (so UI updates after save)
-  const prevPathRef = React.useRef(location.pathname);
   useEffect(() => {
-    const isListPage = location.pathname === '/admin/cart-charges' || location.pathname === '/admin/cart-charges/';
-    const cameFromEdit = prevPathRef.current.includes('/edit/') || prevPathRef.current.includes('/create');
+    const isListPage =
+      location.pathname === listPath || location.pathname === `${listPath}/`;
+    const cameFromEdit =
+      prevPathRef.current.includes("/edit/") || prevPathRef.current.includes("/create");
     prevPathRef.current = location.pathname;
     if (isListPage && cameFromEdit) {
-      console.log('[CartList] returned to list, refetching');
       fetchCharges(currentPage);
     }
-  }, [location.pathname, currentPage, fetchCharges]);
+  }, [location.pathname, currentPage, fetchCharges, listPath]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this cart charge configuration?')) return;
-
+    if (!window.confirm("Delete this cart charge configuration?")) return;
     try {
       setLoading(true);
-      console.log('[CartList] delete', id);
       await deleteCartCharges(id);
-      console.log('[CartList] delete success, refetching');
       await fetchCharges(currentPage);
     } catch (err) {
-      console.error('[CartList] delete failed', err?.response?.data ?? err);
-      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to delete cart charge'));
+      setError(err?.response?.data?.message || "Failed to delete cart charge");
     } finally {
       setLoading(false);
     }
@@ -89,278 +124,256 @@ const CartChargesPage = () => {
   const handleToggleStatus = async (id) => {
     try {
       setLoading(true);
-      console.log('[CartList] toggle status', id);
       await toggleCartChargeStatus(id);
-      console.log('[CartList] toggle success, refetching');
       await fetchCharges(currentPage);
     } catch (err) {
-      console.error('[CartList] toggle failed', err?.response?.data ?? err);
-      setError(err?.response?.data?.message || (typeof err === 'string' ? err : 'Failed to update status'));
+      setError(err?.response?.data?.message || "Failed to update status");
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to show short summary of charges (cartCharge = array of { key, rules } or single object)
-  const getChargeSummary = (cartCharge) => {
-    const list = Array.isArray(cartCharge) ? cartCharge : (cartCharge ? [cartCharge] : []);
-    if (list.length === 0) return '—';
-    return list
-      .map((c) => `${c.key || '—'}${c.isCODSpecial ? ' (COD Special)' : ''}`)
-      .join(', ');
-  };
-
-const handleDeleteRule = async (id, key) => {
-  if (!window.confirm(`Delete rule "${key}"?`)) return;
-
-  try {
-    setLoading(true);
-    console.log('[CartList] delete rule', { id, key });
-
-    const res = await deleteCartChargeRule(id, key);
-    console.log("DELETE RULE RESPONSE:", res);
-
-    if (res?.data?.success) {
-      toast.success(res.data.message || "Rule deleted successfully");
-
-      // ✅ 1. INSTANT UI UPDATE (MAIN FIX)
-      setCharges((prev) =>
-        prev.map((item) => {
-          if (item._id === id) {
-            const updatedRules = (Array.isArray(item.cartCharge)
-              ? item.cartCharge
-              : item.cartCharge
-              ? [item.cartCharge]
-              : []
-            ).filter((rule) => rule.key !== key);
-
-            return {
-              ...item,
-              cartCharge: updatedRules,
-            };
-          }
-          return item;
-        })
-      );
-
-      // ✅ 2. OPTIONAL: Sync with backend (silent)
-      fetchCharges(currentPage); // no await (non-blocking)
-
-    } else {
-      toast.error(res?.data?.message || "Failed to delete rule");
+  const handleDeleteRule = async (id, key) => {
+    if (!window.confirm(`Delete rule "${key}"?`)) return;
+    try {
+      setLoading(true);
+      const res = await deleteCartChargeRule(id, key);
+      if (res?.data?.success) {
+        toast.success(res.data.message || "Rule deleted");
+        setCharges((prev) =>
+          prev.map((item) => {
+            if (item._id !== id) return item;
+            const updatedRules = getChargeList(item.cartCharge).filter((rule) => rule.key !== key);
+            return { ...item, cartCharge: updatedRules };
+          }),
+        );
+        fetchCharges(currentPage);
+      } else {
+        toast.error(res?.data?.message || "Failed to delete rule");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Something went wrong");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('[CartList] delete rule failed', err);
-    toast.error(err?.response?.data?.message || "Something went wrong");
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Helper to format rules for display (cartCharge can be array of { key, rules } or single object)
-  const formatRules = (charge) => {
-    const list = Array.isArray(charge.cartCharge) ? charge.cartCharge : (charge.cartCharge ? [charge.cartCharge] : []);
-    if (list.length === 0) return '—';
-    return list
-      .map((c) => {
-        const rules = Object.entries(c.rules || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
-        return `${c.key || '—'}${c.isCODSpecial ? ' [COD Special]' : ''} (${rules})`;
-      })
-      .join(' | ');
   };
+
+  const inputClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-10">
-        <div className="max-w-full mx-auto px-3 sm:px-4 md:px-6 py-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Cart Charges Configurations</h1>
-            <button
-              onClick={() => navigate("/admin/cart-charges/create")}
-              className="flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition font-medium shadow-sm text-sm sm:text-base"
-            >
-              <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
-              <span className="hidden sm:inline">Add New Configuration</span>
-              <span className="sm:hidden">Add New</span>
-            </button>
-          </div>
-        </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Cart Charges
+        </h1>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search keys…"
+          className={`${inputClass} w-full min-w-[120px] max-w-[160px] sm:w-auto`}
+          aria-label="Search cart charges"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className={`${inputClass} min-w-[120px] max-w-[140px]`}
+          title="Status filter"
+        >
+          <option value="">All statuses</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+        <select
+          className={`${inputClass} min-w-[108px]`}
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          title="Rows per page"
+        >
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => navigate(ap("cart-charges/create"))}
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700"
+        >
+          Create
+        </button>
       </div>
 
-      <main className="max-w-full mx-auto px-3 sm:px-4 md:px-6 py-6 sm:py-8 overflow-x-hidden">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
-            {error}
-          </div>
-        )}
+      {error ? (
+        <div className="mb-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
+          {error}
+        </div>
+      ) : null}
 
-        {loading && charges.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">Loading cart charges...</div>
-        ) : charges.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-gray-500 mb-4">No cart charges configurations found</p>
-            <button
-              onClick={() => navigate("/admin/cart-charges/create")}
-              className="text-black hover:underline font-medium"
-            >
-              Create your first configuration →
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto max-w-full">
-                <table className="w-full text-sm min-w-[600px]">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-semibold text-gray-700 whitespace-nowrap">
-                        ID
-                      </th>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-semibold text-gray-700 min-w-[120px]">
-                        Charges
-                      </th>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-semibold text-gray-700 hidden xl:table-cell min-w-[200px]">
-                        Rules
-                      </th>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-semibold text-gray-700 whitespace-nowrap">
-                        Status
-                      </th>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-left text-xs font-semibold text-gray-700 hidden lg:table-cell whitespace-nowrap">
-                        Created
-                      </th>
-                      <th className="px-2 sm:px-3 md:px-4 py-3 text-right text-xs font-semibold text-gray-700 whitespace-nowrap">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {charges.map((charge) => (
-                      <tr key={charge._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-2 sm:px-3 md:px-4 py-3 font-mono text-gray-600 text-xs whitespace-nowrap">
-                          {charge._id.slice(-8)}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-3 text-gray-700 text-xs">
-                          <div className="font-medium break-words">{getChargeSummary(charge.cartCharge)}</div>
-                          <div className="text-gray-500 text-xs mt-1 xl:hidden line-clamp-2">
-                            {formatRules(charge).substring(0, 60)}...
-                          </div>
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-3 text-gray-600 text-xs hidden xl:table-cell">
-                          <div className="flex flex-wrap gap-2">
-  {(Array.isArray(charge.cartCharge)
-    ? charge.cartCharge
-    : charge.cartCharge
-    ? [charge.cartCharge]
-    : []
-  ).map((rule, idx) => (
-    <div
-      key={idx}
-      className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-md text-xs"
-    >
-      <span>
-        {rule.key}
-        {rule.isCODSpecial ? ' [COD Special]' : ''} (
-        {Object.entries(rule.rules || {})
-          .map(([k, v]) => `${k}:${v}`)
-          .join(', ')})
-      </span>
-
-      <button
-        onClick={() => handleDeleteRule(charge._id, rule.key)}
-        className="text-red-500 hover:text-red-700"
-        title="Delete rule"
-      >
-        <Trash2 size={12} />
-      </button>
-    </div>
-  ))}
-</div>
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-3 whitespace-nowrap">
-                          <span
-                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                              charge.isActive
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {charge.isActive ? 'Active' : 'Inactive'}
+      <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 z-10 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className="w-10 px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                #
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                ID
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Charges
+              </th>
+              <th className="hidden px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500 xl:table-cell">
+                Rules
+              </th>
+              <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Status
+              </th>
+              <th className="hidden px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500 lg:table-cell">
+                Created
+              </th>
+              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && charges.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-2 py-4 text-center text-stone-500">
+                  Loading…
+                </td>
+              </tr>
+            ) : filteredCharges.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-2 py-6 text-center">
+                  <p className="text-stone-500">No configurations found.</p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(ap("cart-charges/create"))}
+                    className="mt-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                  >
+                    Create configuration →
+                  </button>
+                </td>
+              </tr>
+            ) : (
+              filteredCharges.map((charge, idx) => (
+                <tr key={charge._id} className="border-t border-border/80 hover:bg-brand-50/30">
+                  <td className="px-2 py-2 text-center text-[10px] text-stone-500">
+                    {rowIndexBase + idx + 1}
+                  </td>
+                  <td className="px-2 py-2 font-mono text-[10px] text-stone-600 whitespace-nowrap">
+                    …{charge._id.slice(-8)}
+                  </td>
+                  <td className="max-w-[200px] px-2 py-2">
+                    <p className="truncate font-medium text-stone-800">
+                      {getChargeSummary(charge.cartCharge)}
+                    </p>
+                  </td>
+                  <td className="hidden px-2 py-2 xl:table-cell">
+                    <div className="flex max-w-md flex-wrap gap-1">
+                      {getChargeList(charge.cartCharge).map((rule, ruleIdx) => (
+                        <span
+                          key={`${rule.key}-${ruleIdx}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-canvas-muted px-1.5 py-0.5 text-[10px] text-stone-700"
+                        >
+                          <span className="max-w-[140px] truncate">
+                            {rule.key}
+                            {rule.isCODSpecial ? " [COD]" : ""}
                           </span>
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-3 text-gray-600 text-xs hidden lg:table-cell whitespace-nowrap">
-                          {new Date(charge.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-2 sm:px-3 md:px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => navigate(`/admin/cart-charges/edit/${charge._id}`)}
-                              className="p-1.5 text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition"
-                              title="Edit"
-                            >
-                              <Edit size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleToggleStatus(charge._id)}
-                              className={`p-1.5 rounded-lg transition ${
-                                charge.isActive
-                                  ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
-                                  : 'text-green-600 hover:text-green-700 hover:bg-green-50'
-                              }`}
-                              title={charge.isActive ? 'Deactivate' : 'Activate'}
-                            >
-                              <Power size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(charge._id)}
-                              className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Pagination */}
-            {charges.length > 0 && (
-              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row justify-center items-center gap-4">
-                <button
-                  onClick={() => {
-                    if (currentPage > 1) {
-                      setCurrentPage((prev) => prev - 1);
-                    }
-                  }}
-                  disabled={currentPage === 1 || loading}
-                  className="w-full sm:w-auto px-4 sm:px-6 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-                >
-                  ← Previous
-                </button>
-
-                <span className="px-4 sm:px-6 py-2.5 bg-gray-100 rounded-lg text-sm font-semibold text-gray-800 whitespace-nowrap border border-gray-200">
-                  Page {currentPage} of {totalPages || 1}
-                </span>
-
-                <button
-                  onClick={() => {
-                    if (currentPage < totalPages) {
-                      setCurrentPage((prev) => prev + 1);
-                    }
-                  }}
-                  disabled={currentPage >= totalPages || loading}
-                  className="w-full sm:w-auto px-4 sm:px-6 py-2.5 border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 shadow-sm"
-                >
-                  Next →
-                </button>
-              </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRule(charge._id, rule.key)}
+                            className="text-danger hover:opacity-80"
+                            title="Delete rule"
+                            aria-label={`Delete rule ${rule.key}`}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        charge.isActive
+                          ? "bg-success-bg text-success"
+                          : "bg-danger-bg text-danger"
+                      }`}
+                    >
+                      {charge.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="hidden px-2 py-2 whitespace-nowrap text-stone-600 lg:table-cell">
+                    {charge.createdAt
+                      ? new Date(charge.createdAt).toLocaleDateString("en-IN")
+                      : "—"}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => navigate(ap(`cart-charges/edit/${charge._id}`))}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 transition-colors hover:bg-brand-100"
+                        title="Edit"
+                        aria-label="Edit configuration"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(charge._id)}
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
+                          charge.isActive
+                            ? "border-warning/40 bg-warning-bg text-warning hover:opacity-90"
+                            : "border-success/30 bg-success-bg text-success hover:opacity-90"
+                        }`}
+                        title={charge.isActive ? "Deactivate" : "Activate"}
+                        aria-label={charge.isActive ? "Deactivate" : "Activate"}
+                      >
+                        <Power size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(charge._id)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger transition-colors hover:opacity-90"
+                        title="Delete"
+                        aria-label="Delete configuration"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
-          </>
-        )}
-      </main>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          disabled={currentPage === 1 || loading}
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <span className="rounded-lg bg-canvas-muted px-2.5 py-1 text-[11px] text-stone-700">
+          Page {currentPage} / {totalPages || 1}
+        </span>
+        <button
+          type="button"
+          disabled={currentPage >= totalPages || loading}
+          onClick={() => setCurrentPage((p) => p + 1)}
+          className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 };

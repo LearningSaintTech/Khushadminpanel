@@ -1,18 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  Image as ImageIcon,
-  Layers,
-  Loader2,
-  Package,
-  Search,
-  Tag,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Save, Search } from "lucide-react";
 import {
   createSection,
   getOneSection,
@@ -24,20 +12,18 @@ import { getSubcategoriesByCategory } from "../../apis/subcategoryapis";
 import { searchItems } from "../../apis/itemApi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { getSectionDisplayOrders } from "../../utils/sectionDisplay";
+import {
+  btnOutline,
+  btnPrimary,
+  Field,
+  fieldClass,
+  FormSection,
+  formPageWrap,
+  formStickyFooter,
+  formToolbar,
+} from "./sectionShared";
 
 const PAGE_SIZE = 10;
-
-const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
-const labelClass = "mb-1 block text-[11px] font-semibold text-slate-700";
-const sectionCard = "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm";
-const sectionHeader =
-  "flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-slate-50/80";
-const sectionBody = "space-y-3 border-t border-slate-100 p-3 sm:p-4";
-const btnPrimary =
-  "inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
-const btnOutline =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition-colors";
 
 function getTotalPages(pagination) {
   if (!pagination) return 1;
@@ -335,18 +321,18 @@ function SubmitPreviewModal({ open, mode, sectionId, overview, loading, onClose,
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-3 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/50 p-3 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="section-submit-preview-title"
     >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-border/80 px-4 py-3">
           <div>
-            <h2 id="section-submit-preview-title" className="text-sm font-semibold text-slate-900">
+            <h2 id="section-submit-preview-title" className="text-sm font-semibold text-stone-900">
               {mode === "UPDATE" ? "Review update" : "Review before create"}
             </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
+            <p className="mt-0.5 text-[11px] text-stone-500">
               Confirm what will be sent to the API
               {sectionId ? ` (section ${sectionId})` : ""}
             </p>
@@ -355,7 +341,7 @@ function SubmitPreviewModal({ open, mode, sectionId, overview, loading, onClose,
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+            className="rounded-lg p-1 text-stone-400 hover:bg-canvas-muted hover:text-stone-600 disabled:opacity-50"
             aria-label="Close preview"
           >
             <X className="h-4 w-4" />
@@ -381,26 +367,26 @@ function SubmitPreviewModal({ open, mode, sectionId, overview, loading, onClose,
 
           <dl className="grid gap-2 sm:grid-cols-2">
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Title</dt>
-              <dd className="font-medium text-slate-900">{overview.title}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Title</dt>
+              <dd className="font-medium text-stone-900">{overview.title}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Type</dt>
-              <dd className="font-medium text-slate-900">{overview.type}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Type</dt>
+              <dd className="font-medium text-stone-900">{overview.type}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Products</dt>
-              <dd className="tabular-nums text-slate-900">{overview.productCount}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Products</dt>
+              <dd className="tabular-nums text-stone-900">{overview.productCount}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Order</dt>
-              <dd className="text-slate-900">
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Order</dt>
+              <dd className="text-stone-900">
                 App {overview.appOrder} · Web {overview.webOrder}
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Platforms</dt>
-              <dd className="text-slate-900">
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Platforms</dt>
+              <dd className="text-stone-900">
                 {overview.isApp ? "App" : ""}
                 {overview.isApp && overview.isWeb ? " · " : ""}
                 {overview.isWeb ? "Web" : ""}
@@ -408,29 +394,29 @@ function SubmitPreviewModal({ open, mode, sectionId, overview, loading, onClose,
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Show badge</dt>
-              <dd className="text-slate-900">{overview.showBadge ? "Yes" : "No"}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Show badge</dt>
+              <dd className="text-stone-900">{overview.showBadge ? "Yes" : "No"}</dd>
             </div>
           </dl>
 
           {overview.text && (
             <div>
-              <p className="text-[10px] font-semibold uppercase text-slate-500">Description</p>
-              <p className="mt-0.5 text-slate-700">{overview.text}</p>
+              <p className="text-[10px] font-semibold uppercase text-stone-500">Description</p>
+              <p className="mt-0.5 text-stone-700">{overview.text}</p>
             </div>
           )}
 
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-500">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
               Full API payload (FormData)
             </p>
-            <pre className="max-h-48 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-800">
+            <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-canvas-muted p-2 text-[10px] leading-relaxed text-stone-800">
               {JSON.stringify(overview.allFormDataFields, null, 2)}
             </pre>
           </div>
         </div>
 
-        <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
+        <div className="flex gap-2 border-t border-border/80 px-4 py-3">
           <button type="button" onClick={onClose} disabled={loading} className={`${btnOutline} flex-1 py-2`}>
             Go back
           </button>
@@ -466,19 +452,19 @@ const TRACKED_FIELD_CHANGES = new Set([
   "endDate",
 ]);
 
-function PaginationBar({ page, totalPages, onPageChange, loading }) {
-  if (totalPages <= 1) return null;
+function PickerPagination({ page, totalPages, onPageChange, loading, selectedCount, label }) {
   return (
-    <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[11px] text-slate-600">
+    <div className="mt-2 flex items-center justify-between text-[10px] text-stone-500">
       <span>
         Page {page} / {totalPages}
+        {selectedCount != null ? ` · ${selectedCount} ${label || "selected"}` : ""}
       </span>
       <div className="flex gap-1">
         <button
           type="button"
           disabled={page <= 1 || loading}
           onClick={() => onPageChange(page - 1)}
-          className={btnOutline}
+          className="rounded-lg border border-border px-2 py-0.5 hover:bg-canvas-muted disabled:opacity-50"
         >
           Prev
         </button>
@@ -486,7 +472,7 @@ function PaginationBar({ page, totalPages, onPageChange, loading }) {
           type="button"
           disabled={page >= totalPages || loading}
           onClick={() => onPageChange(page + 1)}
-          className={btnOutline}
+          className="rounded-lg border border-border px-2 py-0.5 hover:bg-canvas-muted disabled:opacity-50"
         >
           Next
         </button>
@@ -567,11 +553,6 @@ const SectionForm = () => {
   const [debouncedProductSearch, setDebouncedProductSearch] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(false);
 
-  const [openBasic, setOpenBasic] = useState(true);
-  const [openCategories, setOpenCategories] = useState(true);
-  const [openSubcategories, setOpenSubcategories] = useState(false);
-  const [openProducts, setOpenProducts] = useState(true);
-  const [openMedia, setOpenMedia] = useState(true);
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
   const [submitOverview, setSubmitOverview] = useState(null);
 
@@ -847,10 +828,6 @@ const SectionForm = () => {
         null,
     );
 
-    if (section.type === "CATEGORY") {
-      setOpenCategories(true);
-      setOpenSubcategories(true);
-    }
   }, []);
 
   useEffect(() => {
@@ -1092,22 +1069,38 @@ const SectionForm = () => {
     [subcategoryMap],
   );
 
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(ap("section"));
+  };
+
   if (initialLoading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 bg-slate-50">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-        <p className="text-sm text-slate-600">Loading section…</p>
+      <div className={formPageWrap}>
+        <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-stone-500">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+          Loading section…
+        </div>
       </div>
     );
   }
 
   if (isEdit && loadError) {
-  return (
-      <div className="flex min-h-[60vh] items-center justify-center bg-slate-50 px-4">
-        <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          <p className="font-semibold text-slate-900">Could not load section</p>
-          <p className="mt-2 text-sm text-slate-600">{loadError}</p>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+    return (
+      <div className={formPageWrap}>
+        <div className={formToolbar}>
+          <button type="button" onClick={goBack} className={btnOutline}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Back
+          </button>
+          <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+            Edit section
+          </h1>
+        </div>
+        <div className="rounded-xl border border-danger/30 bg-danger-bg p-4 text-center shadow-sm">
+          <p className="text-sm font-semibold text-stone-900">Could not load section</p>
+          <p className="mt-1 text-[11px] text-danger">{loadError}</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               type="button"
               onClick={() => {
@@ -1120,15 +1113,11 @@ const SectionForm = () => {
                   )
                   .finally(() => setInitialLoading(false));
               }}
-              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+              className={btnPrimary}
             >
               Retry
             </button>
-            <button
-              type="button"
-              onClick={() => navigate(ap("section"))}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <button type="button" onClick={() => navigate(ap("section"))} className={btnOutline}>
               Back to list
             </button>
           </div>
@@ -1138,618 +1127,458 @@ const SectionForm = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/80 pb-24">
-      <div className="mb-3">
-        <button
-          type="button"
-          onClick={() => navigate(ap("section"))}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to sections
+    <div className={formPageWrap}>
+      <div className={formToolbar}>
+        <button type="button" onClick={goBack} className={btnOutline} title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          {isEdit ? "Edit section" : "Create section"}
+        </h1>
+        <button type="button" onClick={() => navigate(ap("section"))} className={btnOutline}>
+          Close
         </button>
       </div>
 
-      <div className="mx-auto max-w-4xl">
+      <form onSubmit={handleSubmit} className="space-y-3">
         {(formError || submitError) && (
           <div
             role="alert"
-            className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+            className="rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger"
           >
             {formError || submitError}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Basic */}
-          <section className={sectionCard}>
-            <button
-              type="button"
-              onClick={() => setOpenBasic(!openBasic)}
-              className={`${sectionHeader} bg-gradient-to-r from-slate-50 to-white`}
-            >
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-indigo-600" />
-                <span className="text-xs font-semibold text-slate-900">Basic details</span>
-              </div>
-              {openBasic ? (
-                <ChevronUp className="h-4 w-4 text-slate-500" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-slate-500" />
-              )}
-            </button>
-            {openBasic && (
-              <div className={sectionBody}>
-          <div>
-                  <label className={labelClass}>
-                    Title <span className="text-red-500">*</span>
-            </label>
+        <FormSection title="Basic details" hint="Title, type, and storefront copy.">
+          <Field label="Title" required>
             <input
               type="text"
               name="title"
               value={formData.title}
               onChange={handleChange}
-                    className={inputClass}
-                    placeholder="Summer collection"
-                    required
-                  />
-          </div>
-          <div>
-                  <label className={labelClass}>
-                    Section type <span className="text-red-500">*</span>
-            </label>
-                  <select
-                    name="type"
-                    value={formData.type}
-                    onChange={(e) => {
-                      handleChange(e);
-                      if (e.target.value === "CATEGORY") {
-                        setOpenCategories(true);
-                        setOpenSubcategories(true);
-                      }
-                    }}
-                    className={inputClass}
-                  >
-                    <option value="MANUAL">MANUAL — pick products yourself</option>
-                    <option value="CATEGORY">CATEGORY — link categories & subcategories</option>
-                  </select>
-              </div>
-              <div>
-                  <label className={labelClass}>Description</label>
-                  <textarea
-                    name="text"
-                    rows={2}
-                    value={formData.text}
-                    onChange={handleChange}
-                    className={`${inputClass} resize-none`}
-                    placeholder="Short copy shown on the storefront"
-                  />
-              </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-                  <label className="flex cursor-pointer items-center gap-2">
-            <input
-                      type="checkbox"
-                      name="enableDiscount"
-                      checked={formData.enableDiscount}
-                      onChange={handleChange}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-xs font-semibold text-slate-800">
-                      Add discount to this section
-                    </span>
-                    <span className="text-[10px] font-normal text-slate-500">(optional)</span>
-              </label>
+              className={fieldClass}
+              placeholder="Summer collection"
+              required
+            />
+          </Field>
+          <Field label="Section type" required>
+            <select name="type" value={formData.type} onChange={handleChange} className={fieldClass}>
+              <option value="MANUAL">MANUAL — pick products</option>
+              <option value="CATEGORY">CATEGORY — link categories</option>
+            </select>
+          </Field>
+          <Field label="Description">
+            <textarea
+              name="text"
+              rows={2}
+              value={formData.text}
+              onChange={handleChange}
+              className={`${fieldClass} resize-none`}
+              placeholder="Short copy on storefront"
+            />
+          </Field>
+        </FormSection>
 
-                  {formData.enableDiscount ? (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className={labelClass}>Discount type</label>
-                        <select
-                          name="discountType"
-                          value={formData.discountType}
-                          onChange={handleChange}
-                          className={inputClass}
-                        >
-                          <option value="FLAT">Flat (₹)</option>
-                          <option value="PERCENT">Percent (%)</option>
-                        </select>
+        <FormSection title="Discount" hint="Optional section-level discount.">
+          <label className="inline-flex items-center gap-2 text-[11px] font-medium text-stone-700">
+            <input
+              type="checkbox"
+              name="enableDiscount"
+              checked={formData.enableDiscount}
+              onChange={handleChange}
+              className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+            />
+            Add discount to this section
+          </label>
+          {formData.enableDiscount ? (
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Field label="Discount type">
+                <select
+                  name="discountType"
+                  value={formData.discountType}
+                  onChange={handleChange}
+                  className={fieldClass}
+                >
+                  <option value="FLAT">Flat (₹)</option>
+                  <option value="PERCENT">Percent (%)</option>
+                </select>
+              </Field>
+              <Field label="Discount value">
+                <input
+                  type="number"
+                  name="discountValue"
+                  min="0"
+                  step="0.01"
+                  value={formData.discountValue}
+                  onChange={handleChange}
+                  className={fieldClass}
+                  placeholder="e.g. 20"
+                />
+              </Field>
             </div>
-            <div>
-                        <label className={labelClass}>Discount value</label>
-              <input
-                type="number"
-                name="discountValue"
-                          min="0"
-                          step="0.01"
-                          value={formData.discountValue}
-                onChange={handleChange}
-                          className={inputClass}
-                          placeholder="e.g. 20"
-                        />
-            </div>
-          </div>
-                  ) : (
-                    <p className="mt-1.5 text-[10px] text-slate-500">
-                      Leave unchecked if this section should not apply a discount.
-                    </p>
-                  )}
-          </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-                    <label className={labelClass}>Navigate path</label>
-              <input
-                type="text"
-                      name="navigate"
-                      value={formData.navigate}
-                onChange={handleChange}
-                      className={inputClass}
-                      placeholder="/summer-sale"
-                    />
-            </div>
-            <div>
-                    <label className={labelClass}>External link</label>
+          ) : null}
+        </FormSection>
+
+        <FormSection title="Navigation & schedule">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="Navigate path">
               <input
                 type="text"
-                      name="externalLink"
-                      value={formData.externalLink}
+                name="navigate"
+                value={formData.navigate}
                 onChange={handleChange}
-                      className={inputClass}
-                      placeholder="https://..."
-                    />
-            </div>
-          </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-                    <label className={labelClass}>Start date</label>
+                className={fieldClass}
+                placeholder="/summer-sale"
+              />
+            </Field>
+            <Field label="External link">
+              <input
+                type="text"
+                name="externalLink"
+                value={formData.externalLink}
+                onChange={handleChange}
+                className={fieldClass}
+                placeholder="https://..."
+              />
+            </Field>
+            <Field label="Start date">
               <input
                 type="date"
                 name="startDate"
-                      value={formData.startDate}
+                value={formData.startDate}
                 onChange={handleChange}
-                      className={inputClass}
-                    />
-            </div>
-            <div>
-                    <label className={labelClass}>End date</label>
+                className={fieldClass}
+              />
+            </Field>
+            <Field label="End date">
               <input
                 type="date"
                 name="endDate"
-                      value={formData.endDate}
+                value={formData.endDate}
                 onChange={handleChange}
-                      className={inputClass}
-                    />
-            </div>
+                className={fieldClass}
+              />
+            </Field>
           </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-                    <label className={labelClass}>App order</label>
+        </FormSection>
+
+        <FormSection title="Display order & platforms">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <Field label="App order">
               <input
                 type="number"
                 name="apporder"
                 value={formData.apporder}
                 onChange={handleChange}
-                      className={inputClass}
-                    />
-            </div>
-            <div>
-                    <label className={labelClass}>Web order</label>
+                className={fieldClass}
+              />
+            </Field>
+            <Field label="Web order">
               <input
                 type="number"
                 name="weborder"
                 value={formData.weborder}
                 onChange={handleChange}
-                      className={inputClass}
-                    />
-            </div>
+                className={fieldClass}
+              />
+            </Field>
           </div>
-                <div className="flex flex-wrap gap-2">
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-canvas-muted/50 px-3 py-2 text-[11px] font-medium text-stone-700">
               <input
                 type="checkbox"
                 name="isapp"
                 checked={formData.isapp}
                 onChange={handleChange}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
-                    />
-                    <span className="text-xs font-medium text-slate-700">Show on app</span>
+                className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+              />
+              Show on app
             </label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-canvas-muted/50 px-3 py-2 text-[11px] font-medium text-stone-700">
               <input
                 type="checkbox"
                 name="isweb"
                 checked={formData.isweb}
                 onChange={handleChange}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
-                    />
-                    <span className="text-xs font-medium text-slate-700">Show on web</span>
-                  </label>
-
-
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-  <input
-    type="checkbox"
-    name="showBadge"
-    checked={formData.showBadge}
-    onChange={handleChange}
-    className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
-  />
-  <span className="text-xs font-medium text-slate-700">
-    Show Badge
-  </span>
-</label>
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* Categories */}
-          {formData.type === "CATEGORY" && (
-            <section className={sectionCard}>
-              <button
-                type="button"
-                onClick={() => setOpenCategories(!openCategories)}
-                className={`${sectionHeader} bg-gradient-to-r from-indigo-50 to-violet-50`}
-              >
-                <div className="flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-indigo-600" />
-                  <div className="text-left">
-                    <span className="text-xs font-semibold text-slate-900">Categories</span>
-                    <p className="text-[10px] text-slate-600">
-                      {categoryIds.length
-                        ? `${categoryIds.length} selected`
-                        : "Required — pick at least one"}
-                    </p>
-                  </div>
-                </div>
-                {openCategories ? (
-                  <ChevronUp className="h-4 w-4 text-slate-500" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-slate-500" />
-                )}
-              </button>
-              {openCategories && (
-                <div className={`${sectionBody} space-y-3`}>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={categorySearch}
-                      onChange={(e) => setCategorySearch(e.target.value)}
-                      placeholder="Search categories..."
-                      className={`${inputClass} pl-8`}
-                    />
-                  </div>
-                  {categoryIds.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {categoryIds.map((cid) => {
-                        const cat = categories.find((c) => c._id === cid);
-                        return (
-                          <span
-                            key={cid}
-                            className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-800"
-                          >
-                            {cat?.name || cat?.title || cid.slice(-6)}
-                            <button
-                              type="button"
-                              onClick={() => toggleId(setCategoryIds, categoryIds, cid)}
-                              className="ml-1 text-indigo-600 hover:text-indigo-900"
-                            >
-                              ×
-                            </button>
-              </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <div className="max-h-52 overflow-y-auto p-1.5">
-                      {loadingCategories ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                        </div>
-                      ) : categories.length === 0 ? (
-                        <p className="py-8 text-center text-xs text-slate-500">No categories found</p>
-                      ) : (
-                        categories.map((cat) => (
-                          <label
-                            key={cat._id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={categoryIds.includes(cat._id)}
-                              onChange={() => toggleId(setCategoryIds, categoryIds, cat._id)}
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
-                            />
-                            <span className="text-xs font-medium text-slate-800">
-                              {cat.name || cat.title || "Unnamed"}
-                            </span>
+                className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+              />
+              Show on web
             </label>
-                        ))
-                      )}
-                    </div>
-                    <PaginationBar
-                      page={categoryPage}
-                      totalPages={categoryTotalPages}
-                      onPageChange={setCategoryPage}
-                      loading={loadingCategories}
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Subcategories */}
-          {formData.type === "CATEGORY" && categoryIds.length > 0 && (
-            <section className={sectionCard}>
-              <button
-                type="button"
-                onClick={() => setOpenSubcategories(!openSubcategories)}
-                className={`${sectionHeader} bg-gradient-to-r from-violet-50 to-purple-50`}
-              >
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-violet-600" />
-                  <div className="text-left">
-                    <span className="text-xs font-semibold text-slate-900">Subcategories</span>
-                    <p className="text-[10px] text-slate-600">
-                      {selectedSubCount ? `${selectedSubCount} selected` : "Optional refinement"}
-                    </p>
+            <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-canvas-muted/50 px-3 py-2 text-[11px] font-medium text-stone-700">
+              <input
+                type="checkbox"
+                name="showBadge"
+                checked={formData.showBadge}
+                onChange={handleChange}
+                className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+              />
+              Show badge
+            </label>
           </div>
-                </div>
-                {openSubcategories ? (
-                  <ChevronUp className="h-4 w-4 text-slate-500" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-slate-500" />
-                )}
-              </button>
-              {openSubcategories && (
-                <div className={`${sectionBody} space-y-3`}>
-                  <div className="flex flex-wrap gap-1.5 border-b border-slate-100 pb-2">
-                    {categoryIds.map((cid) => {
-                      const cat = categories.find((c) => c._id === cid);
-                      const count = subcategoryMap[cid]?.length || 0;
-                      return (
-                        <button
-                          key={cid}
-                          type="button"
-                          onClick={() => setActiveSubcatTab(cid)}
-                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
-                            activeSubcatTab === cid
-                              ? "bg-indigo-600 text-white shadow-sm"
-                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                          }`}
-                        >
-                          {cat?.name || cat?.title || "Category"}
-                          {count > 0 && (
-                            <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-xs">
-                              {count}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={subcategorySearch}
-                      onChange={(e) => setSubcategorySearch(e.target.value)}
-                      placeholder="Search subcategories..."
-                      className={`${inputClass} pl-8`}
-                    />
-                  </div>
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <div className="max-h-52 overflow-y-auto p-1.5">
-                      {loadingSubcategories ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2 className="h-5 w-5 animate-spin text-violet-600" />
-                        </div>
-                      ) : !activeSubcat?.items?.length ? (
-                        <p className="py-8 text-center text-xs text-slate-500">
-                          No subcategories on this page
-                        </p>
-                      ) : (
-                        activeSubcat.items.map((sub) => (
-                          <label
-                            key={sub._id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={(subcategoryMap[activeSubcatTab] || []).includes(sub._id)}
-                              onChange={() =>
-                                handleSubcategoryToggle(activeSubcatTab, sub._id)
-                              }
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
-                            />
-                            <span className="text-xs font-medium text-slate-800">
-                              {sub.name || sub.title || "Unnamed"}
-                            </span>
-                          </label>
-                        ))
-                      )}
-                    </div>
-                    <PaginationBar
-                      page={subcategoryPage}
-                      totalPages={subcatTotalPages}
-                      onPageChange={setSubcategoryPage}
-                      loading={loadingSubcategories}
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
+        </FormSection>
 
-          {/* Products */}
-          <section className={sectionCard}>
-            <button
-              type="button"
-              onClick={() => setOpenProducts(!openProducts)}
-              className={`${sectionHeader} bg-gradient-to-r from-emerald-50 to-teal-50`}
-            >
-              <div className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-emerald-600" />
-                <div className="text-left">
-                  <span className="text-xs font-semibold text-slate-900">Products</span>
-                  <p className="text-[10px] text-slate-600">
-                    {formData.type === "MANUAL" ? (
-                      <>
-                        {productIds.length
-                          ? `${productIds.length} selected`
-                          : "Required for MANUAL"}
-                      </>
-                    ) : (
-                      <>{productIds.length} selected (optional)</>
-                    )}
-                  </p>
-                </div>
-              </div>
-              {openProducts ? (
-                <ChevronUp className="h-4 w-4 text-slate-500" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-slate-500" />
-              )}
-            </button>
-            {openProducts && (
-              <div className={`${sectionBody} space-y-3`}>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="Search by name or SKU..."
-                    className={`${inputClass} pl-8`}
-                  />
-                </div>
-                {productIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                    {productIds.map((pid) => (
-                      <span
-                        key={pid}
-                        className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-900"
-                      >
-                        {productLabels[pid] || `…${pid.slice(-6)}`}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = productIds.filter((x) => x !== pid);
-                            setProductIds(next);
-                          }}
-                          className="text-emerald-700 hover:text-emerald-950"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setProductIds([])}
-                      className="text-xs font-medium text-red-600 hover:underline"
+        {formData.type === "CATEGORY" && (
+          <FormSection
+            title="Categories"
+            hint={
+              categoryIds.length
+                ? `${categoryIds.length} selected — pick at least one.`
+                : "Required for CATEGORY sections."
+            }
+          >
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                value={categorySearch}
+                onChange={(e) => setCategorySearch(e.target.value)}
+                placeholder="Search categories…"
+                className={`${fieldClass} pl-8`}
+              />
+            </div>
+            {categoryIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {categoryIds.map((cid) => {
+                  const cat = categories.find((c) => c._id === cid);
+                  return (
+                    <span
+                      key={cid}
+                      className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-800"
                     >
-                      Clear all
-                    </button>
-                  </div>
-                )}
-                <div className="overflow-hidden rounded-lg border border-slate-200">
-                  <div className="max-h-60 overflow-y-auto p-1.5">
-                    {loadingProducts ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
-                      </div>
-                    ) : products.length === 0 ? (
-                      <p className="py-8 text-center text-xs text-slate-500">No products found</p>
-                    ) : (
-                      products.map((prod) => (
-                        <label
-                          key={prod._id}
-                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={productIds.includes(prod._id)}
-                            onChange={() => {
-                              const next = productIds.includes(prod._id)
-                                ? productIds.filter((x) => x !== prod._id)
-                                : [...productIds, prod._id];
-                              setProductIds(next);
-                              setProductLabels((prev) => ({
-                                ...prev,
-                                [prod._id]:
-                                  prod.title ||
-                                  prod.name ||
-                                  prod.productName ||
-                                  "Product",
-                              }));
-                            }}
-                            className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-medium text-slate-800">
-                              {prod.title || prod.name || prod.productName || "Unnamed"}
-                            </p>
-                            {prod.discountedPrice != null && (
-                              <p className="text-[10px] text-emerald-700">
-                                ₹{prod.discountedPrice}
-                              </p>
-                            )}
-                          </div>
-              </label>
-                      ))
-                    )}
-                  </div>
-                  <PaginationBar
-                    page={productPage}
-                    totalPages={productTotalPages}
-                    onPageChange={setProductPage}
-                    loading={loadingProducts}
-                  />
-                </div>
+                      {cat?.name || cat?.title || cid.slice(-6)}
+                      <button
+                        type="button"
+                        onClick={() => toggleId(setCategoryIds, categoryIds, cid)}
+                        className="text-brand-600 hover:text-brand-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
             )}
-          </section>
-
-          {/* Banners */}
-          <section className={sectionCard}>
-            <button
-              type="button"
-              onClick={() => setOpenMedia(!openMedia)}
-              className={`${sectionHeader} bg-gradient-to-r from-amber-50 to-orange-50`}
-            >
-              <div className="flex items-center gap-2">
-                <ImageIcon className="h-4 w-4 text-amber-600" />
-                <span className="text-xs font-semibold text-slate-900">Banner images</span>
-              </div>
-              {openMedia ? (
-                <ChevronUp className="h-4 w-4 text-slate-500" />
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-border bg-canvas-muted/50 p-2">
+              {loadingCategories ? (
+                <p className="py-2 text-[11px] text-stone-500">Loading…</p>
+              ) : categories.length === 0 ? (
+                <p className="py-2 text-[11px] text-stone-500">No categories found.</p>
               ) : (
-                <ChevronDown className="h-4 w-4 text-slate-500" />
+                <div className="space-y-0.5">
+                  {categories.map((cat) => (
+                    <label
+                      key={cat._id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[11px] hover:bg-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={categoryIds.includes(cat._id)}
+                        onChange={() => toggleId(setCategoryIds, categoryIds, cat._id)}
+                        className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+                      />
+                      <span>{cat.name || cat.title || "Unnamed"}</span>
+                    </label>
+                  ))}
+                </div>
               )}
-            </button>
-            {openMedia && (
-              <div className="grid gap-4 border-t border-slate-100 p-3 sm:grid-cols-2 sm:p-4">
-                <div>
-                  <label className={labelClass}>Desktop banner</label>
+            </div>
+            <PickerPagination
+              page={categoryPage}
+              totalPages={categoryTotalPages}
+              onPageChange={setCategoryPage}
+              loading={loadingCategories}
+              selectedCount={categoryIds.length}
+            />
+          </FormSection>
+        )}
+
+        {formData.type === "CATEGORY" && categoryIds.length > 0 && (
+          <FormSection title="Subcategories" hint="Optional refinement per category.">
+            <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
+              {categoryIds.map((cid) => {
+                const cat = categories.find((c) => c._id === cid);
+                const count = subcategoryMap[cid]?.length || 0;
+                return (
+                  <button
+                    key={cid}
+                    type="button"
+                    onClick={() => setActiveSubcatTab(cid)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
+                      activeSubcatTab === cid
+                        ? "bg-brand-600 text-white shadow-sm"
+                        : "bg-canvas-muted text-stone-700 hover:bg-stone-200"
+                    }`}
+                  >
+                    {cat?.name || cat?.title || "Category"}
+                    {count > 0 ? (
+                      <span className="ml-1 rounded-full bg-white/25 px-1.5">{count}</span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                value={subcategorySearch}
+                onChange={(e) => setSubcategorySearch(e.target.value)}
+                placeholder="Search subcategories…"
+                className={`${fieldClass} pl-8`}
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-border bg-canvas-muted/50 p-2">
+              {loadingSubcategories ? (
+                <p className="py-2 text-[11px] text-stone-500">Loading…</p>
+              ) : !activeSubcat?.items?.length ? (
+                <p className="py-2 text-[11px] text-stone-500">No subcategories on this page.</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {activeSubcat.items.map((sub) => (
+                    <label
+                      key={sub._id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[11px] hover:bg-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(subcategoryMap[activeSubcatTab] || []).includes(sub._id)}
+                        onChange={() => handleSubcategoryToggle(activeSubcatTab, sub._id)}
+                        className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+                      />
+                      <span>{sub.name || sub.title || "Unnamed"}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <PickerPagination
+              page={subcategoryPage}
+              totalPages={subcatTotalPages}
+              onPageChange={setSubcategoryPage}
+              loading={loadingSubcategories}
+              selectedCount={selectedSubCount}
+            />
+          </FormSection>
+        )}
+
+        <FormSection
+          title="Products"
+          hint={
+            formData.type === "MANUAL"
+              ? productIds.length
+                ? `${productIds.length} selected — required for MANUAL.`
+                : "Required for MANUAL sections."
+              : productIds.length
+                ? `${productIds.length} selected (optional).`
+                : "Optional for CATEGORY sections."
+          }
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Search by name or SKU…"
+              className={`${fieldClass} pl-8`}
+            />
+          </div>
+          {productIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 rounded-lg border border-border bg-canvas-muted/50 p-2">
+              {productIds.map((pid) => (
+                <span
+                  key={pid}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-800"
+                >
+                  {productLabels[pid] || `…${pid.slice(-6)}`}
+                  <button
+                    type="button"
+                    onClick={() => setProductIds(productIds.filter((x) => x !== pid))}
+                    className="text-brand-600 hover:text-brand-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={() => setProductIds([])}
+                className="text-[10px] font-medium text-danger hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-canvas-muted/50 p-2">
+            {loadingProducts ? (
+              <p className="py-2 text-[11px] text-stone-500">Loading…</p>
+            ) : products.length === 0 ? (
+              <p className="py-2 text-[11px] text-stone-500">No products found.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {products.map((prod) => (
+                  <label
+                    key={prod._id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[11px] hover:bg-white"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={productIds.includes(prod._id)}
+                      onChange={() => {
+                        const next = productIds.includes(prod._id)
+                          ? productIds.filter((x) => x !== prod._id)
+                          : [...productIds, prod._id];
+                        setProductIds(next);
+                        setProductLabels((prev) => ({
+                          ...prev,
+                          [prod._id]:
+                            prod.title || prod.name || prod.productName || "Product",
+                        }));
+                      }}
+                      className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {prod.title || prod.name || prod.productName || "Unnamed"}
+                      {prod.discountedPrice != null ? (
+                        <span className="ml-1 text-stone-500">₹{prod.discountedPrice}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <PickerPagination
+            page={productPage}
+            totalPages={productTotalPages}
+            onPageChange={setProductPage}
+            loading={loadingProducts}
+            selectedCount={productIds.length}
+          />
+        </FormSection>
+
+        <FormSection title="Banner images" hint="Desktop and mobile hero images.">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="Desktop banner">
               <input
                 type="file"
-                    accept="image/*"
+                accept="image/*"
                 onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setFormData((prev) => ({ ...prev, desktopbanner: file }));
-                      setDesktopPreview(URL.createObjectURL(file));
-                    }}
-                    className="block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
-                  />
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setFormData((prev) => ({ ...prev, desktopbanner: file }));
+                  setDesktopPreview(URL.createObjectURL(file));
+                }}
+                className="block w-full text-[11px] text-stone-600 file:mr-3 file:rounded-md file:border-0 file:bg-canvas-muted file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
+              />
               {desktopPreview && (
-                <div className="relative mt-2 h-28 w-full">
+                <div className="relative mt-2 h-24 w-full">
                   <img
                     src={desktopPreview}
                     alt="Desktop banner preview"
-                    className="h-full w-full rounded-lg border border-slate-200 object-cover"
+                    className="h-full w-full rounded-lg border border-border object-cover"
                   />
                   <button
                     type="button"
@@ -1757,34 +1586,32 @@ const SectionForm = () => {
                       setDesktopPreview(null);
                       setFormData((prev) => ({ ...prev, desktopbanner: null }));
                     }}
-                    className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-semibold text-white shadow-sm hover:bg-black"
+                    className="absolute right-1 top-1 rounded-full bg-black/70 px-1.5 text-[10px] text-white"
                     aria-label="Remove desktop banner"
-                    title="Remove desktop banner"
                   >
                     ×
                   </button>
                 </div>
               )}
-            </div>
-            <div>
-                  <label className={labelClass}>Mobile banner</label>
+            </Field>
+            <Field label="Mobile banner">
               <input
                 type="file"
-                    accept="image/*"
+                accept="image/*"
                 onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setFormData((prev) => ({ ...prev, mobilebanner: file }));
-                      setMobilePreview(URL.createObjectURL(file));
-                    }}
-                    className="block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
-                  />
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setFormData((prev) => ({ ...prev, mobilebanner: file }));
+                  setMobilePreview(URL.createObjectURL(file));
+                }}
+                className="block w-full text-[11px] text-stone-600 file:mr-3 file:rounded-md file:border-0 file:bg-canvas-muted file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
+              />
               {mobilePreview && (
-                <div className="relative mt-2 h-28 w-full">
+                <div className="relative mt-2 h-24 w-full">
                   <img
                     src={mobilePreview}
                     alt="Mobile banner preview"
-                    className="h-full w-full rounded-lg border border-slate-200 object-cover"
+                    className="h-full w-full rounded-lg border border-border object-cover"
                   />
                   <button
                     type="button"
@@ -1792,52 +1619,58 @@ const SectionForm = () => {
                       setMobilePreview(null);
                       setFormData((prev) => ({ ...prev, mobilebanner: null }));
                     }}
-                    className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-semibold text-white shadow-sm hover:bg-black"
+                    className="absolute right-1 top-1 rounded-full bg-black/70 px-1.5 text-[10px] text-white"
                     aria-label="Remove mobile banner"
-                    title="Remove mobile banner"
                   >
                     ×
                   </button>
                 </div>
               )}
-            </div>
+            </Field>
           </div>
-            )}
-          </section>
+        </FormSection>
 
-          <div className="sticky bottom-0 z-10 -mx-3 border-t border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur-sm sm:-mx-4 sm:px-4">
+        <div className={formStickyFooter}>
           <button
-              type="submit"
+            type="button"
+            onClick={() => navigate(ap("section"))}
             disabled={loading}
-              className={`${btnPrimary} w-full py-2.5 text-xs font-semibold`}
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {loading
-                ? "Saving…"
-                : isEdit
-                  ? "Review & update section"
-                  : "Review & create section"}
+            className={btnOutline}
+          >
+            Cancel
           </button>
-          </div>
-        </form>
+          <button type="submit" disabled={loading} className={btnPrimary}>
+            {loading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Save className="h-3.5 w-3.5" aria-hidden />
+                {isEdit ? "Update" : "Create"}
+              </>
+            )}
+          </button>
+        </div>
+      </form>
 
-        <SubmitPreviewModal
-          open={showSubmitPreview}
-          mode={isEdit ? "UPDATE" : "CREATE"}
-          sectionId={id}
-          overview={submitOverview}
-          loading={loading}
-          onClose={() => {
-            if (!loading) {
-              setShowSubmitPreview(false);
-              sectionLog("SUBMIT preview closed — no API call", {
-                discountWillBeSentToApi: isDiscountConsented(formData),
-              });
-            }
-          }}
-          onConfirm={handleConfirmSubmit}
-        />
-      </div>
+      <SubmitPreviewModal
+        open={showSubmitPreview}
+        mode={isEdit ? "UPDATE" : "CREATE"}
+        sectionId={id}
+        overview={submitOverview}
+        loading={loading}
+        onClose={() => {
+          if (!loading) {
+            setShowSubmitPreview(false);
+            sectionLog("SUBMIT preview closed — no API call", {
+              discountWillBeSentToApi: isDiscountConsented(formData),
+            });
+          }
+        }}
+        onConfirm={handleConfirmSubmit}
+      />
     </div>
   );
 };

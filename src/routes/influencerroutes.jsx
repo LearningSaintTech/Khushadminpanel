@@ -15,7 +15,15 @@ const InfluencerRoutes = () => {
       <Route path="verify-otp" element={<VerifyOtpPage />} />
 
       {/* Protected routes - only logged-in users can access */}
-      <Route element={<ProtectedRoute />}>
+      <Route
+        element={
+          <ProtectedRoute
+            allowedRoles={["INFLUENCER"]}
+            loginPath="/influencer/login"
+            wrongRolePolicy="login"
+          />
+        }
+      >
         <Route element={<Layout />}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="coupon" element={<InfluencerCoupons />} />

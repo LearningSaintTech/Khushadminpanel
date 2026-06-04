@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Bell, Loader2 } from "lucide-react";
 import { useNotification } from "../../../context/NotificationContext";
 import { notificationApi } from "../../../admin/services/notificationApi.js";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  PageToolbar,
+  LoadingBlock,
+  EmptyBlock,
+  inputClass,
+} from "./notificationsShared";
 
 const PAGE_SIZE = 20;
 
@@ -27,6 +35,9 @@ function formatNotificationDate(dateVal) {
 
 export default function AdminNotificationsPage() {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
   const { markRead, markAllRead, unreadCount } = useNotification();
   const [list, setList] = useState([]);
   const [total, setTotal] = useState(0);
@@ -66,68 +77,81 @@ export default function AdminNotificationsPage() {
   const handleNotificationClick = (n) => {
     if (!n.read) handleMarkRead(n._id);
     if (n.module === "order" && n.referenceId) {
-      navigate("/admin/orders");
+      navigate(ap("orders"));
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold text-gray-900">Notifications</h1>
-        {unreadCount > 0 && (
+    <div className="text-stone-900">
+      <PageToolbar
+        icon={Bell}
+        title="Notifications"
+        subtitle="Updates and system alerts"
+      >
+        {unreadCount > 0 ? (
+          <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold text-brand-700">
+            {unreadCount} unread
+          </span>
+        ) : null}
+        {unreadCount > 0 ? (
           <button
             type="button"
             onClick={handleMarkAllRead}
-            className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+            className={`${inputClass} font-medium text-brand-600`}
           >
-            Mark all as read
+            Mark all read
           </button>
-        )}
-      </div>
+        ) : null}
+      </PageToolbar>
 
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
+      {loading && list.length === 0 ? (
+        <LoadingBlock />
       ) : list.length === 0 ? (
-        <p className="text-gray-500 py-8">No notifications yet.</p>
+        <EmptyBlock message="No notifications yet." />
       ) : (
-        <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 overflow-hidden bg-white">
+        <ul className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
           {list.map((n) => (
-            <li key={n._id}>
+            <li key={n._id} className="border-t border-border/80 first:border-t-0">
               <button
                 type="button"
                 onClick={() => handleNotificationClick(n)}
-                className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
-                  !n.read ? "bg-blue-50/30" : ""
+                className={`w-full px-3 py-2 text-left transition-colors hover:bg-brand-50/30 ${
+                  !n.read ? "bg-brand-50/40" : ""
                 }`}
               >
-                <div className="flex justify-between items-start gap-2">
-                  <p className="font-medium text-gray-900 flex-1">{n.title}</p>
-                  <span className="text-xs text-gray-500 shrink-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="flex-1 text-[11px] font-semibold text-stone-900">{n.title}</p>
+                  <span className="shrink-0 text-[10px] text-stone-500">
                     {formatNotificationDate(n.createdAt)}
                   </span>
                 </div>
-                {n.body ? (
-                  <p className="text-sm text-gray-600 mt-1">{n.body}</p>
+                {n.body ? <p className="mt-0.5 text-[11px] text-stone-600">{n.body}</p> : null}
+                {n.module === "order" && n.referenceId ? (
+                  <p className="mt-1 text-[10px] font-medium text-brand-600">View orders →</p>
                 ) : null}
-                {n.module === "order" && n.referenceId && (
-                  <p className="text-xs text-blue-600 mt-1">View orders →</p>
-                )}
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      {total > PAGE_SIZE && list.length < total && (
+      {total > PAGE_SIZE && list.length < total ? (
         <button
           type="button"
           onClick={() => loadPage(page + 1, true)}
           disabled={loading}
-          className="mt-4 w-full py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg disabled:opacity-50"
+          className={`${inputClass} mt-2 w-full font-medium disabled:opacity-50`}
         >
-          {loading ? "Loading..." : "Load more"}
+          {loading ? (
+            <span className="inline-flex items-center justify-center gap-1">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading…
+            </span>
+          ) : (
+            "Load more"
+          )}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

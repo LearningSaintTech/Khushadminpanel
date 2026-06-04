@@ -38,42 +38,40 @@ const MoneyFeaturesRedeemCoins = () => {
   const limits = rules?.limits;
   const recharge = rules?.recharge_bonus_rules ?? [];
 
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Coins className="text-violet-600" />
-            Redeem coins (reward points)
+    <div className="text-stone-900">
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+          <h1 className="mr-auto flex min-w-0 items-center gap-2 text-base font-bold tracking-tight sm:text-lg">
+              <Coins className="h-4 w-4 text-violet-600 shrink-0" />
+              Redeem coins
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Points earned on orders and recharges; users redeem to cash wallet at the rate below.
-          </p>
+            <button
+              type="button"
+              onClick={load}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+            <Link
+              to={ap("rewards")}
+              className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700"
+            >
+              <Settings size={14} />
+              Edit rules
+            </Link>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          <Link
-            to={`${basePath}/rewards`}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            <Settings size={16} />
-            Edit reward rules
-          </Link>
-        </div>
-      </div>
 
       {loading ? (
-        <p className="text-gray-500">Loading…</p>
+        <div className="rounded-xl border border-border bg-white p-6 text-center text-[11px] text-stone-500 shadow-sm">
+          Loading…
+        </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3">
             <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
               <p className="text-xs font-semibold uppercase text-violet-800">Total coins in system</p>
               <p className="text-2xl font-bold text-violet-950 mt-1">
@@ -114,59 +112,59 @@ const MoneyFeaturesRedeemCoins = () => {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 lg:gap-3">
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">Redemption rules</h2>
-                <dl className="space-y-2 text-sm">
+                <h2 className="mb-2 text-xs font-semibold text-slate-900">Redemption rules</h2>
+                <dl className="space-y-1.5 text-[11px]">
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Min points to redeem</dt>
-                    <dd className="font-medium">{redemption?.min_points_required ?? "—"}</dd>
+                    <dt className="text-slate-500">Min points to redeem</dt>
+                    <dd className="font-semibold text-slate-900">{redemption?.min_points_required ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Point value (INR)</dt>
-                    <dd className="font-medium">₹{redemption?.point_value_in_currency ?? "—"}</dd>
+                    <dt className="text-slate-500">Point value (INR)</dt>
+                    <dd className="font-semibold text-slate-900">₹{redemption?.point_value_in_currency ?? "—"}</dd>
                   </div>
                 </dl>
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">Earning & expiry</h2>
-                <dl className="space-y-2 text-sm">
+                <h2 className="mb-2 text-xs font-semibold text-slate-900">Earning & expiry</h2>
+                <dl className="space-y-1.5 text-[11px]">
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Earning type</dt>
-                    <dd className="font-medium">{earning?.type ?? "—"}</dd>
+                    <dt className="text-slate-500">Earning type</dt>
+                    <dd className="font-semibold text-slate-900">{earning?.type ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Earning slabs</dt>
-                    <dd className="font-medium">{earning?.slabs?.length ?? 0}</dd>
+                    <dt className="text-slate-500">Earning slabs</dt>
+                    <dd className="font-semibold text-slate-900">{earning?.slabs?.length ?? 0}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Expiry days</dt>
-                    <dd className="font-medium">{expiry?.expiry_days ?? "—"}</dd>
+                    <dt className="text-slate-500">Expiry days</dt>
+                    <dd className="font-semibold text-slate-900">{expiry?.expiry_days ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Max points / order</dt>
-                    <dd className="font-medium">{limits?.max_points_earned_per_order ?? "—"}</dd>
+                    <dt className="text-slate-500">Max points / order</dt>
+                    <dd className="font-semibold text-slate-900">{limits?.max_points_earned_per_order ?? "—"}</dd>
                   </div>
                 </dl>
               </div>
 
               {recharge.length > 0 && (
-                <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3">Wallet recharge bonus slabs</h2>
+                <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <h2 className="mb-2 text-xs font-semibold text-slate-900">Wallet recharge bonus slabs</h2>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="text-xs uppercase text-gray-500 border-b">
+                    <table className="w-full text-[11px]">
+                      <thead className="text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
                         <tr>
-                          <th className="text-left py-2">Min amount</th>
-                          <th className="text-left py-2">Max amount</th>
+                          <th className="text-left py-2">Min</th>
+                          <th className="text-left py-2">Max</th>
                           <th className="text-left py-2">Cash bonus</th>
                           <th className="text-left py-2">Bonus %</th>
                         </tr>
                       </thead>
                       <tbody>
                         {recharge.map((b, i) => (
-                          <tr key={i} className="border-b border-gray-50">
+                          <tr key={i} className="border-b border-slate-100">
                             <td className="py-2">₹{b.min_amount}</td>
                             <td className="py-2">₹{b.max_amount}</td>
                             <td className="py-2">₹{b.cashToAdd ?? 0}</td>
@@ -180,21 +178,21 @@ const MoneyFeaturesRedeemCoins = () => {
               )}
 
               {earning?.slabs?.length > 0 && (
-                <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-3">Order earning slabs</h2>
+                <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <h2 className="mb-2 text-xs font-semibold text-slate-900">Order earning slabs</h2>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="text-xs uppercase text-gray-500 border-b">
+                    <table className="w-full text-[11px]">
+                      <thead className="text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
                         <tr>
-                          <th className="text-left py-2">Order value min</th>
-                          <th className="text-left py-2">Order value max</th>
-                          <th className="text-left py-2">Fixed points</th>
-                          <th className="text-left py-2">% points</th>
+                          <th className="text-left py-2">Min</th>
+                          <th className="text-left py-2">Max</th>
+                          <th className="text-left py-2">Fixed</th>
+                          <th className="text-left py-2">%</th>
                         </tr>
                       </thead>
                       <tbody>
                         {earning.slabs.map((s, i) => (
-                          <tr key={i} className="border-b border-gray-50">
+                          <tr key={i} className="border-b border-slate-100">
                             <td className="py-2">₹{s.min_price}</td>
                             <td className="py-2">₹{s.max_price}</td>
                             <td className="py-2">{s.points ?? 0}</td>

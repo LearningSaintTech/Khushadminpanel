@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { adminNotificationApi } from "../../services/notificationApi.js";
 import { Mail, Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  PageToolbar,
+  Alert,
+  LoadingBlock,
+  EmptyBlock,
+  TableActionBtn,
+  tableScrollShell,
+  fieldClass,
+  labelClass,
+} from "./notificationsShared";
 
 const PAGE_SIZE = 20;
-
 const initialForm = { key: "", subject: "", html: "", text: "", isActive: true };
 
 export default function AdminEmailTemplatesPage() {
@@ -122,81 +131,72 @@ export default function AdminEmailTemplatesPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-          <Mail size={24} />
-          Email templates
-        </h1>
+    <div className="text-stone-900">
+      <PageToolbar
+        icon={Mail}
+        title="Email templates"
+        subtitle='Use {"{{placeholder}}"} for dynamic values. WhatsApp/SMS use registered third-party templates.'
+      >
         <button
           type="button"
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 font-medium"
+          className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-medium text-white transition hover:bg-brand-700"
         >
-          <Plus size={18} />
-          Add template
+          <Plus className="h-3.5 w-3.5" />
+          Add
         </button>
-      </div>
-      <p className="text-gray-600 text-sm mb-4">
-        Create your own email templates (subject and body). Use {"{{placeholder}}"} for dynamic values. For WhatsApp/SMS we use third-party registered templates only.
-      </p>
+      </PageToolbar>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      )}
+      {error ? <Alert>{error}</Alert> : null}
 
       {loading ? (
-        <p className="text-gray-500">Loading email templates...</p>
+        <LoadingBlock />
       ) : list.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center text-gray-500">
-          No email templates yet. Create one to use for broadcast or other notifications.
-        </div>
+        <EmptyBlock message="No email templates yet. Create one for broadcast or other notifications." />
       ) : (
-        <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-200">
+        <div className={tableScrollShell}>
+          <table className="w-full min-w-[760px] text-left text-[11px]">
+            <thead className="sticky top-0 z-10 border-b border-border bg-canvas-muted text-[10px] font-semibold uppercase tracking-wide text-stone-500">
               <tr>
-                <th className="px-4 py-3 text-sm font-semibold text-gray-700">Key</th>
-                <th className="px-4 py-3 text-sm font-semibold text-gray-700">Subject</th>
-                <th className="px-4 py-3 text-sm font-semibold text-gray-700">Active</th>
-                <th className="px-4 py-3 text-sm font-semibold text-gray-700 w-24">Actions</th>
+                <th className="w-8 px-2 py-1.5">#</th>
+                <th className="px-2 py-1.5">Key</th>
+                <th className="px-2 py-1.5">Subject</th>
+                <th className="px-2 py-1.5">Active</th>
+                <th className="w-20 px-2 py-1.5">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {list.map((t) => (
-                <tr key={t._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-sm text-gray-800">{t.key}</td>
-                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">{t.subject}</td>
-                  <td className="px-4 py-3">
+            <tbody className="divide-y divide-border">
+              {list.map((t, i) => (
+                <tr key={t._id} className="hover:bg-brand-50/20">
+                  <td className="px-2 py-1.5 text-stone-400">
+                    {(page - 1) * PAGE_SIZE + i + 1}
+                  </td>
+                  <td className="px-2 py-1.5 font-mono text-stone-800">{t.key}</td>
+                  <td className="max-w-xs truncate px-2 py-1.5 text-stone-900">{t.subject}</td>
+                  <td className="px-2 py-1.5">
                     <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        t.isActive !== false ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-600"
+                      className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold ${
+                        t.isActive !== false
+                          ? "bg-success-bg text-success"
+                          : "bg-canvas-muted text-stone-600"
                       }`}
                     >
                       {t.isActive !== false ? "Yes" : "No"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(t)}
-                      className="p-1.5 text-gray-600 hover:bg-gray-200 rounded"
-                      title="Edit"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(t._id)}
-                      className={`p-1.5 rounded ${
-                        deleteConfirm === t._id
-                          ? "bg-red-100 text-red-700 hover:bg-red-200"
-                          : "text-gray-600 hover:bg-gray-200"
-                      }`}
-                      title={deleteConfirm === t._id ? "Click again to delete" : "Delete"}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1">
+                      <TableActionBtn onClick={() => openEdit(t)} title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </TableActionBtn>
+                      <TableActionBtn
+                        variant="delete"
+                        onClick={() => handleDelete(t._id)}
+                        title={deleteConfirm === t._id ? "Click again to delete" : "Delete"}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </TableActionBtn>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -205,97 +205,99 @@ export default function AdminEmailTemplatesPage() {
         </div>
       )}
 
-      {total > PAGE_SIZE && (
-        <p className="mt-3 text-sm text-gray-500">
-          Showing {list.length} of {total} templates.
+      {total > PAGE_SIZE ? (
+        <p className="mt-1 text-[10px] text-stone-500">
+          Showing {list.length} of {total} templates
         </p>
-      )}
+      ) : null}
 
-      {modalOpen && (
+      {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-white p-3 shadow-xl">
+            <h2 className="mb-2 text-sm font-semibold text-stone-900">
               {editingId ? "Edit email template" : "Create email template"}
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-2.5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Key (unique)</label>
+                <label className={labelClass}>Key (unique)</label>
                 <input
                   type="text"
                   value={form.key}
                   onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
                   placeholder="e.g. BROADCAST, ORDER_CONFIRMED"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm"
+                  className={`${fieldClass} font-mono`}
                   disabled={!!editingId}
                 />
-                {editingId && (
-                  <p className="text-xs text-gray-500 mt-1">Key cannot be changed after creation.</p>
-                )}
+                {editingId ? (
+                  <p className="mt-1 text-[10px] text-stone-500">Key cannot be changed after creation.</p>
+                ) : null}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
+                <label className={labelClass}>Subject *</label>
                 <input
                   type="text"
                   value={form.subject}
                   onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
                   placeholder="e.g. {{announcementTitle}}"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  className={fieldClass}
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Use {"{{var}}"} for dynamic values.</p>
+                <p className="mt-1 text-[10px] text-stone-500">Use {"{{var}}"} for dynamic values.</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">HTML body</label>
+                <label className={labelClass}>HTML body</label>
                 <textarea
                   value={form.html}
                   onChange={(e) => setForm((f) => ({ ...f, html: e.target.value }))}
                   placeholder="<p>Hello {{customerName}}, ...</p>"
                   rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono text-sm"
+                  className={`${fieldClass} font-mono`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plain text (optional)</label>
+                <label className={labelClass}>Plain text (optional)</label>
                 <textarea
                   value={form.text}
                   onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
                   placeholder="Plain text fallback"
                   rows={2}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  className={fieldClass}
                 />
               </div>
-              {editingId && (
+              {editingId ? (
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="isActive"
                     checked={form.isActive}
                     onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
-                    className="rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-border text-brand-600 focus:ring-brand-500"
                   />
-                  <label htmlFor="isActive" className="text-sm text-gray-700">Active</label>
+                  <label htmlFor="isActive" className="text-[11px] text-stone-700">
+                    Active
+                  </label>
                 </div>
-              )}
-              <div className="flex gap-3 pt-2">
+              ) : null}
+              <div className="flex gap-2 pt-1">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+                  className="flex-1 rounded-lg border border-border py-1.5 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 py-2 bg-black text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-brand-600 py-1.5 text-[11px] font-medium text-white transition hover:bg-brand-700 disabled:opacity-50"
                 >
-                  {submitting ? "Saving..." : editingId ? "Update" : "Create"}
+                  {submitting ? "Saving…" : editingId ? "Update" : "Create"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -1,58 +1,52 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getFilters,
   deleteFilter,
   toggleFilterStatus,
 } from "../../apis/Filterapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { Plus, Trash2, Edit, Loader2, Search, X, SlidersHorizontal } from "lucide-react";
 
-import { Plus, Trash2, Edit } from "lucide-react";
+const tableScrollShell =
+  "max-h-[calc(100vh-14rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]";
 
 const FilterPage = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const limit = 10; // Fixed limit: 10 filters per page
+  const [limit, setLimit] = useState(20);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
-  // Debounce search term to avoid too many API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 500); // Wait 500ms after user stops typing
+  const rowIndexBase = useMemo(() => (currentPage - 1) * limit, [currentPage, limit]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 400);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
-    if (debouncedSearchTerm !== searchTerm) {
-      setCurrentPage(1);
-    }
-  }, [debouncedSearchTerm]);
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, limit]);
 
   useEffect(() => {
     fetchFilters();
-  }, [currentPage, debouncedSearchTerm]);
+  }, [currentPage, debouncedSearchTerm, limit]);
 
   const fetchFilters = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await getFilters(
-        currentPage,
-        limit,
-        debouncedSearchTerm,
-      );
-
-      console.log("API Response:", response);
-
-      // Correctly get filters and pagination
+      const response = await getFilters(currentPage, limit, debouncedSearchTerm);
       const filtersData = response?.data?.filters || [];
       const paginationData = response?.data?.pagination || {};
 
@@ -67,7 +61,7 @@ const FilterPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this filter?")) return;
+    if (!window.confirm("Delete this filter?")) return;
 
     try {
       setLoading(true);
@@ -84,7 +78,6 @@ const FilterPage = () => {
   const handleToggleStatus = async (filter) => {
     const originalStatus = filter.isActive;
 
-    // Optimistic UI update
     setFilters((prev) =>
       prev.map((item) =>
         item._id === filter._id ? { ...item, isActive: !item.isActive } : item,
@@ -94,193 +87,204 @@ const FilterPage = () => {
     try {
       await toggleFilterStatus(filter._id);
     } catch (err) {
-      // Revert if API fails
       setFilters((prev) =>
         prev.map((item) =>
-          item._id === filter._id
-            ? { ...item, isActive: originalStatus }
-            : item,
+          item._id === filter._id ? { ...item, isActive: originalStatus } : item,
         ),
       );
-      alert("Failed to update status");
+      setError("Failed to update status");
     }
   };
 
+  const inputClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      {/* Header */}
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex flex-col gap-4">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Product Filters
-            </h1>
-            {/* Search Bar and Create Button - Side by Side */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Search filters..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-black focus:ring-2 focus:ring-black/20 transition-all"
-                />
-              </div>
-              <button
-                onClick={() => navigate("/admin/filters/create")}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition font-medium shadow-sm hover:shadow-md whitespace-nowrap"
-              >
-                <Plus size={18} />
-                Add New Filter
-              </button>
-            </div>
-          </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Product filters
+        </h1>
+        <div className="relative min-w-[140px] max-w-[220px] flex-1 sm:flex-none">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+          <input
+            type="search"
+            placeholder="Search filters…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`${inputClass} w-full pl-8 pr-8`}
+            aria-label="Search filters"
+          />
+          {searchTerm ? (
+            <button
+              type="button"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
+        <select
+          className={`${inputClass} min-w-[108px]`}
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || 20)}
+          title="Rows per page"
+        >
+          <option value={10}>10 / page</option>
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => navigate(ap("filters/create"))}
+          className="inline-flex shrink-0 items-center justify-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create
+        </button>
       </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
-            {error}
-          </div>
-        )}
+      {error ? (
+        <div className="mb-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
+          {error}
+        </div>
+      ) : null}
 
-        {/* Table */}
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">
-            Loading filters...
-          </div>
-        ) : filters.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-gray-500 mb-4">No filters found</p>
-            <button
-              onClick={() => navigate("/admin/filters/create")}
-              className="text-black hover:underline font-medium"
-            >
-              Create your first filter →
-            </button>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      #
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Key
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Label
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Description
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Values
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filters.map((filter, idx) => (
-                    <tr
-                      key={filter._id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {(currentPage - 1) * limit + idx + 1}
-                      </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {filter.key}
-                      </td>
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {filter.label}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {filter.description || (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {filter.values?.length || 0} values
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleToggleStatus(filter)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            filter.isActive ? "bg-green-500" : "bg-gray-300"
+      {loading && filters.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-stone-500">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+          Loading…
+        </div>
+      ) : filters.length === 0 ? (
+        <div className="rounded-xl border border-border bg-white px-4 py-10 text-center">
+          <SlidersHorizontal className="mx-auto mb-2 h-8 w-8 text-stone-300" />
+          <p className="text-[11px] font-medium text-stone-600">No filters found</p>
+          <button
+            type="button"
+            onClick={() => navigate(ap("filters/create"))}
+            className="mt-2 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+          >
+            Create filter →
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className={tableScrollShell}>
+            <table className="w-full min-w-[720px] border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 z-10 bg-canvas-muted/95 shadow-[0_1px_0_0_var(--color-border)]">
+                <tr>
+                  <th className="w-10 whitespace-nowrap px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    #
+                  </th>
+                  <th className="whitespace-nowrap px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    Key
+                  </th>
+                  <th className="whitespace-nowrap px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    Label
+                  </th>
+                  <th className="whitespace-nowrap px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    Description
+                  </th>
+                  <th className="whitespace-nowrap px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    Values
+                  </th>
+                  <th className="whitespace-nowrap px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                    Status
+                  </th>
+                  <th className="sticky right-0 bg-canvas-muted/95 px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.06)]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filters.map((filter, idx) => (
+                  <tr
+                    key={filter._id}
+                    className="group border-t border-border/80 transition-colors hover:bg-brand-50/30"
+                  >
+                    <td className="px-2 py-2 text-center text-[10px] text-stone-500">
+                      {rowIndexBase + idx + 1}
+                    </td>
+                    <td className="px-2 py-2 font-mono text-[10px] font-medium text-brand-700">
+                      {filter.key}
+                    </td>
+                    <td className="px-2 py-2 font-medium text-stone-900">{filter.label}</td>
+                    <td className="max-w-[200px] px-2 py-2 text-stone-600">
+                      <span className="line-clamp-2">{filter.description || "—"}</span>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-stone-600">
+                      {filter.values?.length || 0} values
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(filter)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          filter.isActive ? "bg-success" : "bg-stone-300"
+                        }`}
+                        aria-label={filter.isActive ? "Deactivate filter" : "Activate filter"}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                            filter.isActive ? "translate-x-[18px]" : "translate-x-0.5"
                           }`}
+                        />
+                      </button>
+                    </td>
+                    <td className="sticky right-0 bg-white px-2 py-2 text-right group-hover:bg-brand-50/30 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.06)]">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => navigate(ap(`filters/edit/${filter._id}`))}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100"
+                          title="Edit"
+                          aria-label="Edit filter"
                         >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              filter.isActive
-                                ? "translate-x-6"
-                                : "translate-x-1"
-                            }`}
-                          />
+                          <Edit size={13} />
                         </button>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() =>
-                              navigate(`/admin/filters/edit/${filter._id}`)
-                            }
-                            className="p-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition"
-                            title="Edit"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(filter._id)}
-                            className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(filter._id)}
+                          disabled={loading}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger hover:bg-danger/10 disabled:opacity-50"
+                          title="Delete"
+                          aria-label="Delete filter"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
 
-        {/* Pagination */}
-        {filters.length > 0 && (
-          <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
             <button
+              type="button"
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              disabled={currentPage === 1 || loading}
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Previous
+              Prev
             </button>
-            <div className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-50 rounded-xl whitespace-nowrap">
-              Page {currentPage} of {totalPages}
-            </div>
+            <span className="rounded-lg bg-canvas-muted px-2.5 py-1 text-[11px] text-stone-700">
+              Page {currentPage} / {totalPages || 1}
+            </span>
             <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-              }
-              disabled={currentPage === totalPages}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              type="button"
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || loading}
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] text-stone-700 transition-colors hover:bg-brand-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next
             </button>
           </div>
-        )}
-      </main>
+        </>
+      )}
     </div>
   );
 };

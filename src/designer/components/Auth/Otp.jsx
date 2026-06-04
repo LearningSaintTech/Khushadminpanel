@@ -3,6 +3,7 @@ import { useDispatch } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { setRole, setToken } from "../../../redux/GlobalSlice";
+import { clearOtherPanelSessions } from "../../../utils/authRole";
 import { designerApi } from "../../apis/designerApi";
 import { ShieldCheck } from "lucide-react";
 
@@ -53,6 +54,7 @@ export default function DesignerOtp() {
       let role = String(payload?.role || "").toUpperCase();
       if (!role) role = String(jwtDecode(token)?.role || "").toUpperCase();
       if (role !== "DESIGNER") throw new Error("This account is not allowed on designer login.");
+      clearOtherPanelSessions(role);
       dispatch(setToken(token));
       dispatch(setRole(role));
       navigate("/designer/dashboard", { replace: true });

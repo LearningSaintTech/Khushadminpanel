@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   createInventoryCode,
@@ -123,28 +123,28 @@ const InventoryCodeForm = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-canvas-muted">
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             to={ap("inventory-codes")}
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 w-fit"
+            className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 w-fit"
           >
             <ArrowLeft size={18} /> Back to list
           </Link>
           <Link
             to={ap("inventory-codes/sku-formula")}
-            className="inline-flex items-center justify-center gap-2 border-2 border-gray-900 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 w-fit"
+            className="inline-flex items-center justify-center gap-2 border-2 border-gray-900 bg-white px-4 py-2 text-sm font-medium text-stone-900 hover:bg-brand-50/30 w-fit"
           >
             <Layers size={18} /> SKU &amp; sku_uid formula
           </Link>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-bold text-gray-900">
+        <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-bold text-stone-900">
             {isEdit ? "Edit inventory code" : "Add inventory code"}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-stone-500">
             Codes are stored in uppercase. Type + code must be unique.
           </p>
 
@@ -157,12 +157,12 @@ const InventoryCodeForm = () => {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Type</label>
+              <label className="block text-sm font-medium text-stone-700">Type</label>
               <select
                 name="type"
                 value={form.type}
                 onChange={handleChange}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 disabled={loading}
               >
                 {INVENTORY_CODE_TYPES.map((t) => (
@@ -174,37 +174,37 @@ const InventoryCodeForm = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Code</label>
+              <label className="block text-sm font-medium text-stone-700">Code</label>
               <input
                 name="code"
                 value={form.code}
                 onChange={handleChange}
                 placeholder="e.g. TW-TS, SF, BLK"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono uppercase"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-mono uppercase"
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Display name</label>
+              <label className="block text-sm font-medium text-stone-700">Display name</label>
               <input
                 name="name"
                 value={form.name}
                 onChange={handleChange}
                 placeholder="e.g. T-Shirt, Slim Fit, Black"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Sort order</label>
+              <label className="block text-sm font-medium text-stone-700">Sort order</label>
               <input
                 name="sortOrder"
                 type="number"
                 value={form.sortOrder}
                 onChange={handleChange}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 disabled={loading}
               />
             </div>
@@ -218,13 +218,13 @@ const InventoryCodeForm = () => {
                 onChange={handleChange}
                 disabled={loading}
               />
-              <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
+              <label htmlFor="isActive" className="text-sm font-medium text-stone-700">
                 Active
               </label>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-stone-700">
                 Remarks (optional)
               </label>
               <textarea
@@ -233,7 +233,7 @@ const InventoryCodeForm = () => {
                 onChange={handleChange}
                 rows={3}
                 placeholder="Notes for ambiguous codes, etc."
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 disabled={loading}
               />
             </div>
@@ -241,7 +241,7 @@ const InventoryCodeForm = () => {
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-black py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 sm:w-auto sm:px-8"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 sm:w-auto sm:px-8"
             >
               <Save size={18} />
               {loading ? "Saving…" : isEdit ? "Update" : "Create"}

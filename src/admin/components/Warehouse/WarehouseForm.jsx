@@ -6,11 +6,27 @@ import {
   updateWarehouse,
   getWarehouseById,
 } from "../../apis/Warehouseapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+const inputClass =
+  "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+
+const labelClass =
+  "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-stone-500";
+
+const btnPrimary =
+  "inline-flex items-center justify-center rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60";
+
+const btnOutline =
+  "inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted disabled:opacity-60";
 
 const WarehouseForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = !!id;
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -64,8 +80,7 @@ const WarehouseForm = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    // Handle nested address fields
+
     if (name.startsWith("address.")) {
       const addressField = name.split(".")[1];
       setForm((prev) => ({
@@ -128,201 +143,160 @@ const WarehouseForm = () => {
         await createWarehouse(payload);
       }
 
-      navigate("/admin/warehouse");
+      navigate(ap("warehouse"));
     } catch (err) {
       console.error("Error saving warehouse:", err);
-      setError(
-        err?.response?.data?.message || "Failed to save warehouse"
-      );
+      setError(err?.response?.data?.message || "Failed to save warehouse");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full min-h-screen bg-white">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Professional Back Button */}
+    <div className="max-w-2xl text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
         <button
-          onClick={() => navigate("/admin/warehouse")}
-          className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black transition-colors group"
+          type="button"
+          onClick={() => navigate(-1)}
+          className={btnOutline}
+          title="Back"
         >
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          <span>Back to Warehouses</span>
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
         </button>
-
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-black">
-            {isEdit ? "Edit Warehouse" : "Create New Warehouse"}
-          </h1>
-          <p className="mt-2 text-sm text-gray-500">
-            {isEdit
-              ? "Update warehouse information"
-              : "Add a new warehouse to your system"}
-          </p>
-        </div>
-
-        {/* Form Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Warehouse Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="Enter warehouse name"
-                required
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-              />
-            </div>
-
-            {/* Code */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Warehouse Code
-              </label>
-              <input
-                type="text"
-                name="code"
-                value={form.code}
-                onChange={handleChange}
-                placeholder="e.g. MUM-01"
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-              />
-            </div>
-
-            {/* Address Line */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Address Line
-              </label>
-              <textarea
-                name="address.line"
-                value={form.address.line}
-                onChange={handleChange}
-                placeholder="Enter street address"
-                rows={3}
-                className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none bg-white text-black"
-              />
-            </div>
-
-            {/* City and State */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  City <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="address.city"
-                  value={form.address.city}
-                  onChange={handleChange}
-                  placeholder="Enter city"
-                  required
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  State <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="address.state"
-                  value={form.address.state}
-                  onChange={handleChange}
-                  placeholder="Enter state"
-                  required
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-                />
-              </div>
-            </div>
-
-            {/* Pincode and Country */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Pincode
-                </label>
-                <input
-                  type="text"
-                  name="address.pinCode"
-                  value={form.address.pinCode}
-                  onChange={handleChange}
-                  placeholder="Enter pincode"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Country
-                </label>
-                <input
-                  type="text"
-                  name="address.country"
-                  value={form.address.country}
-                  onChange={handleChange}
-                  placeholder="Enter country"
-                  className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all bg-white text-black"
-                />
-              </div>
-            </div>
-
-            {/* Active Toggle */}
-            <div className="flex items-center pt-2">
-              <label className="flex items-center gap-2.5 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={form.isActive}
-                  onChange={handleChange}
-                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
-                />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-black">
-                  Active
-                </span>
-              </label>
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => navigate("/admin/warehouse")}
-                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading
-                  ? "Saving..."
-                  : isEdit
-                  ? "Update Warehouse"
-                  : "Create Warehouse"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          {isEdit ? "Edit warehouse" : "Create warehouse"}
+        </h1>
+        <button type="button" onClick={() => navigate(ap("warehouse"))} className={btnOutline}>
+          Close
+        </button>
       </div>
+
+      {error ? (
+        <div className="mb-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
+          {error}
+        </div>
+      ) : null}
+
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-2.5 rounded-xl border border-border bg-white p-3 shadow-sm"
+      >
+        <div>
+          <label className={labelClass}>
+            Warehouse name <span className="text-danger">*</span>
+          </label>
+          <input
+            type="text"
+            name="name"
+            value={form.name}
+            onChange={handleChange}
+            placeholder="Enter warehouse name"
+            required
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Warehouse code</label>
+          <input
+            type="text"
+            name="code"
+            value={form.code}
+            onChange={handleChange}
+            placeholder="e.g. MUM-01"
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Address line</label>
+          <textarea
+            name="address.line"
+            value={form.address.line}
+            onChange={handleChange}
+            placeholder="Enter street address"
+            rows={3}
+            className={`${inputClass} resize-none`}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>
+              City <span className="text-danger">*</span>
+            </label>
+            <input
+              type="text"
+              name="address.city"
+              value={form.address.city}
+              onChange={handleChange}
+              placeholder="Enter city"
+              required
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>
+              State <span className="text-danger">*</span>
+            </label>
+            <input
+              type="text"
+              name="address.state"
+              value={form.address.state}
+              onChange={handleChange}
+              placeholder="Enter state"
+              required
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <label className={labelClass}>Pincode</label>
+            <input
+              type="text"
+              name="address.pinCode"
+              value={form.address.pinCode}
+              onChange={handleChange}
+              placeholder="Enter pincode"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Country</label>
+            <input
+              type="text"
+              name="address.country"
+              value={form.address.country}
+              onChange={handleChange}
+              placeholder="Enter country"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 pt-1 text-[12px] text-stone-700">
+          <input
+            type="checkbox"
+            name="isActive"
+            checked={form.isActive}
+            onChange={handleChange}
+            className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-100"
+          />
+          Active
+        </label>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-2">
+          <button type="button" onClick={() => navigate(ap("warehouse"))} className={btnOutline}>
+            Cancel
+          </button>
+          <button type="submit" disabled={loading} className={btnPrimary}>
+            {loading ? "Saving…" : isEdit ? "Update warehouse" : "Create warehouse"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

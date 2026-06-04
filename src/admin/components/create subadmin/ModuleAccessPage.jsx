@@ -1,13 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, ShieldCheck, Loader2 } from "lucide-react";
 import { moduleAccessApi } from "../../apis/ModuleAccessapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  alertDanger,
+  alertSuccess,
+  btnOutline,
+  btnPrimary,
+  FormSection,
+  formPageWrap,
+} from "./subadminShared";
+
+const moduleAccessToolbar =
+  "mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-xl border border-border bg-white p-1.5 shadow-sm [-webkit-overflow-scrolling:touch]";
 
 const ROLE_OPTIONS = [
   { value: "subadmin", label: "Subadmin" },
-  { value: "super_subadmin", label: "Super Subadmin" },
+  { value: "super_subadmin", label: "Super subadmin" },
 ];
 
 export default function ModuleAccessPage() {
+  const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(ap("subadmin"));
+  };
+
   const [role, setRole] = useState("subadmin");
   const [availableModules, setAvailableModules] = useState([]);
   const [selectedModules, setSelectedModules] = useState([]);
@@ -18,7 +41,7 @@ export default function ModuleAccessPage() {
 
   const roleLabel = useMemo(
     () => ROLE_OPTIONS.find((r) => r.value === role)?.label || role,
-    [role]
+    [role],
   );
 
   const loadMetaAndRole = async (targetRole) => {
@@ -47,9 +70,7 @@ export default function ModuleAccessPage() {
 
   const toggleModule = (moduleKey) => {
     setSelectedModules((prev) =>
-      prev.includes(moduleKey)
-        ? prev.filter((m) => m !== moduleKey)
-        : [...prev, moduleKey]
+      prev.includes(moduleKey) ? prev.filter((m) => m !== moduleKey) : [...prev, moduleKey],
     );
   };
 
@@ -73,90 +94,101 @@ export default function ModuleAccessPage() {
     }
   };
 
+  const roleSelectClass =
+    "shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 w-[132px]";
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <div className="flex items-center gap-2 mb-4">
-        <ShieldCheck size={22} className="text-gray-700" />
-        <h1 className="text-2xl font-semibold text-gray-900">Module Access Control</h1>
-      </div>
-
-      <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-gray-50 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[220px]"
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <button
-          type="button"
-          onClick={selectAll}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+    <div className={formPageWrap}>
+      <form
+        className={moduleAccessToolbar}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <button type="button" onClick={goBack} className={`${btnOutline} shrink-0`} title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Module access control
+        </h1>
+        <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+          Role
+        </span>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          className={roleSelectClass}
+          title="Role"
+          aria-label="Role"
+          disabled={loading}
         >
-          Select All
+          {ROLE_OPTIONS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={selectAll} disabled={loading} className={`${btnOutline} shrink-0`}>
+          Select all
+        </button>
+        <button type="button" onClick={clearAll} disabled={loading} className={`${btnOutline} shrink-0`}>
+          Clear
         </button>
         <button
           type="button"
-          onClick={clearAll}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-100"
+          disabled={saving || loading}
+          onClick={save}
+          className={`${btnPrimary} shrink-0`}
         >
-          Clear All
+          {saving ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              Saving…
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+              Save
+            </>
+          )}
         </button>
-      </div>
+        <button type="button" onClick={() => navigate(ap("subadmin"))} className={`${btnOutline} shrink-0`}>
+          Close
+        </button>
+      </form>
 
-      {error ? (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      ) : null}
-      {success ? (
-        <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm">{success}</div>
-      ) : null}
+      {error ? <div className={alertDanger}>{error}</div> : null}
+      {success ? <div className={alertSuccess}>{success}</div> : null}
 
-      {loading ? (
-        <p className="text-gray-500">Loading modules...</p>
-      ) : (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-sm text-gray-600 mb-3">
-            Choose which modules <span className="font-medium text-gray-900">{roleLabel}</span> can access.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <FormSection
+        title={`Modules for ${roleLabel}`}
+        hint={`${selectedModules.length} of ${availableModules.length} selected`}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-[11px] text-stone-500">
+            <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+            Loading modules…
+          </div>
+        ) : availableModules.length === 0 ? (
+          <p className="py-6 text-center text-[11px] text-stone-500">No modules available.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {availableModules.map((moduleKey) => (
               <label
                 key={moduleKey}
-                className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-canvas-muted/30 px-2.5 py-2 transition hover:bg-white"
               >
                 <input
                   type="checkbox"
                   checked={selectedModules.includes(moduleKey)}
                   onChange={() => toggleModule(moduleKey)}
-                  className="rounded border-gray-300"
+                  className="h-3.5 w-3.5 rounded border-border accent-brand-600"
                 />
-                <span className="text-sm text-gray-800">{moduleKey}</span>
+                <span className="text-[11px] font-medium text-stone-800">{moduleKey}</span>
               </label>
             ))}
           </div>
-
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={save}
-              className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save Permissions"}
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </FormSection>
     </div>
   );
 }
-

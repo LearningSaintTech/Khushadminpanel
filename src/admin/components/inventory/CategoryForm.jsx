@@ -1,4 +1,4 @@
-// CategoryForm.jsx
+﻿// CategoryForm.jsx
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Upload, Image as ImageIcon, ZoomIn, X } from "lucide-react";
@@ -280,33 +280,33 @@ const CategoryForm = () => {
         </div>
       )}
 
-      <div className="w-full min-h-screen bg-gray-50">
+      <div className="w-full text-stone-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <button
               onClick={() => navigate("/admin/inventory/categories")}
-              className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+              className="flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-stone-900 transition-colors group"
             >
               <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
               <span>Back</span>
             </button>
             <div className="text-right">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900">
+              <h1 className="text-lg sm:text-xl font-bold text-stone-900">
                 {isEdit ? "Edit Category" : "Create Category"}
               </h1>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-stone-500">
                 {isEdit ? "Update category information" : "Add a new category"}
               </p>
             </div>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-border p-4 sm:p-5">
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                   Category Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -315,13 +315,13 @@ const CategoryForm = () => {
                   value={form.name}
                   onChange={handleChange}
                   placeholder="Enter category name"
-                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                  className="w-full px-3.5 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent transition-all"
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                   Description
                 </label>
                 <textarea
@@ -330,19 +330,19 @@ const CategoryForm = () => {
                   onChange={handleChange}
                   placeholder="Enter category description"
                   rows={3}
-                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all resize-none"
+                  className="w-full px-3.5 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent transition-all resize-none"
                 />
               </div>
 
               {/* Icon file (navbar / UI — e.g. SVG, PNG) */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                   Icon
-                  <span className="text-gray-500 font-normal ml-1">(optional)</span>
+                  <span className="text-stone-500 font-normal ml-1">(optional)</span>
                 </label>
-                <p className="mb-2 text-xs text-gray-500">
+                <p className="mb-2 text-xs text-stone-500">
                   Upload a small icon file (SVG, PNG, etc.). Sent as the multipart field{" "}
-                  <span className="font-mono text-gray-600">icon</span>.
+                  <span className="font-mono text-stone-600">icon</span>.
                 </p>
 
                 {form.iconPreview && (
@@ -366,21 +366,21 @@ const CategoryForm = () => {
                     <img
                       src={form.iconPreview}
                       alt="Icon preview"
-                      className="h-20 w-20 object-contain rounded-lg border-2 border-gray-200 bg-gray-50 p-1 shadow-sm"
+                      className="h-20 w-20 object-contain rounded-lg border-2 border-border bg-canvas-muted p-1 shadow-sm"
                     />
                   </div>
                 )}
 
-                <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
+                <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-gray-400 hover:bg-brand-50/30 transition-colors group">
                   <div className="flex flex-col items-center justify-center">
                     <Upload
                       size={22}
-                      className="text-gray-400 group-hover:text-gray-600 mb-2"
+                      className="text-stone-400 group-hover:text-stone-600 mb-2"
                     />
-                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
+                    <span className="text-xs font-medium text-stone-600 group-hover:text-stone-900">
                       {form.iconPreview ? "Change icon" : "Choose icon file"}
                     </span>
-                    <span className="text-xs text-gray-500 mt-1">
+                    <span className="text-xs text-stone-500 mt-1">
                       SVG, PNG, JPG, WebP (recommended: square SVG)
                     </span>
                   </div>
@@ -396,10 +396,10 @@ const CategoryForm = () => {
 
               {/* Sort Order */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                   Sort Order{" "}
                   {!isEdit && (
-                    <span className="text-gray-500 font-normal">
+                    <span className="text-stone-500 font-normal">
                       (auto-generated, you can change)
                     </span>
                   )}
@@ -410,19 +410,19 @@ const CategoryForm = () => {
                   value={form.sortOrder}
                   onChange={handleChange}
                   disabled={isEdit && !allowEditSortOrder}
-                  className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-500"
+                  className="w-full px-3.5 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent transition-all disabled:bg-canvas-muted disabled:cursor-not-allowed disabled:text-stone-500"
                   min="1"
                   step="1"
                 />
 
                 {isEdit && (
-                  <label className="flex items-center gap-2 mt-2 text-xs text-gray-600 cursor-pointer">
+                  <label className="flex items-center gap-2 mt-2 text-xs text-stone-600 cursor-pointer">
                     <input
                       type="checkbox"
                       name="allowEditSortOrder"
                       checked={allowEditSortOrder}
                       onChange={handleChange}
-                      className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                      className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100"
                     />
                     Allow editing sort order
                   </label>
@@ -435,10 +435,10 @@ const CategoryForm = () => {
 
               {/* Image Upload */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                   Category Image{" "}
                   {isEdit ? (
-                    <span className="text-gray-400 font-normal">(optional)</span>
+                    <span className="text-stone-400 font-normal">(optional)</span>
                   ) : (
                     <span className="text-red-500">*</span>
                   )}
@@ -478,28 +478,28 @@ const CategoryForm = () => {
                       <img
                         src={form.imagePreview}
                         alt="Preview"
-                        className="h-32 w-32 lg:h-40 lg:w-40 object-cover rounded-lg border-2 border-gray-200 shadow-sm hover:ring-2 hover:ring-indigo-500 transition-all duration-200"
+                        className="h-32 w-32 lg:h-40 lg:w-40 object-cover rounded-lg border-2 border-border shadow-sm hover:ring-2 hover:ring-brand-500 transition-all duration-200"
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/0 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100">
                         <ZoomIn className="h-6 w-6 lg:h-8 lg:w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-stone-500 mt-2">
                       Click image to zoom · Cross to remove
                     </p>
                   </div>
                 )}
 
-                <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
+                <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-gray-400 hover:bg-brand-50/30 transition-colors group">
                   <div className="flex flex-col items-center justify-center">
                     <ImageIcon
                       size={24}
-                      className="text-gray-400 group-hover:text-gray-600 mb-2"
+                      className="text-stone-400 group-hover:text-stone-600 mb-2"
                     />
-                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
+                    <span className="text-xs font-medium text-stone-600 group-hover:text-stone-900">
                       {form.imagePreview ? "Change Image" : "Choose Image"}
                     </span>
-                    <span className="text-xs text-gray-500 mt-1">
+                    <span className="text-xs text-stone-500 mt-1">
                       PNG, JPG, GIF up to 10MB
                     </span>
                   </div>
@@ -521,9 +521,9 @@ const CategoryForm = () => {
                     name="isActive"
                     checked={form.isActive}
                     onChange={handleChange}
-                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
                   />
-                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
                     Active
                   </span>
                 </label>
@@ -534,9 +534,9 @@ const CategoryForm = () => {
                     name="isNavbar"
                     checked={form.isNavbar}
                     onChange={handleChange}
-                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
                   />
-                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
                     Show in Navbar
                   </span>
                 </label>
@@ -547,9 +547,9 @@ const CategoryForm = () => {
                     name="isFooter"
                     checked={form.isFooter}
                     onChange={handleChange}
-                    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
                   />
-                  <span className="text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                  <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
                     Show in Footer
                   </span>
                 </label>
@@ -563,18 +563,18 @@ const CategoryForm = () => {
               )}
 
               {/* Buttons */}
-              <div className="flex gap-3 pt-6 border-t border-gray-200">
+              <div className="flex gap-3 pt-6 border-t border-border">
                 <button
                   type="button"
                   onClick={() => navigate("/admin/inventory/categories")}
-                  className="px-5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-5 py-2 text-xs font-medium text-stone-700 bg-white border border-border rounded-lg hover:bg-brand-50/30 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 text-xs font-medium text-white bg-black rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading
                     ? "Saving..."

@@ -1,4 +1,4 @@
- // ItemForm.jsx - Complete form component for Create/Edit Item
+﻿ // ItemForm.jsx - Complete form component for Create/Edit Item
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -43,7 +43,7 @@ function showItemSaveErrorToasts(messages, isCreate) {
           <button
             type="button"
             onClick={() => toast.dismiss(t.id)}
-            className="text-gray-500 hover:text-gray-800 text-lg leading-none shrink-0"
+            className="text-stone-500 hover:text-gray-800 text-lg leading-none shrink-0"
             aria-label="Dismiss"
           >
             ×
@@ -1241,17 +1241,17 @@ const ItemForm = () => {
         <div className="mb-6 sm:mb-8">
           <button
             onClick={() => navigate(-1)}
-            className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-2 text-sm font-medium transition-colors duration-200"
+            className="mb-4 text-stone-600 hover:text-stone-900 flex items-center gap-2 text-sm font-medium transition-colors duration-200"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Back to Products
           </button>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-stone-900 tracking-tight">
             {isEdit ? "Edit Product" : "Create New Product"}
           </h1>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-stone-500">
             {isEdit ? "Update product details below" : "Fill in the details to create a new product"}
           </p>
         </div>
@@ -1276,7 +1276,7 @@ const ItemForm = () => {
               </div>
             )}
             {/* Tabs */}
-            <div className="flex border-b-2 border-gray-200 overflow-x-auto mb-8">
+            <div className="flex border-b-2 border-border overflow-x-auto mb-8">
               {["Basic", "Variants", "Sizes", "Care", "Size Chart", "Policies", "Filters"].map((label, i) => (
                 <button
                   key={label}
@@ -1325,7 +1325,7 @@ const ItemForm = () => {
                       : `border-transparent ${
                           !isEdit && i + 1 > 1 && !isBasicTabValid()
                             ? "text-gray-300 cursor-not-allowed"
-                            : "text-gray-500 hover:text-gray-700"
+                            : "text-stone-500 hover:text-stone-700"
                         }`
                   }`}
                   disabled={!isEdit && i + 1 > 1 && !isBasicTabValid()}
@@ -1346,14 +1346,14 @@ const ItemForm = () => {
                 ) : null}
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-stone-700 mb-2">
                     Product Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="Enter product name"
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     required
                   />
                   {fieldErrors.name && (
@@ -1362,20 +1362,20 @@ const ItemForm = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-stone-700 mb-2">
                     Product ID / SKU
                   </label>
                   <input
                     value={form.productId}
                     onChange={(e) => setForm({ ...form, productId: e.target.value })}
                     placeholder="e.g. TSHIRT-OVERSIZE-006"
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       Style nu
                     </label>
                     <input
@@ -1390,10 +1390,10 @@ const ItemForm = () => {
                         }))
                       }
                       placeholder="e.g. KHM009 (or KH009)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     />
 
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 mt-4">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2 mt-4">
                       Gender
                     </label>
                     <input
@@ -1408,7 +1408,7 @@ const ItemForm = () => {
                         }))
                       }
                       placeholder="e.g. M / F / UNI"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     />
 
                     {fieldErrors.styleNu && (
@@ -1418,7 +1418,7 @@ const ItemForm = () => {
                   <div>
                     {productTypeOptions.length === 0 && !codeLoading ? (
                       <>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-sm font-semibold text-stone-700 mb-2">
                           Product type (CATEGORY) <span className="text-red-500">*</span>
                         </label>
                         <input
@@ -1433,10 +1433,10 @@ const ItemForm = () => {
                             }))
                           }
                           placeholder="e.g. SHRT (must match active inventory CATEGORY code)"
-                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                           required
                         />
-                        <p className="mt-1 text-[11px] text-gray-500">
+                        <p className="mt-1 text-[11px] text-stone-500">
                           No category list loaded — enter the code from admin inventory codes.
                         </p>
                       </>
@@ -1470,7 +1470,7 @@ const ItemForm = () => {
                   <div>
                     {fitTypeOptions.length === 0 && !codeLoading ? (
                       <>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-sm font-semibold text-stone-700 mb-2">
                           Fit type <span className="text-red-500">*</span>
                         </label>
                         <input
@@ -1485,10 +1485,10 @@ const ItemForm = () => {
                             }))
                           }
                           placeholder="e.g. SL / RF / OV (must match active inventory FIT code)"
-                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                          className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                           required
                         />
-                        <p className="mt-1 text-[11px] text-gray-500">
+                        <p className="mt-1 text-[11px] text-stone-500">
                           No fit list loaded — enter the code from admin inventory codes.
                         </p>
                       </>
@@ -1522,7 +1522,7 @@ const ItemForm = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-stone-700 mb-2">
                     Short Description
                   </label>
                   <textarea
@@ -1530,7 +1530,7 @@ const ItemForm = () => {
                     onChange={(e) => setForm({ ...form, shortDescription: e.target.value })}
                     placeholder="Brief product summary for listings"
                     rows={3}
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-y min-h-[4.5rem]"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200 resize-y min-h-[4.5rem]"
                   />
                   {fieldErrors.shortDescription && (
                     <p className="mt-1 text-xs text-red-600">{fieldErrors.shortDescription}</p>
@@ -1538,7 +1538,7 @@ const ItemForm = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-stone-700 mb-2">
                     Detailed Description
                   </label>
                   <textarea
@@ -1546,7 +1546,7 @@ const ItemForm = () => {
                     onChange={(e) => setForm({ ...form, longDescription: e.target.value })}
                     placeholder="Detailed product description"
                     rows={6}
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-y min-h-[9rem]"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200 resize-y min-h-[9rem]"
                   />
                   {fieldErrors.longDescription && (
                     <p className="mt-1 text-xs text-red-600">{fieldErrors.longDescription}</p>
@@ -1556,7 +1556,7 @@ const ItemForm = () => {
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
                   <p className="text-sm font-semibold text-slate-800">SEO (optional)</p>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       Meta title
                     </label>
                     <input
@@ -1564,11 +1564,11 @@ const ItemForm = () => {
                       value={form.metaTitle}
                       onChange={(e) => setForm({ ...form, metaTitle: e.target.value })}
                       placeholder="Page title for storefront / search"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       Meta description
                     </label>
                     <textarea
@@ -1576,11 +1576,11 @@ const ItemForm = () => {
                       onChange={(e) => setForm({ ...form, metaDescription: e.target.value })}
                       placeholder="Meta description"
                       rows={3}
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 resize-y min-h-[4.5rem]"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200 resize-y min-h-[4.5rem]"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       Tags
                     </label>
                     <input
@@ -1588,14 +1588,14 @@ const ItemForm = () => {
                       value={form.metaTagsStr}
                       onChange={(e) => setForm({ ...form, metaTagsStr: e.target.value })}
                       placeholder="Comma or semicolon separated (e.g. cotton, summer)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       MRP (₹) <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -1603,7 +1603,7 @@ const ItemForm = () => {
                       value={form.price}
                       onChange={(e) => setForm({ ...form, price: e.target.value })}
                       placeholder="0"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                       required
                     />
                     {fieldErrors.price && (
@@ -1611,7 +1611,7 @@ const ItemForm = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
                       Selling Price (₹)
                     </label>
                     <input
@@ -1619,7 +1619,7 @@ const ItemForm = () => {
                       value={form.discountedPrice}
                       onChange={(e) => setForm({ ...form, discountedPrice: e.target.value })}
                       placeholder="0"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                     />
                     {fieldErrors.discountedPrice && (
                       <p className="mt-1 text-xs text-red-600">
@@ -1633,9 +1633,9 @@ const ItemForm = () => {
                         type="checkbox"
                         checked={form.isActive}
                         onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                        className="w-4 h-4 rounded border-border text-brand-600 focus:ring-2 focus:ring-brand-500 cursor-pointer"
                       />
-                      <span className="text-sm font-semibold text-gray-700 group-hover:text-gray-900">
+                      <span className="text-sm font-semibold text-stone-700 group-hover:text-stone-900">
                         Active
                       </span>
                     </label>
@@ -1645,7 +1645,7 @@ const ItemForm = () => {
                 <div>
                   {colorCodeOptions.length === 0 && !codeLoading ? (
                     <>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <label className="block text-sm font-semibold text-stone-700 mb-2">
                         Default color
                       </label>
                       <input
@@ -1653,9 +1653,9 @@ const ItemForm = () => {
                         value={form.defaultColor}
                         onChange={(e) => setForm({ ...form, defaultColor: e.target.value })}
                         placeholder="e.g. Black, BLK, or another catalog default"
-                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
                       />
-                      <p className="mt-1 text-[11px] text-gray-500">
+                      <p className="mt-1 text-[11px] text-stone-500">
                         No colour list loaded — free text or colour code from inventory codes.
                       </p>
                     </>
@@ -1688,7 +1688,7 @@ const ItemForm = () => {
                       setFieldErrors({});
                       setActiveTab(2);
                     }}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Variants
                   </button>
@@ -1700,11 +1700,11 @@ const ItemForm = () => {
             {activeTab === 2 && (
               <div className="space-y-8">
                 {form.variants.map((variant, vIdx) => (
-                  <div key={vIdx} className="border-2 border-gray-200 rounded-xl p-6 bg-gray-50">
+                  <div key={vIdx} className="border-2 border-border rounded-xl p-6 bg-canvas-muted">
                     <div className="space-y-4 mb-6">
                       <div className="flex items-center gap-4">
                         <div
-                          className="w-14 h-14 rounded-xl border-2 border-gray-300 shadow-md"
+                          className="w-14 h-14 rounded-xl border-2 border-border shadow-md"
                           style={{ backgroundColor: variant.color.hex }}
                           title="Color Preview"
                         />
@@ -1712,11 +1712,11 @@ const ItemForm = () => {
                           value={variant.color.name}
                           onChange={(e) => updateVariantColor(vIdx, "name", e.target.value)}
                           placeholder="Color name (e.g. Black, White, Red)"
-                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                         />
                       </div>
                       <div className="flex items-center gap-3">
-                        <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                        <label className="text-sm font-semibold text-stone-700 whitespace-nowrap">
                           Hex Code:
                         </label>
                         <input
@@ -1730,21 +1730,21 @@ const ItemForm = () => {
                             }
                           }}
                           placeholder="#000000"
-                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                          className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono"
                           maxLength={7}
                         />
                         <input
                           type="color"
                           value={variant.color.hex}
                           onChange={(e) => updateVariantColor(vIdx, "hex", e.target.value)}
-                          className="w-16 h-12 rounded-xl cursor-pointer border-2 border-gray-300"
+                          className="w-16 h-12 rounded-xl cursor-pointer border-2 border-border"
                           title="Pick Color"
                         />
                       </div>
                       <div className="min-w-0 flex-1">
                         {colorCodeOptions.length === 0 && !codeLoading ? (
                           <div className="flex items-center gap-3">
-                            <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                            <label className="text-sm font-semibold text-stone-700 whitespace-nowrap">
                               Colour (SKU segment):
                             </label>
                             <input
@@ -1764,7 +1764,7 @@ const ItemForm = () => {
                                 })
                               }
                               placeholder="e.g. BLK / RED / BLU"
-                              className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                              className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                             />
                           </div>
                         ) : (
@@ -1804,7 +1804,7 @@ const ItemForm = () => {
                       </div>
                       {/* Color presets */}
                       <div className="space-y-2">
-                        <span className="text-xs font-semibold text-gray-600">Quick colors:</span>
+                        <span className="text-xs font-semibold text-stone-600">Quick colors:</span>
                         <div className="flex items-center gap-2 flex-wrap max-h-48 overflow-y-auto p-2">
                           {[
                             { name: "Black", hex: "#000000" },
@@ -1837,7 +1837,7 @@ const ItemForm = () => {
                                   return { ...prev, variants: next };
                                 });
                               }}
-                              className="w-10 h-10 rounded-lg border-2 border-gray-300 hover:border-gray-500 transition-all shadow-sm"
+                              className="w-10 h-10 rounded-lg border-2 border-border hover:border-gray-500 transition-all shadow-sm"
                               style={{ backgroundColor: preset.hex }}
                               title={preset.name}
                             />
@@ -1846,14 +1846,14 @@ const ItemForm = () => {
                       </div>
                     </div>
 
-                    <p className="text-sm font-semibold text-gray-700 mb-3">Product Images</p>
+                    <p className="text-sm font-semibold text-stone-700 mb-3">Product Images</p>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
                       {variant.images.map((file, imgIdx) => (
                         <div key={imgIdx} className="relative group">
                           <button
                             type="button"
                             onClick={() => openVariantImageZoom(file)}
-                            className="block w-full aspect-square rounded-xl overflow-hidden border-2 border-gray-200 shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="block w-full aspect-square rounded-xl overflow-hidden border-2 border-border shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500"
                             title="Click to zoom"
                           >
                             <img
@@ -1876,9 +1876,9 @@ const ItemForm = () => {
                         </div>
                       ))}
 
-                      <label className="aspect-square border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-all">
-                        <span className="text-3xl text-gray-400">+</span>
-                        <span className="text-xs text-gray-500 mt-1 font-medium">Add image</span>
+                      <label className="aspect-square border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                        <span className="text-3xl text-stone-400">+</span>
+                        <span className="text-xs text-stone-500 mt-1 font-medium">Add image</span>
                         <input
                           ref={(el) => {
                             if (el) fileInputRefs.current[`variant-${vIdx}`] = el;
@@ -1929,7 +1929,7 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(1)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Basic
                   </button>
@@ -1944,7 +1944,7 @@ const ItemForm = () => {
                       }
                       setActiveTab(3);
                     }}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Sizes
                   </button>
@@ -1976,22 +1976,22 @@ const ItemForm = () => {
                   )}
                 </div>
                 {form.variants.map((variant, vIdx) => (
-                  <div key={vIdx} className="border-2 border-gray-200 rounded-xl p-6 bg-white">
+                  <div key={vIdx} className="border-2 border-border rounded-xl p-6 bg-white">
                     <div className="flex items-center gap-3 mb-5">
                       <div className="w-10 h-10 rounded-lg shadow-md" style={{ backgroundColor: variant.color.hex }} />
-                      <span className="font-bold text-gray-900">{variant.color.name || "Unnamed Color"}</span>
+                      <span className="font-bold text-stone-900">{variant.color.name || "Unnamed Color"}</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {variant.sizes.map((size, sIdx) => (
-                        <div key={sIdx} className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                          <div className="font-bold text-gray-900">{size.size}</div>
+                        <div key={sIdx} className="space-y-3 p-4 bg-canvas-muted rounded-xl border border-border">
+                          <div className="font-bold text-stone-900">{size.size}</div>
                           <input
                             type="text"
                             placeholder="SKU (e.g. TSH-BLK-S)"
                             value={size.sku}
                             onChange={(e) => updateSize(vIdx, sIdx, "sku", e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                           />
                           <input
                             type="number"
@@ -2000,14 +2000,14 @@ const ItemForm = () => {
                             placeholder="UID start series (optional)"
                             value={size.skuUidSeriesStart ?? ""}
                             onChange={(e) => updateSize(vIdx, sIdx, "skuUidSeriesStart", e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                           />
                           <input
                             type="number"
                             placeholder="Stock"
                             value={size.stock}
                             onChange={(e) => updateSize(vIdx, sIdx, "stock", e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            className="w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                           />
                         </div>
                       ))}
@@ -2018,7 +2018,7 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(2)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Variants
                   </button>
@@ -2033,7 +2033,7 @@ const ItemForm = () => {
                       }
                       setActiveTab(4);
                     }}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Care
                   </button>
@@ -2045,7 +2045,7 @@ const ItemForm = () => {
             {activeTab === 4 && (
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-stone-700 mb-2">
                     Care Description
                   </label>
                   <textarea
@@ -2058,13 +2058,13 @@ const ItemForm = () => {
                     }
                     placeholder="Proper care will help maintain fabric quality and color."
                     rows={4}
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
+                    className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all resize-none"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Care Instructions</h3>
+                    <h3 className="font-semibold text-stone-900">Care Instructions</h3>
                     <button
                       type="button"
                       onClick={addCareInstruction}
@@ -2078,13 +2078,13 @@ const ItemForm = () => {
                   </div>
 
                   {form.care.instructions.length === 0 ? (
-                    <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-xl">No care instructions added yet</p>
+                    <p className="text-stone-500 text-sm italic p-4 bg-canvas-muted rounded-xl">No care instructions added yet</p>
                   ) : (
                     <div className="space-y-4">
                       {form.care.instructions.map((inst, index) => (
                         <div
                           key={index}
-                          className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3"
+                          className="border-2 border-border rounded-xl p-4 bg-canvas-muted space-y-3"
                         >
                           <div className="flex gap-3">
                             <input
@@ -2094,7 +2094,7 @@ const ItemForm = () => {
                                 updateCareInstruction(index, "text", e.target.value)
                               }
                               placeholder="Instruction text (e.g. Machine wash cold)"
-                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                             />
                             <button
                               onClick={() => removeCareInstruction(index)}
@@ -2111,7 +2111,7 @@ const ItemForm = () => {
                                 updateCareInstruction(index, "iconUrl", e.target.value)
                               }
                               placeholder="Icon URL"
-                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                             />
                             <input
                               type="text"
@@ -2120,11 +2120,11 @@ const ItemForm = () => {
                                 updateCareInstruction(index, "iconKey", e.target.value)
                               }
                               placeholder="Icon Key"
-                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                              className="flex-1 px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                             />
                           </div>
                           <label className="block">
-                            <span className="text-sm font-semibold text-gray-700 mb-1 block">Icon File</span>
+                            <span className="text-sm font-semibold text-stone-700 mb-1 block">Icon File</span>
                             <input
                               type="file"
                               accept="image/*,.svg"
@@ -2132,11 +2132,11 @@ const ItemForm = () => {
                                 const file = e.target.files?.[0] || null;
                                 updateCareInstruction(index, "iconFile", file);
                               }}
-                              className="text-sm text-gray-600"
+                              className="text-sm text-stone-600"
                             />
                         {(inst.iconFile || inst.iconUrl) && (
                           <div className="mt-2 flex items-center gap-3">
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-stone-500">
                               Preview:
                             </span>
                             <img
@@ -2146,7 +2146,7 @@ const ItemForm = () => {
                                   : inst.iconUrl
                               }
                               alt="Care icon preview"
-                              className="h-8 w-8 rounded border border-gray-200 object-contain bg-white"
+                              className="h-8 w-8 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         )}
@@ -2160,14 +2160,14 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(3)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Sizes
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab(5)}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Size Chart
                   </button>
@@ -2178,7 +2178,7 @@ const ItemForm = () => {
             {/* Tab 5 – Size Chart (dual tables: sizeCharts.in / sizeCharts.cm, same as designer inventory) */}
             {activeTab === 5 && (
               <div className="space-y-6">
-                <p className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-sm text-stone-600 rounded-xl border border-border bg-canvas-muted px-4 py-3">
                   Add separate measurement tables for inches and centimeters. Images upload as{" "}
                   <code className="text-xs bg-white px-1 py-0.5 rounded border">measureImagesIn</code> /{" "}
                   <code className="text-xs bg-white px-1 py-0.5 rounded border">measureImagesCm</code>{" "}
@@ -2189,22 +2189,22 @@ const ItemForm = () => {
                   <h3 className="text-sm font-semibold text-indigo-900">Templates (designer parity)</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Units</label>
+                      <label className="block text-xs font-semibold text-stone-700 mb-1">Units</label>
                       <input
                         type="text"
                         readOnly
                         value="Both (in & cm)"
-                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-gray-50 text-gray-700"
+                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-canvas-muted text-stone-700"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      <label className="block text-xs font-semibold text-stone-700 mb-1">
                         Garment type (gender from Style: {sizeChartPresetGender})
                       </label>
                       <select
                         value={sizeChartCategory}
                         onChange={(e) => setSizeChartCategory(e.target.value)}
-                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                       >
                         <option value="upper">Upper</option>
                         <option value="lower">Lower</option>
@@ -2223,18 +2223,18 @@ const ItemForm = () => {
                   </div>
 
                   <div className="rounded-xl border border-indigo-100 bg-white/90 p-3">
-                    <p className="mb-2 text-xs font-medium text-gray-700">
+                    <p className="mb-2 text-xs font-medium text-stone-700">
                       Template preview ({sizeChartPresetGender} ·{" "}
                       {garmentPresetCategoryLabel(sizeChartCategory)})
                     </p>
-                    <p className="mb-1 text-[11px] font-semibold text-gray-700">Inches (in)</p>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white mb-4">
+                    <p className="mb-1 text-[11px] font-semibold text-stone-700">Inches (in)</p>
+                    <div className="overflow-x-auto rounded-lg border border-border bg-white mb-4">
                       <table className="w-full min-w-[640px] text-xs">
                         <thead>
-                          <tr className="bg-gray-100 text-left">
-                            <th className="p-2 font-semibold text-gray-700">Measurement</th>
+                          <tr className="bg-canvas-muted text-left">
+                            <th className="p-2 font-semibold text-stone-700">Measurement</th>
                             {(activeSizeChartPreset?.sizes || []).map((sz) => (
-                              <th key={sz} className="p-2 text-center font-semibold text-gray-700">
+                              <th key={sz} className="p-2 text-center font-semibold text-stone-700">
                                 {sz}
                               </th>
                             ))}
@@ -2248,7 +2248,7 @@ const ItemForm = () => {
                                 const values = activeSizeChartPreset?.sampleValues?.[h.key] || [];
                                 const cell = values[colIdx] ?? "—";
                                 return (
-                                  <td key={`${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-gray-700">
+                                  <td key={`${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-stone-700">
                                     {cell}
                                   </td>
                                 );
@@ -2258,14 +2258,14 @@ const ItemForm = () => {
                         </tbody>
                       </table>
                     </div>
-                    <p className="mb-1 text-[11px] font-semibold text-gray-700">Centimeters (cm) — from sample inches</p>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                    <p className="mb-1 text-[11px] font-semibold text-stone-700">Centimeters (cm) — from sample inches</p>
+                    <div className="overflow-x-auto rounded-lg border border-border bg-white">
                       <table className="w-full min-w-[640px] text-xs">
                         <thead>
-                          <tr className="bg-gray-100 text-left">
-                            <th className="p-2 font-semibold text-gray-700">Measurement</th>
+                          <tr className="bg-canvas-muted text-left">
+                            <th className="p-2 font-semibold text-stone-700">Measurement</th>
                             {(activeSizeChartPreset?.sizes || []).map((sz) => (
-                              <th key={`cm-${sz}`} className="p-2 text-center font-semibold text-gray-700">
+                              <th key={`cm-${sz}`} className="p-2 text-center font-semibold text-stone-700">
                                 {sz}
                               </th>
                             ))}
@@ -2284,7 +2284,7 @@ const ItemForm = () => {
                                 const cell = values[colIdx] ?? "";
                                 const cmCell = cell ? inchesToCmText(cell) : "—";
                                 return (
-                                  <td key={`cm-${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-gray-700">
+                                  <td key={`cm-${h.key}-${sz}-${colIdx}`} className="p-2 text-center text-stone-700">
                                     {cmCell}
                                   </td>
                                 );
@@ -2307,7 +2307,7 @@ const ItemForm = () => {
                   const labelPh =
                     side === "in" ? "Label (e.g. Chest (in))" : "Label (e.g. Chest (cm))";
                   const fieldClass =
-                    "w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all";
+                    "w-full px-3 py-2 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all";
 
                   return (
                     <div
@@ -2315,7 +2315,7 @@ const ItemForm = () => {
                       className="rounded-xl border-2 border-indigo-100 bg-indigo-50/30 p-4 sm:p-5 space-y-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-base font-semibold text-gray-900">{sideTitle}</h3>
+                        <h3 className="text-base font-semibold text-stone-900">{sideTitle}</h3>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -2335,7 +2335,7 @@ const ItemForm = () => {
                       </div>
 
                       {(chart.headers || []).length === 0 ? (
-                        <p className="text-gray-500 text-sm italic p-4 bg-white rounded-xl border border-gray-200">
+                        <p className="text-stone-500 text-sm italic p-4 bg-white rounded-xl border border-border">
                           No headers for this table yet
                         </p>
                       ) : (
@@ -2343,15 +2343,15 @@ const ItemForm = () => {
                           {(chart.headers || []).map((header, idx) => (
                             <div
                               key={idx}
-                              className="flex flex-col sm:flex-row gap-3 items-end bg-white p-3 rounded-xl border border-gray-200"
+                              className="flex flex-col sm:flex-row gap-3 items-end bg-white p-3 rounded-xl border border-border"
                             >
                               <div className="flex-1 min-w-0 flex flex-col gap-1">
                                 <label
                                   htmlFor={`itemform-sc-${side}-hdr-${idx}-key`}
-                                  className="text-xs font-semibold text-gray-700"
+                                  className="text-xs font-semibold text-stone-700"
                                 >
                                   Column key #{idx + 1}{" "}
-                                  <span className="font-normal text-gray-500">(API, e.g. chest)</span>
+                                  <span className="font-normal text-stone-500">(API, e.g. chest)</span>
                                 </label>
                                 <input
                                   id={`itemform-sc-${side}-hdr-${idx}-key`}
@@ -2367,7 +2367,7 @@ const ItemForm = () => {
                               <div className="flex-1 min-w-0 flex flex-col gap-1">
                                 <label
                                   htmlFor={`itemform-sc-${side}-hdr-${idx}-label`}
-                                  className="text-xs font-semibold text-gray-700"
+                                  className="text-xs font-semibold text-stone-700"
                                 >
                                   Display label #{idx + 1}
                                 </label>
@@ -2395,7 +2395,7 @@ const ItemForm = () => {
                       )}
 
                       {(chart.rows || []).length === 0 ? (
-                        <p className="text-gray-500 text-sm italic p-4 bg-white rounded-xl border border-gray-200">
+                        <p className="text-stone-500 text-sm italic p-4 bg-white rounded-xl border border-border">
                           No size rows for this table yet
                         </p>
                       ) : (
@@ -2403,9 +2403,9 @@ const ItemForm = () => {
                           {(chart.rows || []).map((row, rowIndex) => (
                             <div
                               key={rowIndex}
-                              className="border-2 border-gray-200 rounded-xl p-4 bg-white space-y-3"
+                              className="border-2 border-border rounded-xl p-4 bg-white space-y-3"
                             >
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
                                 Size row {rowIndex + 1}
                                 {row.size ? (
                                   <span className="ml-2 normal-case text-gray-800">— {row.size}</span>
@@ -2415,7 +2415,7 @@ const ItemForm = () => {
                                 <div className="flex flex-col gap-1 sm:max-w-[180px]">
                                   <label
                                     htmlFor={`itemform-sc-${side}-row-${rowIndex}-size`}
-                                    className="text-xs font-semibold text-gray-700"
+                                    className="text-xs font-semibold text-stone-700"
                                   >
                                     Size label
                                   </label>
@@ -2439,7 +2439,7 @@ const ItemForm = () => {
                                 </button>
                               </div>
                               <div>
-                                <p className="mb-2 text-xs font-semibold text-gray-700">
+                                <p className="mb-2 text-xs font-semibold text-stone-700">
                                   Measurements ({sideTitle})
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -2449,9 +2449,9 @@ const ItemForm = () => {
                                     const cellId = `itemform-sc-${side}-r${rowIndex}-h${hIdx}-${String(h.key || "col").replace(/\s+/g, "-")}`;
                                     return (
                                       <div key={h.key || `h${hIdx}-${rowIndex}`} className="flex flex-col gap-1">
-                                        <label htmlFor={cellId} className="text-xs font-semibold text-gray-700">
-                                          <span className="text-gray-900">{colLabel}</span>
-                                          <span className="font-normal text-gray-500">
+                                        <label htmlFor={cellId} className="text-xs font-semibold text-stone-700">
+                                          <span className="text-stone-900">{colLabel}</span>
+                                          <span className="font-normal text-stone-500">
                                             {" "}
                                             · {rowLabel}
                                           </span>
@@ -2483,7 +2483,7 @@ const ItemForm = () => {
                             Measurement images (
                             {side === "in" ? "measureImagesIn" : "measureImagesCm"})
                           </h4>
-                          <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border-2 border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-indigo-400 hover:bg-indigo-50">
+                          <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border-2 border-border bg-white px-4 py-2 text-sm font-semibold text-stone-700 hover:border-indigo-400 hover:bg-indigo-50">
                             + Add images
                             <input
                               type="file"
@@ -2495,14 +2495,14 @@ const ItemForm = () => {
                           </label>
                         </div>
                         {(chart.measureImages || []).length === 0 ? (
-                          <p className="text-gray-500 text-sm italic p-4 bg-white rounded-xl border border-gray-200">
+                          <p className="text-stone-500 text-sm italic p-4 bg-white rounded-xl border border-border">
                             No images for this unit
                           </p>
                         ) : (
                           <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
                             {(chart.measureImages || []).map((img, idx) => (
                               <div key={idx} className="relative group flex flex-col gap-1">
-                                <span className="text-center text-[11px] font-semibold text-gray-600">
+                                <span className="text-center text-[11px] font-semibold text-stone-600">
                                   Guide image {idx + 1}
                                 </span>
                                 <img
@@ -2514,7 +2514,7 @@ const ItemForm = () => {
                                         : img?.url || ""
                                   }
                                   alt={`Measurement guide ${idx + 1} (${sideTitle})`}
-                                  className="aspect-square object-cover rounded-xl border-2 border-gray-200 shadow-md"
+                                  className="aspect-square object-cover rounded-xl border-2 border-border shadow-md"
                                 />
                                 <button
                                   type="button"
@@ -2537,14 +2537,14 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(4)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Care
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab(6)}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Policies
                   </button>
@@ -2556,8 +2556,8 @@ const ItemForm = () => {
             {activeTab === 6 && (
               <div className="space-y-8">
                 {/* Shipping */}
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
-                  <h3 className="font-semibold text-gray-900 mb-4">Shipping Policy</h3>
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
+                  <h3 className="font-semibold text-stone-900 mb-4">Shipping Policy</h3>
                   <div className="space-y-4">
                     <input
                       type="text"
@@ -2569,7 +2569,7 @@ const ItemForm = () => {
                         })
                       }
                       placeholder="Title (e.g. Free Shipping)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                     />
                     <input
                       type="text"
@@ -2584,7 +2584,7 @@ const ItemForm = () => {
                         })
                       }
                       placeholder="Estimated Delivery (e.g. Delivery within 4-6 business days)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                     />
                     <input
                       type="number"
@@ -2599,7 +2599,7 @@ const ItemForm = () => {
                         })
                       }
                       placeholder="Shipping Charges (₹)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                     />
                     <div className="flex gap-3">
                       <input
@@ -2612,7 +2612,7 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon URL"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                       <input
                         type="text"
@@ -2624,11 +2624,11 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon Key"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                     </div>
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 mb-1 block">Shipping Icon File</span>
+                      <span className="text-sm font-semibold text-stone-700 mb-1 block">Shipping Icon File</span>
                       <input
                         type="file"
                         accept="image/*,.svg"
@@ -2641,11 +2641,11 @@ const ItemForm = () => {
                             },
                           })
                         }
-                        className="text-sm text-gray-600"
+                        className="text-sm text-stone-600"
                       />
                       {(form.shipping.iconFile || form.shipping.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">Preview:</span>
+                          <span className="text-xs text-stone-500">Preview:</span>
                           <div className="relative inline-block">
                             <button
                               type="button"
@@ -2663,7 +2663,7 @@ const ItemForm = () => {
                                   : form.shipping.iconUrl
                               }
                               alt="Shipping icon preview"
-                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                              className="h-10 w-10 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         </div>
@@ -2673,8 +2673,8 @@ const ItemForm = () => {
                 </div>
 
                 {/* COD Policy */}
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
-                  <h3 className="font-semibold text-gray-900 mb-4">COD Policy</h3>
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
+                  <h3 className="font-semibold text-stone-900 mb-4">COD Policy</h3>
                   <div className="space-y-4">
                     <input
                       type="text"
@@ -2686,7 +2686,7 @@ const ItemForm = () => {
                         })
                       }
                       placeholder="Text (e.g. Cash on Delivery available)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                     />
                     <div className="flex gap-3">
                       <input
@@ -2699,7 +2699,7 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon URL"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                       <input
                         type="text"
@@ -2711,11 +2711,11 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon Key"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                     </div>
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 mb-1 block">COD Icon File</span>
+                      <span className="text-sm font-semibold text-stone-700 mb-1 block">COD Icon File</span>
                       <input
                         type="file"
                         accept="image/*,.svg"
@@ -2728,11 +2728,11 @@ const ItemForm = () => {
                             },
                           })
                         }
-                        className="text-sm text-gray-600"
+                        className="text-sm text-stone-600"
                       />
                       {(form.codPolicy.iconFile || form.codPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">Preview:</span>
+                          <span className="text-xs text-stone-500">Preview:</span>
                           <div className="relative inline-block">
                             <button
                               type="button"
@@ -2750,7 +2750,7 @@ const ItemForm = () => {
                                   : form.codPolicy.iconUrl
                               }
                               alt="COD icon preview"
-                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                              className="h-10 w-10 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         </div>
@@ -2760,8 +2760,8 @@ const ItemForm = () => {
                 </div>
 
                 {/* Return Policy */}
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
-                  <h3 className="font-semibold text-gray-900 mb-4">Return Policy</h3>
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
+                  <h3 className="font-semibold text-stone-900 mb-4">Return Policy</h3>
                   <div className="space-y-4">
                     <input
                       type="text"
@@ -2773,7 +2773,7 @@ const ItemForm = () => {
                         })
                       }
                       placeholder="Text (e.g. 7-day easy return policy)"
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                     />
                     <div className="flex gap-3">
                       <input
@@ -2786,7 +2786,7 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon URL"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                       <input
                         type="text"
@@ -2798,11 +2798,11 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon Key"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                     </div>
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 mb-1 block">Return Policy Icon File</span>
+                      <span className="text-sm font-semibold text-stone-700 mb-1 block">Return Policy Icon File</span>
                       <input
                         type="file"
                         accept="image/*,.svg"
@@ -2815,11 +2815,11 @@ const ItemForm = () => {
                             },
                           })
                         }
-                        className="text-sm text-gray-600"
+                        className="text-sm text-stone-600"
                       />
                       {(form.returnPolicy.iconFile || form.returnPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">Preview:</span>
+                          <span className="text-xs text-stone-500">Preview:</span>
                           <div className="relative inline-block">
                             <button
                               type="button"
@@ -2837,7 +2837,7 @@ const ItemForm = () => {
                                   : form.returnPolicy.iconUrl
                               }
                               alt="Return policy icon preview"
-                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                              className="h-10 w-10 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         </div>
@@ -2847,8 +2847,8 @@ const ItemForm = () => {
                 </div>
 
                 {/* Exchange Policy */}
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
-                  <h3 className="font-semibold text-gray-900 mb-4">Exchange Policy</h3>
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
+                  <h3 className="font-semibold text-stone-900 mb-4">Exchange Policy</h3>
                   <div className="space-y-4">
                     <textarea
                       value={form.exchangePolicy.text}
@@ -2860,7 +2860,7 @@ const ItemForm = () => {
                       }
                       placeholder="Text (e.g. Orders can be exchanged within 7 days of delivery)"
                       rows={3}
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all resize-none"
                     />
                     <div className="flex gap-3">
                       <input
@@ -2873,7 +2873,7 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon URL"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                       <input
                         type="text"
@@ -2885,11 +2885,11 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon Key"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                     </div>
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 mb-1 block">Exchange Policy Icon File</span>
+                      <span className="text-sm font-semibold text-stone-700 mb-1 block">Exchange Policy Icon File</span>
                       <input
                         type="file"
                         accept="image/*,.svg"
@@ -2902,11 +2902,11 @@ const ItemForm = () => {
                             },
                           })
                         }
-                        className="text-sm text-gray-600"
+                        className="text-sm text-stone-600"
                       />
                       {(form.exchangePolicy.iconFile || form.exchangePolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">Preview:</span>
+                          <span className="text-xs text-stone-500">Preview:</span>
                           <div className="relative inline-block">
                             <button
                               type="button"
@@ -2924,7 +2924,7 @@ const ItemForm = () => {
                                   : form.exchangePolicy.iconUrl
                               }
                               alt="Exchange policy icon preview"
-                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                              className="h-10 w-10 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         </div>
@@ -2934,8 +2934,8 @@ const ItemForm = () => {
                 </div>
 
                 {/* Cancellation Policy */}
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
-                  <h3 className="font-semibold text-gray-900 mb-4">Cancellation Policy</h3>
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
+                  <h3 className="font-semibold text-stone-900 mb-4">Cancellation Policy</h3>
                   <div className="space-y-4">
                     <textarea
                       value={form.cancellationPolicy.text}
@@ -2947,7 +2947,7 @@ const ItemForm = () => {
                       }
                       placeholder="Text (e.g. Orders can be cancelled within 24 hours of placement)"
                       rows={3}
-                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all resize-none"
                     />
                     <div className="flex gap-3">
                       <input
@@ -2960,7 +2960,7 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon URL"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                       <input
                         type="text"
@@ -2972,11 +2972,11 @@ const ItemForm = () => {
                           })
                         }
                         placeholder="Icon Key"
-                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        className="flex-1 px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                       />
                     </div>
                     <label className="block">
-                      <span className="text-sm font-semibold text-gray-700 mb-1 block">Cancellation Policy Icon File</span>
+                      <span className="text-sm font-semibold text-stone-700 mb-1 block">Cancellation Policy Icon File</span>
                       <input
                         type="file"
                         accept="image/*,.svg"
@@ -2989,11 +2989,11 @@ const ItemForm = () => {
                             },
                           })
                         }
-                        className="text-sm text-gray-600"
+                        className="text-sm text-stone-600"
                       />
                       {(form.cancellationPolicy.iconFile || form.cancellationPolicy.iconUrl) && (
                         <div className="mt-2 flex items-center gap-3">
-                          <span className="text-xs text-gray-500">Preview:</span>
+                          <span className="text-xs text-stone-500">Preview:</span>
                           <div className="relative inline-block">
                             <button
                               type="button"
@@ -3011,7 +3011,7 @@ const ItemForm = () => {
                                   : form.cancellationPolicy.iconUrl
                               }
                               alt="Cancellation policy icon preview"
-                              className="h-10 w-10 rounded border border-gray-200 object-contain bg-white"
+                              className="h-10 w-10 rounded border border-border object-contain bg-white"
                             />
                           </div>
                         </div>
@@ -3023,14 +3023,14 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(5)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Size Chart
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab(7)}
-                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold hover:bg-gray-900 transition-all"
+                    className="inline-flex items-center px-6 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-all"
                   >
                     Next: Filters
                   </button>
@@ -3041,9 +3041,9 @@ const ItemForm = () => {
             {/* Tab 7 – Filters */}
             {activeTab === 7 && (
               <div className="space-y-6">
-                <div className="border-2 border-gray-200 rounded-xl p-6 bg-white">
+                <div className="border-2 border-border rounded-xl p-6 bg-white">
                   <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-semibold text-gray-900">Filters / Tags</h3>
+                    <h3 className="font-semibold text-stone-900">Filters / Tags</h3>
                     <button
                       type="button"
                       onClick={addFilter}
@@ -3057,22 +3057,22 @@ const ItemForm = () => {
                   </div>
 
                   {form.filters.length === 0 ? (
-                    <p className="text-gray-500 text-sm italic p-4 bg-gray-50 rounded-xl">No filters added yet. Add filters like category, fabric, fit, sleeve, etc.</p>
+                    <p className="text-stone-500 text-sm italic p-4 bg-canvas-muted rounded-xl">No filters added yet. Add filters like category, fabric, fit, sleeve, etc.</p>
                   ) : (
                     <div className="space-y-4">
                       {form.filters.map((filter, index) => (
-                        <div key={index} className="flex gap-3 items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div key={index} className="flex gap-3 items-center bg-canvas-muted p-4 rounded-xl border border-border">
                           <input
                             value={filter.key}
                             onChange={(e) => updateFilter(index, "key", e.target.value)}
                             placeholder="Key (e.g. category, fabric, fit, sleeve)"
-                            className="flex-1 px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            className="flex-1 px-4 py-2.5 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                           />
                           <input
                             value={filter.value}
                             onChange={(e) => updateFilter(index, "value", e.target.value)}
                             placeholder="Value (e.g. tshirt, cotton, oversized, half sleeve)"
-                            className="flex-1 px-4 py-2.5 text-sm rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            className="flex-1 px-4 py-2.5 text-sm rounded-lg border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
                           />
                           <button
                             onClick={() => removeFilter(index)}
@@ -3089,11 +3089,11 @@ const ItemForm = () => {
                   <button
                     type="button"
                     onClick={() => setActiveTab(6)}
-                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                    className="inline-flex items-center px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-stone-700 hover:bg-brand-50/30 transition-all"
                   >
                     Back: Policies
                   </button>
-                  <span className="text-sm text-gray-500 self-center hidden sm:inline">
+                  <span className="text-sm text-stone-500 self-center hidden sm:inline">
                     Use Save below to create or update the product
                   </span>
                 </div>
@@ -3101,10 +3101,10 @@ const ItemForm = () => {
             )}
 
             {/* Footer */}
-            <div className="flex flex-col sm:flex-row justify-end gap-4 pt-8 border-t-2 border-gray-200 mt-8">
+            <div className="flex flex-col sm:flex-row justify-end gap-4 pt-8 border-t-2 border-border mt-8">
               <button
                 onClick={() => navigate(-1)}
-                className="px-8 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-all font-semibold text-sm"
+                className="px-8 py-3 border-2 border-border rounded-xl hover:bg-brand-50/30 transition-all font-semibold text-sm"
               >
                 Cancel
               </button>

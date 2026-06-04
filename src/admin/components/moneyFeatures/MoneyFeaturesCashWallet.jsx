@@ -17,7 +17,14 @@ import {
   getCashTransactions,
   adjustWallet,
 } from "../../apis/MoneyFeaturesapi";
-import { PageHeader, StatCard, Pagination, FlowStep } from "./moneyFeaturesShared";
+import {
+  PageHeader,
+  StatCard,
+  Pagination,
+  FlowStep,
+  inputClass,
+  tableScrollShell,
+} from "./moneyFeaturesShared";
 
 const CASH_FLOW = [
   {
@@ -106,7 +113,7 @@ function WalletInlineAdjustPanel({
   };
 
   return (
-    <div className="rounded-lg border border-indigo-200 bg-white p-3 shadow-sm">
+    <div className="rounded-lg border border-brand-200 bg-white p-3 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs text-slate-600">
           <span className="font-medium text-slate-900">{row.userName || "Customer"}</span>
@@ -175,7 +182,7 @@ function WalletInlineAdjustPanel({
             onChange={(e) => setAmount(e.target.value)}
             placeholder="10"
             autoFocus
-            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm tabular-nums focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className={`${inputClass} w-full tabular-nums`}
           />
         </div>
 
@@ -188,7 +195,7 @@ function WalletInlineAdjustPanel({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={DEFAULT_REASON}
-            className="w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className={`${inputClass} w-full`}
           />
         </div>
 
@@ -196,7 +203,7 @@ function WalletInlineAdjustPanel({
           type="button"
           disabled={submitting}
           onClick={handleApply}
-          className="inline-flex h-[34px] items-center gap-1.5 rounded-md bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="inline-flex h-[34px] items-center gap-1.5 rounded-full bg-brand-600 px-3 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {submitting ? (
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -304,10 +311,13 @@ const MoneyFeaturesCashWallet = () => {
   const cash30 = overview?.last30Days?.cashTransactions ?? [];
   const redeem30 = overview?.last30Days?.pointsRedeemedToCash ?? 0;
 
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   return (
-    <div className="min-h-screen bg-slate-50/80 p-4 sm:p-6">
-      <p className="mb-2 text-xs text-slate-500">
-        <Link to={`${basePath}/money-features`} className="text-indigo-600 hover:underline">
+    <div className="text-stone-900">
+      <p className="mb-2 text-[11px] text-stone-500">
+        <Link to={ap("money-features")} className="font-medium text-brand-600 hover:underline">
           ← Money features
         </Link>
       </p>
@@ -321,7 +331,7 @@ const MoneyFeaturesCashWallet = () => {
           loadTab(tab === "wallets" ? wallets.page : tx.page);
         }}
         loading={loading}
-        accentClass="text-indigo-600"
+        accentClass="text-brand-600"
       />
 
       {flashMessage && (
@@ -340,23 +350,23 @@ const MoneyFeaturesCashWallet = () => {
             label="Total INR balance"
             value={fmtInr(overview.cash?.totalBalanceInr)}
             sub={`${overview.cash?.walletsWithBalance ?? 0} users with balance`}
-            accent="indigo"
+            accent="brand"
           />
           <StatCard
             label="Wallets"
             value={overview.cash?.totalWallets ?? 0}
-            accent="indigo"
+            accent="brand"
           />
           <StatCard
             label="Points → cash (30d)"
             value={redeem30}
             sub="REWARD_REDEEM count"
-            accent="indigo"
+            accent="brand"
           />
           <StatCard
             label="Avg balance"
             value={fmtInr(overview.cash?.averageBalanceInr)}
-            accent="indigo"
+            accent="brand"
           />
         </div>
       )}
@@ -364,7 +374,7 @@ const MoneyFeaturesCashWallet = () => {
       <button
         type="button"
         onClick={() => setShowFlow((v) => !v)}
-        className="mb-4 text-xs font-medium text-indigo-600 hover:underline"
+        className="mb-2 text-[11px] font-medium text-brand-600 hover:underline"
       >
         {showFlow ? "Hide" : "Show"} how cash wallet works
       </button>
@@ -396,8 +406,8 @@ const MoneyFeaturesCashWallet = () => {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex gap-1 border-b border-slate-100 bg-slate-50/80 p-1.5">
+      <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+        <div className="flex gap-1 border-b border-border bg-canvas-muted/50 p-1.5">
           {[
             ["wallets", "User balances"],
             ["tx", "Transactions"],
@@ -409,10 +419,10 @@ const MoneyFeaturesCashWallet = () => {
                 setTab(key);
                 setEditingUserId(null);
               }}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors ${
                 tab === key
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-white"
+                  ? "bg-brand-600 text-white shadow-sm"
+                  : "text-stone-600 hover:bg-white"
               }`}
             >
               {label}
@@ -420,7 +430,7 @@ const MoneyFeaturesCashWallet = () => {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-3">
+        <div className="flex flex-wrap items-end gap-2 border-b border-border p-2">
           {tab === "wallets" && (
             <div className="min-w-[200px] flex-1">
               <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-500">
@@ -432,7 +442,7 @@ const MoneyFeaturesCashWallet = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && loadTab(1)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                className={`${inputClass} w-full`}
               />
             </div>
           )}
@@ -445,7 +455,7 @@ const MoneyFeaturesCashWallet = () => {
                 <select
                   value={txSource}
                   onChange={(e) => setTxSource(e.target.value)}
-                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  className={inputClass}
                 >
                   <option value="">All sources</option>
                   <option value="RECHARGE">Recharge</option>
@@ -463,7 +473,7 @@ const MoneyFeaturesCashWallet = () => {
                 <select
                   value={txType}
                   onChange={(e) => setTxType(e.target.value)}
-                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  className={inputClass}
                 >
                   <option value="">All</option>
                   <option value="CREDIT">Credit</option>
@@ -475,18 +485,18 @@ const MoneyFeaturesCashWallet = () => {
           <button
             type="button"
             onClick={() => loadTab(1)}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-900"
+            className="rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700"
           >
             Apply filters
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className={tableScrollShell}>
           {listLoading ? (
-            <p className="p-8 text-center text-sm text-slate-500">Loading…</p>
+            <p className="p-8 text-center text-[11px] text-stone-500">Loading…</p>
           ) : tab === "wallets" ? (
-            <table className="w-full min-w-[640px] text-left text-xs">
-              <thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <table className="w-full min-w-[640px] border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 z-10 bg-canvas-muted/95 text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
                   <th className="px-3 py-2">Customer</th>
                   <th className="px-3 py-2">Phone</th>
@@ -509,7 +519,7 @@ const MoneyFeaturesCashWallet = () => {
                     return (
                       <React.Fragment key={String(row._id)}>
                         <tr
-                          className={`hover:bg-slate-50/80 ${isEditing ? "bg-indigo-50/50" : ""}`}
+                          className={`border-t border-border/80 hover:bg-brand-50/30 ${isEditing ? "bg-brand-50/50" : ""}`}
                         >
                           <td className="px-3 py-2 font-medium text-slate-900">
                             {row.userName || "—"}
@@ -529,10 +539,10 @@ const MoneyFeaturesCashWallet = () => {
                               type="button"
                               onClick={() => toggleEditRow(row)}
                               title={isEditing ? "Close" : "Edit balance"}
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
                                 isEditing
-                                  ? "border-indigo-300 bg-indigo-100 text-indigo-700"
-                                  : "border-slate-200 bg-white text-slate-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                                  ? "border-brand-300 bg-brand-100 text-brand-700"
+                                  : "border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100"
                               }`}
                             >
                               <Pencil size={14} />
@@ -558,8 +568,8 @@ const MoneyFeaturesCashWallet = () => {
               </tbody>
             </table>
           ) : (
-            <table className="w-full min-w-[720px] text-left text-xs">
-              <thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <table className="w-full min-w-[720px] border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 z-10 bg-canvas-muted/95 text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
                   <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Customer</th>
@@ -640,8 +650,8 @@ const MoneyFeaturesCashWallet = () => {
         <ArrowLeftRight size={12} />
         Click <Pencil size={11} className="inline" /> to add or remove balance.{" "}
         <Link
-          to={`${basePath}/money-features/points-wallet`}
-          className="text-indigo-600 hover:underline"
+          to={ap("money-features/points-wallet")}
+          className="text-brand-600 hover:underline"
         >
           Points wallet
         </Link>

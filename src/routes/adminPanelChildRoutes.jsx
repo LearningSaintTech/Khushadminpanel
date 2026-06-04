@@ -78,6 +78,7 @@ import UsersLayout from "../admin/components/users/UsersLayout";
 import RealUsersManage from "../admin/components/users/RealUsersManage";
 import FakeUsersManage from "../admin/components/users/FakeUsersManage";
 import Referral from "../admin/components/Refferal/Refferal";
+import ReferralConfig from "../admin/components/Refferal/ReferralConfig";
 import MoneyFeaturesHub from "../admin/components/moneyFeatures/MoneyFeaturesHub";
 import MoneyFeaturesCashWallet from "../admin/components/moneyFeatures/MoneyFeaturesCashWallet";
 import MoneyFeaturesGiftCard from "../admin/components/moneyFeatures/MoneyFeaturesGiftCard";
@@ -92,6 +93,7 @@ import Faq from "../admin/components/Faq/Faq";
 import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
 import UsPolicy from "../admin/components/Policy/uspPolicy";
+import UspPolicyForm from "../admin/components/Policy/UspPolicyForm";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -214,6 +216,7 @@ export const adminPanelChildRoutes = [
   <Route key="mf-gift" path="money-features/gift-card" element={<MoneyFeaturesGiftCard />} />,
   <Route key="mf-points" path="money-features/points-wallet" element={<MoneyFeaturesPointsWallet />} />,
   <Route key="mf-refer" path="money-features/refer-earn" element={<Referral />} />,
+  <Route key="mf-refer-config" path="money-features/refer-earn/config" element={<ReferralConfig />} />,
   <Route key="mf-wallet-redirect" path="money-features/wallet" element={<Navigate to="money-features/cash-wallet" replace />} />,
   <Route key="mf-giftcard-redirect" path="money-features/giftcard" element={<Navigate to="money-features/gift-card" replace />} />,
   <Route key="mf-coins-redirect" path="money-features/redeem-coins" element={<Navigate to="money-features/points-wallet" replace />} />,
@@ -227,5 +230,7 @@ export const adminPanelChildRoutes = [
   <Route key="notif-bc" path="notifications/broadcast" element={<AdminBroadcastPage />} />,
   <Route key="notif-test" path="notifications/test" element={<AdminNotificationTestPage />} />,
   <Route key="audit" path="audit-logs" element={<AuditLogsPage />} />,
-  <Route key="usp" path="usp" element={<UsPolicy/>}/>,
+  <Route key="usp" path="usp" element={<UsPolicy />} />,
+  <Route key="usp-cr" path="usp/create" element={<UspPolicyForm />} />,
+  <Route key="usp-ed" path="usp/edit/:id" element={<UspPolicyForm />} />,
 ];

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getSingleItem } from "../../apis/itemapi";
 import SkuUidsModal from "./SkuUidsModal.jsx";
@@ -113,8 +113,8 @@ export default function ItemDetails() {
           onClose={closeSkuUidModal}
           onAfterSave={fetchItem}
         />
-        <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 p-4">
-          <div className="text-gray-500 text-base sm:text-lg animate-pulse">
+        <div className="w-full min-h-screen flex items-center justify-center bg-canvas-muted/40 p-4">
+          <div className="text-stone-500 text-base sm:text-lg animate-pulse">
             Loading item details...
           </div>
         </div>
@@ -131,11 +131,11 @@ export default function ItemDetails() {
           onClose={closeSkuUidModal}
           onAfterSave={fetchItem}
         />
-        <div className="w-full min-h-screen flex flex-col items-center justify-center bg-gray-50/40 p-4 sm:p-6">
+        <div className="w-full min-h-screen flex flex-col items-center justify-center bg-canvas-muted/40 p-4 sm:p-6">
           <div className="text-red-600 text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">
             Error
           </div>
-          <p className="text-gray-700 mb-6 sm:mb-8 text-center max-w-lg text-sm sm:text-base">
+          <p className="text-stone-700 mb-6 sm:mb-8 text-center max-w-lg text-sm sm:text-base">
             {error}
           </p>
           <button
@@ -161,7 +161,7 @@ export default function ItemDetails() {
           onClose={closeSkuUidModal}
           onAfterSave={fetchItem}
         />
-        <div className="w-full min-h-screen flex items-center justify-center bg-gray-50/40 text-gray-600 text-base sm:text-lg p-4">
+        <div className="w-full min-h-screen flex items-center justify-center bg-canvas-muted/40 text-stone-600 text-base sm:text-lg p-4">
           Item not found
         </div>
       </>
@@ -181,7 +181,7 @@ export default function ItemDetails() {
   const closeVariantZoom = () => setZoomVariant(null);
 
   return (
-    <div className="w-full min-h-screen bg-gray-50/40">
+    <div className="w-full text-stone-900">
       <SkuUidsModal
         itemId={itemId}
         open={skuUidModalOpen}
@@ -193,7 +193,7 @@ export default function ItemDetails() {
         <div className="mb-4 sm:mb-6 lg:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition-colors text-sm sm:text-base"
+            className="flex items-center gap-2 text-stone-600 hover:text-stone-900 font-medium transition-colors text-sm sm:text-base"
           >
             <svg
               className="w-4 h-4"
@@ -220,7 +220,7 @@ export default function ItemDetails() {
         </div>
 
         {/* Main product card */}
-        <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden mb-6 sm:mb-8 lg:mb-10">
+        <div className="bg-white shadow-sm border border-border rounded-xl overflow-hidden mb-6 sm:mb-8 lg:mb-10">
           <div className="p-4 sm:p-5 md:p-6 lg:p-8 xl:p-10">
             <div className="flex flex-col md:flex-row gap-4 sm:gap-6 lg:gap-8 xl:gap-10">
               {/* Product Image */}
@@ -246,7 +246,7 @@ export default function ItemDetails() {
 
               {/* Product Info */}
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold text-gray-900 mb-2 sm:mb-3 break-words">
+                <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold text-stone-900 mb-2 sm:mb-3 break-words">
                   {item.name || "Unnamed Product"}
                 </h1>
                 {String(item.metaTitle || "").trim() ? (
@@ -255,7 +255,7 @@ export default function ItemDetails() {
                   </p>
                 ) : null}
 
-                <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6 leading-relaxed">
+                <p className="text-sm sm:text-base text-stone-600 mb-4 sm:mb-6 leading-relaxed">
                   {item.shortDescription || "No short description available"}
                 </p>
 
@@ -266,13 +266,13 @@ export default function ItemDetails() {
                   {item.price &&
                     item.discountedPrice &&
                     item.price !== item.discountedPrice && (
-                      <span className="text-lg sm:text-xl lg:text-2xl text-gray-400 line-through">
+                      <span className="text-lg sm:text-xl lg:text-2xl text-stone-400 line-through">
                         ₹{item.price}
                       </span>
                     )}
                 </div>
 
-                <div className="inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 rounded-full bg-gray-100/80 text-xs sm:text-sm font-medium">
+                <div className="inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 rounded-full bg-canvas-muted/80 text-xs sm:text-sm font-medium">
                   <span
                     className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
                       item.isActive ? "bg-emerald-500" : "bg-rose-500"
@@ -286,7 +286,7 @@ export default function ItemDetails() {
         </div>
 
         {/* Tabs - scrollable only when necessary */}
-        <div className="border-b border-gray-200 mb-4 sm:mb-6 lg:mb-8 bg-white rounded-t-xl">
+        <div className="border-b border-border mb-4 sm:mb-6 lg:mb-8 bg-white rounded-t-xl">
           <div className="flex gap-2 sm:gap-3 md:gap-4 lg:gap-6 overflow-x-auto pb-3 px-4 sm:px-5 lg:px-6 scrollbar-thin scrollbar-thumb-gray-300">
             {["general", "variants", "size", "care", "policies", "filters"].map(
               (tab) => (
@@ -296,7 +296,7 @@ export default function ItemDetails() {
                   className={`pb-2 px-3 sm:px-4 md:px-5 text-xs sm:text-sm md:text-base font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab
                       ? "text-black border-b-2 border-black"
-                      : "text-gray-500 hover:text-gray-800"
+                      : "text-stone-500 hover:text-gray-800"
                   }`}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -307,14 +307,14 @@ export default function ItemDetails() {
         </div>
 
         {/* Tab content container */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-border overflow-hidden">
           <div className="p-4 sm:p-5 md:p-6 lg:p-8 xl:p-10">
             {/* GENERAL */}
             {activeTab === "general" && (
-              <div className="space-y-6 sm:space-y-8 text-gray-700">
+              <div className="space-y-6 sm:space-y-8 text-stone-700">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   <div>
-                    <dt className="text-xs sm:text-sm text-gray-500 font-medium">
+                    <dt className="text-xs sm:text-sm text-stone-500 font-medium">
                       Product ID
                     </dt>
                     <dd className="mt-1 text-sm sm:text-base font-semibold break-words">
@@ -322,7 +322,7 @@ export default function ItemDetails() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs sm:text-sm text-gray-500 font-medium">
+                    <dt className="text-xs sm:text-sm text-stone-500 font-medium">
                       Total Stock
                     </dt>
                     <dd className="mt-1 text-sm sm:text-base font-semibold">
@@ -332,10 +332,10 @@ export default function ItemDetails() {
                 </div>
 
                 <div>
-                  <dt className="text-xs sm:text-sm text-gray-500 font-medium mb-2">
+                  <dt className="text-xs sm:text-sm text-stone-500 font-medium mb-2">
                     Full Description
                   </dt>
-                  <dd className="text-sm sm:text-base whitespace-pre-line leading-relaxed text-gray-700">
+                  <dd className="text-sm sm:text-base whitespace-pre-line leading-relaxed text-stone-700">
                     {item.longDescription ||
                       "No detailed description available."}
                   </dd>
@@ -345,19 +345,19 @@ export default function ItemDetails() {
                   <h3 className="text-sm font-semibold text-slate-900 mb-3">SEO</h3>
                   <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
-                      <dt className="text-xs text-gray-500 font-medium">Meta title</dt>
-                      <dd className="mt-1 text-sm font-medium text-gray-900 break-words">
+                      <dt className="text-xs text-stone-500 font-medium">Meta title</dt>
+                      <dd className="mt-1 text-sm font-medium text-stone-900 break-words">
                         {String(item.metaTitle || "").trim() || "—"}
                       </dd>
                     </div>
                     <div className="sm:col-span-2">
-                      <dt className="text-xs text-gray-500 font-medium">Meta description</dt>
+                      <dt className="text-xs text-stone-500 font-medium">Meta description</dt>
                       <dd className="mt-1 text-sm whitespace-pre-line text-gray-800">
                         {String(item.metaDescription || "").trim() || "—"}
                       </dd>
                     </div>
                     <div className="sm:col-span-2">
-                      <dt className="text-xs text-gray-500 font-medium">Tags</dt>
+                      <dt className="text-xs text-stone-500 font-medium">Tags</dt>
                       <dd className="mt-1 text-sm text-gray-800 break-words">
                         {Array.isArray(item.metaTags) && item.metaTags.length > 0
                           ? item.metaTags.join(", ")
@@ -376,7 +376,7 @@ export default function ItemDetails() {
                   item.variants.map((variant) => (
                     <div
                       key={variant._id}
-                      className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6"
+                      className="border border-border rounded-xl p-4 sm:p-5 md:p-6"
                     >
                       <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5">
                         <div
@@ -396,7 +396,7 @@ export default function ItemDetails() {
                             const src = variantMediaUrl(img);
                             const isVideo = isVariantVideoMedia(img);
                             const tileClass =
-                              "relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 flex-shrink-0 snap-center rounded-lg border border-gray-200 shadow-sm overflow-hidden";
+                              "relative h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 flex-shrink-0 snap-center rounded-lg border border-border shadow-sm overflow-hidden";
                             if (isVideo && src) {
                               return (
                                 <div
@@ -423,7 +423,7 @@ export default function ItemDetails() {
                                 onClick={() =>
                                   src && openVariantZoom(src, isVideo)
                                 }
-                                className={`${tileClass} focus:outline-none focus:ring-2 focus:ring-black/30 cursor-zoom-in`}
+                                className={`${tileClass} focus:outline-none focus:ring-2 focus:ring-brand-100/30 cursor-zoom-in`}
                                 title="Click to zoom"
                               >
                                 <img
@@ -443,7 +443,7 @@ export default function ItemDetails() {
                       {variant.sizes?.length > 0 && (
                         <div className="space-y-3 sm:space-y-4">
                           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                            <span className="text-xs sm:text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                            <span className="text-xs sm:text-sm font-semibold text-stone-600 uppercase tracking-wide">
                               Sizes & SKUs
                             </span>
                             <span className="h-px flex-1 bg-gray-200" />
@@ -452,43 +452,43 @@ export default function ItemDetails() {
                             {variant.sizes.map((s) => (
                               <div
                                 key={s._id || `${variant.color?.name}-${s.size}`}
-                                className="bg-gray-50 border border-gray-200 rounded-lg px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-1.5"
+                                className="bg-canvas-muted border border-border rounded-lg px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-1.5"
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-white border border-gray-200 text-[11px] sm:text-xs font-semibold text-gray-900">
+                                  <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-white border border-border text-[11px] sm:text-xs font-semibold text-stone-900">
                                     {s.size || "—"}
                                   </span>
-                                  <span className="text-[11px] sm:text-xs text-gray-600">
+                                  <span className="text-[11px] sm:text-xs text-stone-600">
                                     Stock:{" "}
-                                    <span className="font-semibold text-gray-900">
+                                    <span className="font-semibold text-stone-900">
                                       {s.stock ?? 0}
                                     </span>
                                   </span>
                                 </div>
 
                                 <div className="mt-1">
-                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-0.5">
                                     SKU
                                   </p>
-                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1">
+                                  <p className="text-[11px] sm:text-xs text-stone-900 break-all bg-white border border-dashed border-border rounded px-2 py-1">
                                     {s.sku || "Not set"}
                                   </p>
                                 </div>
 
                                 <div className="mt-1">
-                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-0.5">
                                     Barcode
                                   </p>
-                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1">
+                                  <p className="text-[11px] sm:text-xs text-stone-900 break-all bg-white border border-dashed border-border rounded px-2 py-1">
                                     {s.barcode || "Not set"}
                                   </p>
                                 </div>
 
                                 <div className="mt-1">
-                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-0.5">
                                     SKU UID (code)
                                   </p>
-                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1 font-mono">
+                                  <p className="text-[11px] sm:text-xs text-stone-900 break-all bg-white border border-dashed border-border rounded px-2 py-1 font-mono">
                                     {typeof s.skuUidId === "object" && s.skuUidId?.code != null
                                       ? String(s.skuUidId.code)
                                       : "—"}
@@ -496,10 +496,10 @@ export default function ItemDetails() {
                                 </div>
 
                                 <div className="mt-1">
-                                  <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-0.5">
                                     UID series start
                                   </p>
-                                  <p className="text-[11px] sm:text-xs text-gray-900 break-all bg-white border border-dashed border-gray-200 rounded px-2 py-1 font-mono">
+                                  <p className="text-[11px] sm:text-xs text-stone-900 break-all bg-white border border-dashed border-border rounded px-2 py-1 font-mono">
                                     {s.skuUidSeriesStart != null && s.skuUidSeriesStart !== ""
                                       ? String(s.skuUidSeriesStart)
                                       : "—"}
@@ -513,7 +513,7 @@ export default function ItemDetails() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base">
+                  <p className="text-stone-500 py-6 sm:py-8 text-center text-sm sm:text-base">
                     No variants available
                   </p>
                 )}
@@ -537,7 +537,7 @@ export default function ItemDetails() {
                 />
               </div>
             ) : activeTab === "size" ? (
-              <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base">
+              <p className="text-stone-500 py-6 sm:py-8 text-center text-sm sm:text-base">
                 No size chart available
               </p>
             ) : null}
@@ -554,7 +554,7 @@ export default function ItemDetails() {
                     {item.care.instructions.map((c) => (
                       <div
                         key={c._id}
-                        className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-5 text-center hover:shadow-md transition"
+                        className="bg-canvas-muted border border-border rounded-xl p-4 sm:p-5 text-center hover:shadow-md transition"
                       >
                         {c.iconUrl && (
                           <img
@@ -563,7 +563,7 @@ export default function ItemDetails() {
                             alt=""
                           />
                         )}
-                        <p className="text-xs sm:text-sm text-gray-700 font-medium break-words">
+                        <p className="text-xs sm:text-sm text-stone-700 font-medium break-words">
                           {c.text}
                         </p>
                       </div>
@@ -572,7 +572,7 @@ export default function ItemDetails() {
                 )}
               </div>
             ) : activeTab === "care" ? (
-              <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base">
+              <p className="text-stone-500 py-6 sm:py-8 text-center text-sm sm:text-base">
                 No care instructions available
               </p>
             ) : null}
@@ -582,7 +582,7 @@ export default function ItemDetails() {
               <div className="space-y-6 sm:space-y-8">
                 {/* Shipping Policy */}
                 {item.shipping && (
-                  <div className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6 bg-gray-50">
+                  <div className="border border-border rounded-xl p-4 sm:p-5 md:p-6 bg-canvas-muted">
                     <div className="flex items-start gap-3 sm:gap-4">
                       {item.shipping.iconUrl && (
                         <img
@@ -592,22 +592,22 @@ export default function ItemDetails() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg text-stone-900 mb-2">
                           {item.shipping.title || "Shipping Policy"}
                         </h3>
                         {item.shipping.description && (
-                          <p className="text-sm sm:text-base text-gray-700">
+                          <p className="text-sm sm:text-base text-stone-700">
                             {item.shipping.description}
                           </p>
                         )}
                         {item.shipping.estimatedDelivery && (
-                          <p className="text-sm text-gray-600 mt-2">
+                          <p className="text-sm text-stone-600 mt-2">
                             {item.shipping.estimatedDelivery}
                           </p>
                         )}
                         {item.shipping.shippingCharges !== undefined &&
                           item.shipping.shippingCharges !== null && (
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-stone-600 mt-1">
                               Shipping Charges: ₹{item.shipping.shippingCharges}
                             </p>
                           )}
@@ -618,7 +618,7 @@ export default function ItemDetails() {
 
                 {/* COD Policy */}
                 {item.codPolicy && (
-                  <div className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6 bg-gray-50">
+                  <div className="border border-border rounded-xl p-4 sm:p-5 md:p-6 bg-canvas-muted">
                     <div className="flex items-start gap-3 sm:gap-4">
                       {item.codPolicy.iconUrl && (
                         <img
@@ -628,11 +628,11 @@ export default function ItemDetails() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg text-stone-900 mb-2">
                           COD Policy
                         </h3>
                         {item.codPolicy.text && (
-                          <p className="text-sm sm:text-base text-gray-700">
+                          <p className="text-sm sm:text-base text-stone-700">
                             {item.codPolicy.text}
                           </p>
                         )}
@@ -643,7 +643,7 @@ export default function ItemDetails() {
 
                 {/* Return Policy */}
                 {item.returnPolicy && (
-                  <div className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6 bg-gray-50">
+                  <div className="border border-border rounded-xl p-4 sm:p-5 md:p-6 bg-canvas-muted">
                     <div className="flex items-start gap-3 sm:gap-4">
                       {item.returnPolicy.iconUrl && (
                         <img
@@ -653,11 +653,11 @@ export default function ItemDetails() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg text-stone-900 mb-2">
                           Return Policy
                         </h3>
                         {item.returnPolicy.text && (
-                          <p className="text-sm sm:text-base text-gray-700">
+                          <p className="text-sm sm:text-base text-stone-700">
                             {item.returnPolicy.text}
                           </p>
                         )}
@@ -668,7 +668,7 @@ export default function ItemDetails() {
 
                 {/* Exchange Policy */}
                 {item.exchangePolicy && (
-                  <div className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6 bg-gray-50">
+                  <div className="border border-border rounded-xl p-4 sm:p-5 md:p-6 bg-canvas-muted">
                     <div className="flex items-start gap-3 sm:gap-4">
                       {item.exchangePolicy.iconUrl && (
                         <img
@@ -678,11 +678,11 @@ export default function ItemDetails() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg text-stone-900 mb-2">
                           Exchange Policy
                         </h3>
                         {item.exchangePolicy.text && (
-                          <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line">
+                          <p className="text-sm sm:text-base text-stone-700 whitespace-pre-line">
                             {item.exchangePolicy.text}
                           </p>
                         )}
@@ -693,7 +693,7 @@ export default function ItemDetails() {
 
                 {/* Cancellation Policy */}
                 {item.cancellationPolicy && (
-                  <div className="border border-gray-200 rounded-xl p-4 sm:p-5 md:p-6 bg-gray-50">
+                  <div className="border border-border rounded-xl p-4 sm:p-5 md:p-6 bg-canvas-muted">
                     <div className="flex items-start gap-3 sm:gap-4">
                       {item.cancellationPolicy.iconUrl && (
                         <img
@@ -703,11 +703,11 @@ export default function ItemDetails() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="font-semibold text-base sm:text-lg text-gray-900 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg text-stone-900 mb-2">
                           Cancellation Policy
                         </h3>
                         {item.cancellationPolicy.text && (
-                          <p className="text-sm sm:text-base text-gray-700 whitespace-pre-line">
+                          <p className="text-sm sm:text-base text-stone-700 whitespace-pre-line">
                             {item.cancellationPolicy.text}
                           </p>
                         )}
@@ -721,7 +721,7 @@ export default function ItemDetails() {
                   !item.returnPolicy &&
                   !item.exchangePolicy &&
                   !item.cancellationPolicy && (
-                    <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base">
+                    <p className="text-stone-500 py-6 sm:py-8 text-center text-sm sm:text-base">
                       No policies available
                     </p>
                   )}
@@ -735,7 +735,7 @@ export default function ItemDetails() {
                   item.filters.map((f) => (
                     <span
                       key={f._id}
-                      className="px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 bg-gray-100 text-gray-700 text-xs sm:text-sm rounded-full border border-gray-200 shadow-sm break-words"
+                      className="px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 bg-canvas-muted text-stone-700 text-xs sm:text-sm rounded-full border border-border shadow-sm break-words"
                     >
                       <span className="font-medium text-gray-800">
                         {f.key}:
@@ -744,7 +744,7 @@ export default function ItemDetails() {
                     </span>
                   ))
                 ) : (
-                  <p className="text-gray-500 py-6 sm:py-8 text-center text-sm sm:text-base w-full">
+                  <p className="text-stone-500 py-6 sm:py-8 text-center text-sm sm:text-base w-full">
                     No tags or filters available
                   </p>
                 )}

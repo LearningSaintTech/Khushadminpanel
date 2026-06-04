@@ -8,7 +8,14 @@ import {
   getRewardWallets,
   getRewardTransactions,
 } from "../../apis/MoneyFeaturesapi";
-import { PageHeader, StatCard, Pagination, FlowStep } from "./moneyFeaturesShared";
+import {
+  PageHeader,
+  StatCard,
+  Pagination,
+  FlowStep,
+  inputClass,
+  tableScrollShell,
+} from "./moneyFeaturesShared";
 
 const POINTS_FLOW = [
   {
@@ -91,10 +98,13 @@ const MoneyFeaturesPointsWallet = () => {
   const earning = rules?.earning_rules;
   const reward30 = overview?.last30Days?.rewardTransactions ?? [];
 
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <p className="text-xs text-gray-500 mb-2">
-        <Link to={`${basePath}/money-features`} className="text-indigo-600 hover:underline">
+    <div className="text-stone-900">
+      <p className="mb-2 text-[11px] text-stone-500">
+        <Link to={ap("money-features")} className="font-medium text-brand-600 hover:underline">
           ← Money features
         </Link>
       </p>
@@ -111,14 +121,14 @@ const MoneyFeaturesPointsWallet = () => {
         accentClass="text-violet-600"
       />
 
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3 md:gap-3">
         {POINTS_FLOW.map((s) => (
           <FlowStep key={s.n} {...s} />
         ))}
       </div>
 
       {overview && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:gap-3">
           <StatCard
             label="Total points"
             value={Number(overview.reward?.totalPoints ?? 0).toLocaleString("en-IN")}
@@ -152,18 +162,18 @@ const MoneyFeaturesPointsWallet = () => {
 
       <div className="mb-6 flex flex-wrap gap-2">
         <Link
-          to={`${basePath}/rewards`}
-          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          to={ap("rewards")}
+          className="inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700"
         >
-          <Settings size={16} />
+          <Settings size={14} />
           Edit reward rules
         </Link>
       </div>
 
       {reward30.length > 0 && (
-        <div className="mb-6 rounded-xl border border-violet-100 bg-white p-4">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">Point activity (30 days)</h3>
-          <ul className="text-xs space-y-1 text-gray-600">
+        <div className="mb-3 rounded-xl border border-violet-200 bg-white p-3 shadow-sm">
+          <h3 className="mb-2 text-xs font-semibold text-slate-800">Point activity (30 days)</h3>
+          <ul className="space-y-1 text-[11px] text-slate-600">
             {reward30.map((row, i) => (
               <li key={i} className="flex justify-between">
                 <span>
@@ -178,8 +188,8 @@ const MoneyFeaturesPointsWallet = () => {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex gap-1 border-b border-gray-100 p-2 bg-gray-50">
+      <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+        <div className="flex gap-1 border-b border-border bg-canvas-muted/50 p-1.5">
           {[
             ["balances", "User point balances"],
             ["tx", "Point transactions"],
@@ -188,8 +198,8 @@ const MoneyFeaturesPointsWallet = () => {
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                tab === key ? "bg-violet-600 text-white" : "text-gray-600 hover:bg-gray-100"
+              className={`rounded-md px-3 py-1.5 text-[11px] font-medium ${
+                tab === key ? "bg-brand-600 text-white shadow-sm" : "text-stone-600 hover:bg-white"
               }`}
             >
               {label}
@@ -197,21 +207,21 @@ const MoneyFeaturesPointsWallet = () => {
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-3 p-4 border-b border-gray-100">
+        <div className="flex flex-wrap items-end gap-2 border-b border-border p-2">
           {tab === "balances" && (
             <input
               type="search"
               placeholder="Search customer…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px]"
+              className={`${inputClass} min-w-[200px] flex-1`}
             />
           )}
           {tab === "tx" && (
             <select
               value={txType}
               onChange={(e) => setTxType(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className={inputClass}
             >
               <option value="">All types</option>
               <option value="EARN">Earn</option>
@@ -224,54 +234,54 @@ const MoneyFeaturesPointsWallet = () => {
           <button
             type="button"
             onClick={() => loadTab(1)}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white"
+            className="rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700"
           >
             Apply
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className={tableScrollShell}>
           {listLoading ? (
-            <p className="p-8 text-center text-gray-500">Loading…</p>
+            <p className="p-8 text-center text-[11px] text-stone-500">Loading…</p>
           ) : tab === "balances" ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[760px] border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 z-10 bg-canvas-muted/95 text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Phone</th>
-                  <th className="px-3 py-2">Points</th>
-                  <th className="px-3 py-2">User ID</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Phone</th>
+                  <th className="px-2.5 py-1.5">Points</th>
+                  <th className="px-2.5 py-1.5">User ID</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {wallets.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2">{row.userName || "—"}</td>
-                    <td className="px-3 py-2">{row.userPhone || "—"}</td>
-                    <td className="px-3 py-2 font-semibold text-violet-700">
+                  <tr key={String(row._id)} className="border-t border-border/80 hover:bg-brand-50/30">
+                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5">{row.userPhone || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-semibold text-violet-700">
                       {Number(row.points_balance ?? 0).toLocaleString("en-IN")}
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500 break-all">{String(row.userId)}</td>
+                    <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500 break-all">{String(row.userId)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-sm text-left min-w-[640px]">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+            <table className="w-full min-w-[860px] border-collapse text-left text-[11px]">
+              <thead className="sticky top-0 z-10 bg-canvas-muted/95 text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[0_1px_0_0_var(--color-border)]">
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Customer</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Points</th>
-                  <th className="px-3 py-2">Balance after</th>
+                  <th className="px-2.5 py-1.5">Date</th>
+                  <th className="px-2.5 py-1.5">Customer</th>
+                  <th className="px-2.5 py-1.5">Type</th>
+                  <th className="px-2.5 py-1.5">Source</th>
+                  <th className="px-2.5 py-1.5">Points</th>
+                  <th className="px-2.5 py-1.5">After</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {tx.items.map((row) => (
-                  <tr key={String(row._id)} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                  <tr key={String(row._id)} className="border-t border-border/80 hover:bg-brand-50/30">
+                    <td className="px-2.5 py-1.5 whitespace-nowrap text-[10px] text-slate-600">
                       {row.createdAt
                         ? new Date(row.createdAt).toLocaleString("en-IN", {
                             dateStyle: "short",
@@ -279,8 +289,8 @@ const MoneyFeaturesPointsWallet = () => {
                           })
                         : "—"}
                     </td>
-                    <td className="px-3 py-2">{row.userName || "—"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5">
                       <span
                         className={
                           row.type === "REDEEM" ? "font-semibold text-violet-700" : ""
@@ -289,9 +299,9 @@ const MoneyFeaturesPointsWallet = () => {
                         {row.type}
                       </span>
                     </td>
-                    <td className="px-3 py-2">{row.source || "—"}</td>
-                    <td className="px-3 py-2 font-medium">{row.points}</td>
-                    <td className="px-3 py-2">{row.points_balance_after}</td>
+                    <td className="px-2.5 py-1.5">{row.source || "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums">{row.points}</td>
+                    <td className="px-2.5 py-1.5 tabular-nums text-slate-600">{row.points_balance_after}</td>
                   </tr>
                 ))}
               </tbody>
@@ -307,9 +317,9 @@ const MoneyFeaturesPointsWallet = () => {
         />
       </div>
 
-      <p className="mt-4 text-xs text-gray-500">
+      <p className="mt-3 text-[11px] text-slate-500">
         After <strong>REDEEM</strong>, check cash wallet transactions (source REWARD_REDEEM) under{" "}
-        <Link to={`${basePath}/money-features/cash-wallet`} className="text-indigo-600 hover:underline">
+        <Link to={ap("money-features/cash-wallet")} className="text-brand-600 hover:underline">
           Cash wallet
         </Link>
         .

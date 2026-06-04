@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* Khush Midnight Plum — see docs/KHUSH_ADMIN_DESIGN_SYSTEM.md */
+@theme {
+  --color-brand-50: #f6f4fa;
+  --color-brand-100: #ede8f4;
+  --color-brand-500: #8268b8;
+  --color-brand-600: #6b4fa3;
+  --color-brand-700: #5c3d8a;
+  --color-brand-800: #3f2960;
+  --color-brand-900: #2a1a3d;
+  --color-brand-950: #1e1229;
+
+  --color-canvas: #f4f2ef;
+  --color-canvas-muted: #ebe8e3;
+  --color-border: #ddd8d0;
+
+  --color-gold-50: #fbf7ef;
+  --color-gold-100: #f5edd8;
+  --color-gold-500: #b8954a;
+  --color-gold-600: #9a7b3c;
+
+  --color-success: #2f6f5e;
+  --color-success-bg: #e6f2ee;
+  --color-warning: #8a6d1d;
+  --color-warning-bg: #f8f1e3;
+  --color-danger: #9b3d42;
+  --color-danger-bg: #f9ebec;
+  --color-info: #3d6b8c;
+  --color-info-bg: #e8f0f6;
+}
+
 @layer base {
   html {
     @apply antialiased;

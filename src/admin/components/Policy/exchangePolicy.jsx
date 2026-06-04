@@ -1,43 +1,70 @@
-// src/admin/pages/Exchange.jsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getAllExchange,
   deleteExchange,
   toggleExchangeActive,
 } from "../../apis/Exchangeapi";
-import { Plus, Edit, Trash2, Power, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Power,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  btnIconDelete,
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  badgeActive,
+  badgeInactive,
+  alertDanger,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./policyShared";
+
+const LIMIT_OPTIONS = [10, 20, 50];
 
 const Exchange = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [exchanges, setExchanges] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalPolicies, setTotalPolicies] = useState(0); // optional - if your API returns total count
+  const [totalPolicies, setTotalPolicies] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [limit, setLimit] = useState(10);
 
   useEffect(() => {
     fetchExchanges();
-  }, [page]);
+  }, [page, limit]);
 
   const fetchExchanges = async () => {
     setLoading(true);
     setError(null);
-
     try {
-      const res = await getAllExchange(page, 10);
+      const res = await getAllExchange(page, limit);
       if (res?.success) {
         setExchanges(res.data.policies || []);
-        setTotalPages(res.data.pagination?.totalPages || 1);
-        // If your API returns total count, uncomment and use:
-        // setTotalPolicies(res.data.pagination?.total || 0);
+        setTotalPages(Math.max(1, res.data.pagination?.totalPages || 1));
+        setTotalPolicies(res.data.pagination?.total || res.data.policies?.length || 0);
       } else {
+        setExchanges([]);
         setError("Failed to load exchange policies");
       }
     } catch (err) {
       console.error("Fetch error:", err);
+      setExchanges([]);
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -58,7 +85,11 @@ const Exchange = () => {
   const handleToggleActive = async (id) => {
     const policy = exchanges.find((p) => p._id === id);
     const willActivate = policy && !policy.isActive;
-    if (willActivate && !window.confirm("Activate this policy? Any other active policy will be deactivated.")) return;
+    if (
+      willActivate &&
+      !window.confirm("Activate this policy? Any other active policy will be deactivated.")
+    )
+      return;
     try {
       await toggleExchangeActive(id);
       fetchExchanges();
@@ -68,228 +99,159 @@ const Exchange = () => {
     }
   };
 
-  // Generate page numbers to show (with ellipsis)
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    if (totalPages <= maxVisible) {
-      // Show all pages if few
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      // Show first + last + around current
-      if (page <= 3) {
-        for (let i = 1; i <= 4; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      } else if (page >= totalPages - 2) {
-        pages.push(1);
-        pages.push("...");
-        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
-      } else {
-        pages.push(1);
-        pages.push("...");
-        for (let i = page - 1; i <= page + 1; i++) pages.push(i);
-        pages.push("...");
-        pages.push(totalPages);
-      }
-    }
-    return pages;
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Exchange Policies
-              {totalPolicies > 0 && <span className="text-gray-500 text-xl ml-3">({totalPolicies})</span>}
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">Only one policy can be active at a time.</p>
-          </div>
+    <div className="text-stone-900">
+      <div className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}>
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Exchange policies
+        </h1>
+        <select
+          className="w-[108px] shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          value={limit}
+          onChange={(e) => {
+            setPage(1);
+            setLimit(Number(e.target.value) || 10);
+          }}
+          title="Rows per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => navigate(ap("exchange/create"))} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Create
+        </button>
+      </div>
+      <p className="mb-2 text-[10px] text-stone-500">Only one policy can be active at a time.</p>
 
+      {error ? <div className={alertDanger}>{error}</div> : null}
+
+      <div className={tableScrollShell}>
+        <table className="min-w-[880px] w-full divide-y divide-border text-[11px]">
+          <thead className={tableHeadClass}>
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Max days</th>
+              <th className={thClass}>Max limit (₹)</th>
+              <th className={thClass}>Reasons</th>
+              <th className={`${thClass} text-center`}>Status</th>
+              <th className={`${thClass} min-w-[100px] text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && exchanges.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
+              </tr>
+            ) : exchanges.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-stone-500">
+                  No exchange policies found.{" "}
+                  <button
+                    type="button"
+                    onClick={() => navigate(ap("exchange/create"))}
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    Create one
+                  </button>
+                </td>
+              </tr>
+            ) : (
+              exchanges.map((policy, idx) => (
+                <tr key={policy._id} className="hover:bg-canvas-muted/50">
+                  <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                    {(page - 1) * limit + idx + 1}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-stone-900">
+                    {policy.maxExchangeTimeInDays ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 tabular-nums text-stone-800">
+                    {policy.maxExchangeLimit
+                      ? Number(policy.maxExchangeLimit).toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="max-w-xs truncate px-2 py-2 text-stone-700">
+                    {policy.exchangeReasons?.length
+                      ? policy.exchangeReasons.join(" • ")
+                      : "—"}
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        policy.isActive ? badgeActive : badgeInactive
+                      }`}
+                    >
+                      {policy.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`exchange/edit/${policy._id}`))}
+                      className={btnIconEdit}
+                      title="Edit"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(policy._id)}
+                      className={`ml-1.5 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border transition ${
+                        policy.isActive
+                          ? "text-warning hover:bg-warning/10"
+                          : "text-success hover:bg-success-bg"
+                      }`}
+                      title={policy.isActive ? "Deactivate" : "Activate"}
+                    >
+                      <Power className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(policy._id)}
+                      className={`${btnIconDelete} ml-1.5`}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          Page {page} of {totalPages}
+          {totalPolicies > 0 ? ` (${totalPolicies} total)` : ""}
+        </p>
+        <div className="flex gap-2">
           <button
-            onClick={() => navigate("/admin/exchange/create")}
-            className="inline-flex items-center px-5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors shadow-sm"
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+            className={btnOutline}
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Create New Policy
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
-
-        {/* Content */}
-        {loading ? (
-          <div className="text-center py-16">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-gray-900"></div>
-            <p className="mt-4 text-gray-600">Loading policies...</p>
-          </div>
-        ) : error ? (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-5 rounded-lg text-center">
-            {error}
-          </div>
-        ) : exchanges.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <p className="text-gray-600 text-lg mb-2">No exchange policies found.</p>
-            <p className="text-gray-500">
-              Click "Create New Policy" to add your first exchange rule.
-            </p>
-          </div>
-        ) : (
-          <div className="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Max Days
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Max Limit (₹)
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Reasons
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="bg-white divide-y divide-gray-100">
-                  {exchanges.map((policy) => (
-                    <tr key={policy._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                        {policy.maxExchangeTimeInDays ?? "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {policy.maxExchangeLimit
-                          ? Number(policy.maxExchangeLimit).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {policy.exchangeReasons?.length
-                          ? policy.exchangeReasons.join(" • ")
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                            policy.isActive
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-rose-100 text-rose-800"
-                          }`}
-                        >
-                          {policy.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => navigate(`/admin/exchange/edit/${policy._id}`)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                            title="Edit"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleToggleActive(policy._id)}
-                            className={`p-2 rounded-lg transition ${
-                              policy.isActive
-                                ? "text-amber-600 hover:bg-amber-50"
-                                : "text-green-600 hover:bg-green-50"
-                            }`}
-                            title={policy.isActive ? "Deactivate" : "Activate"}
-                          >
-                            <Power size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(policy._id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Enhanced Pagination */}
-            { (
-              <div className="flex flex-col sm:flex-row items-center justify-between border-t border-gray-200 px-6 py-4 bg-gray-50 gap-4">
-                <div className="text-sm text-gray-600">
-                  Showing <strong>{exchanges.length}</strong> of{" "}
-                  <strong>{totalPolicies || "many"}</strong> policies
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                  <button
-                    onClick={() => setPage(1)}
-                    disabled={page === 1}
-                    className="p-2 rounded-md text-gray-500 hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                    title="First page"
-                  >
-                    <ChevronsLeft className="h-5 w-5" />
-                  </button>
-
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    Prev
-                  </button>
-
-                  {getPageNumbers().map((num, idx) => (
-                    <React.Fragment key={idx}>
-                      {num === "..." ? (
-                        <span className="px-3 py-2 text-gray-500">...</span>
-                      ) : (
-                        <button
-                          onClick={() => setPage(Number(num))}
-                          className={`px-3.5 py-2 rounded-md text-sm font-medium transition-colors ${
-                            page === num
-                              ? "bg-gray-900 text-white"
-                              : "text-gray-700 hover:bg-gray-200"
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      )}
-                    </React.Fragment>
-                  ))}
-
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </button>
-
-                  <button
-                    onClick={() => setPage(totalPages)}
-                    disabled={page === totalPages}
-                    className="p-2 rounded-md text-gray-500 hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                    title="Last page"
-                  >
-                    <ChevronsRight className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

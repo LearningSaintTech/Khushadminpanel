@@ -13,6 +13,11 @@ import { extractBackendMessages } from "../../utils/extractBackendMessages";
 const LOG = "[BannerForm]";
 const DEFAULT_CROP = { x: 5, y: 5, w: 90, h: 90 };
 
+const fieldClass =
+  "block w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted";
+const labelClass =
+  "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-stone-500";
+
 function logFormDataEntries(formData, label = "FormData") {
   const entries = [];
   for (const [key, value] of formData.entries()) {
@@ -160,23 +165,23 @@ async function cropImageToFile(src, cropPct, fileName, useCrossOrigin = false) {
 function FormErrors({ errors, onDismiss }) {
   if (!errors?.length) return null;
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+    <div className="rounded-xl border border-danger/30 bg-danger-bg p-3">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-red-800">
+        <p className="text-[11px] font-semibold text-danger">
           Please fix the following:
         </p>
         {onDismiss && (
           <button
             type="button"
             onClick={onDismiss}
-            className="shrink-0 rounded p-1 text-red-600 hover:bg-red-100"
+            className="shrink-0 rounded p-1 text-danger hover:bg-danger/10"
             aria-label="Dismiss errors"
           >
             <X className="h-4 w-4" />
           </button>
         )}
       </div>
-      <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-red-700">
+      <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] text-danger">
         {errors.map((msg, i) => (
           <li key={`${msg}-${i}`}>{msg}</li>
         ))}
@@ -740,7 +745,7 @@ const BannerForm = () => {
     onClearNew,
   ) => (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700">{sectionLabel}</label>
+      <label className={labelClass}>{sectionLabel}</label>
       <input
         type="file"
         name={fileInputName}
@@ -753,12 +758,12 @@ const BannerForm = () => {
             existingItems.length,
           )
         }
-        className="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+        className="block w-full text-[11px] text-stone-500 file:mr-2 file:rounded-lg file:border-0 file:bg-brand-50 file:px-2.5 file:py-1 file:text-[10px] file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
       />
-      <p className="text-xs text-gray-500">
+      <p className="text-[10px] text-stone-500">
         Upload multiple images. Hover a thumbnail to zoom, crop, or remove.
         {isEdit && (
-          <span className="mt-1 block text-indigo-700">
+          <span className="mt-1 block text-brand-700">
             On update, images still listed here are kept. New files are added.
             Use remove only when you want to delete a server image.
           </span>
@@ -766,7 +771,7 @@ const BannerForm = () => {
       </p>
 
       {(existingItems.length > 0 || filePreviews.length > 0) && (
-        <p className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-900">
+        <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-[10px] font-medium text-brand-900">
           {existingItems.length > 0 && (
             <span>{existingItems.length} on server</span>
           )}
@@ -777,7 +782,7 @@ const BannerForm = () => {
               {filePreviews.length !== 1 ? "s" : ""}
             </span>
           )}
-          <span className="text-indigo-700">
+          <span className="text-brand-700">
             {" "}
             = {existingItems.length + filePreviews.length} shown total
           </span>
@@ -870,49 +875,49 @@ const BannerForm = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl overflow-hidden rounded-xl bg-white shadow-lg">
-        <div className="border-b border-gray-200 bg-gray-50 px-6 py-5">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => navigate(`${basePath}/splash`)}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
-            >
-              ← Back
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEdit ? "Edit Banner" : "Create Banner"}
-            </h1>
-          </div>
-        </div>
+    <div className="pb-20 text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate(`${basePath}/splash`)}
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted"
+        >
+          ← Back
+        </button>
+        <h1 className="text-base font-bold tracking-tight sm:text-lg">
+          {isEdit ? "Edit homepage banner" : "Create homepage banner"}
+        </h1>
+      </div>
 
+      <div className="mx-auto max-w-4xl">
         {loading && isEdit ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-14 w-14 animate-spin text-indigo-600" />
+          <div className="flex justify-center gap-2 py-16 text-[11px] text-stone-500">
+            <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+            Loading…
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6 p-6">
+          <form onSubmit={handleSubmit} className="space-y-2">
             <FormErrors errors={formErrors} onDismiss={clearErrors} />
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Title <span className="text-red-600">*</span>
+                <label className={labelClass}>
+                  Title <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-black focus:ring-1 focus:ring-black"
+                  className={fieldClass}
                   placeholder="Sale 🔥"
                   required
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Banner type <span className="text-red-600">*</span>
+                <label className={labelClass}>
+                  Banner type <span className="text-danger">*</span>
                 </label>
                 <select
                   value={type}
@@ -920,7 +925,7 @@ const BannerForm = () => {
                     setType(e.target.value);
                     if (e.target.value !== "CATEGORY") setCategoryId("");
                   }}
-                  className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-black focus:ring-1 focus:ring-black"
+                  className={fieldClass}
                 >
                   <option value="NORMAL">NORMAL</option>
                   <option value="CATEGORY">CATEGORY</option>
@@ -929,15 +934,15 @@ const BannerForm = () => {
             </div>
 
             {type === "CATEGORY" && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Category <span className="text-red-600">*</span>
+              <div className="mt-2.5">
+                <label className={labelClass}>
+                  Category <span className="text-danger">*</span>
                 </label>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
                   disabled={categoriesLoading}
-                  className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
+                  className={fieldClass}
                 >
                   <option value="">
                     {categoriesLoading ? "Loading categories…" : "Select category"}
@@ -951,64 +956,60 @@ const BannerForm = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Discount type
-                </label>
+                <label className={labelClass}>Discount type</label>
                 <select
                   value={discountType}
                   onChange={(e) => setDiscountType(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm"
+                  className={fieldClass}
                 >
                   <option value="PERCENT">PERCENT</option>
                   <option value="FLAT">FLAT</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  Discount
-                </label>
+                <label className={labelClass}>Discount</label>
                 <input
                   type="number"
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value)}
                   min="0"
                   step="0.01"
-                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
+                  className={fieldClass}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  navigation.navigate <span className="text-red-600">*</span>
+                <label className={labelClass}>
+                  navigation.navigate <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
                   value={navigation}
                   onChange={(e) => setNavigation(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
+                  className={fieldClass}
                   placeholder="/summer"
                   required
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                  External link (optional)
-                </label>
+                <label className={labelClass}>External link (optional)</label>
                 <input
                   type="text"
                   value={externalLink}
                   onChange={(e) => setExternalLink(e.target.value)}
-                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm"
+                  className={fieldClass}
                   placeholder="Optional external URL"
                 />
               </div>
             </div>
+            </section>
 
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {renderMediaGrid(
                 desktopExistingItems,
                 desktopFilePreviews,
@@ -1027,21 +1028,25 @@ const BannerForm = () => {
               )}
             </div>
 
-            <div className="flex flex-col gap-4 border-t border-gray-200 pt-6 sm:flex-row">
-              <button
-                type="submit"
-                disabled={loading || cropBusy}
-                className="flex-1 rounded-lg bg-black py-3 px-6 font-medium text-white hover:bg-gray-900 disabled:opacity-50"
-              >
-                {loading ? "Saving…" : isEdit ? "Update Banner" : "Create Banner"}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(`${basePath}/splash`)}
-                className="flex-1 rounded-lg border border-gray-300 py-3 px-6 font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+            </section>
+
+            <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-white/95 px-3 py-2 backdrop-blur-sm lg:left-[var(--sidebar-width,0)]">
+              <div className="mx-auto flex max-w-4xl justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`${basePath}/splash`)}
+                  className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || cropBusy}
+                  className="rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  {loading ? "Saving…" : isEdit ? "Update banner" : "Create banner"}
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -1121,7 +1126,7 @@ const BannerForm = () => {
                   crossOrigin={cropSession.useCrossOrigin ? "anonymous" : undefined}
                 />
                 <div
-                  className="pointer-events-none absolute border-2 border-indigo-500 bg-indigo-500/20"
+                  className="pointer-events-none absolute border-2 border-brand-500 bg-brand-500/20"
                   style={{
                     left: `${cropPct.x}%`,
                     top: `${cropPct.y}%`,
@@ -1153,7 +1158,7 @@ const BannerForm = () => {
                         [key]: Number(e.target.value),
                       }))
                     }
-                    className="w-full accent-indigo-600"
+                    className="w-full accent-brand-600"
                   />
                 </div>
               ))}
@@ -1174,7 +1179,7 @@ const BannerForm = () => {
                   type="button"
                   onClick={applyCrop}
                   disabled={cropBusy}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 py-2.5 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                 >
                   {cropBusy && <Loader2 className="h-4 w-4 animate-spin" />}
                   Apply crop
@@ -1182,7 +1187,7 @@ const BannerForm = () => {
                 <button
                   type="button"
                   onClick={closeCrop}
-                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-border px-4 py-2.5 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted"
                 >
                   Cancel
                 </button>

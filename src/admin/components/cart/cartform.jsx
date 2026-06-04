@@ -1,16 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   createCartCharges,
   updateCartCharges,
   getSingleCartCharge,
 } from "../../apis/Cartapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+
+const fieldClass =
+  "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted";
+const fieldSmClass =
+  "rounded-lg border border-border bg-white px-2 py-1.5 text-[11px] outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
+const labelClass = "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-stone-500";
+
+function FormSection({ title, hint, children }) {
+  return (
+    <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
+      <div className="mb-2.5 border-b border-border pb-2">
+        <h2 className="text-xs font-semibold text-stone-900">{title}</h2>
+        {hint ? <p className="mt-0.5 text-[10px] text-stone-500">{hint}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 const CartChargesConfigForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+  const isEdit = useMemo(() => Boolean(id), [id]);
 
   const [loading, setLoading] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(false);
   const [error, setError] = useState(null);
 
   const [formData, setFormData] = useState({
@@ -18,34 +43,28 @@ const CartChargesConfigForm = () => {
     cartCharge: [],
   });
 
-  // ✅ Prefill Data (Edit Mode)
   useEffect(() => {
-    if (id) {
-      const loadConfig = async () => {
-        try {
-          setLoading(true);
-          console.log("[CartForm] Load single config", { id });
-          const response = await getSingleCartCharge(id);
-          const data = response?.data?.data || response?.data;
-          console.log("[CartForm] Load response", { id, hasData: !!data, raw: response?.data });
+    if (!id) return;
 
-          if (data) {
+    const loadConfig = async () => {
+      try {
+        setLoadingConfig(true);
+        setError(null);
+        const response = await getSingleCartCharge(id);
+        const data = response?.data?.data || response?.data;
+
+        if (data) {
           const mapRule = (r) => {
             const hasPercentField =
               r?.percent !== undefined && r?.percent !== null && r?.percent !== "";
             const isPercentType = String(r?.type || "").toUpperCase() === "PERCENT";
-
             const resolvedType = hasPercentField || isPercentType ? "PERCENT" : "FLAT";
-
             return {
               min: r?.min ?? "",
               max: r?.max === null || r?.max === undefined ? "" : r.max,
               type: resolvedType,
-              // Backend sometimes returns either `percent` or `value` for percent rules.
               amount:
-                resolvedType === "PERCENT"
-                  ? (r?.percent ?? r?.value ?? "")
-                  : (r?.value ?? ""),
+                resolvedType === "PERCENT" ? (r?.percent ?? r?.value ?? "") : (r?.value ?? ""),
             };
           };
 
@@ -57,12 +76,9 @@ const CartChargesConfigForm = () => {
               item.rules && !Array.isArray(item.rules)
                 ? item.rules
                 : (item.rules && item.rules[0]) || {};
-
             const nextIsCODSpecial = item.isCODSpecial !== undefined ? !!item.isCODSpecial : false;
-
             if (!byKey[key]) byKey[key] = { key, isCODSpecial: nextIsCODSpecial, rules: [] };
             else if (item.isCODSpecial !== undefined) byKey[key].isCODSpecial = nextIsCODSpecial;
-
             byKey[key].rules.push(mapRule(rule));
           });
 
@@ -70,27 +86,17 @@ const CartChargesConfigForm = () => {
             isActive: data.isActive !== false,
             cartCharge: Object.values(byKey),
           });
-          console.log("[CartForm] Load set formData", { cartChargeCount: Object.values(byKey).length, byKey });
         }
       } catch (err) {
         console.error("[CartForm] Load failed", err);
         setError("Failed to load cart charges configuration");
       } finally {
-        setLoading(false);
+        setLoadingConfig(false);
       }
     };
 
     loadConfig();
-  }
-}, [id]);
-  // ✅ Back Button
-  const handleBack = () => {
-    navigate("/admin/cart-charges");
-  };
-
-  // ============================
-  // Charge + Rule Handlers
-  // ============================
+  }, [id]);
 
   const addNewCharge = () => {
     setFormData((prev) => ({
@@ -99,39 +105,15 @@ const CartChargesConfigForm = () => {
     }));
   };
 
- const addRuleField = (chargeIndex) => {
-  const updated = [...formData.cartCharge];
+  const addRuleField = (chargeIndex) => {
+    const updated = [...formData.cartCharge];
+    if (!Array.isArray(updated[chargeIndex].rules)) {
+      updated[chargeIndex].rules = [];
+    }
+    updated[chargeIndex].rules.push({ min: "", max: "", type: "FLAT", amount: "" });
+    setFormData({ ...formData, cartCharge: updated });
+  };
 
-  if (!Array.isArray(updated[chargeIndex].rules)) {
-    updated[chargeIndex].rules = [];
-  }
-
-  updated[chargeIndex].rules.push({
-    min: "",
-    max: "",
-    type: "FLAT",
-    amount: "",
-  });
-
-  setFormData({ ...formData, cartCharge: updated });
-};
-
-  // const updateRuleKey = (chargeIndex, oldKey, newKey) => {
-  //   const updated = [...formData.cartCharge];
-
-  //   if (!newKey.trim()) return;
-
-  //   const rules = { ...updated[chargeIndex].rules };
-
-  //   if (oldKey !== newKey) {
-  //     const value = rules[oldKey];
-  //     delete rules[oldKey];
-  //     rules[newKey] = value;
-  //   }
-
-  //   updated[chargeIndex].rules = rules;
-  //   setFormData({ ...formData, cartCharge: updated });
-  // };
   const updateRuleValue = (chargeIndex, ruleIndex, field, value) => {
     const updated = formData.cartCharge.map((charge, ci) =>
       ci !== chargeIndex
@@ -141,29 +123,26 @@ const CartChargesConfigForm = () => {
             rules: charge.rules.map((r, ri) => {
               if (ri !== ruleIndex) return r;
               if (field === "type") return { ...r, type: value };
-              if (field === "amount") return { ...r, amount: value === "" ? "" : (isNaN(Number(value)) ? value : Number(value)) };
-              if (field === "min" || field === "max") return { ...r, [field]: value === "" ? "" : Number(value) };
+              if (field === "amount")
+                return {
+                  ...r,
+                  amount: value === "" ? "" : isNaN(Number(value)) ? value : Number(value),
+                };
+              if (field === "min" || field === "max")
+                return { ...r, [field]: value === "" ? "" : Number(value) };
               return r;
             }),
-          }
+          },
     );
     setFormData({ ...formData, cartCharge: updated });
   };
 
-  // const removeRuleField = (chargeIndex, ruleKey) => {
-  //   const updated = [...formData.cartCharge];
-
-  //   delete updated[chargeIndex].rules[ruleKey];
-
-  //   setFormData({ ...formData, cartCharge: updated });
-  // };
   const removeRuleField = (chargeIndex, ruleIndex) => {
     const updated = [...formData.cartCharge];
-
     updated[chargeIndex].rules.splice(ruleIndex, 1);
-
     setFormData({ ...formData, cartCharge: updated });
   };
+
   const removeCharge = (index) => {
     const updated = [...formData.cartCharge];
     updated.splice(index, 1);
@@ -173,11 +152,8 @@ const CartChargesConfigForm = () => {
   const updateChargeKey = (index, value) => {
     const updated = [...formData.cartCharge];
     updated[index].key = value;
-
     setFormData({ ...formData, cartCharge: updated });
   };
-
- 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -186,175 +162,152 @@ const CartChargesConfigForm = () => {
       setLoading(true);
       setError(null);
 
-      // Validate that all charges have keys
       const invalidCharges = formData.cartCharge.filter(
         (charge) => !charge.key || charge.key.trim() === "",
       );
-
       if (invalidCharges.length > 0) {
         setError("Please provide a key for all charges");
         setLoading(false);
         return;
       }
 
-    const buildRule = (rule) => {
-      const cleaned = {};
-      if (rule.min !== "" && rule.min !== undefined) cleaned.min = Number(rule.min);
-      cleaned.max = rule.max === "" || rule.max === undefined ? null : Number(rule.max);
-      cleaned.type = rule.type ?? "FLAT";
-
-      if (rule.amount !== "" && rule.amount !== undefined) {
-        if (rule.type === "PERCENT") {
-          // Send both `percent` and `value` to support backend variations.
-          cleaned.percent = Number(rule.amount);
-          cleaned.value = Number(rule.amount);
-        } else {
-          cleaned.value = Number(rule.amount);
+      const buildRule = (rule) => {
+        const cleaned = {};
+        if (rule.min !== "" && rule.min !== undefined) cleaned.min = Number(rule.min);
+        cleaned.max = rule.max === "" || rule.max === undefined ? null : Number(rule.max);
+        cleaned.type = rule.type ?? "FLAT";
+        if (rule.amount !== "" && rule.amount !== undefined) {
+          if (rule.type === "PERCENT") {
+            cleaned.percent = Number(rule.amount);
+            cleaned.value = Number(rule.amount);
+          } else {
+            cleaned.value = Number(rule.amount);
+          }
         }
-      }
-      return cleaned;
-    };
+        return cleaned;
+      };
 
-    const payload = {
-      isActive: formData.isActive,
-      cartCharge: formData.cartCharge.flatMap((charge) =>
-        (charge.rules || []).map((rule) => ({
-          key: charge.key.trim(),
-          isCODSpecial: !!charge.isCODSpecial,
-          rules: buildRule(rule),
-        }))
-      ),
-    };
-      console.log("[CartForm] Submit payload", { id, payload, cartChargeLength: payload.cartCharge?.length });
+      const payload = {
+        isActive: formData.isActive,
+        cartCharge: formData.cartCharge.flatMap((charge) =>
+          (charge.rules || []).map((rule) => ({
+            key: charge.key.trim(),
+            isCODSpecial: !!charge.isCODSpecial,
+            rules: buildRule(rule),
+          })),
+        ),
+      };
+
       if (id) {
         await updateCartCharges(id, payload);
-        console.log("[CartForm] Update success", id);
-        alert("✅ Cart charges updated successfully!");
       } else {
         await createCartCharges(payload);
-        console.log("[CartForm] Create success");
-        alert("✅ Cart charges created successfully!");
       }
 
-      navigate("/admin/cart-charges");
+      navigate(ap("cart-charges"));
     } catch (err) {
       console.error("[CartForm] Submit failed", err?.response?.data ?? err);
-      setError(
-        err?.response?.data?.message ||
-          "Failed to save cart charges configuration",
-      );
+      setError(err?.response?.data?.message || "Failed to save cart charges configuration");
     } finally {
       setLoading(false);
     }
   };
 
-  // ============================
-  // UI
-  // ============================
+  const formDisabled = loadingConfig;
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 p-6">
-      <div className="max-w-5xl mx-auto bg-white shadow-lg rounded-xl p-6 sm:p-8">
-        {/* 🔙 Back Button */}
-        <button
-          onClick={handleBack}
-          className="mb-4 text-sm text-gray-600 hover:text-black flex items-center gap-2 transition"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div className="mx-auto max-w-4xl text-stone-900">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(ap("cart-charges"))}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] font-semibold text-stone-700 transition-colors hover:bg-canvas-muted"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to Cart Charges
-        </button>
-
-        <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-gray-900">
-          {id ? "Edit Cart Charges" : "Create Cart Charges"}
-        </h1>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-            {error}
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold tracking-tight sm:text-lg">
+              {isEdit ? "Edit Cart Charges" : "Create Cart Charges"}
+            </h1>
+            <p className="truncate text-[11px] text-stone-500">
+              Delivery, packing, platform fees, and other cart rules
+            </p>
           </div>
-        )}
+        </div>
+      </div>
 
-        {loading && !formData.cartCharge.length && (
-          <p className="mb-4 text-gray-600">Loading...</p>
-        )}
+      {error ? (
+        <div className="mb-3 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
+          {error}
+        </div>
+      ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Enable Toggle */}
-          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+      {loadingConfig ? (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-border bg-canvas-muted px-3 py-3 text-[11px] text-stone-600">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+          Loading configuration…
+        </div>
+      ) : null}
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <FormSection title="Configuration" hint="Enable or disable this charge set.">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-[11px] font-medium text-brand-800">
             <input
               type="checkbox"
               id="isActive"
               checked={formData.isActive}
+              disabled={formDisabled}
               onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  isActive: e.target.checked,
-                }))
+                setFormData((prev) => ({ ...prev, isActive: e.target.checked }))
               }
-              className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+              className="h-3.5 w-3.5 accent-brand-600"
             />
-            <label
-              htmlFor="isActive"
-              className="font-semibold text-gray-900 cursor-pointer"
-            >
-              Enable Cart Charges
-            </label>
-          </div>
+            Enable cart charges
+          </label>
+        </FormSection>
 
-          {/* Charges */}
-          {formData.cartCharge.map((charge, index) => {
-            // const ruleFields = getRuleFields(charge);
-
-            return (
+        <FormSection
+          title="Charge types & rules"
+          hint="Each key (e.g. delivery, packing) can have min/max cart value rules."
+        >
+          <div className="space-y-2.5">
+            {formData.cartCharge.map((charge, index) => (
               <div
                 key={index}
-                className="border-2 border-gray-200 rounded-xl p-5 bg-gray-50 space-y-4"
+                className="rounded-xl border border-border bg-canvas-muted/40 p-2.5 space-y-2"
               >
-                <div className="flex justify-between items-center gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Charge Key
-                    </label>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[200px] flex-1">
+                    <label className={labelClass}>Charge key</label>
                     <input
                       type="text"
-                      placeholder="e.g. delivery, packing, platformfee, surge, nightcharge, convienece"
+                      placeholder="delivery, packing, platformfee…"
                       value={charge.key}
+                      disabled={formDisabled}
                       onChange={(e) => updateChargeKey(index, e.target.value)}
-                      className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                      className={fieldClass}
                     />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Common keys: delivery, packing, platformfee, surge,
-                      nightcharge, convienece
-                    </p>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => removeCharge(index)}
-                    className="px-4 py-2.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition font-medium text-sm"
+                    disabled={formDisabled}
+                    className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger-bg px-2.5 py-1.5 text-[11px] font-medium text-danger hover:opacity-90 disabled:opacity-50"
                   >
+                    <Trash2 size={12} />
                     Remove
                   </button>
                 </div>
 
-                {charge.key && (
-                  <div className="space-y-3 pt-3 border-t border-gray-300">
-                    <div className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-gray-200">
+                {charge.key ? (
+                  <div className="space-y-2 border-t border-border pt-2">
+                    <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-700">
                       <input
                         type="checkbox"
                         checked={!!charge.isCODSpecial}
+                        disabled={formDisabled}
                         onChange={(e) => {
                           const checked = e.target.checked;
                           setFormData((prev) => {
@@ -363,129 +316,136 @@ const CartChargesConfigForm = () => {
                             return { ...prev, cartCharge: updated };
                           });
                         }}
-                        className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                        className="h-3 w-3 accent-brand-600"
                       />
-                      <span className="text-sm font-semibold text-gray-800">
-                        isCODSpecial
-                      </span>
-                    </div>
+                      COD special
+                    </label>
 
-                    <h4 className="text-sm font-semibold text-gray-700">
-                      Rules
-                    </h4>
-
-                  {charge.rules.map((rule, ruleIndex) => (
-                    <div
-                      key={ruleIndex}
-                      className="flex gap-3 items-center flex-wrap p-3 bg-white border border-gray-200 rounded-lg"
-                    >
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Min</label>
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={rule.min ?? ""}
-                          onChange={(e) =>
-                            updateRuleValue(index, ruleIndex, "min", e.target.value)
-                          }
-                          className="w-24 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Max (empty = no max)</label>
-                        <input
-                          type="number"
-                          placeholder="null"
-                          value={rule.max ?? ""}
-                          onChange={(e) =>
-                            updateRuleValue(index, ruleIndex, "max", e.target.value)
-                          }
-                          className="w-24 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Type</label>
-                        <select
-                          value={rule.type ?? "FLAT"}
-                          onChange={(e) =>
-                            updateRuleValue(index, ruleIndex, "type", e.target.value)
-                          }
-                          className="w-28 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-                        >
-                          <option value="FLAT">FLAT</option>
-                          <option value="PERCENT">PERCENT</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">
-                          {rule.type === "PERCENT" ? "Percent (e.g. 20)" : "Value (e.g. 100)"}
-                        </label>
-                        <input
-                          type="number"
-                          placeholder={rule.type === "PERCENT" ? "20" : "100"}
-                          min={0}
-                          step={rule.type === "PERCENT" ? 1 : 0.01}
-                          value={rule.amount ?? ""}
-                          onChange={(e) =>
-                            updateRuleValue(index, ruleIndex, "amount", e.target.value)
-                          }
-                          className="w-28 border-2 border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeRuleField(index, ruleIndex)}
-                        className="mt-5 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded text-sm font-medium"
+                    <p className={labelClass}>Rules</p>
+                    {charge.rules.map((rule, ruleIndex) => (
+                      <div
+                        key={ruleIndex}
+                        className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-white p-2"
                       >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <label className={labelClass}>Min</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={rule.min ?? ""}
+                            disabled={formDisabled}
+                            onChange={(e) =>
+                              updateRuleValue(index, ruleIndex, "min", e.target.value)
+                            }
+                            className={`${fieldSmClass} w-20`}
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Max</label>
+                          <input
+                            type="number"
+                            placeholder="∞"
+                            value={rule.max ?? ""}
+                            disabled={formDisabled}
+                            onChange={(e) =>
+                              updateRuleValue(index, ruleIndex, "max", e.target.value)
+                            }
+                            className={`${fieldSmClass} w-20`}
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Type</label>
+                          <select
+                            value={rule.type ?? "FLAT"}
+                            disabled={formDisabled}
+                            onChange={(e) =>
+                              updateRuleValue(index, ruleIndex, "type", e.target.value)
+                            }
+                            className={`${fieldSmClass} w-24`}
+                          >
+                            <option value="FLAT">FLAT</option>
+                            <option value="PERCENT">%</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelClass}>
+                            {rule.type === "PERCENT" ? "Percent" : "Amount"}
+                          </label>
+                          <input
+                            type="number"
+                            placeholder={rule.type === "PERCENT" ? "20" : "100"}
+                            min={0}
+                            step={rule.type === "PERCENT" ? 1 : 0.01}
+                            value={rule.amount ?? ""}
+                            disabled={formDisabled}
+                            onChange={(e) =>
+                              updateRuleValue(index, ruleIndex, "amount", e.target.value)
+                            }
+                            className={`${fieldSmClass} w-24`}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRuleField(index, ruleIndex)}
+                          disabled={formDisabled}
+                          className="mb-0.5 rounded-lg px-2 py-1 text-[10px] font-medium text-danger hover:bg-danger-bg"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
 
-                    {/* Add Rule Button */}
                     <button
                       type="button"
                       onClick={() => addRuleField(index)}
-                      className="text-sm text-blue-600"
+                      disabled={formDisabled}
+                      className="text-[11px] font-medium text-brand-600 hover:text-brand-700"
                     >
-                      + Add Rule
+                      + Add rule
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
-            );
-          })}
+            ))}
 
-          <button
-            type="button"
-            onClick={addNewCharge}
-            className="w-full sm:w-auto px-6 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg transition font-medium text-gray-900"
-          >
-            + Add Charge Type
-          </button>
-
-          <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t-2 border-gray-200">
             <button
               type="button"
-              onClick={handleBack}
-              className="px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+              onClick={addNewCharge}
+              disabled={formDisabled}
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-border bg-white px-3 py-2 text-[11px] font-semibold text-stone-700 transition-colors hover:border-brand-300 hover:bg-brand-50/50 disabled:opacity-50"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading
-                ? "Saving..."
-                : id
-                  ? "Update Configuration"
-                  : "Create Configuration"}
+              <Plus size={14} />
+              Add charge type
             </button>
           </div>
-        </form>
-      </div>
+        </FormSection>
+
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-border bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => navigate(ap("cart-charges"))}
+            className="rounded-lg border border-border px-4 py-1.5 text-[11px] font-semibold text-stone-700 transition-colors hover:bg-canvas-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading || formDisabled}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Saving…
+              </>
+            ) : isEdit ? (
+              "Update configuration"
+            ) : (
+              "Create configuration"
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

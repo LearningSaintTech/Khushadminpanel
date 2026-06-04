@@ -1,65 +1,54 @@
-// PolicyManagement.jsx
-
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { ChevronLeft, ChevronRight, Loader2, Plus, Trash2, Pencil } from "lucide-react";
+import { getPolicies, deletePolicy } from "../../apis/UspPolicy";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
-  Plus,
-  Trash2,
-  Edit,
-  ShieldCheck,
-  Search,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-
-import {
-  createPolicy,
-  getPolicies,
-  updatePolicy,
-  deletePolicy,
-} from "../../apis/UspPolicy";
-
-const initialForm = {
-  text: "",
-  policyType: "cancellation",
-  order: "",
-  isActive: true,
-  icon: null,
-};
+  badgeActive,
+  btnIconDelete,
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./policyShared";
 
 const LIMIT_OPTIONS = [10, 20, 50, 100];
 
 export default function PolicyManagement() {
-  // ================= STATES =================
+  const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
   const [totalPolicies, setTotalPolicies] = useState(0);
 
-  const [form, setForm] = useState(initialForm);
-  const [editingId, setEditingId] = useState(null);
-
-  // ================= FETCH POLICIES =================
   const fetchPolicies = async (page = 1, itemsPerPage = limit) => {
     try {
       setLoading(true);
-      console.log(`Fetching policies: Page ${page}, Limit ${itemsPerPage}`);
-
       const res = await getPolicies(page, itemsPerPage);
-
       if (res?.success) {
         setPolicies(res?.data?.policies || []);
         setTotalPolicies(res?.data?.pagination?.total || 0);
-        setTotalPages(res?.data?.pagination?.totalPages || 1);
+        setTotalPages(Math.max(1, res?.data?.pagination?.totalPages || 1));
         setCurrentPage(res?.data?.pagination?.currentPage || page);
+      } else {
+        setPolicies([]);
+        toast.error(res?.message || "Failed to load policies");
       }
     } catch (error) {
       console.error("Fetch Policies Error:", error);
+      setPolicies([]);
+      toast.error("Failed to load policies");
     } finally {
       setLoading(false);
     }
@@ -69,381 +58,185 @@ export default function PolicyManagement() {
     fetchPolicies(currentPage, limit);
   }, [currentPage, limit]);
 
-  // ================= SEARCH (Client-side for now) =================
   const filteredPolicies = useMemo(() => {
     if (!search.trim()) return policies;
-
-    return policies.filter((item) =>
-      item?.text?.toLowerCase().includes(search.toLowerCase())
+    const q = search.trim().toLowerCase();
+    return policies.filter(
+      (item) =>
+        item?.text?.toLowerCase().includes(q) ||
+        item?.policyType?.toLowerCase().includes(q),
     );
   }, [policies, search]);
 
-  // ================= HANDLE CHANGE =================
-  const handleChange = (e) => {
-    const { name, value, type, checked, files } = e.target;
-
-    if (type === "checkbox") {
-      setForm((prev) => ({ ...prev, [name]: checked }));
-    } else if (type === "file") {
-      setForm((prev) => ({ ...prev, icon: files[0] }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  // ================= SUBMIT =================
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitLoading(true);
-
+  const handleDelete = async (policyId) => {
+    if (!window.confirm("Delete this policy?")) return;
     try {
-      const formData = new FormData();
-      formData.append("text", form.text);
-      formData.append("policyType", form.policyType);
-      formData.append("order", form.order);
-      formData.append("isActive", form.isActive);
-
-      if (form.icon) formData.append("icon", form.icon);
-
-      let response;
-      if (editingId) {
-        response = await updatePolicy(editingId, formData);
-      } else {
-        response = await createPolicy(formData);
-      }
-
+      const response = await deletePolicy(policyId);
       if (response?.success) {
-        setForm(initialForm);
-        setEditingId(null);
-        fetchPolicies(1, limit); // Reset to first page after create/update
-      }
-    } catch (error) {
-      console.error("Submit Error:", error);
-    } finally {
-      setSubmitLoading(false);
-    }
-  };
-
-  // ================= DELETE =================
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this policy?")) return;
-
-    try {
-      const response = await deletePolicy(id);
-      if (response?.success) {
+        toast.success("Policy deleted");
         fetchPolicies(currentPage, limit);
+      } else {
+        toast.error(response?.message || "Delete failed");
       }
     } catch (error) {
       console.error("Delete Error:", error);
+      toast.error("Failed to delete policy");
     }
   };
 
-  // ================= EDIT =================
-  const handleEdit = (item) => {
-    setEditingId(item._id);
-    setForm({
-      text: item.text || "",
-      policyType: item.policyType || "cancellation",
-      order: item.order || "",
-      isActive: item.isActive || false,
-      icon: null,
-    });
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  // ================= PAGINATION HANDLERS =================
-  const handlePageChange = (newPage) => {
-    if (newPage < 1 || newPage > totalPages) return;
-    setCurrentPage(newPage);
-  };
-
-  const handleLimitChange = (e) => {
-    const newLimit = parseInt(e.target.value);
-    setLimit(newLimit);
-    setCurrentPage(1); // Reset to first page when changing limit
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* HEADER */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Policy Management</h1>
-          <p className="text-gray-500 mt-1">Create, update and manage your policies.</p>
-        </div>
-
-        <button
-          onClick={() => fetchPolicies(currentPage, limit)}
-          className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-100 transition"
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight text-stone-900 sm:text-lg">
+          USP policies
+        </h1>
+        <input
+          type="search"
+          placeholder="Search on this page…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="min-w-[120px] flex-1 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:min-w-[140px] sm:max-w-[220px]"
+        />
+        <select
+          value={limit}
+          onChange={(e) => {
+            setLimit(parseInt(e.target.value, 10) || 20);
+            setCurrentPage(1);
+          }}
+          className="w-[108px] shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          title="Items per page"
         >
-          <RefreshCw size={18} />
-          Refresh
+          {LIMIT_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt} / page
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => navigate(ap("usp/create"))} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Create
         </button>
-      </div>
+      </form>
 
-      {/* FORM */}
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-8">
-        {/* Form content remains same */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-indigo-100 p-3 rounded-2xl">
-            <ShieldCheck className="text-indigo-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-gray-800">
-              {editingId ? "Update Policy" : "Create New Policy"}
-            </h2>
-            <p className="text-sm text-gray-500">Fill all required details.</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* ... Your existing form fields ... */}
-          <div className="lg:col-span-2">
-            <label className="block mb-2 font-medium text-gray-700">Policy Text</label>
-            <textarea
-              name="text"
-              value={form.text}
-              onChange={handleChange}
-              rows={4}
-              required
-              placeholder="Enter policy..."
-              className="w-full border border-gray-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="block mb-2 font-medium text-gray-700">Policy Type</label>
-            <select
-              name="policyType"
-              value={form.policyType}
-              onChange={handleChange}
-              className="w-full border border-gray-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="cancellation">Cancellation</option>
-              <option value="shipping">Shipping</option>
-              <option value="refund">Refund</option>
-              <option value="exchange">Exchange</option>
-              <option value="general">General</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block mb-2 font-medium text-gray-700">Display Order</label>
-            <input
-              type="number"
-              name="order"
-              value={form.order}
-              onChange={handleChange}
-              placeholder="Enter order"
-              className="w-full border border-gray-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="block mb-2 font-medium text-gray-700">Upload Icon</label>
-            <input
-              type="file"
-              accept="image/*"
-              name="icon"
-              onChange={handleChange}
-              className="w-full border border-gray-200 rounded-2xl p-3 bg-white"
-            />
-          </div>
-
-          <div className="flex items-center gap-3 mt-8">
-            <input
-              type="checkbox"
-              name="isActive"
-              checked={form.isActive}
-              onChange={handleChange}
-              className="w-5 h-5"
-            />
-            <label className="font-medium text-gray-700">Active Policy</label>
-          </div>
-
-          <div className="lg:col-span-2 flex justify-end">
-            <button
-              type="submit"
-              disabled={submitLoading}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold flex items-center gap-2 transition"
-            >
-              <Plus size={18} />
-              {submitLoading ? "Processing..." : editingId ? "Update Policy" : "Create Policy"}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* TABLE + PAGINATION */}
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 p-6 border-b border-gray-100">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-800">All Policies</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Total Policies: {totalPolicies} | Showing {filteredPolicies.length} results
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Limit Selector */}
-            <select
-              value={limit}
-              onChange={handleLimitChange}
-              className="border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {LIMIT_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt} per page
-                </option>
-              ))}
-            </select>
-
-            {/* Search */}
-            <div className="relative w-80">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Search policy..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full border border-gray-200 rounded-2xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* TABLE */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-gray-50">
+      <div className={tableScrollShell}>
+        <table className="min-w-[800px] w-full divide-y divide-border text-[11px]">
+          <thead className={tableHeadClass}>
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Icon</th>
+              <th className={thClass}>Policy</th>
+              <th className={thClass}>Type</th>
+              <th className={thClass}>Order</th>
+              <th className={thClass}>Status</th>
+              <th className={`${thClass} min-w-[90px] text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && policies.length === 0 ? (
               <tr>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Icon</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Policy</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Type</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Order</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Status</th>
-                <th className="text-center px-6 py-4 text-sm font-semibold text-gray-600">Actions</th>
+                <td colSpan={7} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-12 text-gray-500">
-                    Loading policies...
+            ) : filteredPolicies.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-stone-500">
+                  No policies found.
+                </td>
+              </tr>
+            ) : (
+              filteredPolicies.map((item, idx) => (
+                <tr key={item._id} className="hover:bg-canvas-muted/50">
+                  <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                    {(currentPage - 1) * limit + idx + 1}
                   </td>
-                </tr>
-              ) : filteredPolicies.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="text-center py-12 text-gray-500">
-                    No policies found.
-                  </td>
-                </tr>
-              ) : (
-                filteredPolicies.map((item) => (
-                  <tr key={item._id} className="border-t border-gray-100 hover:bg-gray-50 transition">
-                    <td className="px-6 py-4">
-                      {item.iconUrl ? (
-                        <img
-                          src={item.iconUrl}
-                          alt="policy"
-                          className="w-14 h-14 object-cover rounded-xl border"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400">
-                          N/A
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="font-medium text-gray-800 max-w-md">{item.text}</p>
-                    </td>
-                    <td className="px-6 py-4 capitalize">
-                      <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full">
-                        {item.policyType}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-medium text-gray-700">#{item.order}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                          item.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {item.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-3">
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded-xl transition"
-                        >
-                          <Edit size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item._id)}
-                          className="bg-red-100 hover:bg-red-200 text-red-700 p-2 rounded-xl transition"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                  <td className="px-2 py-2">
+                    {item.iconUrl ? (
+                      <img
+                        src={item.iconUrl}
+                        alt=""
+                        className="h-10 w-10 rounded-lg border border-border object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-canvas-muted text-[10px] text-stone-400">
+                        —
                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    )}
+                  </td>
+                  <td className="max-w-md px-2 py-2">
+                    <p className="line-clamp-2 font-medium text-stone-800">{item.text}</p>
+                  </td>
+                  <td className="px-2 py-2 capitalize">
+                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700">
+                      {item.policyType}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 font-medium tabular-nums text-stone-700">
+                    #{item.order}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        item.isActive ? badgeActive : "bg-danger-bg text-danger"
+                      }`}
+                    >
+                      {item.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap(`usp/edit/${item._id}`))}
+                      className={btnIconEdit}
+                      title="Edit"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(item._id)}
+                      className={`${btnIconDelete} ml-1.5`}
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          Page {currentPage} of {totalPages}
+          {totalPolicies > 0 ? ` (${totalPolicies} total)` : ""}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage <= 1 || loading}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages || loading}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
-
-        {/* PAGINATION CONTROLS */}
-        {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
-            <div className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={20} />
-              </button>
-
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum = i + 1;
-                if (totalPages > 5 && currentPage > 3) {
-                  pageNum = currentPage - 2 + i;
-                }
-                if (pageNum > totalPages) return null;
-
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => handlePageChange(pageNum)}
-                    className={`px-4 py-2 rounded-xl ${
-                      currentPage === pageNum
-                        ? "bg-indigo-600 text-white"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

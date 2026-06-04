@@ -248,19 +248,19 @@ const Sidebar = ({
       : "flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors";
     if (active) {
       return `${base} ${
-        isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
+        isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
       }`;
     }
     return `${base} ${
       isDark
-        ? "text-gray-300 hover:bg-white/10 hover:text-white"
-        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        ? "text-stone-300 hover:bg-white/10 hover:text-white"
+        : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
     }`;
   };
 
   const panelIconClass = isDark
-    ? "text-gray-400 group-hover:text-white shrink-0"
-    : "text-slate-400 group-hover:text-slate-700 shrink-0";
+    ? "text-stone-400 group-hover:text-white shrink-0"
+    : "text-stone-400 group-hover:text-stone-700 shrink-0";
 
   const handleLogout = async () => {
     console.log("ðŸšª Logout button clicked");
@@ -307,7 +307,7 @@ const Sidebar = ({
       <button
         type="button"
         className={`fixed top-4 left-4 z-50 rounded-xl p-2 shadow-lg transition-all duration-300 lg:hidden ${
-          isDark ? "bg-[#140034] text-white" : "border border-slate-200 bg-white text-slate-800"
+          isDark ? "bg-brand-950 text-white" : "border border-border bg-white text-stone-800"
         } ${isOpen ? "scale-95 opacity-90" : "scale-100 opacity-100"}`}
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
@@ -336,15 +336,15 @@ const Sidebar = ({
           ${collapsed ? "w-[4.25rem]" : "w-60"}
           ${
             isDark
-              ? "border-transparent bg-gradient-to-b from-[#4B0082] to-[#140034] text-gray-100"
-              : "border-slate-200/80 bg-white text-slate-700"
+              ? "border-transparent bg-gradient-to-b from-brand-900 to-brand-950 text-stone-100"
+              : "border-border bg-white text-stone-700"
           }
         `}
       >
         {/* Logo + Notification icon */}
         <div
           className={`flex h-14 shrink-0 items-center border-b ${
-            isDark ? "border-gray-800" : "border-slate-200"
+            isDark ? "border-brand-800/60" : "border-border"
           } ${collapsed ? "justify-center px-2" : "justify-between px-4"}`}
         >
           {/* <div className="flex items-center gap-2 min-w-0">
@@ -366,8 +366,8 @@ const Sidebar = ({
             onClick={onToggleCollapse}
             className={`hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-xl transition ${
               isDark
-                ? "text-gray-400 hover:bg-white/10 hover:text-white"
-                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-stone-400 hover:bg-white/10 hover:text-white"
+                : "text-stone-500 hover:bg-canvas-muted hover:text-stone-900"
             }`}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -384,21 +384,21 @@ const Sidebar = ({
                 }}
                 className={`relative rounded-xl p-2 transition ${
                   isDark
-                    ? "text-gray-300 hover:bg-white/10 hover:text-white"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    ? "text-stone-300 hover:bg-white/10 hover:text-white"
+                    : "text-stone-500 hover:bg-canvas-muted hover:text-stone-800"
                 }`}
                 aria-label="Notifications"
               >
                 <Bell size={22} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+                  <span className="absolute top-0 right-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-danger text-white text-xs font-medium">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
               {isBellOpen && (
-                <div className="absolute top-full right-0 mt-1 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
+                <div className="absolute top-full right-0 mt-1 w-64 bg-brand-950 border border-brand-800 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-brand-800 flex items-center justify-between">
                     <span className="text-sm font-medium text-white">
                       Notifications
                     </span>
@@ -409,7 +409,7 @@ const Sidebar = ({
                           markAllRead();
                           setIsBellOpen(false);
                         }}
-                        className="text-xs text-gray-400 hover:text-white"
+                        className="text-xs text-stone-400 hover:text-white"
                       >
                         Mark all read
                       </button>
@@ -417,7 +417,7 @@ const Sidebar = ({
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     {dropdownList.length === 0 ? (
-                      <p className="px-3 py-4 text-sm text-gray-500">
+                      <p className="px-3 py-4 text-sm text-stone-500">
                         No notifications
                       </p>
                     ) : (
@@ -429,13 +429,13 @@ const Sidebar = ({
                             markRead(n._id);
                             setIsBellOpen(false);
                           }}
-                          className={`block px-3 py-2.5 hover:bg-white/5 border-b border-gray-800 last:border-0 ${!n.read ? "bg-white/5" : ""}`}
+                          className={`block px-3 py-2.5 hover:bg-white/5 border-b border-brand-800 last:border-0 ${!n.read ? "bg-white/5" : ""}`}
                         >
-                          <p className="text-sm text-gray-200 font-medium truncate">
+                          <p className="text-sm text-stone-200 font-medium truncate">
                             {n.title}
                           </p>
                           {n.body && (
-                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                            <p className="text-xs text-stone-500 truncate mt-0.5">
                               {n.body}
                             </p>
                           )}
@@ -446,7 +446,7 @@ const Sidebar = ({
                   <Link
                     to={ap("notifications")}
                     onClick={() => setIsBellOpen(false)}
-                    className="block px-3 py-2.5 text-center text-sm font-medium text-gray-300 hover:bg-white/5 border-t border-gray-700"
+                    className="block px-3 py-2.5 text-center text-sm font-medium text-stone-300 hover:bg-white/5 border-t border-brand-800"
                   >
                     See all
                   </Link>
@@ -463,7 +463,7 @@ const Sidebar = ({
             <div className="relative">
               <Search
                 size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
               />
               <input
                 type="search"
@@ -472,8 +472,8 @@ const Sidebar = ({
                 placeholder="Search menu..."
                 className={`w-full rounded-xl border py-2 pl-8 pr-8 text-xs focus:outline-none focus:ring-1 ${
                   isDark
-                    ? "border-gray-700 bg-gray-900/80 text-gray-100 placeholder:text-gray-500 focus:border-gray-500 focus:ring-gray-600"
-                    : "border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:ring-indigo-200"
+                    ? "border-brand-800 bg-brand-950/80 text-stone-100 placeholder:text-stone-500 focus:border-brand-600 focus:ring-brand-800"
+                    : "border-border bg-canvas-muted text-stone-800 placeholder:text-stone-400 focus:border-brand-500 focus:ring-brand-100"
                 }`}
                 aria-label="Search sidebar menu"
               />
@@ -481,7 +481,7 @@ const Sidebar = ({
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-500 hover:text-gray-200"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-stone-500 hover:text-stone-200"
                   aria-label="Clear search"
                 >
                   <X size={14} />
@@ -534,14 +534,14 @@ const Sidebar = ({
               <div
                 className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex h-7 items-start justify-center pt-0.5 ${
                   isDark
-                    ? "bg-gradient-to-b from-[#4B0082] via-[#4B0082]/80 to-transparent"
+                    ? "bg-gradient-to-b from-brand-900 via-brand-900/80 to-transparent"
                     : "bg-gradient-to-b from-white via-white/90 to-transparent"
                 }`}
                 aria-hidden
               >
                 <ChevronUp
                   size={14}
-                  className={isDark ? "text-white/40" : "text-slate-400"}
+                  className={isDark ? "text-white/40" : "text-stone-400"}
                 />
               </div>
             )}
@@ -587,10 +587,10 @@ const Sidebar = ({
 
             {/* Panel Management */}
             {canUse(["admin"]) && (
-            <div className={`mt-3 space-y-0.5 border-t pt-3 ${isDark ? "border-gray-800" : "border-slate-200"}`}>
+            <div className={`mt-3 space-y-0.5 border-t pt-3 ${isDark ? "border-brand-800/60" : "border-border"}`}>
               {!collapsed && (
               <div className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                isDark ? "text-gray-500" : "text-slate-400"
+                isDark ? "text-stone-500" : "text-stone-400"
               }`}>
                 Panel Management
               </div>
@@ -649,9 +649,9 @@ const Sidebar = ({
                     <span className="truncate">Influencer</span>
                   </div>
                   {isInfluencerOpen ? (
-                    <ChevronDown size={14} className={isDark ? "text-gray-400" : "text-slate-400"} />
+                    <ChevronDown size={14} className={isDark ? "text-stone-400" : "text-stone-400"} />
                   ) : (
-                    <ChevronRight size={14} className={isDark ? "text-gray-400" : "text-slate-400"} />
+                    <ChevronRight size={14} className={isDark ? "text-stone-400" : "text-stone-400"} />
                   )}
                 </button>
 
@@ -665,8 +665,8 @@ const Sidebar = ({
                       to={ap("influencer")}
                       className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                         isActive(ap("influencer"))
-                          ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
-                          : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                          ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
+                          : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
                       }`}
                     >
                       Influencer List
@@ -675,8 +675,8 @@ const Sidebar = ({
                       to={ap("influencer/coupons")}
                       className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                         isActive(ap("influencer/coupons"))
-                          ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
-                          : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                          ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
+                          : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
                       }`}
                     >
                       Influencer Coupons
@@ -717,9 +717,9 @@ const Sidebar = ({
                       <span className="truncate">Designer</span>
                     </div>
                     {isDesignerOpen ? (
-                      <ChevronDown size={14} className={isDark ? "text-gray-400 shrink-0" : "text-slate-400 shrink-0"} />
+                      <ChevronDown size={14} className={isDark ? "text-stone-400 shrink-0" : "text-stone-400 shrink-0"} />
                     ) : (
-                      <ChevronRight size={14} className={isDark ? "text-gray-400 shrink-0" : "text-slate-400 shrink-0"} />
+                      <ChevronRight size={14} className={isDark ? "text-stone-400 shrink-0" : "text-stone-400 shrink-0"} />
                     )}
                   </button>
 
@@ -733,8 +733,8 @@ const Sidebar = ({
                         to={ap("designer")}
                         className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                           isActive(ap("designer"))
-                            ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
-                            : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                            ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
+                            : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
                         }`}
                       >
                         Management
@@ -743,8 +743,8 @@ const Sidebar = ({
                         to={ap("designer/inventory")}
                         className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
                           isActive(ap("designer/inventory"))
-                            ? isDark ? "bg-white/10 text-white" : "bg-indigo-50 text-indigo-700"
-                            : isDark ? "text-gray-400 hover:bg-white/10 hover:text-white" : "text-slate-500 hover:bg-slate-100"
+                            ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
+                            : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
                         }`}
                       >
                         Inventory
@@ -761,14 +761,14 @@ const Sidebar = ({
               <div
                 className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center justify-end pb-1 pt-6 ${
                   isDark
-                    ? "bg-gradient-to-t from-[#140034] via-[#140034]/85 to-transparent"
+                    ? "bg-gradient-to-t from-brand-950 via-brand-950/85 to-transparent"
                     : "bg-gradient-to-t from-white via-white/90 to-transparent"
                 }`}
                 aria-hidden
               >
                 <span
                   className={`mb-0.5 flex items-center gap-0.5 text-[9px] font-medium uppercase tracking-wide ${
-                    isDark ? "text-white/50" : "text-slate-400"
+                    isDark ? "text-white/50" : "text-stone-400"
                   }`}
                 >
                   <ChevronDown size={12} className="animate-bounce" />
@@ -781,7 +781,7 @@ const Sidebar = ({
 
         {/* Bottom */}
         <div
-          className={`shrink-0 border-t ${isDark ? "border-gray-800" : "border-slate-200"} ${
+          className={`shrink-0 border-t ${isDark ? "border-brand-800/60" : "border-border"} ${
             collapsed ? "p-2" : "p-3"
           }`}
         >
@@ -797,8 +797,8 @@ const Sidebar = ({
               collapsed ? "justify-center" : "justify-between gap-2"
             } ${
               isDark
-                ? "text-gray-300 hover:bg-white/10 hover:text-white"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-stone-300 hover:bg-white/10 hover:text-white"
+                : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
             }`}
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
           >
@@ -808,15 +808,15 @@ const Sidebar = ({
               <>
                 <span className="flex items-center gap-2">
                   {isDark ? (
-                    <Moon size={16} className="shrink-0 text-indigo-300" />
+                    <Moon size={16} className="shrink-0 text-brand-400" />
                   ) : (
-                    <Sun size={16} className="shrink-0 text-amber-300" />
+                    <Sun size={16} className="shrink-0 text-gold-500" />
                   )}
                   <span>{isDark ? "Dark mode" : "Light mode"}</span>
                 </span>
                 <span
                   className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                    isDark ? "bg-indigo-500" : "bg-white/25"
+                    isDark ? "bg-brand-600" : "bg-stone-300"
                   }`}
                   aria-hidden
                 >
@@ -838,14 +838,14 @@ const Sidebar = ({
               collapsed ? "justify-center" : "gap-2"
             } ${
               isDark
-                ? "text-gray-300 hover:bg-white/10 hover:text-white"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-stone-300 hover:bg-white/10 hover:text-white"
+                : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
             }`}
           >
             <Settings
               size={16}
               className={`shrink-0 ${
-                isDark ? "text-gray-400 group-hover:text-white" : "text-slate-400 group-hover:text-slate-700"
+                isDark ? "text-stone-400 group-hover:text-white" : "text-stone-400 group-hover:text-stone-700"
               }`}
             />
             {!collapsed && <span>Settings</span>}
@@ -859,14 +859,14 @@ const Sidebar = ({
               collapsed ? "justify-center" : "gap-2"
             } ${
               isDark
-                ? "text-gray-300 hover:bg-white/10 hover:text-white"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "text-stone-300 hover:bg-white/10 hover:text-white"
+                : "text-stone-600 hover:bg-canvas-muted hover:text-stone-900"
             }`}
           >
             <Settings
               size={16}
               className={`shrink-0 ${
-                isDark ? "text-gray-400 group-hover:text-white" : "text-slate-400 group-hover:text-slate-700"
+                isDark ? "text-stone-400 group-hover:text-white" : "text-stone-400 group-hover:text-stone-700"
               }`}
             />
             {!collapsed && <span>Profile</span>}
@@ -882,8 +882,8 @@ const Sidebar = ({
               collapsed ? "justify-center" : "gap-2"
             } ${
               isDark
-                ? "text-red-400 hover:bg-red-950/40 hover:text-red-300"
-                : "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                ? "text-danger hover:bg-danger-bg/30 hover:text-danger"
+                : "text-danger hover:bg-danger-bg hover:text-danger"
             }`}
           >
             <LogOut size={16} className="shrink-0" />

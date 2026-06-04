@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Wallet, Gift, Coins, ArrowRight, HandCoins } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
@@ -8,6 +8,9 @@ import { StatCard } from "./moneyFeaturesShared";
 
 const MoneyFeaturesHub = () => {
   const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [walletOv, setWalletOv] = useState(null);
   const [couponSum, setCouponSum] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,29 +35,32 @@ const MoneyFeaturesHub = () => {
 
   const cards = [
     {
-      to: `${basePath}/money-features/cash-wallet`,
+      to: ap("money-features/cash-wallet"),
       icon: Wallet,
-      title: "1. Cash wallet (direct)",
-      color: "border-indigo-200 hover:border-indigo-400",
-      desc: "Stored INR balance. Users recharge via Razorpay, pay online orders, get refunds. Points can convert in as REWARD_REDEEM.",
+      title: "Cash wallet",
+      border: "border-brand-200 hover:border-brand-400",
+      iconClass: "text-brand-600",
+      desc: "Stored INR balance. Recharge via Razorpay, pay orders, refunds. Points convert in as REWARD_REDEEM.",
       stat: walletOv ? fmt(walletOv.cash?.totalBalanceInr) : "—",
       statLabel: "Total INR in wallets",
     },
     {
-      to: `${basePath}/money-features/gift-card`,
+      to: ap("money-features/gift-card"),
       icon: Gift,
-      title: "2. Gift card (coupon codes)",
-      color: "border-amber-200 hover:border-amber-400",
-      desc: "Not a ₹ balance — discount codes at checkout & My Coupons. Each use reduces order total once.",
+      title: "Gift card (coupons)",
+      border: "border-amber-200 hover:border-amber-400",
+      iconClass: "text-amber-600",
+      desc: "Discount codes at checkout — not a stored ₹ balance. Each use reduces order total once.",
       stat: couponSum ? String(couponSum.activeCoupons ?? 0) : "—",
       statLabel: "Active codes",
     },
     {
-      to: `${basePath}/money-features/points-wallet`,
+      to: ap("money-features/points-wallet"),
       icon: Coins,
-      title: "3. Points wallet (coins)",
-      color: "border-violet-200 hover:border-violet-400",
-      desc: "Reward points from orders/recharge. User redeems all coins → credits cash wallet (REDEEM transaction).",
+      title: "Points wallet",
+      border: "border-violet-200 hover:border-violet-400",
+      iconClass: "text-violet-600",
+      desc: "Reward points from orders. User redeems → credits cash wallet (REWARD_REDEEM).",
       stat: walletOv
         ? Number(walletOv.reward?.totalPoints ?? 0).toLocaleString("en-IN")
         : "—",
@@ -63,57 +69,81 @@ const MoneyFeaturesHub = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <HandCoins className="text-gray-800" />
-        Money features — overview
-      </h1>
-      <p className="text-sm text-gray-600 mt-2 max-w-3xl">
-        Khush has <strong>three separate money flows</strong> for customers. They are not interchangeable —
-        gift cards do not add to wallet balance; points must be redeemed to become cash.
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto flex items-center gap-2 text-base font-bold tracking-tight sm:text-lg">
+          <HandCoins className="h-4 w-4 text-brand-600" />
+          Money features
+        </h1>
+      </div>
+
+      <p className="mb-2 max-w-3xl text-[11px] text-stone-600">
+        Khush has <strong>three separate money flows</strong> for customers. They are not
+        interchangeable — gift cards do not add to wallet balance; points must be redeemed to
+        become cash.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        {cards.map(({ to, icon: Icon, title, color, desc, stat, statLabel }) => (
+      <div className="mb-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+        {cards.map(({ to, icon: Icon, title, border, iconClass, desc, stat, statLabel }) => (
           <Link
             key={to}
             to={to}
-            className={`block rounded-xl border-2 bg-white p-5 shadow-sm transition ${color}`}
+            className={`block rounded-xl border-2 bg-white p-3 shadow-sm transition hover:bg-brand-50/20 ${border}`}
           >
-            <Icon className="h-8 w-8 text-gray-700 mb-3" />
-            <h2 className="text-base font-bold text-gray-900">{title}</h2>
-            <p className="mt-2 text-xs text-gray-600 leading-relaxed">{desc}</p>
-            <p className="mt-4 text-2xl font-bold text-gray-900">{loading ? "…" : stat}</p>
-            <p className="text-xs text-gray-500">{statLabel}</p>
-            <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-indigo-600">
+            <Icon className={`mb-2 h-5 w-5 ${iconClass}`} />
+            <h2 className="text-xs font-semibold text-stone-900">{title}</h2>
+            <p className="mt-1 text-[11px] leading-relaxed text-stone-600">{desc}</p>
+            <p className="mt-2 text-base font-bold text-stone-900">{loading ? "…" : stat}</p>
+            <p className="text-[10px] text-stone-500">{statLabel}</p>
+            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-brand-600">
               Open <ArrowRight size={14} />
             </span>
           </Link>
         ))}
       </div>
 
-      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">How they connect</h3>
-        <div className="text-sm text-gray-700 space-y-2">
+      <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
+        <h3 className="mb-2 text-xs font-semibold text-stone-800">How they connect</h3>
+        <div className="space-y-1.5 text-[11px] text-stone-700">
           <p>
             <strong>Cash wallet</strong> ← recharge, refunds, referral rewards, and{" "}
             <strong>points redeem</strong> (REWARD_REDEEM).
           </p>
           <p>
-            <strong>Gift card</strong> → discount on that order only (coupon in cart/checkout APIs).
+            <strong>Gift card</strong> → discount on that order only (coupon in cart/checkout).
           </p>
           <p>
-            <strong>Points</strong> → earn on delivered orders → user taps redeem on Coins page → moves to cash
-            wallet.
+            <strong>Points</strong> → earn on delivered orders → user redeems on Coins page →
+            moves to cash wallet.
           </p>
         </div>
         <Link
-          to={`${basePath}/money-features/refer-earn`}
-          className="mt-4 inline-block text-sm text-indigo-600 hover:underline"
+          to={ap("money-features/refer-earn")}
+          className="mt-2 inline-block text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
         >
-          Refer & earn (separate — pays into cash wallet) →
+          Refer & earn (pays into cash wallet) →
         </Link>
       </div>
+
+      {walletOv && !loading ? (
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <StatCard
+            label="Cash wallets"
+            value={walletOv.cash?.totalWallets ?? 0}
+            accent="brand"
+          />
+          <StatCard
+            label="Users with balance"
+            value={walletOv.cash?.walletsWithBalance ?? 0}
+            accent="brand"
+          />
+          <StatCard
+            label="Users with points"
+            value={walletOv.reward?.walletsWithPoints ?? 0}
+            accent="violet"
+          />
+        </div>
+      ) : null}
     </div>
   );
 };

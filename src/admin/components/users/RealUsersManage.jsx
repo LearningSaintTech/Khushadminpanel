@@ -7,6 +7,16 @@ import {
   updateUser,
   deleteUser,
 } from "../../apis/userApi";
+import {
+  btnIconDelete,
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  inputClass,
+  labelClass,
+  tableScrollShell,
+  thClass,
+} from "./usersShared";
 
 const emptyForm = {
   name: "",
@@ -17,6 +27,13 @@ const emptyForm = {
   isNumberVerified: false,
   gender: "",
 };
+
+const getRowId = (row) => row?._id ?? row?.id ?? null;
+
+const getApiErrorMessage = (err, fallback) =>
+  err?.message ||
+  (Array.isArray(err?.errors) ? err.errors.map((e) => e.msg || e.message).filter(Boolean).join(", ") : "") ||
+  fallback;
 
 export default function RealUsersManage() {
   const [rows, setRows] = useState([]);
@@ -66,7 +83,7 @@ export default function RealUsersManage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm });
     setError("");
     setModalOpen(true);
   };
@@ -87,32 +104,54 @@ export default function RealUsersManage() {
   };
 
   const handleSave = async () => {
+    const name = String(form.name || "").trim();
+    const phoneNumber = String(form.phoneNumber || "").trim();
+    if (!name) {
+      setError("Name is required");
+      return;
+    }
+    if (!phoneNumber) {
+      setError("Phone number is required");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
       const payload = {
-        ...form,
-        gender: form.gender || undefined,
-        email: form.email || undefined,
+        name,
+        phoneNumber,
+        countryCode: String(form.countryCode || "+91").trim() || "+91",
+        isActive: form.isActive !== false,
+        isNumberVerified: Boolean(form.isNumberVerified),
+        ...(form.gender === "f" || form.gender === "m" ? { gender: form.gender } : {}),
+        ...(String(form.email || "").trim() ? { email: String(form.email).trim() } : {}),
       };
-      if (editing?._id) {
-        await updateUser(editing._id, payload);
+      const editId = getRowId(editing);
+      if (editId) {
+        await updateUser(editId, payload);
       } else {
         await createUser(payload);
       }
       setModalOpen(false);
+      setEditing(null);
       await fetchList();
     } catch (err) {
-      setError(err?.message || "Failed to save user");
+      setError(getApiErrorMessage(err, "Failed to save user"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (row) => {
+    const id = getRowId(row);
+    if (!id) {
+      alert("Cannot delete — missing user id");
+      return;
+    }
     if (!window.confirm(`Delete user "${row.name}"?`)) return;
     try {
-      await deleteUser(row._id);
+      await deleteUser(id);
       await fetchList();
     } catch (err) {
       alert(err?.message || "Failed to delete user");
@@ -126,199 +165,233 @@ export default function RealUsersManage() {
 
   return (
     <>
-      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <form onSubmit={applyFilters} className="flex flex-wrap gap-2 flex-1">
-          <input
-            type="text"
-            placeholder="Search name, phone, email"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px]"
-          />
-          <select
-            value={isActiveFilter}
-            onChange={(e) => setIsActiveFilter(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">All status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
-          <button
-            type="submit"
-            className="rounded-lg bg-gray-900 text-white px-4 py-2 text-sm font-medium"
-          >
-            Apply
-          </button>
-        </form>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+      <form
+        onSubmit={applyFilters}
+        className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm"
+      >
+        <h1 className="mr-auto min-w-0 shrink-0 text-base font-bold tracking-tight sm:text-lg">
+          Real users
+        </h1>
+        <input
+          type="text"
+          placeholder="Search name, phone, email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className={`${inputClass} min-w-[160px] flex-1 max-w-[240px]`}
+        />
+        <select
+          value={isActiveFilter}
+          onChange={(e) => setIsActiveFilter(e.target.value)}
+          className={`${inputClass} shrink-0 min-w-[120px]`}
         >
-          <Plus size={16} /> Add User
+          <option value="">All status</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+        <select
+          value={pagination.limit}
+          onChange={(e) =>
+            setPagination((p) => ({ ...p, page: 1, limit: parseInt(e.target.value, 10) || 20 }))
+          }
+          className={`${inputClass} shrink-0 min-w-[108px]`}
+          title="Rows per page"
+        >
+          <option value={20}>20 / page</option>
+          <option value={50}>50 / page</option>
+          <option value={100}>100 / page</option>
+        </select>
+        <button type="submit" className={btnPrimary}>
+          Apply
         </button>
+        <button type="button" onClick={openCreate} className={btnPrimary}>
+          <Plus className="h-3.5 w-3.5" aria-hidden /> Add
+        </button>
+      </form>
+
+      <div className={tableScrollShell}>
+        <table className="min-w-[920px] w-full divide-y divide-border text-[11px]">
+          <thead className="sticky top-0 z-10 bg-canvas-muted/90 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Name</th>
+              <th className={thClass}>Phone</th>
+              <th className={thClass}>Email</th>
+              <th className={thClass}>Active</th>
+              <th className={thClass}>Verified</th>
+              <th className={`${thClass} min-w-[130px] text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-stone-500">
+                  Loading…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-12 text-center text-stone-500">
+                  No users found.
+                </td>
+              </tr>
+            ) : (
+              rows.map((u, idx) => (
+                <tr key={u._id} className="hover:bg-canvas-muted/50">
+                  <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                    {(pagination.page - 1) * pagination.limit + idx + 1}
+                  </td>
+                  <td className="px-2 py-2 font-semibold text-stone-900">{u.name || "—"}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-stone-700">
+                    {`${u.countryCode || ""} ${u.phoneNumber || ""}`.trim()}
+                  </td>
+                  <td className="px-2 py-2 text-stone-700">{u.email || "—"}</td>
+                  <td className="px-2 py-2 text-stone-700">{u.isActive ? "Yes" : "No"}</td>
+                  <td className="px-2 py-2 text-stone-700">
+                    {u.isNumberVerified ? "Yes" : "No"}
+                  </td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(u)}
+                      className={btnIconEdit}
+                      title="Edit"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(u)}
+                      className={`${btnIconDelete} ml-1.5`}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Active</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Verified</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-500">Loading...</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-gray-500">No users found.</td>
-                </tr>
-              ) : (
-                rows.map((u) => (
-                  <tr key={u._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{u.name || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {`${u.countryCode || ""} ${u.phoneNumber || ""}`.trim()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{u.email || "-"}</td>
-                    <td className="px-4 py-3 text-sm">{u.isActive ? "Yes" : "No"}</td>
-                    <td className="px-4 py-3 text-sm">{u.isNumberVerified ? "Yes" : "No"}</td>
-                    <td className="px-4 py-3 text-sm text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(u)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded"
-                      >
-                        <Pencil size={14} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(u)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-red-600 hover:bg-red-50 rounded ml-2"
-                      >
-                        <Trash2 size={14} /> Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-between border-t px-4 py-3">
-          <p className="text-sm text-gray-600">
-            Page {pagination.page} of {pagination.totalPages} ({pagination.totalItems} total)
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={pagination.page <= 1}
-              onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-40"
-            >
-              <ChevronLeft size={16} /> Prev
-            </button>
-            <button
-              type="button"
-              disabled={pagination.page >= pagination.totalPages}
-              onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm disabled:opacity-40"
-            >
-              Next <ChevronRight size={16} />
-            </button>
-          </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          Page {pagination.page} of {pagination.totalPages} ({pagination.totalItems} total)
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={pagination.page <= 1}
+            onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={pagination.page >= pagination.totalPages}
+            onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
       </div>
 
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? "Edit User" : "Add User"}
+        title={editing ? "Edit user" : "Add user"}
         maxWidthClass="max-w-lg"
         footer={
           <>
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-sm border rounded-lg"
-            >
+            <button type="button" onClick={() => setModalOpen(false)} className={btnOutline}>
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save"}
+            <button type="button" onClick={handleSave} disabled={saving} className={btnPrimary}>
+              {saving ? "Saving…" : "Save"}
             </button>
           </>
         }
       >
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-        <div className="space-y-3">
-          <input
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Name *"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <div className="grid grid-cols-3 gap-2">
+        {error ? (
+          <p className="mb-2 rounded-lg border border-danger/30 bg-danger-bg px-2 py-1.5 text-[11px] text-danger">
+            {error}
+          </p>
+        ) : null}
+        <div className="space-y-2">
+          <div>
+            <div className={labelClass}>Name</div>
             <input
-              className="border rounded-lg px-3 py-2 text-sm"
-              placeholder="+91"
-              value={form.countryCode}
-              onChange={(e) => setForm((f) => ({ ...f, countryCode: e.target.value }))}
-            />
-            <input
-              className="col-span-2 border rounded-lg px-3 py-2 text-sm"
-              placeholder="Phone *"
-              value={form.phoneNumber}
-              onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+              className={inputClass}
+              placeholder="Name *"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
-          <input
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-          <select
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            value={form.gender}
-            onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-          >
-            <option value="">Gender (optional)</option>
-            <option value="f">Female</option>
-            <option value="m">Male</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm">
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <div className={labelClass}>Code</div>
+              <input
+                className={inputClass}
+                placeholder="+91"
+                value={form.countryCode}
+                onChange={(e) => setForm((f) => ({ ...f, countryCode: e.target.value }))}
+              />
+            </div>
+            <div className="col-span-2">
+              <div className={labelClass}>Phone</div>
+              <input
+                className={inputClass}
+                placeholder="Phone *"
+                value={form.phoneNumber}
+                onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
+            <div className={labelClass}>Email</div>
             <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+              className={inputClass}
+              placeholder="Email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
-            Active
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.isNumberVerified}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, isNumberVerified: e.target.checked }))
-              }
-            />
-            Phone verified
-          </label>
+          </div>
+          <div>
+            <div className={labelClass}>Gender</div>
+            <select
+              className={inputClass}
+              value={form.gender}
+              onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
+            >
+              <option value="">(optional)</option>
+              <option value="f">Female</option>
+              <option value="m">Male</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-3 border-t border-border pt-2 sm:flex-row sm:items-center sm:gap-6">
+            <label className="flex items-center gap-2 text-[12px] font-medium text-stone-800">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-100"
+              />
+              Active account
+            </label>
+            <label className="flex items-center gap-2 text-[12px] font-medium text-stone-800">
+              <input
+                type="checkbox"
+                checked={form.isNumberVerified}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, isNumberVerified: e.target.checked }))
+                }
+                className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-100"
+              />
+              Phone verified
+            </label>
+          </div>
         </div>
       </Modal>
     </>

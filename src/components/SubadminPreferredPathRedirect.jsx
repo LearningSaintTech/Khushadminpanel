@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { decodeTokenRole, normalizeRole } from "../utils/authRole";
 
 /**
  * Subadmin / super_subadmin should use /subadmin/* URLs. Many screens still call
@@ -9,11 +10,18 @@ import { useSelector } from "react-redux";
 export default function SubadminPreferredPathRedirect() {
   const location = useLocation();
   const navigate = useNavigate();
-  const role = useSelector((s) => s.global?.role);
+  const reduxRole = useSelector((s) => s.global?.role);
+  const token = useSelector((s) => s.global?.token);
+  const role = normalizeRole(
+    reduxRole ||
+      decodeTokenRole(token) ||
+      decodeTokenRole(
+        typeof window !== "undefined" ? localStorage.getItem("token") : null,
+      ),
+  );
 
   useEffect(() => {
-    const r = String(role || "").toUpperCase();
-    if (r !== "SUBADMIN" && r !== "SUPER_SUBADMIN") return;
+    if (role !== "SUBADMIN") return;
 
     const p = location.pathname;
     if (!p.startsWith("/admin")) return;

@@ -11,6 +11,7 @@ import {
   setToken,
   setRole,
 } from "../../../redux/GlobalSlice";
+import { clearOtherPanelSessions } from "../../../utils/authRole";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
 
 export default function OTP() {
@@ -130,9 +131,9 @@ export default function OTP() {
 
         if (!role) throw new Error("Role not found in token");
 
+        clearOtherPanelSessions(role);
         dispatch(setRole(role));
 
-        // Role-based navigation
         switch (role) {
           case "ADMIN":
             navigate("/admin/dashboard", { replace: true });
@@ -141,6 +142,9 @@ export default function OTP() {
           case "SUPER_SUBADMIN":
             navigate("/subadmin/dashboard", { replace: true });
             break;
+          case "DESIGNER":
+            navigate("/designer/dashboard", { replace: true });
+            break;
           case "INFLUENCER":
             navigate("/influencer/dashboard", { replace: true });
             break;
@@ -148,7 +152,7 @@ export default function OTP() {
             navigate("/driver/dashboard", { replace: true });
             break;
           default:
-            navigate("/login", { replace: true });
+            navigate("/admin", { replace: true });
         }
       } else {
         setIsValid(false);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   getSingleSkuFormulaConfig,
@@ -154,23 +154,23 @@ const SkuFormulaFormPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-canvas-muted">
       <div className="mx-auto max-w-3xl">
         <Link
           to={ap("inventory-codes/sku-formula")}
-          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 w-fit"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 w-fit"
         >
           <ArrowLeft size={18} /> Back to formulas
         </Link>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
           <div className="flex items-start gap-3">
-            <Layers className="h-8 w-8 text-indigo-600 shrink-0 mt-0.5" />
+            <Layers className="h-8 w-8 text-brand-600 shrink-0 mt-0.5" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
+              <h1 className="text-xl font-bold text-stone-900">
                 {isCreate ? "New SKU formula" : "Edit SKU formula"}
               </h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-stone-500">
                 Check &quot;Active&quot; to use this preset and deactivate all others, or leave it off
                 and set active from the list.
               </p>
@@ -191,95 +191,95 @@ const SkuFormulaFormPage = () => {
           )}
 
           {loading ? (
-            <p className="mt-8 text-center text-gray-500">Loading…</p>
+            <p className="mt-8 text-center text-stone-500">Loading…</p>
           ) : (
             <form onSubmit={handleSubmit} className="mt-8 space-y-8">
               <div>
-                <label className="block text-xs font-medium text-gray-600">Preset name (unique)</label>
+                <label className="block text-xs font-medium text-stone-600">Preset name (unique)</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Standard 2025"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 />
               </div>
 
               <section>
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                <h2 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">
                   Hierarchy (reference text)
                 </h2>
                 <div className="space-y-3 mt-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600">Product ID</label>
+                    <label className="block text-xs font-medium text-stone-600">Product ID</label>
                     <textarea
                       value={hierarchy.productId}
                       onChange={(e) => handleHierarchyChange("productId", e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600">SKU (variant)</label>
+                    <label className="block text-xs font-medium text-stone-600">SKU (variant)</label>
                     <textarea
                       value={hierarchy.sku}
                       onChange={(e) => handleHierarchyChange("sku", e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600">sku_uid</label>
+                    <label className="block text-xs font-medium text-stone-600">sku_uid</label>
                     <textarea
                       value={hierarchy.skuUid}
                       onChange={(e) => handleHierarchyChange("skuUid", e.target.value)}
                       rows={2}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     />
                   </div>
                 </div>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                <h2 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">
                   Concatenation template
                 </h2>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600">Template string</label>
+                  <label className="block text-xs font-medium text-stone-600">Template string</label>
                   <input
                     value={skuTemplateString}
                     onChange={(e) => setSkuTemplateString(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600">
+                  <label className="block text-xs font-medium text-stone-600">
                     Segment order (comma-separated)
                   </label>
                   <input
                     value={skuSegmentOrderText}
                     onChange={(e) => setSkuSegmentOrderText(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600">Segments (JSON)</label>
+                  <label className="block text-xs font-medium text-stone-600">Segments (JSON)</label>
                   <textarea
                     value={segmentsJson}
                     onChange={(e) => setSegmentsJson(e.target.value)}
                     rows={14}
                     spellCheck={false}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-xs font-mono"
                   />
                 </div>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">sku_uid</h2>
+                <h2 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">sku_uid</h2>
                 <textarea
                   value={skuUidDescription}
                   onChange={(e) => setSkuUidDescription(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                   placeholder="Description"
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -287,30 +287,30 @@ const SkuFormulaFormPage = () => {
                     value={skuUidExample}
                     onChange={(e) => setSkuUidExample(e.target.value)}
                     placeholder="Example"
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                    className="rounded-lg border border-border px-3 py-2 text-sm font-mono"
                   />
                   <input
                     value={skuUidPatternHint}
                     onChange={(e) => setSkuUidPatternHint(e.target.value)}
                     placeholder="Pattern hint"
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="rounded-lg border border-border px-3 py-2 text-sm"
                   />
                 </div>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Example SKU</h2>
+                <h2 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">Example SKU</h2>
                 <input
                   value={exampleFullSku}
                   onChange={(e) => setExampleFullSku(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm font-mono"
                 />
                 <textarea
                   value={exampleBreakdownJson}
                   onChange={(e) => setExampleBreakdownJson(e.target.value)}
                   rows={8}
                   spellCheck={false}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-xs font-mono"
                 />
               </section>
 
@@ -320,9 +320,9 @@ const SkuFormulaFormPage = () => {
                   onChange={(e) => setAdminNotes(e.target.value)}
                   rows={3}
                   placeholder="Admin notes"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                 />
-                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <label className="inline-flex items-center gap-2 text-sm text-stone-700">
                   <input
                     type="checkbox"
                     checked={isActive}
@@ -335,7 +335,7 @@ const SkuFormulaFormPage = () => {
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
               >
                 <Save size={18} />
                 {saving ? "Saving…" : isCreate ? "Create" : "Save changes"}

@@ -1,7 +1,7 @@
 import Orders from "./order";
 
-const ExchangeOrders = () => {
-  return <Orders exchangeOnly defaultViewMode="order" />;
-};
+const ExchangeOrders = () => (
+  <Orders exchangeOnly defaultViewMode="order" pageTitle="Exchange orders" />
+);
 
 export default ExchangeOrders;

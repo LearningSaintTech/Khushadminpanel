@@ -1,21 +1,38 @@
-// This component can be used for a different purpose if needed
-// Currently, the attach/detach functionality is handled in influencercoupon.jsx
-// This file is kept for future use or can be removed if not needed
-
-import React from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { btnOutline, formPageWrap, formToolbar, FormSection } from "./influencerShared";
 
 const InfluencerCouponForm = () => {
+  const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">
-          Influencer Coupon Form
+    <div className={formPageWrap}>
+      <div className={formToolbar}>
+        <button type="button" onClick={() => navigate(ap("influencer/coupons"))} className={btnOutline}>
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          Influencer coupon form
         </h1>
-        <p className="text-gray-600">
-          This component is reserved for future use. The attach/detach functionality 
-          is currently handled in the Influencer Coupon page.
-        </p>
       </div>
+      <FormSection title="Not in use" hint="Attach and detach coupons from the influencer coupons list.">
+        <p className="text-[11px] text-stone-600">
+          This route is reserved. Open{" "}
+          <button
+            type="button"
+            className="font-medium text-brand-600 hover:underline"
+            onClick={() => navigate(ap("influencer/coupons"))}
+          >
+            Influencer coupons
+          </button>{" "}
+          and select an influencer to manage their coupons.
+        </p>
+      </FormSection>
     </div>
   );
 };

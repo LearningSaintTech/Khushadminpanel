@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+﻿import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import {
   PackageSearch,
@@ -331,12 +331,12 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
   return (
     <div
       ref={rootRef}
-      className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50/80 p-4"
+      className="mt-4 rounded-lg border border-dashed border-border bg-canvas-muted/80 p-4"
     >
-      <h5 className="text-xs font-semibold text-gray-900 uppercase tracking-wide mb-1">
+      <h5 className="text-xs font-semibold text-stone-900 uppercase tracking-wide mb-1">
         Add all SKUs from one item
       </h5>
-      <p className="text-xs text-gray-500 mb-3 max-w-2xl">
+      <p className="text-xs text-stone-500 mb-3 max-w-2xl">
         Search by product name (same catalog search as Items). Choose an item,
         set units <strong>per SKU</strong>, then apply — each variant size
         moves that many units from <strong>central</strong> into this warehouse.
@@ -362,18 +362,18 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
               }
             }}
             onFocus={() => setOpen(true)}
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-brand-100 focus:border-transparent"
             autoComplete="off"
           />
           {open && debouncedQuery.length >= 2 && !selectedId ? (
-            <div className="absolute z-20 left-0 right-0 mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+            <div className="absolute z-20 left-0 right-0 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
               {searching ? (
-                <div className="px-3 py-4 flex items-center justify-center gap-2 text-xs text-gray-500">
+                <div className="px-3 py-4 flex items-center justify-center gap-2 text-xs text-stone-500">
                   <Loader2 className="animate-spin" size={14} />
                   Searching…
                 </div>
               ) : results.length === 0 ? (
-                <p className="px-3 py-3 text-xs text-gray-500">No items found</p>
+                <p className="px-3 py-3 text-xs text-stone-500">No items found</p>
               ) : (
                 <ul className="py-1">
                   {results.map((it) => {
@@ -386,15 +386,15 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
                       <li key={rid ? String(rid) : label}>
                         <button
                           type="button"
-                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-brand-50/30 border-b border-gray-100 last:border-b-0"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => pickItem(it)}
                         >
-                          <span className="block font-medium text-gray-900 truncate pr-1">
+                          <span className="block font-medium text-stone-900 truncate pr-1">
                             {label}
                           </span>
-                          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
-                            <span className="font-mono text-gray-600" title="Product ID">
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-stone-500">
+                            <span className="font-mono text-stone-600" title="Product ID">
                               {pid}
                             </span>
                             <span className="text-gray-300" aria-hidden>
@@ -402,7 +402,7 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
                             </span>
                             <span title="Total central catalog stock (all SKUs)">
                               Central{" "}
-                              <strong className="font-semibold text-gray-700">
+                              <strong className="font-semibold text-stone-700">
                                 {central.toLocaleString()}
                               </strong>
                             </span>
@@ -424,15 +424,15 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
         </div>
         <div className="flex flex-wrap items-end gap-2">
           {selectedId ? (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700 max-w-md min-w-0">
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg border border-border bg-white text-xs text-stone-700 max-w-md min-w-0">
               <div className="min-w-0 flex-1">
                 <span
-                  className="block truncate font-medium text-gray-900"
+                  className="block truncate font-medium text-stone-900"
                   title={selectedName}
                 >
                   {selectedName}
                 </span>
-                <span className="mt-0.5 block text-[11px] text-gray-500 font-mono truncate" title="Product ID · central stock">
+                <span className="mt-0.5 block text-[11px] text-stone-500 font-mono truncate" title="Product ID · central stock">
                   {getItemProductIdDisplay(selected)} · central{" "}
                   {getCentralStockTotal(selected).toLocaleString()} ·{" "}
                   {skuCount} SKU{skuCount !== 1 ? "s" : ""}
@@ -442,15 +442,15 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
                 type="button"
                 onClick={clearSelection}
                 disabled={applying}
-                className="p-0.5 rounded text-gray-400 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+                className="p-0.5 rounded text-stone-400 hover:text-gray-800 hover:bg-canvas-muted shrink-0"
                 aria-label="Clear item"
               >
                 <X size={16} />
               </button>
             </div>
           ) : null}
-          <label className="flex flex-col gap-0.5 text-xs text-gray-600">
-            <span className="font-medium text-gray-700">Qty per SKU</span>
+          <label className="flex flex-col gap-0.5 text-xs text-stone-600">
+            <span className="font-medium text-stone-700">Qty per SKU</span>
             <input
               type="number"
               min={1}
@@ -458,7 +458,7 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
               value={qtyPerSku}
               disabled={disabled || applying}
               onChange={(e) => setQtyPerSku(e.target.value)}
-              className="w-24 px-2.5 py-2 border border-gray-300 rounded-lg text-sm"
+              className="w-24 px-2.5 py-2 border border-border rounded-lg text-sm"
             />
           </label>
           <button
@@ -472,7 +472,7 @@ function AddItemSkusToWarehousePanel({ warehouseId, disabled, onStockUpdated }) 
               Number(qtyPerSku) < 1
             }
             onClick={handleApply}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {applying ? (
               <>
@@ -1151,16 +1151,16 @@ export default function Stockmanagement() {
 
   return (
     <div className="w-full min-h-screen bg-white">
-      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur-sm">
+      <div className="sticky top-0 z-10 border-b border-border bg-white/95 backdrop-blur-sm">
         <div className="px-4 sm:px-6 py-3 sm:py-4 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-black text-white flex items-center justify-center">
+          <div className="h-9 w-9 rounded-lg bg-brand-600 text-white flex items-center justify-center">
             <PackageSearch size={18} />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-black">
               Stock Management
             </h1>
-            <p className="text-xs sm:text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-stone-500">
               Move stock between <strong>central catalog</strong> and each warehouse (use
               negative quantity to return stock to central). Filters and pagination help with
               large lists.
@@ -1170,34 +1170,34 @@ export default function Stockmanagement() {
       </div>
 
       <div className="px-4 sm:px-6 py-4 sm:py-6 space-y-6">
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+        <div className="bg-white border border-border rounded-xl shadow-sm p-4 sm:p-5">
           <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
-              <Upload size={20} className="text-gray-700" />
+            <div className="h-10 w-10 rounded-lg bg-canvas-muted border border-border flex items-center justify-center shrink-0">
+              <Upload size={20} className="text-stone-700" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm sm:text-base font-semibold text-gray-900">
+              <h2 className="text-sm sm:text-base font-semibold text-stone-900">
                 Bulk stock upload
               </h2>
-              <p className="mt-1 text-xs text-gray-500 max-w-3xl">
+              <p className="mt-1 text-xs text-stone-500 max-w-3xl">
                 JSON, CSV, or Excel with{" "}
-                <span className="font-mono text-gray-700">sku</span>, optional{" "}
-                <span className="font-mono text-gray-700">central_stock</span>,{" "}
-                <span className="font-mono text-gray-700">warehouse_id</span>,{" "}
-                <span className="font-mono text-gray-700">warehouse_delta</span>{" "}
+                <span className="font-mono text-stone-700">sku</span>, optional{" "}
+                <span className="font-mono text-stone-700">central_stock</span>,{" "}
+                <span className="font-mono text-stone-700">warehouse_id</span>,{" "}
+                <span className="font-mono text-stone-700">warehouse_delta</span>{" "}
                 (+ into warehouse from central, − back to central). Max 2000 rows per file. Optional
                 default warehouse applies when rows omit warehouse id.
               </p>
               <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
-                <label className="flex flex-col gap-1 text-xs text-gray-600 sm:min-w-[200px]">
-                  <span className="font-medium text-gray-700">Default warehouse ID (optional)</span>
+                <label className="flex flex-col gap-1 text-xs text-stone-600 sm:min-w-[200px]">
+                  <span className="font-medium text-stone-700">Default warehouse ID (optional)</span>
                   <input
                     type="text"
                     placeholder="69c5308e5033cadea9873121"
                     value={bulkDefaultWarehouseId}
                     onChange={(e) => setBulkDefaultWarehouseId(e.target.value)}
                     disabled={bulkSubmitting}
-                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-black focus:ring-1 focus:ring-black"
+                    className="rounded-lg border border-border px-3 py-2 text-sm font-mono focus:border-brand-500 focus:ring-1 focus:ring-brand-100"
                   />
                 </label>
                 <input
@@ -1210,13 +1210,13 @@ export default function Stockmanagement() {
                     setBulkFile(f);
                     setBulkLastResult(null);
                   }}
-                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800 hover:file:bg-gray-200"
+                  className="block text-sm text-stone-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-canvas-muted file:text-gray-800 hover:file:bg-gray-200"
                 />
                 <button
                   type="button"
                   disabled={bulkSubmitting || !bulkFile}
                   onClick={handleBulkStockUpload}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {bulkSubmitting ? (
                     <>
@@ -1231,28 +1231,28 @@ export default function Stockmanagement() {
                   )}
                 </button>
                 <details className="relative">
-                  <summary className="list-none cursor-pointer inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  <summary className="list-none cursor-pointer inline-flex items-center justify-center rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-stone-700 hover:bg-brand-50/30">
                     Download template
                   </summary>
-                  <div className="absolute z-10 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg p-1.5 space-y-1">
+                  <div className="absolute z-10 mt-2 w-52 rounded-lg border border-border bg-white shadow-lg p-1.5 space-y-1">
                     <a
                       href="/templates/bulk-stock-upload.sample.csv"
                       download
-                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                     >
                       CSV format
                     </a>
                     <a
                       href="/templates/bulk-stock-upload.sample.json"
                       download
-                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                     >
                       JSON format
                     </a>
                     <a
                       href="/templates/bulk-stock-upload.sample.xml"
                       download
-                      className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                     >
                       Excel format
                     </a>
@@ -1279,13 +1279,13 @@ export default function Stockmanagement() {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-4 sm:px-5 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-sm sm:text-base font-semibold text-gray-900">
+              <h2 className="text-sm sm:text-base font-semibold text-stone-900">
                 Warehouses
               </h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-stone-500">
                 Search by name, code, or city • Expand/collapse cards to focus on one site
               </p>
             </div>
@@ -1294,7 +1294,7 @@ export default function Stockmanagement() {
                 <button
                   type="button"
                   onClick={expandAllWarehouses}
-                  className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-white text-stone-700 hover:bg-brand-50/30"
                 >
                   Expand all
                 </button>
@@ -1302,13 +1302,13 @@ export default function Stockmanagement() {
                   type="button"
                   onClick={collapseAllWarehouses}
                   disabled={!warehouses.length}
-                  className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-white text-stone-700 hover:bg-brand-50/30 disabled:opacity-50"
                 >
                   Collapse all
                 </button>
               </div>
               <div className="relative w-full sm:w-72 min-w-0">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">
                   <PackageSearch size={16} />
                 </span>
                 <input
@@ -1319,7 +1319,7 @@ export default function Stockmanagement() {
                     setWarehouseSearch(e.target.value);
                     setWarehousePage(1);
                   }}
-                  className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-9 py-2.5 text-sm focus:border-black focus:ring-1 focus:ring-black"
+                  className="w-full rounded-lg border border-border bg-white pl-9 pr-9 py-2.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-100"
                   aria-label="Search warehouses"
                 />
                 {warehouseSearch ? (
@@ -1329,7 +1329,7 @@ export default function Stockmanagement() {
                       setWarehouseSearch("");
                       setWarehousePage(1);
                     }}
-                    className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-700 p-1"
+                    className="absolute inset-y-0 right-2 flex items-center text-stone-400 hover:text-stone-700 p-1"
                     aria-label="Clear search"
                   >
                     <X size={16} />
@@ -1345,13 +1345,13 @@ export default function Stockmanagement() {
                 {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className="rounded-xl border border-gray-200 overflow-hidden animate-pulse"
+                    className="rounded-xl border border-border overflow-hidden animate-pulse"
                   >
-                    <div className="h-24 bg-gray-100" />
-                    <div className="h-20 bg-gray-50 border-t border-gray-100" />
+                    <div className="h-24 bg-canvas-muted" />
+                    <div className="h-20 bg-canvas-muted border-t border-gray-100" />
                   </div>
                 ))}
-                <p className="text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                <p className="text-center text-xs text-stone-500 flex items-center justify-center gap-2">
                   <Loader2 className="animate-spin" size={14} />
                   Loading warehouses…
                 </p>
@@ -1361,7 +1361,7 @@ export default function Stockmanagement() {
                 {warehousesError}
               </p>
             ) : warehouses.length === 0 ? (
-              <div className="py-10 text-center text-sm text-gray-500">
+              <div className="py-10 text-center text-sm text-stone-500">
                 {debouncedWarehouseSearch
                   ? "No warehouses match your search."
                   : "No warehouses found."}
@@ -1396,14 +1396,14 @@ export default function Stockmanagement() {
                     return (
                       <div
                         key={wh.id}
-                        className="rounded-xl border-2 border-gray-200 bg-gray-50/50 overflow-hidden shadow-sm hover:border-gray-300 transition-colors"
+                        className="rounded-xl border-2 border-border bg-canvas-muted/50 overflow-hidden shadow-sm hover:border-border transition-colors"
                       >
-                        <div className="bg-white border-b border-gray-200 px-4 py-4 sm:px-6 sm:py-5">
+                        <div className="bg-white border-b border-border px-4 py-4 sm:px-6 sm:py-5">
                           <div className="flex items-start gap-3 sm:gap-4">
                             <button
                               type="button"
                               onClick={() => toggleWarehouseCollapsed(wh.id)}
-                              className="mt-1 p-1 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 shrink-0"
+                              className="mt-1 p-1 rounded-md text-stone-500 hover:bg-canvas-muted hover:text-stone-900 shrink-0"
                               aria-expanded={!isCollapsed}
                               aria-label={
                                 isCollapsed ? "Expand warehouse" : "Collapse warehouse"
@@ -1415,17 +1415,17 @@ export default function Stockmanagement() {
                                 <ChevronDown size={22} />
                               )}
                             </button>
-                            <div className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center">
+                            <div className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-xl bg-canvas-muted border border-border flex items-center justify-center">
                               <WarehouseIcon
                                 size={26}
-                                className="text-gray-600"
+                                className="text-stone-600"
                               />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h3 className="text-base sm:text-xl font-bold text-gray-900">
+                              <h3 className="text-base sm:text-xl font-bold text-stone-900">
                                 {wh.name || "Unnamed Warehouse"}
                               </h3>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-gray-500">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-stone-500">
                                 {wh.code ? (
                                   <span className="font-mono">{wh.code}</span>
                                 ) : null}
@@ -1435,7 +1435,7 @@ export default function Stockmanagement() {
                                   </span>
                                 )}
                                 {!stockState.loading && !isCollapsed ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-canvas-muted text-stone-700">
                                     {totalSkus.toLocaleString()} SKU
                                     {totalSkus !== 1 ? "s" : ""}
                                     {totalPages > 1
@@ -1447,7 +1447,7 @@ export default function Stockmanagement() {
                             </div>
                           </div>
                           {isCollapsed ? (
-                            <p className="mt-3 ml-10 sm:ml-12 text-xs text-gray-500">
+                            <p className="mt-3 ml-10 sm:ml-12 text-xs text-stone-500">
                               Collapsed — click the arrow to manage stock for this
                               warehouse.
                             </p>
@@ -1457,10 +1457,10 @@ export default function Stockmanagement() {
                         {!isCollapsed ? (
                           <>
                         <div className="px-5 py-4 sm:px-6 sm:py-5 bg-white border-b border-gray-100">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                          <h4 className="text-sm font-semibold text-stone-900 mb-1">
                             Adjust stock (central ↔ warehouse)
                           </h4>
-                          <p className="text-xs text-gray-500 mb-3 max-w-2xl">
+                          <p className="text-xs text-stone-500 mb-3 max-w-2xl">
                             <strong>Positive</strong> quantity moves units from central catalog
                             stock into this warehouse. <strong>Negative</strong> quantity returns
                             units from this warehouse back to central. SKU must already exist on
@@ -1482,7 +1482,7 @@ export default function Stockmanagement() {
                                   sku: e.target.value,
                                 })
                               }
-                              className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                              className="px-4 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-brand-100 focus:border-transparent"
                               autoComplete="off"
                               aria-label="SKU to add"
                             />
@@ -1495,13 +1495,13 @@ export default function Stockmanagement() {
                                   quantity: e.target.value,
                                 })
                               }
-                              className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                              className="px-4 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-brand-100 focus:border-transparent"
                               aria-label="Quantity"
                             />
                             <button
                               type="submit"
                               disabled={isUpdating}
-                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {isUpdating ? (
                                 <>
@@ -1523,7 +1523,7 @@ export default function Stockmanagement() {
                         <div className="px-5 py-4 sm:px-6 sm:py-5">
                           <div className="flex flex-col gap-3 mb-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                              <h4 className="text-sm font-semibold text-gray-900">
+                              <h4 className="text-sm font-semibold text-stone-900">
                                 Stock in this warehouse
                               </h4>
                               <div className="flex flex-wrap items-center gap-2">
@@ -1533,7 +1533,7 @@ export default function Stockmanagement() {
                                     Applying filters…
                                   </span>
                                 ) : null}
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-stone-500">
                                   {totalSkus.toLocaleString()} SKU
                                   {totalSkus !== 1 ? "s" : ""}
                                   {(debouncedStockItemSearch[wh.id] ||
@@ -1558,13 +1558,13 @@ export default function Stockmanagement() {
                                       [wh.id]: 1,
                                     }));
                                   }}
-                                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                                  className="w-full px-3 py-2 pr-8 border border-border rounded-lg text-sm focus:ring-2 focus:ring-brand-100 focus:border-transparent"
                                   aria-label="Filter by product name"
                                 />
                                 {(stockItemSearch[wh.id] ?? "") ? (
                                   <button
                                     type="button"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
                                     onClick={() => {
                                       setStockItemSearch((prev) => ({
                                         ...prev,
@@ -1596,13 +1596,13 @@ export default function Stockmanagement() {
                                       [wh.id]: 1,
                                     }));
                                   }}
-                                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent font-mono"
+                                  className="w-full px-3 py-2 pr-8 border border-border rounded-lg text-sm focus:ring-2 focus:ring-brand-100 focus:border-transparent font-mono"
                                   aria-label="Filter by SKU"
                                 />
                                 {(stockSkuSearch[wh.id] ?? "") ? (
                                   <button
                                     type="button"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
                                     onClick={() => {
                                       setStockSkuSearch((prev) => ({
                                         ...prev,
@@ -1700,12 +1700,12 @@ export default function Stockmanagement() {
                           </div>
 
                           {totalPages > 0 && (
-                            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-gray-100 text-xs text-gray-600">
+                            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-gray-100 text-xs text-stone-600">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-gray-700">
+                                <span className="font-medium text-stone-700">
                                   Page {stockPage} / {totalPages}
                                 </span>
-                                <label className="inline-flex items-center gap-1.5 text-gray-600 ml-0 sm:ml-2">
+                                <label className="inline-flex items-center gap-1.5 text-stone-600 ml-0 sm:ml-2">
                                   <span className="sr-only">Rows per page</span>
                                   <select
                                     value={stockPageSize}
@@ -1716,7 +1716,7 @@ export default function Stockmanagement() {
                                         [wh.id]: 1,
                                       }));
                                     }}
-                                    className="border border-gray-200 rounded-md px-2 py-1 text-xs bg-white"
+                                    className="border border-border rounded-md px-2 py-1 text-xs bg-white"
                                   >
                                     {STOCK_PAGE_SIZE_OPTIONS.map((n) => (
                                       <option key={n} value={n}>
@@ -1733,7 +1733,7 @@ export default function Stockmanagement() {
                                   disabled={
                                     stockPage <= 1 || stockState.loading
                                   }
-                                  className="p-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                                  className="p-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                                   title="First page"
                                   aria-label="First page"
                                 >
@@ -1747,7 +1747,7 @@ export default function Stockmanagement() {
                                   disabled={
                                     stockPage <= 1 || stockState.loading
                                   }
-                                  className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                                  className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                                 >
                                   Prev
                                 </button>
@@ -1760,7 +1760,7 @@ export default function Stockmanagement() {
                                     stockPage >= totalPages ||
                                     stockState.loading
                                   }
-                                  className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                                  className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                                 >
                                   Next
                                 </button>
@@ -1773,7 +1773,7 @@ export default function Stockmanagement() {
                                     stockPage >= totalPages ||
                                     stockState.loading
                                   }
-                                  className="p-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                                  className="p-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                                   title="Last page"
                                   aria-label="Last page"
                                 >
@@ -1788,10 +1788,10 @@ export default function Stockmanagement() {
                               {[1, 2, 3, 4, 5].map((i) => (
                                 <div
                                   key={i}
-                                  className="h-12 rounded-lg bg-gray-100 animate-pulse"
+                                  className="h-12 rounded-lg bg-canvas-muted animate-pulse"
                                 />
                               ))}
-                              <p className="text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                              <p className="text-center text-xs text-stone-500 flex items-center justify-center gap-2">
                                 <Loader2 className="animate-spin" size={14} />
                                 Loading stock lines…
                               </p>
@@ -1821,7 +1821,7 @@ export default function Stockmanagement() {
                               </button>
                             </div>
                           ) : !stockState.data?.length ? (
-                            <p className="py-4 text-sm text-gray-500">
+                            <p className="py-4 text-sm text-stone-500">
                               {(stockItemSearch[wh.id] || stockSkuSearch[wh.id])
                                 ?.trim()
                                 ? "No stock matches your filters."
@@ -1863,13 +1863,13 @@ export default function Stockmanagement() {
                                   return (
                                       <div
                                         key={groupKeyId}
-                                        className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm"
+                                        className="rounded-lg border border-border bg-white overflow-hidden shadow-sm"
                                       >
-                                        <div className="px-4 py-3 bg-gray-50/80 border-b border-gray-200">
-                                          <p className="text-sm font-semibold text-gray-900">
+                                        <div className="px-4 py-3 bg-canvas-muted/80 border-b border-border">
+                                          <p className="text-sm font-semibold text-stone-900">
                                             {productTitle}
                                           </p>
-                                          <p className="text-xs text-gray-500 mt-0.5">
+                                          <p className="text-xs text-stone-500 mt-0.5">
                                             {variantCount} SKU
                                             {variantCount !== 1 ? "s" : ""} in
                                             this warehouse — adjust each line
@@ -1877,7 +1877,7 @@ export default function Stockmanagement() {
                                           </p>
                                         </div>
                                         <div className="px-3 sm:px-4 py-2 border-b border-gray-100 bg-white">
-                                          <div className="flex flex-wrap items-center gap-3 sm:gap-4 py-1.5 text-xs font-semibold text-gray-500">
+                                          <div className="flex flex-wrap items-center gap-3 sm:gap-4 py-1.5 text-xs font-semibold text-stone-500">
                                             <span className="min-w-28 pl-2 sm:pl-3">
                                               SKU
                                             </span>
@@ -1891,7 +1891,7 @@ export default function Stockmanagement() {
                                             </span>
                                           </div>
                                         </div>
-                                        <ul className="divide-y divide-gray-100 bg-gray-50/30">
+                                        <ul className="divide-y divide-gray-100 bg-canvas-muted/30">
                                           {rows.map((item) => {
                                             const sku =
                                               item.sku || item.SKU || "—";
@@ -1912,12 +1912,12 @@ export default function Stockmanagement() {
                                                 key={
                                                   item._id || item.id || sku
                                                 }
-                                                className="py-2.5 px-2 sm:px-3 border-l-2 border-gray-200 ml-2 sm:ml-3 bg-white/80 first:pt-3 last:pb-3"
+                                                className="py-2.5 px-2 sm:px-3 border-l-2 border-border ml-2 sm:ml-3 bg-white/80 first:pt-3 last:pb-3"
                                               >
                                                 <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                                                   <div className="flex items-center gap-1 min-w-28">
                                                     <span
-                                                      className="text-sm font-mono font-medium text-gray-700 truncate max-w-40 sm:max-w-xs"
+                                                      className="text-sm font-mono font-medium text-stone-700 truncate max-w-40 sm:max-w-xs"
                                                       title={sku}
                                                     >
                                                       {sku}
@@ -1930,7 +1930,7 @@ export default function Stockmanagement() {
                                                           key
                                                         )
                                                       }
-                                                      className="p-1 rounded text-gray-400 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+                                                      className="p-1 rounded text-stone-400 hover:text-gray-800 hover:bg-canvas-muted shrink-0"
                                                       title="Copy SKU"
                                                       aria-label={`Copy SKU ${sku}`}
                                                     >
@@ -1945,7 +1945,7 @@ export default function Stockmanagement() {
                                                     </button>
                                                   </div>
                                                   <span
-                                                    className="text-xs font-mono text-gray-500 min-w-20 truncate max-w-24"
+                                                    className="text-xs font-mono text-stone-500 min-w-20 truncate max-w-24"
                                                     title="ID"
                                                   >
                                                     {item._id
@@ -1955,10 +1955,10 @@ export default function Stockmanagement() {
                                                       : "—"}
                                                   </span>
                                                   <span
-                                                    className="text-sm text-gray-700 min-w-16"
+                                                    className="text-sm text-stone-700 min-w-16"
                                                     title="Stock (warehouse)"
                                                   >
-                                                    <span className="text-gray-500 text-xs">
+                                                    <span className="text-stone-500 text-xs">
                                                       Stock:{" "}
                                                     </span>
                                                     <span
@@ -1971,16 +1971,16 @@ export default function Stockmanagement() {
                                                       {warehouseQty}
                                                     </span>
                                                     {warehouseQty < 10 && (
-                                                      <span className="ml-1 px-2 py-0.5 text-xs font-medium text-red-700 bg-red-100 rounded-full">
+                                                      <span className="ml-1 px-2 py-0.5 text-xs font-medium text-danger bg-danger-bg rounded-full">
                                                         Low
                                                       </span>
                                                     )}
                                                   </span>
                                                   <span
-                                                    className="text-sm text-gray-700 min-w-20"
+                                                    className="text-sm text-stone-700 min-w-20"
                                                     title="Central stock (Item model)"
                                                   >
-                                                    <span className="text-gray-500 text-xs">
+                                                    <span className="text-stone-500 text-xs">
                                                       Central:{" "}
                                                     </span>
                                                     <span className="font-medium">
@@ -1988,7 +1988,7 @@ export default function Stockmanagement() {
                                                     </span>
                                                   </span>
                                                   <div className="flex items-center gap-2 ml-auto">
-                                                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                                                    <span className="text-xs text-stone-500 whitespace-nowrap">
                                                       ± Qty:
                                                     </span>
                                                     <input
@@ -2014,7 +2014,7 @@ export default function Stockmanagement() {
                                                           );
                                                         }
                                                       }}
-                                                      className="w-20 px-2.5 py-1.5 border border-gray-300 rounded text-sm"
+                                                      className="w-20 px-2.5 py-1.5 border border-border rounded text-sm"
                                                       aria-label={`Add quantity for ${sku}`}
                                                     />
                                                     <button
@@ -2032,7 +2032,7 @@ export default function Stockmanagement() {
                                                         Number(inlineVal) === 0 ||
                                                         Number.isNaN(Number(inlineVal))
                                                       }
-                                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+                                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border bg-white text-sm font-medium text-stone-700 hover:bg-brand-50/30 disabled:opacity-50 whitespace-nowrap"
                                                     >
                                                       {isInlineUpdating ? (
                                                         <>
@@ -2066,7 +2066,7 @@ export default function Stockmanagement() {
                   })}
                 </div>
 
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-xs sm:text-sm text-gray-600">
+                <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-xs sm:text-sm text-stone-600">
                   <span>
                     Page {warehousePage} of {warehouseTotalPages}
                   </span>
@@ -2075,7 +2075,7 @@ export default function Stockmanagement() {
                       type="button"
                       onClick={() => setWarehousePage((p) => Math.max(1, p - 1))}
                       disabled={warehousePage === 1 || warehousesLoading}
-                      className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                      className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                     >
                       Prev
                     </button>
@@ -2090,7 +2090,7 @@ export default function Stockmanagement() {
                         warehousePage >= warehouseTotalPages ||
                         warehousesLoading
                       }
-                      className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-gray-50"
+                      className="px-3 py-1.5 border rounded disabled:opacity-50 hover:bg-brand-50/30"
                     >
                       Next
                     </button>

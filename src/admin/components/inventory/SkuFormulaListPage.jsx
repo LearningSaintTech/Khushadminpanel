@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   getAllSkuFormulaConfigs,
@@ -81,29 +81,29 @@ const SkuFormulaListPage = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-gray-50">
+    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8 bg-canvas-muted">
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             to={ap("inventory-codes")}
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 w-fit"
+            className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 w-fit"
           >
             <ArrowLeft size={18} /> Back to inventory codes
           </Link>
           <Link
             to={ap("inventory-codes/sku-formula/new")}
-            className="inline-flex items-center justify-center gap-2 bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 w-fit"
+            className="inline-flex items-center justify-center gap-2 bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 w-fit"
           >
             <Plus size={18} /> New formula
           </Link>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
           <div className="flex items-start gap-3 mb-2">
-            <Layers className="h-8 w-8 text-indigo-600 shrink-0" />
+            <Layers className="h-8 w-8 text-brand-600 shrink-0" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">SKU &amp; sku_uid formulas</h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <h1 className="text-xl font-bold text-stone-900">SKU &amp; sku_uid formulas</h1>
+              <p className="mt-1 text-sm text-stone-500">
                 Save multiple presets. Only <strong>one</strong> can be active at a time — that is
                 the definition your apps should read when generating or validating SKUs.
               </p>
@@ -119,18 +119,18 @@ const SkuFormulaListPage = () => {
 
           <div className="mt-6 overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-canvas-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-stone-600">
                     Name
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-stone-600">
                     Template preview
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-stone-600">
                     Active
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-600">
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-stone-600">
                     Actions
                   </th>
                 </tr>
@@ -138,30 +138,30 @@ const SkuFormulaListPage = () => {
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="py-12 text-center text-gray-500">
+                    <td colSpan={4} className="py-12 text-center text-stone-500">
                       Loading…
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-12 text-center text-gray-500">
+                    <td colSpan={4} className="py-12 text-center text-stone-500">
                       No formulas yet. Create one to get started.
                     </td>
                   </tr>
                 ) : (
                   items.map((row) => (
-                    <tr key={row._id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 font-mono truncate max-w-xs">
+                    <tr key={row._id} className="hover:bg-brand-50/30">
+                      <td className="px-4 py-3 font-medium text-stone-900">{row.name}</td>
+                      <td className="px-4 py-3 text-sm text-stone-600 font-mono truncate max-w-xs">
                         {row.skuTemplateString || "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {row.isActive ? (
-                          <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                          <span className="inline-flex rounded-full bg-success-bg px-2.5 py-0.5 text-xs font-medium text-success">
                             Active
                           </span>
                         ) : (
-                          <span className="text-gray-400 text-sm">—</span>
+                          <span className="text-stone-400 text-sm">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -178,7 +178,7 @@ const SkuFormulaListPage = () => {
                           )}
                           <Link
                             to={ap(`inventory-codes/sku-formula/edit/${row._id}`)}
-                            className="inline-flex rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                            className="inline-flex rounded-lg p-2 text-stone-600 hover:bg-canvas-muted"
                             title="Edit"
                           >
                             <Edit size={18} />
@@ -201,8 +201,8 @@ const SkuFormulaListPage = () => {
           </div>
 
           {pagination.totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
-              <p className="text-sm text-gray-600">
+            <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+              <p className="text-sm text-stone-600">
                 Page {pagination.page} of {pagination.totalPages}
               </p>
               <div className="flex gap-2">

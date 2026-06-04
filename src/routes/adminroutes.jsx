@@ -14,7 +14,7 @@ const AdminRoutes = () => {
       {/* Protected Layout Routes */}
       <Route
         element={
-          <ProtectedRoute allowedRoles={["ADMIN", "SUBADMIN"]}>
+          <ProtectedRoute allowedRoles={["ADMIN"]} loginPath="/admin" wrongRolePolicy="home">
             <Layout basePath="/admin" filterSidebar={false} />
           </ProtectedRoute>
         }

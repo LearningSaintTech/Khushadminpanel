@@ -1,196 +1,261 @@
-// src/pages/admin/influencers/InfluencerCouponList.jsx
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getInfluencers } from "../../apis/Influencer";
-import { Search, ChevronRight, ChevronLeft } from "lucide-react";
+import { Search, ChevronRight, ChevronLeft, Loader2, Ticket } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { getInfluencerCoupons } from "../../apis/influrncerCouponapi";
+import {
+  alertDanger,
+  btnOutline,
+  pageToolbar,
+  tableScrollShell,
+  inputClass,
+} from "./influencerShared";
+
+const LIMIT = 15;
+const LIMIT_OPTIONS = [15, 20, 50];
 
 const InfluencerCouponList = () => {
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
   const [influencers, setInfluencers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Pagination
+  const [couponCounts, setCouponCounts] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(LIMIT);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const limit = 15;
-
-  // Search
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // Debounce search
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * limit + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(currentPage * limit, total);
+
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset page when search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, limit]);
 
-  // Fetch influencers
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-
-        const res = await getInfluencers(
-          currentPage,
-          limit,
-          debouncedSearch,
-          null
-        );
-
+        setError(null);
+        const res = await getInfluencers(currentPage, limit, debouncedSearch, null);
         const data = res?.data || {};
-
         setInfluencers(data?.influencers || []);
         setTotalPages(data?.pagination?.totalPages || 1);
         setTotal(data?.pagination?.total || 0);
       } catch (err) {
         setError("Failed to load influencers");
         console.error(err);
+        setInfluencers([]);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
-  }, [currentPage, debouncedSearch]);
+  }, [currentPage, debouncedSearch, limit]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const ids = influencers.map((i) => i?._id).filter(Boolean);
+      if (ids.length === 0) {
+        setCouponCounts({});
+        return;
+      }
+      try {
+        const results = await Promise.all(
+          ids.map(async (influencerId) => {
+            try {
+              const res = await getInfluencerCoupons(influencerId, 1, 1);
+              const payload = res?.data?.data ?? res?.data ?? {};
+              const totalFromRes =
+                payload?.total ??
+                payload?.pagination?.total ??
+                payload?.pagination?.totalItems ??
+                (Array.isArray(payload?.coupons) ? payload.coupons.length : 0) ??
+                0;
+              return [influencerId, Number(totalFromRes) || 0];
+            } catch {
+              return [influencerId, 0];
+            }
+          }),
+        );
+        if (!cancelled) setCouponCounts(Object.fromEntries(results));
+      } catch {
+        // ignore
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [influencers]);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Influencer Coupon Management
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <Ticket className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+        <div className="mr-auto shrink-0 min-w-0">
+          <h1 className="whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+            Influencer coupons
           </h1>
-          <p className="mt-2 text-gray-600">
+          <p className="whitespace-nowrap text-[10px] text-stone-500">
             Select an influencer to manage attached coupons
           </p>
         </div>
-
-        {/* Search */}
-        <div className="mb-6 max-w-md">
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              size={18}
-            />
-            <input
-              type="text"
-              placeholder="Search by name, email or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 focus:border-black focus:ring-1 focus:ring-black/20"
-            />
-          </div>
+        <div className="relative min-w-[140px] flex-1 sm:max-w-[220px]">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            placeholder="Search name / email / phone…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2.5 text-[11px] outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          />
         </div>
+        <select
+          value={limit}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10) || LIMIT)}
+          className={`${inputClass} w-[108px]`}
+          title="Rows per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+      </form>
 
-        {/* Error */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
+      {error ? <div className={`${alertDanger} mb-2`}>{error}</div> : null}
 
-        {/* Content */}
-        {loading ? (
-          <div className="text-center py-20">Loading influencers...</div>
-        ) : influencers.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            No influencers found
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="divide-y divide-gray-200">
-              {influencers.map((inf) => (
-                <div
+      <div className={tableScrollShell}>
+        <table className="min-w-[640px] w-full text-[11px]">
+          <thead className="sticky top-0 z-10 border-b border-border bg-canvas-muted/90 text-[10px] font-semibold uppercase tracking-wide text-stone-500 shadow-[0_1px_0_0_var(--color-border)]">
+            <tr>
+              <th className="w-10 px-2 py-2 text-center">#</th>
+              <th className="px-2 py-2 text-left">Influencer</th>
+              <th className="px-2 py-2 text-right">Coupons</th>
+              <th className="px-2 py-2 text-center">Status</th>
+              <th className="w-10 px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && influencers.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading…
+                  </span>
+                </td>
+              </tr>
+            ) : influencers.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-10 text-center text-stone-500">
+                  No influencers found
+                </td>
+              </tr>
+            ) : (
+              influencers.map((inf, idx) => (
+                <tr
                   key={inf._id}
-                  onClick={() =>
-                    navigate(`/admin/influencer/${inf._id}/coupons`)
-                  }
-                  className="p-5 flex items-center justify-between hover:bg-gray-50 cursor-pointer transition-colors group"
+                  className="cursor-pointer hover:bg-canvas-muted/50"
+                  onClick={() => navigate(ap(`influencer/${inf._id}/coupons`))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") navigate(ap(`influencer/${inf._id}/coupons`));
+                  }}
+                  tabIndex={0}
+                  role="button"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900">
-                      {inf.name || inf.username || "—"}
-                    </div>
-                    <div className="text-sm text-gray-500 mt-0.5">
+                  <td className="px-2 py-2 text-center text-[10px] text-stone-500">
+                    {(currentPage - 1) * limit + idx + 1}
+                  </td>
+                  <td className="px-2 py-2">
+                    <p className="font-medium text-stone-900">{inf.name || inf.username || "—"}</p>
+                    <p className="text-[10px] text-stone-500">
                       {inf.email || inf.phone || "No contact"}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900">
-                        {inf.couponCount || 0} coupons
-                      </div>
-                      <div className="text-xs text-gray-500">attached</div>
-                    </div>
-
-                    {inf.isActive !== undefined && (
+                    </p>
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums font-medium text-stone-800">
+                    {couponCounts?.[inf._id] ?? 0}
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    {inf.isActive !== undefined ? (
                       <span
-                        className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           inf.isActive
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                            ? "bg-success-bg text-success"
+                            : "bg-danger-bg text-danger"
                         }`}
                       >
                         {inf.isActive ? "Active" : "Inactive"}
                       </span>
+                    ) : (
+                      "—"
                     )}
-
-                    <ChevronRight className="text-gray-400 group-hover:text-gray-700 transition" />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between text-sm">
-                <button
-                  onClick={() =>
-                    setCurrentPage((p) => Math.max(1, p - 1))
-                  }
-                  disabled={currentPage === 1}
-                  className="inline-flex items-center gap-1 px-4 py-2 border rounded disabled:opacity-50 hover:bg-gray-50"
-                >
-                  <ChevronLeft size={16} /> Previous
-                </button>
-
-                <span>
-                  Page <strong>{currentPage}</strong> of{" "}
-                  <strong>{totalPages}</strong>
-                </span>
-
-                <button
-                  onClick={() =>
-                    setCurrentPage((p) =>
-                      Math.min(totalPages, p + 1)
-                    )
-                  }
-                  disabled={currentPage === totalPages}
-                  className="px-4 py-2 border rounded disabled:opacity-50 hover:bg-gray-50"
-                >
-                  Next
-                </button>
-              </div>
+                  </td>
+                  <td className="px-2 py-2 text-stone-400">
+                    <ChevronRight className="h-4 w-4" aria-hidden />
+                  </td>
+                </tr>
+              ))
             )}
-          </div>
-        )}
+          </tbody>
+        </table>
+      </div>
 
-        {/* Optional count display */}
-        {!loading && total > 0 && (
-          <div className="mt-4 text-sm text-gray-500">
-            Showing {(currentPage - 1) * limit + 1} –{" "}
-            {Math.min(currentPage * limit, total)} of {total} influencers
-          </div>
-        )}
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          {loading ? (
+            "Loading…"
+          ) : total === 0 ? (
+            "0 influencers"
+          ) : (
+            <>
+              Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+              <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+              <span className="font-medium text-stone-700">{total}</span> total · Page{" "}
+              <span className="font-medium text-stone-700">{currentPage}</span> of{" "}
+              <span className="font-medium text-stone-700">{totalPages}</span>
+            </>
+          )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={currentPage <= 1 || loading}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={currentPage >= totalPages || loading}
+            onClick={() => setCurrentPage((p) => p + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
       </div>
     </div>
   );

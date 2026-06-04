@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+﻿import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { X, Loader2 } from "lucide-react";
@@ -462,14 +462,14 @@ export default function Items() {
       <div className="sticky top-0 z-50 border-b border-black/10 bg-white/95 backdrop-blur">
         <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-black text-white flex items-center justify-center text-sm font-semibold">
+            <div className="h-9 w-9 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold">
               P
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
                 Products
               </h1>
-              <p className="text-xs sm:text-sm text-gray-500">
+              <p className="text-xs sm:text-sm text-stone-500">
                 Manage all items inside this subcategory
               </p>
             </div>
@@ -478,14 +478,14 @@ export default function Items() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowBulkUpload(true)}
-              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full border border-black text-sm font-medium hover:bg-black hover:text-white transition-colors"
+              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full border border-black text-sm font-medium hover:bg-brand-600 hover:text-white transition-colors"
             >
               Bulk Upload
             </button>
 
             <button
               onClick={openCreate}
-              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors"
+              className="hidden sm:inline-flex items-center px-4 py-2.5 rounded-full bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
             >
               + Add Product
             </button>
@@ -498,7 +498,7 @@ export default function Items() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <button
                 onClick={goBackToSubcategory}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/10 text-xs sm:text-sm font-medium hover:bg-black hover:text-white transition-colors"
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/10 text-xs sm:text-sm font-medium hover:bg-brand-600 hover:text-white transition-colors"
               >
                 ← Back
               </button>
@@ -514,30 +514,30 @@ export default function Items() {
                     setSearchTerm(e.target.value);
                   }}
                   placeholder="Search by product name or product ID..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-full border border-black/10 text-sm focus:outline-none focus:ring-2 focus:ring-black/80 focus:border-black/80 bg-white"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-full border border-black/10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100/80 focus:border-brand-500/80 bg-white"
                 />
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400 text-sm">
                   🔍
                 </span>
               </div>
               <button
                 onClick={handleSearchClick}
                 disabled={!searchTerm.trim()}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Search
               </button>
               <button
                 onClick={handleClearSearch}
                 disabled={!searchTerm && !appliedSearchTerm}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/20 text-sm font-medium hover:bg-black hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-black/20 text-sm font-medium hover:bg-brand-600 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Clear
               </button>
 
               <button
                 onClick={openCreate}
-                className="sm:hidden inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-900 transition-colors"
+                className="sm:hidden inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
               >
                 + Add
               </button>
@@ -547,7 +547,7 @@ export default function Items() {
 
         {showBulkUpload && (
   <div className="px-4 sm:px-6 lg:px-8 py-6">
-    <div className="bg-gray-50 border border-black/10 rounded-2xl p-6 max-w-xl">
+    <div className="bg-canvas-muted border border-black/10 rounded-2xl p-6 max-w-xl">
 
       <h2 className="text-lg font-semibold mb-4">Bulk Upload Products</h2>
 
@@ -624,7 +624,7 @@ export default function Items() {
                 <tr>
                   <td
                     colSpan={10}
-                    className="px-4 py-10 text-center text-gray-500 text-sm"
+                    className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     Loading products...
                   </td>
@@ -633,7 +633,7 @@ export default function Items() {
                 <tr>
                   <td
                     colSpan={10}
-                    className="px-4 py-10 text-center text-gray-500 text-sm"
+                    className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     No products found
                   </td>
@@ -652,12 +652,12 @@ export default function Items() {
                     }}
                     className="border-t border-black/5 hover:bg-black/[0.02] cursor-pointer transition-colors"
                   >
-                    <td className="px-4 py-3 align-middle text-xs text-gray-500">
+                    <td className="px-4 py-3 align-middle text-xs text-stone-500">
                       {index + 1}
                     </td>
 
                     <td className="px-4 py-3 align-middle">
-                      <div className="h-11 w-11 rounded-lg overflow-hidden border border-black/10 bg-gray-50">
+                      <div className="h-11 w-11 rounded-lg overflow-hidden border border-black/10 bg-canvas-muted">
                         <img
                           src={
                             item?.thumbnail || "https://via.placeholder.com/50"
@@ -672,12 +672,12 @@ export default function Items() {
                       {item.name}
                     </td>
 
-                    <td className="px-4 py-3 align-middle text-xs sm:text-sm text-gray-600 max-w-xs truncate">
+                    <td className="px-4 py-3 align-middle text-xs sm:text-sm text-stone-600 max-w-xs truncate">
                       {item.shortDescription || "—"}
                     </td>
 
                     <td
-                      className="px-4 py-3 align-middle text-xs text-gray-600 max-w-[140px]"
+                      className="px-4 py-3 align-middle text-xs text-stone-600 max-w-[140px]"
                       title={[
                         item.metaTitle && `Title: ${item.metaTitle}`,
                         Array.isArray(item.metaTags) &&
@@ -691,20 +691,20 @@ export default function Items() {
                       <div className="font-medium text-gray-800 line-clamp-1">
                         {String(item.metaTitle || "").trim() || "—"}
                       </div>
-                      <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                      <div className="mt-0.5 text-[10px] text-stone-500 line-clamp-2">
                         {Array.isArray(item.metaTags) && item.metaTags.length > 0
                           ? item.metaTags.join(", ")
                           : ""}
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 align-middle text-center text-xs text-gray-600">
+                    <td className="px-4 py-3 align-middle text-center text-xs text-stone-600">
                       {itemHasSizeChartContent(item) ? (
                         <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 border border-emerald-100">
                           Yes
                         </span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-stone-400">—</span>
                       )}
                     </td>
 
@@ -733,7 +733,7 @@ export default function Items() {
                             type="button"
                             onClick={cancelInlineEdit}
                             disabled={savingPrice}
-                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-brand-600 hover:text-white transition-colors disabled:opacity-40"
                           >
                             Cancel
                           </button>
@@ -744,7 +744,7 @@ export default function Items() {
                           <button
                             type="button"
                             onClick={(e) => startPriceEdit(e, item)}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-brand-600 hover:text-white transition-colors"
                             title="Edit MRP"
                           >
                             ✎
@@ -778,7 +778,7 @@ export default function Items() {
                             type="button"
                             onClick={cancelInlineEdit}
                             disabled={savingPrice}
-                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                            className="text-xs px-2 py-1 rounded border border-black/20 hover:bg-brand-600 hover:text-white transition-colors disabled:opacity-40"
                           >
                             Cancel
                           </button>
@@ -790,12 +790,12 @@ export default function Items() {
                               ₹{item.discountedPrice}
                             </span>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-stone-400">—</span>
                           )}
                           <button
                             type="button"
                             onClick={(e) => startDiscountEdit(e, item)}
-                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded-full border border-black/20 hover:bg-brand-600 hover:text-white transition-colors"
                             title="Edit discounted price"
                           >
                             ✎
@@ -806,11 +806,11 @@ export default function Items() {
 
                     <td className="px-4 py-3 align-middle text-center">
                       {item.isActive ? (
-                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-semibold bg-black text-white">
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-semibold bg-brand-600 text-white">
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-semibold border border-black/20 text-gray-700">
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-semibold border border-black/20 text-stone-700">
                           Inactive
                         </span>
                       )}
@@ -845,7 +845,7 @@ export default function Items() {
                             e.stopPropagation();
                             openEdit(item);
                           }}
-                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-black/20 hover:bg-black hover:text-white transition-colors"
+                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-black/20 hover:bg-brand-600 hover:text-white transition-colors"
                         >
                           Edit
                         </button>
@@ -870,12 +870,12 @@ export default function Items() {
                 );
                 fetchItems(pagination.page - 1, 10, appliedSearchTerm.trim());
               }}
-              className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
+              className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-brand-600 hover:text-white transition-colors"
             >
               Previous
             </button>
 
-            <span className="text-gray-700">
+            <span className="text-stone-700">
               Page {pagination.page} of {pagination.totalPages}
             </span>
 
@@ -888,7 +888,7 @@ export default function Items() {
                 );
                 fetchItems(pagination.page + 1, 10, appliedSearchTerm.trim());
               }}
-              className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-black hover:text-white transition-colors"
+              className="px-4 py-2 rounded-full border border-black/15 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-brand-600 hover:text-white transition-colors"
             >
               Next
             </button>
@@ -914,14 +914,14 @@ export default function Items() {
               <div className="min-w-0">
                 <h2
                   id="wh-modal-title"
-                  className="text-lg font-bold text-gray-900 truncate"
+                  className="text-lg font-bold text-stone-900 truncate"
                 >
                   Warehouse stock
                 </h2>
                 <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">
                   {warehouseUiItem.name}
                 </p>
-                <p className="text-xs text-gray-500 mt-1 font-mono">
+                <p className="text-xs text-stone-500 mt-1 font-mono">
                   Product ID:{" "}
                   {warehouseUiItem.productId != null &&
                   String(warehouseUiItem.productId).trim() !== ""
@@ -932,7 +932,7 @@ export default function Items() {
               <button
                 type="button"
                 onClick={() => setWarehouseUiItem(null)}
-                className="p-2 rounded-full border border-black/10 hover:bg-black hover:text-white transition-colors shrink-0"
+                className="p-2 rounded-full border border-black/10 hover:bg-brand-600 hover:text-white transition-colors shrink-0"
                 aria-label="Close"
               >
                 <X size={18} />
@@ -940,16 +940,16 @@ export default function Items() {
             </div>
 
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-6">
-              <div className="rounded-xl border border-black/10 bg-gray-50 p-4">
-                <h3 className="text-sm font-semibold text-gray-900">
+              <div className="rounded-xl border border-black/10 bg-canvas-muted p-4">
+                <h3 className="text-sm font-semibold text-stone-900">
                   Add all SKUs to a warehouse
                 </h3>
-                <p className="text-xs text-gray-600 mt-1 max-w-2xl">
+                <p className="text-xs text-stone-600 mt-1 max-w-2xl">
                   Moves the same quantity from <strong>central</strong> catalog
                   stock into the chosen warehouse for every SKU on this product.
                 </p>
                 <div className="mt-3 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
-                  <label className="flex flex-col gap-1 text-xs text-gray-600 min-w-[200px] flex-1">
+                  <label className="flex flex-col gap-1 text-xs text-stone-600 min-w-[200px] flex-1">
                     <span className="font-medium text-gray-800">Warehouse</span>
                     <select
                       value={pickWarehouseId}
@@ -972,7 +972,7 @@ export default function Items() {
                       )}
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1 text-xs text-gray-600 w-full sm:w-28">
+                  <label className="flex flex-col gap-1 text-xs text-stone-600 w-full sm:w-28">
                     <span className="font-medium text-gray-800">Qty / SKU</span>
                     <input
                       type="number"
@@ -994,7 +994,7 @@ export default function Items() {
                       !Number.isInteger(Number(whQtyPerSku)) ||
                       Number(whQtyPerSku) < 1
                     }
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-black text-white px-5 py-2.5 text-sm font-medium hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 text-white px-5 py-2.5 text-sm font-medium hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {whApplyLoading ? (
                       <>
@@ -1010,7 +1010,7 @@ export default function Items() {
 
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <h3 className="text-sm font-semibold text-gray-900">
+                  <h3 className="text-sm font-semibold text-stone-900">
                     Stock by warehouse
                   </h3>
                   <button
@@ -1019,7 +1019,7 @@ export default function Items() {
                     disabled={
                       whPresenceLoading || warehouseListOpts.length === 0
                     }
-                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-black/15 hover:bg-black hover:text-white transition-colors disabled:opacity-40"
+                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-black/15 hover:bg-brand-600 hover:text-white transition-colors disabled:opacity-40"
                   >
                     Refresh
                   </button>
@@ -1044,7 +1044,7 @@ export default function Items() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="px-3 py-8 text-center text-gray-500"
+                            className="px-3 py-8 text-center text-stone-500"
                           >
                             <span className="inline-flex items-center gap-2 justify-center">
                               <Loader2 className="animate-spin" size={16} />
@@ -1056,7 +1056,7 @@ export default function Items() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="px-3 py-6 text-center text-gray-500 text-sm"
+                            className="px-3 py-6 text-center text-stone-500 text-sm"
                           >
                             No warehouses loaded, or this product has no name to
                             match stock.
@@ -1072,7 +1072,7 @@ export default function Items() {
                                 : "bg-white"
                             }`}
                           >
-                            <td className="px-3 py-2.5 font-medium text-gray-900">
+                            <td className="px-3 py-2.5 font-medium text-stone-900">
                               {row.name}
                               {row.fetchError ? (
                                 <span className="ml-1 text-xs text-amber-700">
@@ -1080,10 +1080,10 @@ export default function Items() {
                                 </span>
                               ) : null}
                             </td>
-                            <td className="px-3 py-2.5 font-mono text-xs text-gray-700">
+                            <td className="px-3 py-2.5 font-mono text-xs text-stone-700">
                               {row.code || "—"}
                             </td>
-                            <td className="px-3 py-2.5 text-gray-600">
+                            <td className="px-3 py-2.5 text-stone-600">
                               {row.city || "—"}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">
@@ -1098,7 +1098,7 @@ export default function Items() {
                     </tbody>
                   </table>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-2">
+                <p className="text-[11px] text-stone-500 mt-2">
                   Rows use catalog name search per warehouse, then match this
                   product by ID. Warehouses with no lines show 0. Highlighted rows
                   have stock in that warehouse.

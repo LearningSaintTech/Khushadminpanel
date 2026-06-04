@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import {
   getItemsWithSkus,
@@ -8,7 +8,6 @@ import {
   deleteReview,
 } from "../../apis/Reviewapi";
 import {
-  Search,
   Star,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +18,7 @@ import {
   MessageSquare,
   Package,
 } from "lucide-react";
+import { btnIconDelete, btnIconEdit, btnOutline, pageToolbar } from "./reviewsShared";
 
 function itemIdStr(item) {
   const id = item?.itemId;
@@ -37,7 +37,7 @@ function StarRow({ value, max = 5, size = "sm" }) {
         <Star
           key={i}
           className={`${cls} ${
-            i < n ? "fill-black text-black" : "text-gray-200"
+            i < n ? "fill-brand-600 text-brand-600" : "text-stone-200"
           }`}
         />
       ))}
@@ -57,6 +57,7 @@ export default function Reviews() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(12);
 
   const [statsMap, setStatsMap] = useState({});
   const [statsLoading, setStatsLoading] = useState(false);
@@ -80,18 +81,18 @@ export default function Reviews() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, limit]);
 
   const fetchItems = useCallback(async () => {
     setLoadingItems(true);
     try {
-      const res = await getItemsWithSkus(page, 12, debouncedSearch);
+      const res = await getItemsWithSkus(page, limit, debouncedSearch);
       if (res?.success && res.data) {
         setItems(res.data.items || []);
         const p = res.data.pagination || {};
         setPagination({
           page: p.page ?? page,
-          limit: p.limit ?? 12,
+          limit: p.limit ?? limit,
           total: p.total ?? 0,
           totalPages: p.totalPages ?? 1,
         });
@@ -106,7 +107,7 @@ export default function Reviews() {
     } finally {
       setLoadingItems(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, limit, debouncedSearch]);
 
   useEffect(() => {
     fetchItems();
@@ -248,37 +249,57 @@ export default function Reviews() {
     ? Math.max(1, ...Object.values(dist))
     : 1;
 
+  const currentPage = pagination.page ?? page;
+  const totalPages = Math.max(1, pagination.totalPages ?? 1);
+  const totalItems = pagination.total ?? 0;
+
   return (
-    <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Product reviews</h1>
-        <p className="text-sm text-gray-600 mb-6">
-          Search by product name, product ID, or SKU. Open a product to see all reviews; you can edit or delete any review.
-        </p>
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto`}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(1);
+        }}
+      >
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight text-stone-900 sm:text-lg">
+          Product reviews
+        </h1>
+        <input
+          type="search"
+          placeholder="Search name, product ID, SKU…"
+          className="min-w-[120px] flex-1 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:min-w-[160px] sm:max-w-[280px]"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="w-[108px] shrink-0 rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          value={limit}
+          onChange={(e) => setLimit(Number(e.target.value) || 12)}
+          title="Items per page"
+        >
+          <option value={12}>12 / page</option>
+          <option value={24}>24 / page</option>
+          <option value={36}>36 / page</option>
+          <option value={48}>48 / page</option>
+        </select>
+      </form>
 
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by product name, product ID, or SKU…"
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {loadingItems ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white py-14 text-[11px] text-stone-500 shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+          Loading products…
         </div>
-
-        {loadingItems ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-            <Package className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-600">No products match your search.</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      ) : items.length === 0 ? (
+        <div className="rounded-xl border border-border bg-white px-4 py-12 text-center shadow-sm">
+          <Package className="mx-auto mb-2 h-9 w-9 text-stone-300" aria-hidden />
+          <p className="text-sm font-semibold text-stone-900">No products found</p>
+          <p className="mt-1 text-[11px] text-stone-500">Try another search term.</p>
+        </div>
+      ) : (
+        <>
+          <div className="max-h-[calc(100vh-14rem)] overflow-auto overscroll-contain rounded-xl border border-border bg-white p-2 shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {items.map((item) => {
                 const id = itemIdStr(item);
                 const stats = statsMap[id];
@@ -290,102 +311,97 @@ export default function Reviews() {
                     key={id || item.name}
                     type="button"
                     onClick={() => openDetail(item)}
-                    className="text-left bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md hover:border-gray-300 transition-all"
+                    className="text-left rounded-xl border border-border bg-white p-3 shadow-sm transition hover:border-brand-200 hover:bg-brand-50/20"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h2 className="font-semibold text-gray-900 truncate">
+                        <h2 className="truncate text-xs font-semibold text-stone-900">
                           {item.name || "—"}
                         </h2>
-                        <p className="text-xs text-gray-500 font-mono mt-0.5">
+                        <p className="mt-0.5 font-mono text-[10px] text-stone-500">
                           ID: {item.productId || "—"}
                         </p>
-                        <p className="text-[11px] text-gray-400 font-mono truncate mt-1">
+                        <p className="mt-1 truncate font-mono text-[10px] text-stone-400">
                           {id}
                         </p>
                       </div>
-                      <MessageSquare className="w-5 h-5 text-gray-400 shrink-0" />
+                      <MessageSquare className="h-4 w-4 shrink-0 text-stone-400" />
                     </div>
 
                     {statsLoading && !stats ? (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading stats…
+                      <div className="flex items-center gap-2 text-xs text-stone-500">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading…
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
                           <StarRow value={Math.round(avg || 0)} />
-                          <span className="text-sm font-medium text-gray-800">
+                          <span className="text-xs font-semibold text-stone-800">
                             {avg != null ? avg.toFixed(1) : "—"}
                           </span>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-xs text-stone-500">
                             ({total} review{total !== 1 ? "s" : ""})
                           </span>
                         </div>
                         {stats?.distribution && (
-                          <div className="space-y-1 mt-3 pt-3 border-t border-gray-100">
+                          <div className="mt-2 space-y-1 border-t border-border/80 pt-2">
                             {[5, 4, 3, 2, 1].map((star) => {
                               const c = stats.distribution[star] || 0;
                               const pct = (c / maxDist) * 100;
                               return (
                                 <div
                                   key={star}
-                                  className="flex items-center gap-2 text-xs"
+                                  className="flex items-center gap-2 text-[10px]"
                                 >
-                                  <span className="w-3 text-gray-500">{star}★</span>
-                                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <span className="w-3 text-stone-500">{star}★</span>
+                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-canvas-muted">
                                     <div
-                                      className="h-full bg-gray-900 rounded-full transition-all"
+                                      className="h-full rounded-full bg-brand-600 transition-all"
                                       style={{ width: `${pct}%` }}
                                     />
                                   </div>
-                                  <span className="w-6 text-right text-gray-600">{c}</span>
+                                  <span className="w-6 text-right text-stone-600">{c}</span>
                                 </div>
                               );
                             })}
                           </div>
                         )}
-                        <p className="text-xs text-gray-500 mt-3">
-                          Click to view & manage reviews
-                        </p>
+                        <p className="mt-2 text-[10px] text-stone-500">Open to manage</p>
                       </>
                     )}
                   </button>
                 );
               })}
             </div>
+          </div>
 
-            {pagination.totalPages > 1 && (
-              <div className="flex justify-center items-center gap-4 mt-8">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-40"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Prev
-                </button>
-                <span className="text-sm text-gray-600">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPage((p) => Math.min(pagination.totalPages, p + 1))
-                  }
-                  disabled={page >= pagination.totalPages}
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-40"
-                >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] text-stone-500">
+              Page {currentPage} of {totalPages}
+              {totalItems > 0 ? ` (${totalItems} products)` : ""}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || loadingItems}
+                className={btnOutline}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || loadingItems}
+                className={btnOutline}
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Detail: all reviews for item */}
       {detailOpen && selectedItem && (
@@ -394,33 +410,33 @@ export default function Reviews() {
           onClick={(e) => e.target === e.currentTarget && closeDetail()}
         >
           <div
-            className="bg-white w-full max-w-lg h-full sm:h-[min(100vh-2rem,900px)] sm:rounded-xl shadow-xl flex flex-col overflow-hidden"
+            className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-white shadow-xl sm:h-[min(100vh-2rem,900px)] sm:rounded-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 p-4 border-b border-gray-200">
+            <div className="flex items-start justify-between gap-3 border-b border-border bg-white p-3">
               <div className="min-w-0">
-                <h2 className="font-bold text-lg text-gray-900 leading-tight">
+                <h2 className="truncate text-sm font-semibold text-stone-900 leading-tight">
                   {selectedItem.name}
                 </h2>
-                <p className="text-xs text-gray-500 font-mono mt-1">
+                <p className="mt-0.5 font-mono text-[10px] text-stone-500">
                   Product ID: {selectedItem.productId || "—"}
                 </p>
-                <p className="text-[11px] text-gray-400 font-mono truncate">
+                <p className="truncate font-mono text-[10px] text-stone-400">
                   {itemIdStr(selectedItem)}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeDetail}
-                className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                className="rounded-lg p-1.5 text-stone-600 hover:bg-canvas-muted"
                 aria-label="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <p className="text-xs font-semibold text-gray-700 uppercase mb-2">
+            <div className="border-b border-border bg-canvas-muted p-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-stone-600">
                 Summary
               </p>
               {statsMap[itemIdStr(selectedItem)] && (
@@ -431,12 +447,12 @@ export default function Reviews() {
                     )}
                     size="lg"
                   />
-                  <span className="text-lg font-semibold">
+                  <span className="text-base font-semibold text-stone-900">
                     {statsMap[itemIdStr(selectedItem)].averageRating != null
                       ? statsMap[itemIdStr(selectedItem)].averageRating.toFixed(1)
                       : "—"}
                   </span>
-                  <span className="text-sm text-gray-600">
+                  <span className="text-xs text-stone-600">
                     {statsMap[itemIdStr(selectedItem)].totalReviews} total
                   </span>
                 </div>
@@ -447,15 +463,15 @@ export default function Reviews() {
                     const c = dist[star] || 0;
                     const pct = (c / maxDist) * 100;
                     return (
-                      <div key={star} className="flex items-center gap-2 text-xs">
-                        <span className="w-3 text-gray-500">{star}★</span>
-                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div key={star} className="flex items-center gap-2 text-[10px]">
+                        <span className="w-3 text-stone-500">{star}★</span>
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-200">
                           <div
-                            className="h-full bg-gray-900 rounded-full"
+                            className="h-full rounded-full bg-brand-600"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className="w-6 text-right">{c}</span>
+                        <span className="w-6 text-right text-stone-700">{c}</span>
                       </div>
                     );
                   })}
@@ -463,58 +479,56 @@ export default function Reviews() {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">
-                All reviews
-              </h3>
+            <div className="flex-1 overflow-y-auto p-3">
+              <h3 className="mb-2 text-xs font-semibold text-stone-800">All reviews</h3>
               {detailLoading ? (
                 <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                  <Loader2 className="h-7 w-7 animate-spin text-stone-400" />
                 </div>
               ) : itemReviews.length === 0 ? (
-                <p className="text-gray-500 text-sm">No reviews for this product yet.</p>
+                <p className="text-xs text-stone-500">No reviews for this product yet.</p>
               ) : (
-                <ul className="space-y-4">
+                <ul className="space-y-2">
                   {itemReviews.map((rev) => (
                     <li
                       key={rev._id}
-                      className="border border-gray-200 rounded-lg p-3 bg-white"
+                      className="rounded-lg border border-border bg-white p-2"
                     >
-                      <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="mb-1.5 flex items-start justify-between gap-2">
                         <div>
                           <StarRow value={Number(rev.rating) || 0} />
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="mt-0.5 text-[10px] text-stone-500">
                             {rev.name || "Customer"}
                           </p>
                         </div>
-                        <div className="flex gap-1 shrink-0">
+                        <div className="flex shrink-0 gap-1">
                           <button
                             type="button"
                             onClick={() => openEdit(rev)}
-                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-700"
+                            className={btnIconEdit}
                             title="Edit"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDelete(rev)}
-                            className="p-2 rounded-lg hover:bg-red-50 text-red-600"
+                            className={btnIconDelete}
                             title="Delete"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
                           </button>
                         </div>
                       </div>
                       {rev.description ? (
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                        <p className="whitespace-pre-wrap text-xs text-stone-800">
                           {rev.description}
                         </p>
                       ) : (
-                        <p className="text-sm text-gray-400 italic">No text</p>
+                        <p className="text-xs italic text-stone-400">No text</p>
                       )}
                       {Array.isArray(rev.images) && rev.images.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {rev.images.map((img, i) => {
                             const src = img?.url || img?.imageUrl;
                             if (!src) return null;
@@ -523,7 +537,7 @@ export default function Reviews() {
                                 key={img?.key || img?.imageKey || i}
                                 src={src}
                                 alt=""
-                                className="w-16 h-16 object-cover rounded border border-gray-200"
+                                className="h-16 w-16 rounded border border-border object-cover"
                               />
                             );
                           })}
@@ -541,26 +555,26 @@ export default function Reviews() {
       {/* Edit review modal */}
       {editOpen && editingReview && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-100 flex items-center justify-center bg-black/50 p-4"
           onClick={(e) => e.target === e.currentTarget && closeEdit()}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-bold text-gray-900">Edit review</h3>
+            <div className="flex items-center justify-between border-b border-border p-3">
+              <h3 className="text-sm font-semibold text-stone-900">Edit review</h3>
               <button
                 type="button"
                 onClick={closeEdit}
-                className="p-1 rounded hover:bg-gray-100"
+                className="rounded-lg p-1.5 hover:bg-canvas-muted"
               >
-                <X className="w-5 h-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveEdit} className="p-4 space-y-4">
+            <form onSubmit={handleSaveEdit} className="space-y-3 p-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                <label className="mb-1 block text-[10px] font-semibold text-stone-700">
                   Rating
                 </label>
                 <div className="flex gap-1">
@@ -572,10 +586,10 @@ export default function Reviews() {
                       className="p-1"
                     >
                       <Star
-                        className={`w-8 h-8 ${
+                        className={`h-7 w-7 ${
                           s <= editRating
-                            ? "fill-black text-black"
-                            : "text-gray-200"
+                            ? "fill-brand-600 text-brand-600"
+                            : "text-stone-200"
                         }`}
                       />
                     </button>
@@ -583,18 +597,18 @@ export default function Reviews() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="mb-1 block text-[10px] font-semibold text-stone-700">
                   Comment
                 </label>
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full rounded-lg border border-border bg-white px-2.5 py-2 text-xs text-stone-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                <label className="mb-1 block text-[10px] font-semibold text-stone-700">
                   Replace images (optional, max 5)
                 </label>
                 <input
@@ -604,26 +618,26 @@ export default function Reviews() {
                   onChange={(e) =>
                     setEditFiles(Array.from(e.target.files || []).slice(0, 5))
                   }
-                  className="text-sm w-full"
+                  className="w-full text-xs"
                 />
                 {editFiles.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="mt-1 text-[10px] text-stone-500">
                     {editFiles.length} new file(s) — saving replaces existing photos.
                   </p>
                 )}
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={closeEdit}
-                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-stone-700 shadow-sm hover:bg-canvas-muted"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={editSaving}
-                  className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg disabled:opacity-50"
+                  className="rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
                 >
                   {editSaving ? "Saving…" : "Save"}
                 </button>

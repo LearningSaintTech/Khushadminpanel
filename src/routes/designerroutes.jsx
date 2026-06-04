@@ -9,6 +9,7 @@ import DesignerInventoryForm from "../designer/components/inventory/DesignerInve
 import DesignerProfile from "../designer/components/profile/DesignerProfile";
 import DesignerSizeChartManager from "../designer/components/sizechart/DesignerSizeChartManager";
 import DesignerListingTemplateManager from "../designer/components/listingTemplate/DesignerListingTemplateManager";
+import PanelEntryRedirect from "../components/PanelEntryRedirect";
 
 const DesignerRoutes = () => {
   return (
@@ -18,7 +19,11 @@ const DesignerRoutes = () => {
 
       <Route
         element={
-          <ProtectedRoute allowedRoles={["DESIGNER"]}>
+          <ProtectedRoute
+            allowedRoles={["DESIGNER"]}
+            loginPath="/designer/login"
+            wrongRolePolicy="login"
+          >
             <DesignerLayout />
           </ProtectedRoute>
         }
@@ -32,7 +37,16 @@ const DesignerRoutes = () => {
         <Route path="profile" element={<DesignerProfile />} />
       </Route>
 
-      <Route index element={<Navigate to="/designer/login" replace />} />
+      <Route
+        index
+        element={
+          <PanelEntryRedirect
+            allowedRoles={["DESIGNER"]}
+            loginPath="/designer/login"
+            homePath="/designer/dashboard"
+          />
+        }
+      />
       <Route path="*" element={<Navigate to="/designer/login" replace />} />
     </Routes>
   );

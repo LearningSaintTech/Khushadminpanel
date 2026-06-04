@@ -1,4 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
+import { clearAdminOtpSessionStorage, clearDesignerSessionStorage } from "../utils/authRole";
 
 const initialState = {
   loading: false,
@@ -66,6 +67,8 @@ const globalSlice = createSlice({
       localStorage.removeItem("admin_phone");
       localStorage.removeItem("userId");
       localStorage.removeItem("influencer");
+      clearDesignerSessionStorage();
+      clearAdminOtpSessionStorage();
     },
   },
 });

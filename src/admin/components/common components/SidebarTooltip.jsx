@@ -51,8 +51,8 @@ export default function SidebarTooltip({ label, show, lightMode = false, childre
       }}
       className={`pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-lg ${
         lightMode
-          ? "border border-slate-200 bg-white text-slate-800"
-          : "border border-violet-900/50 bg-[#1a0a2e] text-white"
+          ? "border border-border bg-white text-stone-800"
+          : "border border-brand-800/50 bg-brand-950 text-white"
       }`}
     >
       {label}

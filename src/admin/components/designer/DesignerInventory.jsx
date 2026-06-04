@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, Info, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+  Eye,
+  Info,
+  Loader2,
+  Search,
+  X,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import {
   approveDesignerCatalogSync,
@@ -29,6 +40,19 @@ import {
   isVariantVideoMedia,
   variantMediaUrl,
 } from "../../../utils/variantMedia.js";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  alertDanger,
+  btnIconEdit,
+  btnOutline,
+  inputClass,
+  pageToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./designerShared";
+
+const LIMIT_OPTIONS = [10, 20, 50, 100];
 
 /** Table/list cell: clamp text + info opens full copy in modal. */
 const ADMIN_TABLE_SHORT_PEEK = 100;
@@ -78,6 +102,8 @@ function CatalogSyncControls({
   onApprove,
   onDismiss,
 }) {
+  const pending = r.catalogItemId && r.catalogUpdateStatus === "pending";
+  const busy = busyApproveCatalogId === r._id || busyDismissCatalogId === r._id;
   return (
     <div className="flex min-w-0 max-w-[9rem] flex-col gap-1 sm:min-w-[118px] sm:max-w-none">
       <span
@@ -93,25 +119,30 @@ function CatalogSyncControls({
             : "Up to date"
           : "—"}
       </span>
-      {r.catalogItemId && r.catalogUpdateStatus === "pending" ? (
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-left text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-            disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
-            onClick={() => onApprove(r)}
-          >
-            {busyApproveCatalogId === r._id ? "Applying…" : "Apply to catalog"}
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            disabled={busyApproveCatalogId === r._id || busyDismissCatalogId === r._id}
-            onClick={() => onDismiss(r)}
-          >
-            {busyDismissCatalogId === r._id ? "Clearing…" : "Dismiss pending"}
-          </button>
-        </div>
+      {pending ? (
+        <select
+          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50"
+          disabled={busy}
+          defaultValue=""
+          onChange={(e) => {
+            const v = e.target.value;
+            // reset back to placeholder
+            e.target.value = "";
+            if (v === "apply") onApprove(r);
+            if (v === "dismiss") onDismiss(r);
+          }}
+          title="Catalog sync actions"
+        >
+          <option value="">
+            {busyApproveCatalogId === r._id
+              ? "Applying…"
+              : busyDismissCatalogId === r._id
+                ? "Clearing…"
+                : "Actions…"}
+          </option>
+          <option value="apply">Apply to catalog</option>
+          <option value="dismiss">Dismiss pending</option>
+        </select>
       ) : null}
     </div>
   );
@@ -213,14 +244,19 @@ const getSkuIds = (item) => {
 
 const DesignerInventory = () => {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
   const presetDesignerId = params.get("designerId") || "";
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [status, setStatus] = useState("");
   const [listedFilter, setListedFilter] = useState("");
   const [catalogSyncFilter, setCatalogSyncFilter] = useState("");
   const [search, setSearch] = useState("");
-  const [pagination, setPagination] = useState({ totalPages: 1 });
+  const [pagination, setPagination] = useState({ totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(false);
   const [exportingType, setExportingType] = useState("");
   const [error, setError] = useState("");
@@ -233,12 +269,63 @@ const DesignerInventory = () => {
   const [selectedRowIds, setSelectedRowIds] = useState([]);
   const [selectedRegenProgress, setSelectedRegenProgress] = useState({ done: 0, total: 0 });
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedItemTab, setSelectedItemTab] = useState("overview"); // overview | details | production | variants | skus
   const [listModalDesigner, setListModalDesigner] = useState(null);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
   const [fullTextModal, setFullTextModal] = useState(null);
   const [catalogCategories, setCatalogCategories] = useState([]);
   const [subcategoryLabels, setSubcategoryLabels] = useState({});
   const [subcategoryLabelsLoading, setSubcategoryLabelsLoading] = useState(false);
+
+  // Visible columns (desktop table)
+  const DESIGNER_INV_COLUMNS_STORAGE_KEY = "khush_admin_designer_inventory_visible_columns";
+  const DESIGNER_INV_TABLE_COLUMNS = [
+    { key: "style", label: "Style", defaultVisible: true, alwaysVisible: true },
+    { key: "designer", label: "Designer", defaultVisible: true, alwaysVisible: true },
+    { key: "product", label: "Product", defaultVisible: true },
+    { key: "shortDescription", label: "Short Description", defaultVisible: false },
+    { key: "longDescription", label: "Long Description", defaultVisible: false },
+    { key: "seo", label: "SEO", defaultVisible: false },
+    { key: "price", label: "Price", defaultVisible: true },
+    { key: "gender", label: "Gender", defaultVisible: false },
+    { key: "skuIds", label: "SKU IDs", defaultVisible: false },
+    { key: "status", label: "Status", defaultVisible: true, alwaysVisible: true },
+    { key: "catalogSync", label: "Catalog sync", defaultVisible: true },
+    { key: "listed", label: "Listed", defaultVisible: true, alwaysVisible: true },
+    { key: "action", label: "Action", defaultVisible: true, alwaysVisible: true },
+  ];
+
+  const defaultDesignerInvVisibleKeys = () =>
+    DESIGNER_INV_TABLE_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key);
+
+  const loadDesignerInvVisibleKeys = () => {
+    const fallback = defaultDesignerInvVisibleKeys();
+    try {
+      const raw = localStorage.getItem(DESIGNER_INV_COLUMNS_STORAGE_KEY);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return fallback;
+      const valid = new Set(DESIGNER_INV_TABLE_COLUMNS.map((c) => c.key));
+      const keys = [...new Set(parsed.filter((k) => valid.has(k)))];
+      DESIGNER_INV_TABLE_COLUMNS.filter((c) => c.alwaysVisible).forEach((c) => {
+        if (!keys.includes(c.key)) keys.unshift(c.key);
+      });
+      return keys.length ? keys : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const persistDesignerInvVisibleKeys = (keys) => {
+    try {
+      localStorage.setItem(DESIGNER_INV_COLUMNS_STORAGE_KEY, JSON.stringify(keys));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(loadDesignerInvVisibleKeys);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   const mergeRowFromApi = (id, data) => {
     if (!id || !data) return;
@@ -289,20 +376,22 @@ const DesignerInventory = () => {
     setError("");
     const query = {
       page,
-      limit: 10,
+      limit,
       search,
       status,
       designerId: presetDesignerId,
       isListed: listedFilter,
       catalogUpdateStatus: catalogSyncFilter,
     };
-    console.log("[DesignerInventory] fetch list", query);
     try {
       const res = await getDesignerInventory(query);
-      console.log("[DesignerInventory] fetch list response", res);
       if (res?.success) {
         setRows(res.data?.items || []);
-        setPagination(res.data?.pagination || { totalPages: 1 });
+        const pag = res.data?.pagination || {};
+        setPagination({
+          totalPages: pag.totalPages || 1,
+          total: pag.total ?? res.data?.items?.length ?? 0,
+        });
       } else {
         setError(res?.message || "Failed to fetch inventory.");
       }
@@ -316,11 +405,11 @@ const DesignerInventory = () => {
 
   useEffect(() => {
     fetchRows();
-  }, [page, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
+  }, [page, limit, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
 
   useEffect(() => {
     setSelectedRowIds([]);
-  }, [page, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
+  }, [page, limit, status, listedFilter, catalogSyncFilter, search, presetDesignerId]);
 
   useEffect(() => {
     (async () => {
@@ -713,12 +802,14 @@ const DesignerInventory = () => {
       const res = await getDesignerInventoryById(row._id);
       if (res?.success && res?.data) {
         setSelectedItem(res.data);
+        setSelectedItemTab("overview");
         return;
       }
     } catch {
       // Fallback to row data if detail fetch fails.
     }
     setSelectedItem(row);
+    setSelectedItemTab("overview");
   };
 
   useEffect(() => {
@@ -755,41 +846,56 @@ const DesignerInventory = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [fullTextModal]);
 
-  return (
-    <div className="min-w-0 bg-white p-3 text-black sm:p-4 lg:mx-auto lg:max-w-[min(100vw-1rem,90rem)]">
-      <div className="mb-3 sm:mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Designer Inventory</h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">Review inventory submissions and update approval status.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("csv")}>{exportingType === "csv" ? "Exporting..." : "CSV"}</button>
-          <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("excel")}>{exportingType === "excel" ? "Exporting..." : "Excel"}</button>
-          <button className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={exportingType !== ""} onClick={() => onExport("pdf")}>{exportingType === "pdf" ? "Exporting..." : "PDF"}</button>
-          <button
-            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={exportingType !== "" || regeneratingAll || regeneratingSelected || selectedRowIds.length === 0}
-            onClick={onRegenerateSelectedSkuIds}
-            title="Regenerate SKU IDs only for selected rows"
-          >
-            {regeneratingSelected
-              ? `Regenerating selected... (${selectedRegenProgress.done}/${selectedRegenProgress.total})`
-              : `Regenerate selected SKU IDs${selectedRowIds.length ? ` (${selectedRowIds.length})` : ""}`}
-          </button>
-          <button
-            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs sm:text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={exportingType !== "" || regeneratingAll || regeneratingSelected}
-            onClick={onRegenerateAllSkuIds}
-            title="Regenerate all SKU IDs for the current filters"
-          >
-            {regeneratingAll ? "Regenerating..." : "Regenerate all SKU IDs"}
-          </button>
-        </div>
-      </div>
+  const rowIndexBase = useMemo(() => (page - 1) * limit, [page, limit]);
+  const total = pagination.total ?? 0;
+  const totalPages = pagination.totalPages || 1;
+  const rangeStart = total === 0 ? 0 : rowIndexBase + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * limit, total);
 
-      <div className="mb-3 sm:mb-4 flex flex-col gap-2 sm:flex-row">
-        <input className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by designer, style, SKU, meta title, tags…" />
-        <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[170px]" value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
+  return (
+    <div className="text-stone-900">
+      <form
+        className={`${pageToolbar} flex-nowrap items-center overflow-x-auto overflow-y-visible`}
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <button
+          type="button"
+          onClick={() =>
+            window.history.length > 1 ? navigate(-1) : navigate(ap("designer"))
+          }
+          className={btnOutline}
+          title="Back"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+          Designer inventory
+        </h1>
+        <div className="relative min-w-[140px] flex-1 sm:max-w-[220px]">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+            aria-hidden
+          />
+          <input
+            type="search"
+            className={`${inputClass} w-full pl-8`}
+            value={search}
+            onChange={(e) => {
+              setPage(1);
+              setSearch(e.target.value);
+            }}
+            placeholder="Search style, designer…"
+          />
+        </div>
+        <select
+          className={`${inputClass} w-[124px] shrink-0`}
+          value={status}
+          onChange={(e) => {
+            setPage(1);
+            setStatus(e.target.value);
+          }}
+        >
           <option value="">All status</option>
           <option value="draft">draft</option>
           <option value="submitted">submitted</option>
@@ -797,55 +903,216 @@ const DesignerInventory = () => {
           <option value="rejected">rejected</option>
           <option value="archived">archived</option>
         </select>
-        <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[160px]" value={listedFilter} onChange={(e) => { setPage(1); setListedFilter(e.target.value); }}>
+        <select
+          className={`${inputClass} w-[116px] shrink-0`}
+          value={listedFilter}
+          onChange={(e) => {
+            setPage(1);
+            setListedFilter(e.target.value);
+          }}
+        >
           <option value="">All listing</option>
           <option value="true">Listed</option>
           <option value="false">Not listed</option>
         </select>
-        <select className="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30 focus:ring-2 focus:ring-black/5 sm:min-w-[200px]" value={catalogSyncFilter} onChange={(e) => { setPage(1); setCatalogSyncFilter(e.target.value); }}>
+        <select
+          className={`${inputClass} w-[148px] shrink-0`}
+          value={catalogSyncFilter}
+          onChange={(e) => {
+            setPage(1);
+            setCatalogSyncFilter(e.target.value);
+          }}
+        >
           <option value="">All catalog sync</option>
-          <option value="pending">Pending main-item sync</option>
+          <option value="pending">Pending sync</option>
         </select>
-      </div>
-      {error ? (
-        <div className="mb-3 whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
+        <select
+          className={`${inputClass} w-[108px] shrink-0`}
+          value={limit}
+          onChange={(e) => {
+            setPage(1);
+            setLimit(parseInt(e.target.value, 10) || 20);
+          }}
+          title="Rows per page"
+        >
+          {LIMIT_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setColumnsOpen((o) => !o)}
+            className={btnOutline}
+            aria-expanded={columnsOpen}
+            aria-haspopup="dialog"
+            title="Choose columns to show"
+          >
+            <Columns3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Columns
+            <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-900">
+              {visibleColumnKeys.length}
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 shrink-0 transition-transform ${columnsOpen ? "rotate-180" : ""}`}
+              aria-hidden
+            />
+          </button>
+          {columnsOpen ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 bg-stone-900/20"
+                aria-label="Close column picker"
+                onClick={() => setColumnsOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-label="Visible columns"
+                className="fixed z-50 flex max-h-[min(70vh,22rem)] w-[min(20rem,calc(100vw-1.5rem))] flex-col rounded-xl border border-border bg-white p-2 shadow-xl left-1/2 top-[max(5rem,12vh)] -translate-x-1/2"
+              >
+                <p className="shrink-0 px-1.5 pb-1.5 text-[11px] font-semibold text-stone-700">
+                  Visible columns
+                </p>
+                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
+                  {DESIGNER_INV_TABLE_COLUMNS.map((col) => {
+                    const checked = visibleColumnKeys.includes(col.key);
+                    const locked = !!col.alwaysVisible;
+                    return (
+                      <label
+                        key={col.key}
+                        className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[12px] ${
+                          locked
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:bg-canvas-muted"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={locked}
+                          onChange={() => {
+                            if (locked) return;
+                            setVisibleColumnKeys((prev) => {
+                              const has = prev.includes(col.key);
+                              const next = has
+                                ? prev.filter((k) => k !== col.key)
+                                : [...prev, col.key];
+                              const always = DESIGNER_INV_TABLE_COLUMNS.filter(
+                                (c) => c.alwaysVisible,
+                              ).map((c) => c.key);
+                              const merged = [...new Set([...always, ...next])];
+                              persistDesignerInvVisibleKeys(merged);
+                              return merged;
+                            });
+                          }}
+                          className="h-3.5 w-3.5 rounded border-border text-brand-600"
+                        />
+                        {col.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-2 flex shrink-0 items-center justify-between border-t border-border pt-2">
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-brand-700 hover:text-brand-900"
+                    onClick={() => {
+                      const next = DESIGNER_INV_TABLE_COLUMNS.map((c) => c.key);
+                      setVisibleColumnKeys(next);
+                      persistDesignerInvVisibleKeys(next);
+                    }}
+                  >
+                    Show all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-stone-700 hover:text-stone-900"
+                    onClick={() => {
+                      const next = defaultDesignerInvVisibleKeys();
+                      setVisibleColumnKeys(next);
+                      persistDesignerInvVisibleKeys(next);
+                    }}
+                  >
+                    Reset default
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
-      ) : null}
+        <button
+          type="button"
+          className={`${btnOutline} !text-success`}
+          disabled={exportingType !== ""}
+          onClick={() => onExport("csv")}
+        >
+          {exportingType === "csv" ? "Exporting…" : "CSV"}
+        </button>
+        <button
+          type="button"
+          className={`${btnOutline} !text-brand-700`}
+          disabled={exportingType !== ""}
+          onClick={() => onExport("excel")}
+        >
+          {exportingType === "excel" ? "Exporting…" : "Excel"}
+        </button>
+        <button
+          type="button"
+          className={`${btnOutline} !text-danger`}
+          disabled={exportingType !== ""}
+          onClick={() => onExport("pdf")}
+        >
+          {exportingType === "pdf" ? "Exporting…" : "PDF"}
+        </button>
+        <button
+          type="button"
+          className={btnOutline}
+          disabled={
+            exportingType !== "" ||
+            regeneratingAll ||
+            regeneratingSelected ||
+            selectedRowIds.length === 0
+          }
+          onClick={onRegenerateSelectedSkuIds}
+          title="Regenerate SKU IDs only for selected rows"
+        >
+          {regeneratingSelected
+            ? `Regen… (${selectedRegenProgress.done}/${selectedRegenProgress.total})`
+            : `Regen selected${selectedRowIds.length ? ` (${selectedRowIds.length})` : ""}`}
+        </button>
+        <button
+          type="button"
+          className={btnOutline}
+          disabled={exportingType !== "" || regeneratingAll || regeneratingSelected}
+          onClick={onRegenerateAllSkuIds}
+          title="Regenerate all SKU IDs for the current filters"
+        >
+          {regeneratingAll ? "Regenerating…" : "Regen all SKUs"}
+        </button>
+      </form>
 
-      <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-xs text-indigo-950">
-        <p className="font-semibold">Review workflow</p>
-        <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-indigo-900/90">
-          <li>Designer submits → status becomes <strong>submitted</strong>.</li>
-          <li>Set status to <strong>approved</strong> (PATCH …/status).</li>
-          <li>
-            Set <strong>Listed</strong> to publish: creates main catalog item, then PATCH …/listed{" "}
-            <code className="rounded bg-white/80 px-1">{"{ isListed: true }"}</code>.
-          </li>
-          <li>
-            Set Listed to <strong>Not listed</strong> to hide without deleting (
-            <code className="rounded bg-white/80 px-1">{"{ isListed: false }"}</code>).
-          </li>
-        </ol>
-      </div>
+      {error ? <div className={`${alertDanger} mb-2 whitespace-pre-wrap`}>{error}</div> : null}
 
       {/* Card layout: small / split viewports (incl. narrow MacBook) */}
       <div className="space-y-3 lg:hidden">
         {loading ? (
-          <div className="flex justify-center rounded-xl border border-black/10 bg-white py-10 text-gray-500">
+          <div className="flex justify-center rounded-xl border border-border bg-white py-10 text-gray-500">
             Loading...
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-xl border border-black/10 bg-white py-10 text-center text-sm text-gray-500">
+          <div className="rounded-xl border border-border bg-white py-10 text-center text-sm text-gray-500">
             No records.
           </div>
         ) : (
           rows.map((r) => (
             <div
               key={r._id}
-              className="min-w-0 rounded-xl border border-black/10 bg-white p-4 shadow-sm"
+              className="min-w-0 rounded-xl border border-border bg-white p-4 shadow-sm"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-black/5 pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border/60 pb-3">
                 <label className="flex min-w-0 cursor-pointer items-start gap-2">
                   <input
                     type="checkbox"
@@ -962,7 +1229,7 @@ const DesignerInventory = () => {
                   </dd>
                 </div>
               </dl>
-              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-black/5 pt-3">
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-3">
                 <button
                   type="button"
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
@@ -1001,227 +1268,325 @@ const DesignerInventory = () => {
       </div>
 
       {/* Wide table: lg+ (full-width laptop / desktop) */}
-      <div className="hidden min-w-0 lg:block">
-        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-black/10 bg-white shadow-sm [-webkit-overflow-scrolling:touch]">
-          <table className="w-full min-w-[72rem] table-fixed text-sm xl:min-w-0 xl:table-auto">
-            <thead className="bg-gray-50/80">
+      <div className={`hidden lg:block ${tableScrollShell}`}>
+          <table className="w-full min-w-[84rem] table-auto text-[11px] xl:min-w-0">
+            <thead className={tableHeadClass}>
               <tr>
-                <th className="w-10 p-2 text-center font-semibold text-gray-700 xl:w-auto xl:p-2.5">
+                <th className={`${thClass} w-10 text-center`}>
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
                     onChange={toggleSelectAllVisible}
                     aria-label="Select all visible items"
+                    className="h-3.5 w-3.5 rounded border-border text-brand-600"
                   />
                 </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Style
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Designer
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Product
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Short Description
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Long Description
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  SEO
-                </th>
-                <th className="w-[5.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Price
-                </th>
-                <th className="w-[4.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Gender
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  SKU IDs
-                </th>
-                <th className="w-[5.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Status
-                </th>
-                <th className="min-w-0 p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Catalog sync
-                </th>
-                <th className="w-[6.5rem] p-2 text-left text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Listed
-                </th>
-                <th className="w-[7.5rem] p-2 text-right text-xs font-semibold text-gray-700 xl:w-auto xl:p-2.5 xl:text-sm">
-                  Action
-                </th>
+                <th className={`${thClass} w-10 text-center`}>#</th>
+                {visibleColumnKeys.includes("style") && (
+                  <th className={thClass}>Style</th>
+                )}
+                {visibleColumnKeys.includes("designer") && (
+                  <th className={thClass}>Designer</th>
+                )}
+                {visibleColumnKeys.includes("product") && (
+                  <th className={thClass}>Product</th>
+                )}
+                {visibleColumnKeys.includes("shortDescription") && (
+                  <th className={thClass}>Short Description</th>
+                )}
+                {visibleColumnKeys.includes("longDescription") && (
+                  <th className={thClass}>Long Description</th>
+                )}
+                {visibleColumnKeys.includes("seo") && (
+                  <th className={thClass}>SEO</th>
+                )}
+                {visibleColumnKeys.includes("price") && (
+                  <th className={`${thClass} w-[6.5rem] whitespace-nowrap`}>Price</th>
+                )}
+                {visibleColumnKeys.includes("gender") && (
+                  <th className={`${thClass} w-[5.5rem] whitespace-nowrap`}>Gender</th>
+                )}
+                {visibleColumnKeys.includes("skuIds") && (
+                  <th className={thClass}>SKU IDs</th>
+                )}
+                {visibleColumnKeys.includes("status") && (
+                  <th className={`${thClass} w-[6.5rem] whitespace-nowrap`}>Status</th>
+                )}
+                {visibleColumnKeys.includes("catalogSync") && (
+                  <th className={thClass}>Catalog sync</th>
+                )}
+                {visibleColumnKeys.includes("listed") && (
+                  <th className={`${thClass} w-[7.5rem] whitespace-nowrap`}>Listed</th>
+                )}
+                {visibleColumnKeys.includes("action") && (
+                  <th className={`${thClass} w-[12rem] text-right whitespace-nowrap`}>Action</th>
+                )}
               </tr>
             </thead>
-            <tbody>
-              {loading ? (
+            <tbody className="divide-y divide-border/60">
+              {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="p-4 text-gray-500">
-                    Loading...
+                  <td colSpan={14} className="py-12 text-center text-stone-500">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                      Loading…
+                    </span>
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="p-4 text-gray-500">
-                    No records.
+                  <td colSpan={14} className="px-4 py-10 text-center text-stone-500">
+                    No inventory items found.
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
-                  <tr key={r._id} className="border-t border-black/5">
-                    <td className="p-2 align-top text-center xl:p-2.5">
+                rows.map((r, idx) => (
+                  <tr key={r._id} className="hover:bg-canvas-muted/50">
+                    <td className="px-2 py-2 align-top text-center">
                       <input
                         type="checkbox"
                         checked={selectedRowIds.includes(r._id)}
                         onChange={() => toggleSelectRow(r._id)}
                         aria-label={`Select item ${r.StyleNumber || r._id}`}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
                       />
                     </td>
-                    <td className="min-w-0 p-2 align-top xl:p-2.5">
-                      <div className="truncate font-medium">{r.StyleNumber || "-"}</div>
-                      <div className="truncate text-xs text-gray-500">{r.employeeId || "-"}</div>
+                    <td className="px-2 py-2 align-top text-center text-[11px] tabular-nums text-gray-500">
+                      {(page - 1) * limit + idx + 1}
                     </td>
-                    <td className="min-w-0 p-2 align-top text-gray-700 xl:p-2.5">
-                      <span className="line-clamp-2 break-words text-xs">{r.designerName}</span>
-                    </td>
-                    <td className="min-w-0 p-2 align-top text-gray-700 xl:p-2.5">
-                      <span className="line-clamp-3 break-words text-xs">
-                        {r.productType || "—"}
-                        {r.productTypeCode ? (
-                          <span className="text-gray-500"> [{r.productTypeCode}]</span>
-                        ) : null}{" "}
-                        / {r.fitType || "—"}
-                      </span>
-                    </td>
-                    <td className="min-w-0 p-2 align-top xl:p-2.5">
-                      <InventoryTableTextPeek
-                        text={r.shortDescription}
-                        modalTitle="Short description"
-                        previewLen={ADMIN_TABLE_SHORT_PEEK}
-                        onOpenFull={setFullTextModal}
-                      />
-                    </td>
-                    <td className="min-w-0 p-2 align-top xl:p-2.5">
-                      <InventoryTableTextPeek
-                        text={r.longDescription}
-                        modalTitle="Long description"
-                        previewLen={ADMIN_TABLE_LONG_PEEK}
-                        onOpenFull={setFullTextModal}
-                      />
-                    </td>
-                    <td
-                      className="min-w-0 max-w-[9rem] p-2 align-top text-xs text-gray-700 xl:max-w-none xl:p-2.5"
-                      title={[
-                        r.metaTitle && `Title: ${r.metaTitle}`,
-                        r.metaDescription && `Meta: ${r.metaDescription}`,
-                        Array.isArray(r.metaTags) && r.metaTags.length && `Tags: ${r.metaTags.join(", ")}`,
-                      ]
-                        .filter(Boolean)
-                        .join("\n")}
-                    >
-                      <div className="font-medium text-gray-900 line-clamp-1">
-                        {String(r.metaTitle || "").trim() || "—"}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-gray-500 line-clamp-2 break-words">
-                        {Array.isArray(r.metaTags) && r.metaTags.length > 0 ? r.metaTags.join(", ") : ""}
-                      </div>
-                    </td>
-                    <td className="p-2 align-top text-gray-700 xl:p-2.5">
-                      <div className="text-xs">MRP: {Number(r.mrp ?? 0)}</div>
-                      <div className="text-xs">Disc: {Number(r.discountPrice ?? 0)}</div>
-                    </td>
-                    <td className="p-2 align-top xl:p-2.5">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getGenderClasses(r.gender)}`}
+                    {visibleColumnKeys.includes("style") && (
+                      <td className="min-w-0 px-2 py-2 align-top">
+                        <div className="truncate font-semibold text-gray-900">{r.StyleNumber || "-"}</div>
+                        <div className="truncate text-[10px] text-gray-500">{r.employeeId || "-"}</div>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("designer") && (
+                      <td className="min-w-0 px-2 py-2 align-top text-gray-700">
+                        <span className="line-clamp-2 break-words text-[11px]">{r.designerName}</span>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("product") && (
+                      <td className="min-w-0 px-2 py-2 align-top text-gray-700">
+                        <span className="line-clamp-3 break-words text-[11px]">
+                          {r.productType || "—"}
+                          {r.productTypeCode ? (
+                            <span className="text-gray-500"> [{r.productTypeCode}]</span>
+                          ) : null}{" "}
+                          / {r.fitType || "—"}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("shortDescription") && (
+                      <td className="min-w-0 px-2 py-2 align-top">
+                        <InventoryTableTextPeek
+                          text={r.shortDescription}
+                          modalTitle="Short description"
+                          previewLen={ADMIN_TABLE_SHORT_PEEK}
+                          onOpenFull={setFullTextModal}
+                        />
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("longDescription") && (
+                      <td className="min-w-0 px-2 py-2 align-top">
+                        <InventoryTableTextPeek
+                          text={r.longDescription}
+                          modalTitle="Long description"
+                          previewLen={ADMIN_TABLE_LONG_PEEK}
+                          onOpenFull={setFullTextModal}
+                        />
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("seo") && (
+                      <td
+                        className="min-w-0 max-w-[9rem] px-2 py-2 align-top text-[11px] text-gray-700 xl:max-w-none"
+                        title={[
+                          r.metaTitle && `Title: ${r.metaTitle}`,
+                          r.metaDescription && `Meta: ${r.metaDescription}`,
+                          Array.isArray(r.metaTags) && r.metaTags.length && `Tags: ${r.metaTags.join(", ")}`,
+                        ]
+                          .filter(Boolean)
+                          .join("\n")}
                       >
-                        {r.gender || "-"}
-                      </span>
-                    </td>
-                    <td className="min-w-0 p-2 align-top xl:p-2.5">
-                      <div className="truncate text-xs text-gray-700 xl:max-w-[14rem] xl:whitespace-normal xl:break-words">
-                        {getSkuIds(r).slice(0, 3).join(", ") || "-"}
-                      </div>
-                      {getSkuIds(r).length > 3 ? (
-                        <div className="text-[11px] text-gray-500">+{getSkuIds(r).length - 3} more</div>
-                      ) : null}
-                    </td>
-                    <td className="p-2 align-top xl:p-2.5">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusClasses(r.status)}`}
-                      >
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="min-w-0 p-2 align-top xl:p-2.5">
-                      <CatalogSyncControls
-                        row={r}
-                        busyApproveCatalogId={busyApproveCatalogId}
-                        busyDismissCatalogId={busyDismissCatalogId}
-                        onApprove={handleApproveCatalogSync}
-                        onDismiss={handleDismissCatalogPending}
-                      />
-                    </td>
-                    <td className="p-2 align-top xl:p-2.5">
-                      <select
-                        className="w-full max-w-[7.5rem] rounded-lg border border-teal-200 bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed xl:max-w-[9rem] xl:px-2 xl:py-1.5 xl:text-xs"
-                        disabled={busyListedId === r._id}
-                        value={listedSelectValue(r)}
-                        onChange={(e) => handleListedSelect(r, e)}
-                      >
-                        <option value="false">Not listed</option>
-                        <option value="true">Listed</option>
-                      </select>
-                    </td>
-                    <td className="p-2 align-top text-right xl:p-2.5">
-                      <div className="flex flex-wrap items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/15 text-gray-700 hover:bg-black hover:text-white transition-colors"
-                          onClick={() => openInventoryDetails(r)}
-                          title="View details"
-                          aria-label="View details"
+                        <div className="font-medium text-gray-900 line-clamp-1">
+                          {String(r.metaTitle || "").trim() || "—"}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-gray-500 line-clamp-2 break-words">
+                          {Array.isArray(r.metaTags) && r.metaTags.length > 0 ? r.metaTags.join(", ") : ""}
+                        </div>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("price") && (
+                      <td className="px-2 py-2 align-top text-gray-700">
+                        <div className="text-[11px] tabular-nums">
+                          <span className="text-gray-500">MRP:</span> {Number(r.mrp ?? 0)}
+                        </div>
+                        <div className="text-[11px] tabular-nums">
+                          <span className="text-gray-500">Disc:</span> {Number(r.discountPrice ?? 0)}
+                        </div>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("gender") && (
+                      <td className="px-2 py-2 align-top">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium capitalize ${getGenderClasses(r.gender)}`}
                         >
-                          <Eye size={14} />
-                        </button>
+                          {r.gender || "-"}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("skuIds") && (
+                      <td className="min-w-0 px-2 py-2 align-top">
+                        {(() => {
+                          const skus = getSkuIds(r);
+                          const preview = skus.slice(0, 2).join(", ");
+                          const more = Math.max(0, skus.length - 2);
+                          const full = skus.join(", ");
+                          return (
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className="truncate text-[11px] text-gray-700 xl:max-w-[14rem] xl:whitespace-normal xl:break-words"
+                                  title={full || undefined}
+                                >
+                                  {preview || "—"}
+                                </div>
+                                {more > 0 ? (
+                                  <div className="text-[11px] text-gray-500">+{more} more</div>
+                                ) : null}
+                              </div>
+                              {skus.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setFullTextModal({
+                                      title: "SKU IDs",
+                                      body: full || "—",
+                                    })
+                                  }
+                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                  title="View full SKU IDs"
+                                  aria-label="View full SKU IDs"
+                                >
+                                  <Info className="h-3.5 w-3.5" strokeWidth={2.25} />
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("status") && (
+                      <td className="px-2 py-2 align-top whitespace-nowrap">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusClasses(r.status)}`}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("catalogSync") && (
+                      <td className="min-w-0 px-2 py-2 align-top">
+                        <CatalogSyncControls
+                          row={r}
+                          busyApproveCatalogId={busyApproveCatalogId}
+                          busyDismissCatalogId={busyDismissCatalogId}
+                          onApprove={handleApproveCatalogSync}
+                          onDismiss={handleDismissCatalogPending}
+                        />
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("listed") && (
+                      <td className="px-2 py-2 align-top whitespace-nowrap">
                         <select
-                          className="min-w-0 max-w-[5.5rem] flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-1 py-1 text-[11px] font-medium text-indigo-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed xl:max-w-[7rem] xl:px-2 xl:py-1.5 xl:text-xs"
-                          disabled={busyStatusId === r._id}
-                          value={r.status}
-                          onChange={(e) => onChangeStatus(r, e.target.value)}
+                          className="min-w-[7.5rem] rounded-md border border-teal-200 bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-900 outline-none transition focus:border-teal-300 focus:ring-2 focus:ring-teal-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={busyListedId === r._id}
+                          value={listedSelectValue(r)}
+                          onChange={(e) => handleListedSelect(r, e)}
                         >
-                          <option value="draft">draft</option>
-                          <option value="submitted">submitted</option>
-                          <option value="approved">approved</option>
-                          <option value="rejected">rejected</option>
-                          <option value="archived">archived</option>
+                          <option value="false">Not listed</option>
+                          <option value="true">Listed</option>
                         </select>
-                        {String(r.status || "").toLowerCase() === "submitted" ? (
+                      </td>
+                    )}
+                    {visibleColumnKeys.includes("action") && (
+                      <td className="px-2 py-2 align-top text-right whitespace-nowrap">
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
                           <button
                             type="button"
-                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-1.5 py-1 text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 xl:text-[11px]"
-                            disabled={busyStatusId === r._id}
-                            onClick={() => quickApprove(r)}
-                            title="Approve"
+                            className={btnIconEdit}
+                            onClick={() => openInventoryDetails(r)}
+                            title="View details"
+                            aria-label="View details"
                           >
-                            OK
+                            <Eye className="h-3.5 w-3.5" aria-hidden />
                           </button>
-                        ) : null}
-                      </div>
-                    </td>
+                          <select
+                            className="min-w-[7rem] rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-1 text-[11px] font-medium text-indigo-900 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={busyStatusId === r._id}
+                            value={r.status}
+                            onChange={(e) => onChangeStatus(r, e.target.value)}
+                          >
+                            <option value="draft">draft</option>
+                            <option value="submitted">submitted</option>
+                            <option value="approved">approved</option>
+                            <option value="rejected">rejected</option>
+                            <option value="archived">archived</option>
+                          </select>
+                          {String(r.status || "").toLowerCase() === "submitted" ? (
+                            <button
+                              type="button"
+                              className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                              disabled={busyStatusId === r._id}
+                              onClick={() => quickApprove(r)}
+                              title="Approve"
+                            >
+                              OK
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
-        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-        <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm text-gray-700 hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
-        <span className="rounded-lg bg-gray-50 px-3 py-1.5 text-sm text-gray-700">Page {page} / {pagination.totalPages || 1}</span>
-        <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm text-gray-700 hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={page >= (pagination.totalPages || 1)} onClick={() => setPage((p) => p + 1)}>Next</button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          {loading ? (
+            "Loading…"
+          ) : total === 0 ? (
+            "0 items"
+          ) : (
+            <>
+              Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+              <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+              <span className="font-medium text-stone-700">{total}</span> total · Page{" "}
+              <span className="font-medium text-stone-700">{page}</span> of{" "}
+              <span className="font-medium text-stone-700">{totalPages}</span>
+            </>
+          )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => p - 1)}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
       </div>
 
       {lightbox.open ? (
@@ -1272,358 +1637,488 @@ const DesignerInventory = () => {
 
       {selectedItem ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[88vh] w-full min-w-0 max-w-5xl overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 sm:p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Inventory Details</h2>
-              <button className="rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-black hover:text-white transition-colors" onClick={() => setSelectedItem(null)}>
-                Close
-              </button>
+          <div className="max-h-[88vh] w-full min-w-0 max-w-5xl overflow-hidden rounded-2xl border border-border bg-white shadow-xl">
+            <div className="sticky top-0 z-10 border-b border-black/10 bg-white">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4">
+                <div className="min-w-0">
+                  <h2 className="truncate text-[13px] font-semibold text-gray-900">
+                    Inventory Details
+                  </h2>
+                  <p className="mt-0.5 truncate text-[11px] text-gray-500">
+                    {selectedItem.StyleNumber || "—"} · {selectedItem.designerName || "—"}
+                  </p>
+                </div>
+                <button
+                  className="shrink-0 rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-black hover:text-white transition-colors"
+                  onClick={() => setSelectedItem(null)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="px-3 pb-2 sm:px-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    ["overview", "Overview"],
+                    ["details", "Details"],
+                    ["production", "Production"],
+                    ["variants", "Variants"],
+                    ["skus", "SKUs"],
+                  ].map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedItemTab(key)}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                        selectedItemTab === key
+                          ? "border-indigo-200 bg-indigo-50 text-indigo-800"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <div><span className="font-medium">Style Number:</span> {selectedItem.StyleNumber || "-"}</div>
-              <div><span className="font-medium">Designer:</span> {selectedItem.designerName || "-"}</div>
-              <div><span className="font-medium">Employee ID:</span> {selectedItem.employeeId || "-"}</div>
-              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
-                <p className="mb-2 text-xs font-semibold text-indigo-900">Admin actions</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-gray-600">
-                    Status
-                    <select
-                      className="ml-1 rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs font-medium text-indigo-800 disabled:opacity-50"
-                      disabled={busyStatusId === selectedItem._id}
-                      value={selectedItem.status || "draft"}
-                      onChange={(e) => onChangeStatus(selectedItem, e.target.value)}
-                    >
-                      <option value="draft">draft</option>
-                      <option value="submitted">submitted</option>
-                      <option value="approved">approved</option>
-                      <option value="rejected">rejected</option>
-                      <option value="archived">archived</option>
-                    </select>
-                  </label>
-                  <label className="text-xs text-gray-600">
-                    Listed
-                    <select
-                      className="ml-1 rounded-lg border border-teal-200 bg-white px-2 py-1 text-xs font-medium text-teal-800 disabled:opacity-50"
-                      disabled={busyListedId === selectedItem._id}
-                      value={listedSelectValue(selectedItem)}
-                      onChange={(e) => handleListedSelect(selectedItem, e)}
-                    >
-                      <option value="false">Not listed</option>
-                      <option value="true">Listed</option>
-                    </select>
-                  </label>
-                  {String(selectedItem.status || "").toLowerCase() === "submitted" ? (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
-                      disabled={busyStatusId === selectedItem._id}
-                      onClick={() => quickApprove(selectedItem)}
-                    >
-                      Quick approve
-                    </button>
-                  ) : null}
-                </div>
-                {!canAdminListItem(selectedItem) && !selectedItem.isListed ? (
-                  <p className="mt-2 text-[11px] text-amber-800">
-                    Approve this item before setting Listed to Yes.
-                  </p>
-                ) : null}
-              </div>
-              <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
-              <div><span className="font-medium">Listed (catalog):</span> {selectedItem.isListed ? "Yes" : "No"}</div>
-              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-slate-200 bg-slate-50/90 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-900">Store categories</h4>
-                {subcategoryLabelsLoading ? (
-                  <p className="text-xs text-gray-500">Loading names…</p>
-                ) : null}
-                <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="font-medium text-gray-600">Primary category</dt>
-                    <dd>{resolveCategoryName(selectedItem.categoryId)}</dd>
+            <div className="max-h-[calc(88vh-6.5rem)] overflow-y-auto p-3 text-[12px] text-gray-800 sm:p-4">
+              {selectedItemTab === "overview" ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div><span className="font-medium">Style:</span> {selectedItem.StyleNumber || "-"}</div>
+                    <div><span className="font-medium">Designer:</span> {selectedItem.designerName || "-"}</div>
+                    <div><span className="font-medium">Employee ID:</span> {selectedItem.employeeId || "-"}</div>
+                    <div><span className="font-medium">Status:</span> {selectedItem.status || "-"}</div>
+                    <div><span className="font-medium">Listed:</span> {selectedItem.isListed ? "Yes" : "No"}</div>
+                    <div><span className="font-medium">Catalog item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
                   </div>
-                  <div>
-                    <dt className="font-medium text-gray-600">Primary subcategory</dt>
-                    <dd>{resolveSubcategoryName(selectedItem.subcategoryId)}</dd>
+
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
+                    <p className="mb-2 text-[11px] font-semibold text-indigo-900">Admin actions</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-[11px] text-gray-700">
+                        Status
+                        <select
+                          className="ml-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-medium text-indigo-900 disabled:opacity-50"
+                          disabled={busyStatusId === selectedItem._id}
+                          value={selectedItem.status || "draft"}
+                          onChange={(e) => onChangeStatus(selectedItem, e.target.value)}
+                        >
+                          <option value="draft">draft</option>
+                          <option value="submitted">submitted</option>
+                          <option value="approved">approved</option>
+                          <option value="rejected">rejected</option>
+                          <option value="archived">archived</option>
+                        </select>
+                      </label>
+                      <label className="text-[11px] text-gray-700">
+                        Listed
+                        <select
+                          className="ml-1 rounded-md border border-teal-200 bg-white px-2 py-1 text-[11px] font-medium text-teal-900 disabled:opacity-50"
+                          disabled={busyListedId === selectedItem._id}
+                          value={listedSelectValue(selectedItem)}
+                          onChange={(e) => handleListedSelect(selectedItem, e)}
+                        >
+                          <option value="false">Not listed</option>
+                          <option value="true">Listed</option>
+                        </select>
+                      </label>
+                      {String(selectedItem.status || "").toLowerCase() === "submitted" ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                          disabled={busyStatusId === selectedItem._id}
+                          onClick={() => quickApprove(selectedItem)}
+                        >
+                          Quick approve
+                        </button>
+                      ) : null}
+                    </div>
+                    {!canAdminListItem(selectedItem) && !selectedItem.isListed ? (
+                      <p className="mt-2 text-[11px] text-amber-800">
+                        Approve this item before setting Listed to Yes.
+                      </p>
+                    ) : null}
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-gray-600">Secondary categories</dt>
-                    <dd>
-                      {normalizeIdList(selectedItem.secondaryCategoryId).length > 0 ? (
-                        <ul className="mt-0.5 list-inside list-disc text-sm">
-                          {normalizeIdList(selectedItem.secondaryCategoryId).map((id) => (
-                            <li key={id}>{resolveCategoryName(id)}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        "—"
-                      )}
-                    </dd>
+
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3">
+                    <p className="mb-2 text-[11px] font-semibold text-slate-900">Store categories</p>
+                    {subcategoryLabelsLoading ? (
+                      <p className="text-[11px] text-gray-500">Loading names…</p>
+                    ) : null}
+                    <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <dt className="font-medium text-gray-600">Primary category</dt>
+                        <dd>{resolveCategoryName(selectedItem.categoryId)}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium text-gray-600">Primary subcategory</dt>
+                        <dd>{resolveSubcategoryName(selectedItem.subcategoryId)}</dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="font-medium text-gray-600">Secondary categories</dt>
+                        <dd>
+                          {normalizeIdList(selectedItem.secondaryCategoryId).length > 0 ? (
+                            <ul className="mt-0.5 list-inside list-disc">
+                              {normalizeIdList(selectedItem.secondaryCategoryId).map((id) => (
+                                <li key={id}>{resolveCategoryName(id)}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            "—"
+                          )}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="font-medium text-gray-600">Secondary subcategories</dt>
+                        <dd>
+                          {normalizeIdList(selectedItem.secondarySubcategoryId).length > 0 ? (
+                            <ul className="mt-0.5 list-inside list-disc">
+                              {normalizeIdList(selectedItem.secondarySubcategoryId).map((id) => (
+                                <li key={id}>{resolveSubcategoryName(id)}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            "—"
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-gray-600">Secondary subcategories</dt>
-                    <dd>
-                      {normalizeIdList(selectedItem.secondarySubcategoryId).length > 0 ? (
-                        <ul className="mt-0.5 list-inside list-disc text-sm">
-                          {normalizeIdList(selectedItem.secondarySubcategoryId).map((id) => (
-                            <li key={id}>{resolveSubcategoryName(id)}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        "—"
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-              <div><span className="font-medium">Main inventory item ID:</span> {selectedItem.catalogItemId ? String(selectedItem.catalogItemId) : "—"}</div>
-              <div>
-                <span className="font-medium">Main catalog update:</span>{" "}
-                {selectedItem.catalogItemId
-                  ? selectedItem.catalogUpdateStatus === "pending"
-                    ? "Pending admin approval"
-                    : "Up to date"
-                  : "—"}
-              </div>
-              {selectedItem.catalogItemId && selectedItem.catalogUpdateStatus === "pending" ? (
-                <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-                    disabled={
-                      busyApproveCatalogId === selectedItem._id ||
-                      busyDismissCatalogId === selectedItem._id
-                    }
-                    onClick={() => handleApproveCatalogSync(selectedItem)}
-                  >
-                    {busyApproveCatalogId === selectedItem._id
-                      ? "Applying…"
-                      : "Apply designer changes to catalog item"}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
-                    disabled={
-                      busyApproveCatalogId === selectedItem._id ||
-                      busyDismissCatalogId === selectedItem._id
-                    }
-                    onClick={() => handleDismissCatalogPending(selectedItem)}
-                  >
-                    {busyDismissCatalogId === selectedItem._id
-                      ? "Clearing…"
-                      : "Dismiss pending (no catalog change)"}
-                  </button>
                 </div>
               ) : null}
-              <div>
-                <span className="font-medium">Product type:</span> {selectedItem.productType || "—"}
-                {selectedItem.productTypeCode ? (
-                  <span className="text-gray-600"> ({selectedItem.productTypeCode})</span>
-                ) : null}
-              </div>
-              <div><span className="font-medium">Fit Type:</span> {selectedItem.fitType || "-"}</div>
-              <div><span className="font-medium">Gender:</span> {selectedItem.gender || "-"}</div>
-              <div><span className="font-medium">MRP:</span> {Number(selectedItem.mrp ?? 0)}</div>
-              <div><span className="font-medium">Discount Price:</span> {Number(selectedItem.discountPrice ?? 0)}</div>
-              <div><span className="font-medium">Total Production Qty:</span> {selectedItem.totalProductionQty ?? 0}</div>
-              <div><span className="font-medium">Default Color:</span> {selectedItem.defaultColor || "-"}</div>
-              <div><span className="font-medium">Top SKU ID:</span> {selectedItem?.sku?.skuId || "-"}</div>
-              <DescriptionWithInfo
-                label="Short description:"
-                value={selectedItem.shortDescription}
-                previewLen={DETAIL_SHORT_PREVIEW_LEN}
-                onOpenFull={setFullTextModal}
-              />
-              <DescriptionWithInfo
-                label="Long description:"
-                value={selectedItem.longDescription}
-                previewLen={DETAIL_LONG_PREVIEW_LEN}
-                onOpenFull={setFullTextModal}
-              />
 
-              <div className="sm:col-span-2 lg:col-span-3 rounded-lg border border-slate-200 bg-slate-50/90 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-900">SEO</h4>
-                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <span className="font-medium text-gray-700">Meta title:</span>{" "}
-                    <span className="text-gray-900">{String(selectedItem.metaTitle || "").trim() || "—"}</span>
+              {selectedItemTab === "details" ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                      <span className="font-medium">Product type:</span> {selectedItem.productType || "—"}
+                      {selectedItem.productTypeCode ? (
+                        <span className="text-gray-600"> ({selectedItem.productTypeCode})</span>
+                      ) : null}
+                    </div>
+                    <div><span className="font-medium">Fit:</span> {selectedItem.fitType || "—"}</div>
+                    <div><span className="font-medium">Gender:</span> {selectedItem.gender || "—"}</div>
+                    <div><span className="font-medium">MRP:</span> {Number(selectedItem.mrp ?? 0)}</div>
+                    <div><span className="font-medium">Discount:</span> {Number(selectedItem.discountPrice ?? 0)}</div>
+                    <div><span className="font-medium">Default color:</span> {selectedItem.defaultColor || "—"}</div>
                   </div>
-                  <div className="sm:col-span-2">
-                    <span className="font-medium text-gray-700">Meta description:</span>
-                    <p className="mt-0.5 whitespace-pre-wrap break-words text-gray-800">
-                      {String(selectedItem.metaDescription || "").trim() || "—"}
-                    </p>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <span className="font-medium text-gray-700">Tags:</span>{" "}
-                    <span className="break-all text-gray-800">
-                      {Array.isArray(selectedItem.metaTags) && selectedItem.metaTags.length > 0
-                        ? selectedItem.metaTags.join(", ")
-                        : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
 
-              <div><span className="font-medium">Created:</span> {selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleString() : "-"}</div>
-              <div><span className="font-medium">Updated:</span> {selectedItem.updatedAt ? new Date(selectedItem.updatedAt).toLocaleString() : "-"}</div>
-            </div>
+                  <DescriptionWithInfo
+                    label="Short description:"
+                    value={selectedItem.shortDescription}
+                    previewLen={DETAIL_SHORT_PREVIEW_LEN}
+                    onOpenFull={setFullTextModal}
+                  />
+                  <DescriptionWithInfo
+                    label="Long description:"
+                    value={selectedItem.longDescription}
+                    previewLen={DETAIL_LONG_PREVIEW_LEN}
+                    onOpenFull={setFullTextModal}
+                  />
 
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-emerald-400 pl-2 font-medium text-emerald-700">Fabric Details</h3>
-              <div className="grid grid-cols-1 gap-2 rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                <div><span className="font-medium">Name:</span> {selectedItem.fabric?.name || "-"}</div>
-                <div><span className="font-medium">GSM:</span> {selectedItem.fabric?.gsm ?? 0}</div>
-                <div><span className="font-medium">Width:</span> {selectedItem.fabric?.width || "-"}</div>
-                <div><span className="font-medium">Lining:</span> {selectedItem.fabric?.lining || "-"}</div>
-                <div><span className="font-medium">Meter:</span> {selectedItem.fabric?.meter ?? 0}</div>
-                <div><span className="font-medium">Cost / Meter:</span> {selectedItem.fabric?.costPerMeter ?? 0}</div>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-indigo-400 pl-2 font-medium text-indigo-700">Costing</h3>
-              <div className="grid grid-cols-1 gap-2 rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                <div><span className="font-medium">Trim Cost:</span> {selectedItem.costs?.trimCost ?? 0}</div>
-                <div><span className="font-medium">Stitching Cost:</span> {selectedItem.costs?.stitchingCost ?? 0}</div>
-                <div><span className="font-medium">Finishing Cost:</span> {selectedItem.costs?.finishingCost ?? 0}</div>
-                <div><span className="font-medium">Total Fabric Cost:</span> {selectedItem.costs?.totalFabricCost ?? 0}</div>
-                <div><span className="font-medium">Total Cost:</span> {selectedItem.costs?.totalCost ?? 0}</div>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-cyan-400 pl-2 font-medium text-cyan-700">
-                Size chart (in &amp; cm)
-              </h3>
-              <DesignerSizeChartReadonlyTables
-                item={selectedItem}
-                showMeasureImages
-                onMeasureImageClick={(urls, idx) => openLightbox(urls, idx)}
-              />
-            </div>
-
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-teal-400 pl-2 font-medium text-teal-700">
-                Care
-              </h3>
-              <div className="rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm">
-                <p className="whitespace-pre-wrap break-words text-gray-800">
-                  {selectedItem.care?.description || "-"}
-                </p>
-                {Array.isArray(selectedItem.care?.instructions) &&
-                selectedItem.care.instructions.length > 0 ? (
-                  <ul className="mt-2 space-y-1">
-                    {selectedItem.care.instructions.map((inst, idx) => (
-                      <li
-                        key={`care-${idx}`}
-                        className="rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700"
-                      >
-                        <div className="flex items-center gap-2">
-                          {resolveCareIconSrc(inst) ? (
-                            <img
-                              src={resolveCareIconSrc(inst)}
-                              alt=""
-                              className="h-8 w-8 rounded border border-gray-200 bg-white p-1 object-contain"
-                              loading="lazy"
-                            />
-                          ) : null}
-                          <div className="min-w-0">
-                            <span className="font-medium">{idx + 1}.</span>{" "}
-                            {inst?.text || "-"}
-                          </div>
-                        </div>
-                        {!resolveCareIconSrc(inst) && (inst?.iconKey || inst?.iconUrl) ? (
-                          <span className="ml-1 break-all text-gray-500">
-                            ({inst.iconKey || inst.iconUrl})
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-1 text-xs text-gray-500">No care instructions.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-amber-400 pl-2 font-medium text-amber-700">All SKU IDs</h3>
-              <div className="rounded-xl border border-black/10 bg-gray-50 p-2.5 text-sm">
-                {getSkuIds(selectedItem).length ? getSkuIds(selectedItem).join(", ") : "-"}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <h3 className="mb-2 border-l-4 border-violet-400 pl-2 font-medium text-violet-700">Variants and Sizes</h3>
-              <div className="space-y-1.5">
-                {(selectedItem.variants || []).map((variant, idx) => {
-                  const imgs = orderedVariantImages(variant);
-                  const withMedia = imgs.filter((im) => variantMediaSrc(im));
-                  return (
-                    <div key={`${variant?.color?.name || "variant"}-${idx}`} className="rounded-xl border border-black/10 p-2.5">
-                      <div className="text-sm font-medium">
-                        Variant {idx + 1}: {variant?.color?.name || "-"} ({variant?.color?.hex || "-"})
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3">
+                    <p className="mb-2 text-[11px] font-semibold text-slate-900">SEO</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <span className="font-medium text-gray-700">Meta title:</span>{" "}
+                        <span className="text-gray-900">{String(selectedItem.metaTitle || "").trim() || "—"}</span>
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        Media: {imgs.length}
-                        {withMedia.length ? ` · ${withMedia.length} with URL` : ""}
+                      <div className="sm:col-span-2">
+                        <span className="font-medium text-gray-700">Meta description:</span>
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-gray-800">
+                          {String(selectedItem.metaDescription || "").trim() || "—"}
+                        </p>
                       </div>
-                      {withMedia.length ? (
-                        <div className="mt-2 max-h-72 overflow-y-auto rounded-lg border border-black/5 bg-white/80 p-2">
-                          <div className="flex flex-wrap gap-2">
-                            {withMedia.map((im, i) => {
-                              const src = variantMediaSrc(im);
-                              const isVideo = isVariantVideoMedia(im);
-                              return (
-                                <button
-                                  key={`${src}-${i}`}
-                                  type="button"
-                                  onClick={() => openLightbox(withMedia, i)}
-                                  className="relative shrink-0 rounded-lg border border-black/10 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
-                                  title={isVideo ? "Open video viewer" : "Open image viewer"}
-                                >
-                                  {isVideo ? (
-                                    <>
-                                      <video
-                                        src={src}
-                                        muted
-                                        playsInline
-                                        preload="metadata"
-                                        className="h-24 w-24 rounded-lg object-cover hover:opacity-90"
-                                      />
-                                      <span className="pointer-events-none absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[9px] font-medium text-white">
-                                        Video
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <img
-                                      src={src}
-                                      alt=""
-                                      className="h-24 w-24 rounded-lg object-cover hover:opacity-90"
-                                      loading="lazy"
-                                    />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-xs text-gray-400">No media URLs for this variant.</p>
-                      )}
-                      <div className="mt-2 text-sm text-gray-700">
-                        {(variant?.sizes || []).map((s, sIdx) => (
-                          <div key={`${s?.size || "size"}-${sIdx}`} className="mb-1">
-                            Size: {s?.size || "-"} | SKU: {s?.sku || "-"} | Barcode: {s?.barcode || "-"} | Planned: {s?.plannedQty ?? 0} | Produced: {s?.producedQty ?? 0}
-                          </div>
-                        ))}
+                      <div className="sm:col-span-2">
+                        <span className="font-medium text-gray-700">Tags:</span>{" "}
+                        <span className="break-all text-gray-800">
+                          {Array.isArray(selectedItem.metaTags) && selectedItem.metaTags.length > 0
+                            ? selectedItem.metaTags.join(", ")
+                            : "—"}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedItemTab === "production" ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-border bg-gray-50 p-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-emerald-700">Fabric</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      <div><span className="font-medium">Name:</span> {selectedItem.fabric?.name || "-"}</div>
+                      <div><span className="font-medium">GSM:</span> {selectedItem.fabric?.gsm ?? 0}</div>
+                      <div><span className="font-medium">Width:</span> {selectedItem.fabric?.width || "-"}</div>
+                      <div><span className="font-medium">Lining:</span> {selectedItem.fabric?.lining || "-"}</div>
+                      <div><span className="font-medium">Meter:</span> {selectedItem.fabric?.meter ?? 0}</div>
+                      <div><span className="font-medium">Cost/m:</span> {selectedItem.fabric?.costPerMeter ?? 0}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-gray-50 p-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-indigo-700">Costing</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      <div><span className="font-medium">Trim:</span> {selectedItem.costs?.trimCost ?? 0}</div>
+                      <div><span className="font-medium">Stitching:</span> {selectedItem.costs?.stitchingCost ?? 0}</div>
+                      <div><span className="font-medium">Finishing:</span> {selectedItem.costs?.finishingCost ?? 0}</div>
+                      <div><span className="font-medium">Fabric total:</span> {selectedItem.costs?.totalFabricCost ?? 0}</div>
+                      <div><span className="font-medium">Total:</span> {selectedItem.costs?.totalCost ?? 0}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-gray-50 p-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-cyan-700">Size chart</p>
+                    <DesignerSizeChartReadonlyTables
+                      item={selectedItem}
+                      showMeasureImages
+                      onMeasureImageClick={(urls, idx) => openLightbox(urls, idx)}
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-gray-50 p-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-teal-700">Care</p>
+                    <p className="whitespace-pre-wrap break-words text-gray-800">
+                      {selectedItem.care?.description || "-"}
+                    </p>
+                    {Array.isArray(selectedItem.care?.instructions) &&
+                    selectedItem.care.instructions.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {selectedItem.care.instructions.map((inst, idx) => (
+                          <li
+                            key={`care-${idx}`}
+                            className="rounded-md border border-gray-200 bg-white p-2 text-[11px] text-gray-700"
+                          >
+                            <div className="flex items-center gap-2">
+                              {resolveCareIconSrc(inst) ? (
+                                <img
+                                  src={resolveCareIconSrc(inst)}
+                                  alt=""
+                                  className="h-7 w-7 rounded border border-gray-200 bg-white p-1 object-contain"
+                                  loading="lazy"
+                                />
+                              ) : null}
+                              <div className="min-w-0">
+                                <span className="font-medium">{idx + 1}.</span>{" "}
+                                {inst?.text || "-"}
+                              </div>
+                            </div>
+                            {!resolveCareIconSrc(inst) && (inst?.iconKey || inst?.iconUrl) ? (
+                              <span className="ml-1 break-all text-gray-500">
+                                ({inst.iconKey || inst.iconUrl})
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-gray-500">No care instructions.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedItemTab === "skus" ? (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-border bg-gray-50 p-2.5">
+                    {(() => {
+                      const skus = getSkuIds(selectedItem);
+                      const has = skus.length > 0;
+                      const text = has ? skus.join("\n") : "";
+                      return (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-semibold text-amber-700">
+                              All SKU IDs
+                              <span className="ml-1 text-gray-500">({skus.length})</span>
+                            </p>
+                            <button
+                              type="button"
+                              disabled={!has}
+                              onClick={() => copyTextToClipboard(text, "SKU IDs copied")}
+                              className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+                              title="Copy all SKUs"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          {!has ? (
+                            <p className="mt-2 text-[11px] text-gray-500">No SKUs.</p>
+                          ) : (
+                            <>
+                              <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                {skus.map((sku) => (
+                                  <div
+                                    key={sku}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1"
+                                    title={sku}
+                                  >
+                                    <span className="min-w-0 truncate font-mono text-[11px] text-gray-800">
+                                      {sku}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyTextToClipboard(sku, "SKU copied")}
+                                      className="shrink-0 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-700 hover:bg-gray-100"
+                                      title="Copy SKU"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border bg-white p-2">
+                                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-gray-700">
+{text}
+                                </pre>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedItemTab === "variants" ? (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-border bg-white p-2.5">
+                    <p className="mb-2 text-[11px] font-semibold text-violet-700">
+                      Variants and Sizes
+                      <span className="ml-1 text-gray-500">
+                        ({(selectedItem.variants || []).length})
+                      </span>
+                    </p>
+                    <div className="space-y-2">
+                      {(selectedItem.variants || []).map((variant, idx) => {
+                        const imgs = orderedVariantImages(variant);
+                        const withMedia = imgs.filter((im) => variantMediaSrc(im));
+                        return (
+                          <div
+                            key={`${variant?.color?.name || "variant"}-${idx}`}
+                            className="rounded-lg border border-border bg-white p-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-[12px] font-semibold text-gray-900">
+                                  Variant {idx + 1}: {variant?.color?.name || "-"}{" "}
+                                  <span className="font-normal text-gray-500">
+                                    ({variant?.color?.hex || "-"})
+                                  </span>
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-gray-500">
+                                  Media: {imgs.length}
+                                  {withMedia.length ? ` · ${withMedia.length} with URL` : ""}
+                                </div>
+                              </div>
+                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                Sizes: {(variant?.sizes || []).length}
+                              </span>
+                            </div>
+                            {withMedia.length ? (
+                              <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-black/5 bg-slate-50 p-2">
+                                <div className="flex flex-wrap gap-2">
+                                  {withMedia.map((im, i) => {
+                                    const src = variantMediaSrc(im);
+                                    const isVideo = isVariantVideoMedia(im);
+                                    return (
+                                      <button
+                                        key={`${src}-${i}`}
+                                        type="button"
+                                        onClick={() => openLightbox(withMedia, i)}
+                                        className="relative shrink-0 rounded-lg border border-border bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
+                                        title={isVideo ? "Open video viewer" : "Open image viewer"}
+                                      >
+                                        {isVideo ? (
+                                          <>
+                                            <video
+                                              src={src}
+                                              muted
+                                              playsInline
+                                              preload="metadata"
+                                              className="h-20 w-20 rounded-lg object-cover hover:opacity-90"
+                                            />
+                                            <span className="pointer-events-none absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[9px] font-medium text-white">
+                                              Video
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <img
+                                            src={src}
+                                            alt=""
+                                            className="h-20 w-20 rounded-lg object-cover hover:opacity-90"
+                                            loading="lazy"
+                                          />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[11px] text-gray-400">No media URLs for this variant.</p>
+                            )}
+                            <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+                              <table className="w-full min-w-[520px] border-collapse text-[11px]">
+                                <thead className="bg-slate-50">
+                                  <tr className="border-b border-slate-200 text-left text-slate-600">
+                                    <th className="px-2 py-1.5 font-semibold">Size</th>
+                                    <th className="px-2 py-1.5 font-semibold">SKU</th>
+                                    <th className="px-2 py-1.5 font-semibold">Planned</th>
+                                    <th className="px-2 py-1.5 font-semibold">Produced</th>
+                                    <th className="px-2 py-1.5 font-semibold">Barcode</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white">
+                                  {(variant?.sizes || []).map((s, sIdx) => (
+                                    <tr
+                                      key={`${s?.size || "size"}-${sIdx}`}
+                                      className="border-b border-slate-100 text-slate-800"
+                                    >
+                                      <td className="px-2 py-1.5 font-semibold">
+                                        {s?.size || "—"}
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="min-w-0 truncate font-mono text-[11px]">
+                                            {s?.sku || "—"}
+                                          </span>
+                                          {s?.sku ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => copyTextToClipboard(s.sku, "SKU copied")}
+                                              className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100"
+                                              title="Copy SKU"
+                                            >
+                                              Copy
+                                            </button>
+                                          ) : null}
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-1.5 tabular-nums">
+                                        {s?.plannedQty ?? "—"}
+                                      </td>
+                                      <td className="px-2 py-1.5 tabular-nums">
+                                        {s?.producedQty ?? "—"}
+                                      </td>
+                                      <td className="px-2 py-1.5 font-mono text-[11px] text-slate-600">
+                                        {s?.barcode || "—"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1638,7 +2133,7 @@ const DesignerInventory = () => {
           onClick={() => setFullTextModal(null)}
         >
           <div
-            className="max-h-[min(90vh,40rem)] w-full max-w-2xl min-w-0 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl"
+            className="max-h-[min(90vh,40rem)] w-full max-w-2xl min-w-0 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
@@ -1656,7 +2151,7 @@ const DesignerInventory = () => {
                 Close
               </button>
             </div>
-            <div className="max-h-[min(75vh,36rem)] overflow-y-auto px-4 py-4 text-sm leading-relaxed text-gray-800">
+            <div className="max-h-[min(75vh,36rem)] overflow-y-auto px-4 py-4 text-[12px] leading-relaxed text-gray-800">
               <p className="whitespace-pre-wrap break-words">{fullTextModal.body}</p>
             </div>
           </div>

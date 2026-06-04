@@ -1,4 +1,4 @@
-// Edit subcategory from "Show all subcategories" page (subcategoriess).
+﻿// Edit subcategory from "Show all subcategories" page (subcategoriess).
 // Route: /admin/inventory/subcategories/edit/:id
 // Back / success → /admin/subcategoriess
 import { useState, useEffect, useCallback } from "react";
@@ -237,18 +237,18 @@ export default function SubcategoryEditStandalone() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+      <div className="text-stone-900 flex items-center justify-center">
+        <div className="text-stone-500">Loading...</div>
       </div>
     );
   }
   if (notFound) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
-        <p className="text-gray-700 font-medium">Subcategory not found</p>
+      <div className="text-stone-900 flex flex-col items-center justify-center px-4">
+        <p className="text-stone-700 font-medium">Subcategory not found</p>
         <button
           onClick={goBack}
-          className="mt-4 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+          className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
         >
           Back to Subcategories
         </button>
@@ -257,23 +257,23 @@ export default function SubcategoryEditStandalone() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
+    <div className="w-full text-stone-900">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex items-center justify-between mb-8">
           <button
             onClick={goBack}
-            className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors group"
+            className="flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-stone-900 transition-colors group"
           >
             <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
             <span>Back to Subcategories</span>
           </button>
           <div className="text-right">
-            <h1 className="text-base sm:text-lg font-bold text-gray-900">Edit Subcategory</h1>
-            <p className="mt-1 text-xs text-gray-500">Update subcategory (from all subcategories)</p>
+            <h1 className="text-base sm:text-lg font-bold text-stone-900">Edit Subcategory</h1>
+            <p className="mt-1 text-xs text-stone-500">Update subcategory (from all subcategories)</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+        <div className="bg-white rounded-xl shadow-sm border border-border p-4 sm:p-5">
           <form onSubmit={handleSubmit} className="space-y-4">
             {backendErrors.length > 0 && (
               <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs">
@@ -286,7 +286,7 @@ export default function SubcategoryEditStandalone() {
               </div>
             )}
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                 Subcategory Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -295,8 +295,8 @@ export default function SubcategoryEditStandalone() {
                 value={form.name}
                 onChange={handleChange}
                 placeholder="Enter subcategory name"
-                className={`w-full px-3.5 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent ${
-                  clientErrors.name ? "border-red-400" : "border-gray-300"
+                className={`w-full px-3.5 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent ${
+                  clientErrors.name ? "border-red-400" : "border-border"
                 }`}
               />
               {clientErrors.name && (
@@ -304,14 +304,14 @@ export default function SubcategoryEditStandalone() {
               )}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
+              <label className="block text-xs font-semibold text-stone-700 mb-1.5">Description</label>
               <textarea
                 name="description"
                 value={form.description}
                 onChange={handleChange}
                 placeholder="Enter description"
                 rows={3}
-                className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                className="w-full px-3.5 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent resize-none"
               />
             </div>
 
@@ -322,15 +322,15 @@ export default function SubcategoryEditStandalone() {
                   name="editSortOrder"
                   checked={editSortOrder}
                   onChange={handleChange}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black cursor-pointer"
+                  className="mt-0.5 w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
                 />
                 <span>
-                  <span className="block text-xs font-semibold text-gray-800 group-hover:text-gray-900">
+                  <span className="block text-xs font-semibold text-gray-800 group-hover:text-stone-900">
                     Edit sort order
                   </span>
-                  <span className="block text-xs text-gray-500 mt-0.5 font-normal">
+                  <span className="block text-xs text-stone-500 mt-0.5 font-normal">
                     Current order:{" "}
-                    <span className="font-medium text-gray-700">
+                    <span className="font-medium text-stone-700">
                       {originalSortOrder || form.sortOrder || "—"}
                     </span>
                     . Enable only if you want to change it on save.
@@ -345,7 +345,7 @@ export default function SubcategoryEditStandalone() {
               </label>
               {editSortOrder && (
                 <div className="pl-7 space-y-2">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-stone-700 mb-1.5">
                     New sort order
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
@@ -356,13 +356,13 @@ export default function SubcategoryEditStandalone() {
                       onChange={handleChange}
                       placeholder="Sort order"
                       min="0"
-                      className="flex-1 min-w-0 px-3.5 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+                      className="flex-1 min-w-0 px-3.5 py-2 text-xs border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-transparent transition-all"
                     />
                     <button
                       type="button"
                       disabled={!categoryIdForSort}
                       onClick={() => suggestNextSortOrder()}
-                      className="shrink-0 px-4 py-2 text-xs font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="shrink-0 px-4 py-2 text-xs font-medium text-gray-800 bg-canvas-muted border border-border rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Use next available
                     </button>
@@ -372,12 +372,12 @@ export default function SubcategoryEditStandalone() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Icon <span className="text-gray-400 font-normal">(optional)</span>
+              <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                Icon <span className="text-stone-400 font-normal">(optional)</span>
               </label>
-              <p className="mb-2 text-xs text-gray-500">
+              <p className="mb-2 text-xs text-stone-500">
                 Navbar / UI icon file (SVG, PNG, etc.). Uploaded as multipart field{" "}
-                <span className="font-mono text-gray-600">icon</span>.
+                <span className="font-mono text-stone-600">icon</span>.
               </p>
               {form.iconPreview && (
                 <div className="mb-3 relative inline-block">
@@ -395,16 +395,16 @@ export default function SubcategoryEditStandalone() {
                   <img
                     src={form.iconPreview}
                     alt="Icon preview"
-                    className="h-20 w-20 object-contain rounded-lg border-2 border-gray-200 bg-gray-50 p-1"
+                    className="h-20 w-20 object-contain rounded-lg border-2 border-border bg-canvas-muted p-1"
                   />
                 </div>
               )}
-              <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group mb-6">
-                <Upload size={22} className="text-gray-400 group-hover:text-gray-600 mb-2" />
-                <span className="text-xs font-medium text-gray-600 group-hover:text-gray-900">
+              <label className="flex flex-col items-center justify-center w-full max-w-md px-4 py-5 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-gray-400 hover:bg-brand-50/30 transition-colors group mb-6">
+                <Upload size={22} className="text-stone-400 group-hover:text-stone-600 mb-2" />
+                <span className="text-xs font-medium text-stone-600 group-hover:text-stone-900">
                   {form.iconPreview ? "Change icon" : "Choose icon file"}
                 </span>
-                <span className="text-xs text-gray-500 mt-1">SVG, PNG, JPG, WebP</span>
+                <span className="text-xs text-stone-500 mt-1">SVG, PNG, JPG, WebP</span>
                 <input
                   type="file"
                   name="iconUpload"
@@ -416,8 +416,8 @@ export default function SubcategoryEditStandalone() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Image <span className="text-gray-400 font-normal">(optional)</span>
+              <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                Image <span className="text-stone-400 font-normal">(optional)</span>
               </label>
               {form.imagePreview && (
                 <div className="mb-3 relative inline-block">
@@ -433,13 +433,13 @@ export default function SubcategoryEditStandalone() {
                   <img
                     src={form.imagePreview}
                     alt="Preview"
-                    className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200"
+                    className="h-24 w-24 object-cover rounded-lg border-2 border-border"
                   />
                 </div>
               )}
-              <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors group">
-                <ImageIcon size={24} className="text-gray-400 mb-2" />
-                <span className="text-xs font-medium text-gray-600">
+              <label className="flex flex-col items-center justify-center w-full px-4 py-6 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-gray-400 hover:bg-brand-50/30 transition-colors group">
+                <ImageIcon size={24} className="text-stone-400 mb-2" />
+                <span className="text-xs font-medium text-stone-600">
                   {form.imagePreview ? "Change Image" : "Choose Image"}
                 </span>
                 <input
@@ -458,9 +458,9 @@ export default function SubcategoryEditStandalone() {
                   name="isActive"
                   checked={form.isActive}
                   onChange={handleChange}
-                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                  className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100"
                 />
-                <span className="text-xs font-medium text-gray-700">Active</span>
+                <span className="text-xs font-medium text-stone-700">Active</span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
@@ -469,9 +469,9 @@ export default function SubcategoryEditStandalone() {
                   checked={form.showInNavbar}
                   onChange={handleChange}
                   disabled={!form.isActive}
-                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black disabled:opacity-50"
+                  className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 disabled:opacity-50"
                 />
-                <span className="text-xs font-medium text-gray-700">Show in Navbar</span>
+                <span className="text-xs font-medium text-stone-700">Show in Navbar</span>
               </label>
 
               <label className="flex items-center gap-2.5 cursor-pointer">
@@ -481,25 +481,25 @@ export default function SubcategoryEditStandalone() {
     checked={form.isFooter}
     onChange={handleChange}
     disabled={!form.isActive}
-    className="w-4 h-4 rounded border-gray-300 text-black focus:ring-2 focus:ring-black disabled:opacity-50"
+    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 disabled:opacity-50"
   />
-  <span className="text-xs font-medium text-gray-700">
+  <span className="text-xs font-medium text-stone-700">
     Show in Footer
   </span>
 </label>
             </div>
-            <div className="flex gap-3 pt-6 border-t border-gray-200">
+            <div className="flex gap-3 pt-6 border-t border-border">
               <button
                 type="button"
                 onClick={goBack}
-                className="px-5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-5 py-2 text-xs font-medium text-stone-700 bg-white border border-border rounded-lg hover:bg-brand-50/30"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-2 text-xs font-medium text-white bg-black rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                className="px-6 py-2 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Update Subcategory"}
               </button>

@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
@@ -8,6 +8,7 @@ import DesignerRoutes from "./routes/designerroutes";
 import { NotificationProvider } from "./context/NotificationContext";
 import { NotificationSocketConnector } from "./context/NotificationSocketConnector";
 import SubadminPreferredPathRedirect from "./components/SubadminPreferredPathRedirect";
+import RootRoleRedirect from "./components/RootRoleRedirect";
 
 function App() {
   return (
@@ -37,11 +38,10 @@ function App() {
       {/* Designer Routes */}
       <Route path="/designer/*" element={<DesignerRoutes />} />
       
-      {/* Root redirect - default to admin login */}
-      <Route path="/" element={<Navigate to="/admin" replace />} />
-      
-      {/* 404 fallback */}
-      <Route path="*" element={<Navigate to="/admin" replace />} />
+      <Route path="/" element={<RootRoleRedirect />} />
+
+      {/* Unknown paths: role-aware home/login, not always admin */}
+      <Route path="*" element={<RootRoleRedirect />} />
       </Routes>
     </NotificationProvider>
   );

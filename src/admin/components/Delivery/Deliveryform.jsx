@@ -1,4 +1,4 @@
-import React, { useState, useEffect,useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
 import {
   createDelivery,
@@ -7,7 +7,7 @@ import {
   getSingleDelivery,
 } from "../../apis/Deliveryapi";
 import { getPincodes } from "../../apis/Pincodeapi";
-import { Search, Loader2, Trash2, X } from "lucide-react";
+import { Search, Loader2, Trash2, X, Save } from "lucide-react";
 
 const PINCODE_PAGE_SIZE = 10;
 
@@ -20,7 +20,6 @@ const cleanApiErrorMessage = (err, fallback = "Failed to delete") => {
   return cleaned || fallback;
 };
 
-/** Only these delivery types are supported in this form (matches backend expectations). */
 const DELIVERY_TYPE_OPTIONS = [
   { value: "NORMAL", label: "NORMAL" },
   { value: "ONE_DAY", label: "ONE_DAY" },
@@ -39,6 +38,36 @@ const defaultFormData = {
   isActive: true,
 };
 
+const fieldClass =
+  "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted disabled:text-stone-500";
+const labelClass = "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-stone-500";
+const fieldErrorClass = "border-danger focus:border-danger focus:ring-danger/20";
+
+function FormSection({ title, hint, children }) {
+  return (
+    <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
+      <div className="mb-2.5 border-b border-border pb-2">
+        <h2 className="text-xs font-semibold text-stone-900">{title}</h2>
+        {hint ? <p className="mt-0.5 text-[10px] text-stone-500">{hint}</p> : null}
+      </div>
+      <div className="space-y-2.5">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, required, hint, error, children }) {
+  return (
+    <div>
+      <label className={labelClass}>
+        {label}
+        {required ? <span className="text-danger"> *</span> : null}
+      </label>
+      {hint ? <p className="mb-1 text-[10px] text-stone-400">{hint}</p> : null}
+      {children}
+      {error ? <p className="mt-1 text-[10px] text-danger">{error}</p> : null}
+    </div>
+  );
+}
 
 export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   const [formData, setFormData] = useState(defaultFormData);
@@ -48,7 +77,7 @@ export default function Deliveryform({ editId = null, onSuccess, onCancel }) {
   const [apiErrors, setApiErrors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-const formRef = useRef(null);
+  const formRef = useRef(null);
   const [pincodes, setPincodes] = useState([]);
   const [pincodesLoading, setPincodesLoading] = useState(false);
   const [pincodeSearch, setPincodeSearch] = useState("");
@@ -73,13 +102,10 @@ const formRef = useRef(null);
   }, [editId]);
 
   useEffect(() => {
-  if (editId && formRef.current) {
-    formRef.current.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }
-}, [editId]);
+    if (editId && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [editId]);
 
   const fetchPincodes = async (page = 1, search = "") => {
     setPincodesLoading(true);
@@ -96,7 +122,9 @@ const formRef = useRef(null);
       setPincodes(Array.isArray(list) ? list : []);
       setPincodePage(page);
       const pagination = raw?.pagination ?? res?.pagination;
-      setPincodeTotalPages(pagination?.totalPages ?? (list.length >= PINCODE_PAGE_SIZE ? page + 1 : page));
+      setPincodeTotalPages(
+        pagination?.totalPages ?? (list.length >= PINCODE_PAGE_SIZE ? page + 1 : page),
+      );
     } catch {
       toast.error("Failed to load pincodes");
     } finally {
@@ -188,18 +216,6 @@ const formRef = useRef(null);
       payload.serviceablePincodes = selectedPincodes.map(String);
     }
     try {
-      console.log("[DeliveryForm] submit:start", {
-        editId,
-        payloadPreview: {
-          ...payload,
-          serviceablePincodesCount: Array.isArray(payload.serviceablePincodes)
-            ? payload.serviceablePincodes.length
-            : 0,
-          serviceablePincodesSample: Array.isArray(payload.serviceablePincodes)
-            ? payload.serviceablePincodes.slice(0, 10)
-            : [],
-        },
-      });
       if (editId) {
         await updateDelivery(editId, payload);
         toast.success("Delivery option updated");
@@ -214,7 +230,11 @@ const formRef = useRef(null);
       const data = typeof raw === "string" ? { message: raw } : raw;
       const msgs = [];
       if (data?.errors && typeof data.errors === "object")
-        Object.values(data.errors).forEach((v) => (Array.isArray(v) ? v.forEach((m) => m && msgs.push(String(m))) : v && msgs.push(String(v))));
+        Object.values(data.errors).forEach((v) =>
+          Array.isArray(v)
+            ? v.forEach((m) => m && msgs.push(String(m)))
+            : v && msgs.push(String(v)),
+        );
       if (data?.message && !msgs.length) msgs.push(String(data.message));
       if (data?.error) msgs.push(String(data.error));
       if (!msgs.length && err?.message) msgs.push(String(err.message));
@@ -231,13 +251,9 @@ const formRef = useRef(null);
     if (!window.confirm("Delete this delivery option?")) return;
     setSaving(true);
     try {
-      console.log("[DeliveryForm] delete:start", { editId });
       const res = await deleteDelivery(editId);
       const success = res?.data?.success ?? res?.success ?? true;
-      if (!success) {
-        throw new Error(res?.data?.message || res?.message || "Delete failed");
-      }
-      console.log("[DeliveryForm] delete:success", { editId });
+      if (!success) throw new Error(res?.data?.message || res?.message || "Delete failed");
       toast.success("Delivery option deleted");
       onSuccess?.();
     } catch (err) {
@@ -251,7 +267,7 @@ const formRef = useRef(null);
   const togglePincode = (id) => {
     const idStr = String(id);
     setSelectedPincodes((prev) =>
-      prev.includes(idStr) ? prev.filter((x) => x !== idStr) : [...prev, idStr]
+      prev.includes(idStr) ? prev.filter((x) => x !== idStr) : [...prev, idStr],
     );
   };
 
@@ -259,7 +275,7 @@ const formRef = useRef(null);
     const ids = pincodes.map((p) => p._id).filter(Boolean).map(String);
     const allSelected = ids.length > 0 && ids.every((id) => selectedPincodes.includes(id));
     setSelectedPincodes((prev) =>
-      allSelected ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])]
+      allSelected ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])],
     );
   };
 
@@ -268,78 +284,53 @@ const formRef = useRef(null);
     fetchPincodes(1, pincodeSearch.trim());
   };
 
+  const pincodesDisabled = !!editId && !editPincodes;
+
   if (loading && editId) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-500" />
+      <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-stone-500">
+        <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+        Loading delivery…
       </div>
     );
   }
 
   return (
-<div
-  ref={formRef}
-  className="bg-white rounded-2xl shadow-lg border border-slate-200/80 overflow-hidden"
->      <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-white">
-            {editId ? "Edit delivery option" : "New delivery option"}
-          </h2>
-          {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-              aria-label="Close"
-            >
-              <X size={20} />
-            </button>
-          )}
-        </div>
+    <div ref={formRef} className="mx-auto max-w-4xl">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-stone-900">
+          {editId ? "Edit delivery option" : "New delivery option"}
+        </h2>
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border text-stone-500 hover:bg-canvas-muted"
+            aria-label="Close form"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        {apiErrors.length > 0 && (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-            <p className="text-sm font-medium text-red-800 mb-1">Please fix the following:</p>
-            <ul className="list-disc list-inside text-sm text-red-700 space-y-0.5">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {apiErrors.length > 0 ? (
+          <div className="rounded-xl border border-danger/30 bg-danger-bg px-3 py-2">
+            <p className="text-[11px] font-medium text-danger">Please fix the following:</p>
+            <ul className="mt-1 list-inside list-disc text-[11px] text-danger">
               {apiErrors.map((msg, i) => (
                 <li key={i}>{msg}</li>
               ))}
             </ul>
           </div>
-        )}
+        ) : null}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {editId && (
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={editPincodes}
-                  onChange={(e) => setEditPincodes(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
-                />
-                Update serviceable pincodes in this edit
-              </label>
-              {!editPincodes && (
-                <p className="mt-1 text-xs text-slate-500">
-                  Pincodes will remain unchanged to avoid large update payloads.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Delivery type <span className="text-red-500">*</span>
-            </label>
+        <FormSection title="Delivery type" hint="NORMAL, ONE_DAY, or 90_MIN.">
+          <Field label="Type" required error={formErrors.deliveryType}>
             <select
               value={formData.deliveryType}
               onChange={(e) => setFormData({ ...formData, deliveryType: e.target.value })}
-              className={`w-full rounded-xl border px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-400 focus:border-slate-500 outline-none transition-shadow ${
-                formErrors.deliveryType ? "border-red-400" : "border-slate-300"
-              }`}
+              className={`${fieldClass} ${formErrors.deliveryType ? fieldErrorClass : ""}`}
             >
               <option value="">Select type</option>
               {DELIVERY_TYPE_OPTIONS.map((o) => (
@@ -348,61 +339,84 @@ const formRef = useRef(null);
                 </option>
               ))}
             </select>
-            {formErrors.deliveryType && (
-              <p className="mt-1 text-xs text-red-600">{formErrors.deliveryType}</p>
-            )}
-          </div>
+          </Field>
+        </FormSection>
 
-          <div className={`md:col-span-2 ${editId && !editPincodes ? "opacity-60" : ""}`}>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Serviceable pincodes <span className="text-red-500">*</span>
+        <FormSection
+          title="Serviceable pincodes"
+          hint={
+            editId && !editPincodes
+              ? "Enable “Update pincodes” below to change pincode mapping."
+              : "Select at least one pincode for this option."
+          }
+        >
+          {editId ? (
+            <label className="inline-flex items-center gap-2 text-[11px] font-medium text-stone-700">
+              <input
+                type="checkbox"
+                checked={editPincodes}
+                onChange={(e) => setEditPincodes(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+              />
+              Update serviceable pincodes in this edit
             </label>
-            <div className="flex gap-2 mb-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          ) : null}
+
+          <div className={pincodesDisabled ? "pointer-events-none opacity-60" : ""}>
+            <div className="flex gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
                 <input
                   type="text"
-                  disabled={!!editId && !editPincodes}
+                  disabled={pincodesDisabled}
                   value={pincodeSearch}
                   onChange={(e) => setPincodeSearch(e.target.value)}
-                  placeholder="Search pincode..."
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-500 outline-none"
+                  placeholder="Search pincode…"
+                  className={`${fieldClass} pl-8`}
                 />
               </div>
-               <button
-  type="button"
-  disabled={!!editId && !editPincodes}
-  onClick={handlePincodeSearch}
- className="px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+              <button
+                type="button"
+                disabled={pincodesDisabled}
+                onClick={handlePincodeSearch}
+                className="shrink-0 rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              >
                 Search
               </button>
             </div>
-            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-44 overflow-y-auto">
+
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-border bg-canvas-muted/50 p-2">
               {pincodesLoading ? (
-                <p className="text-sm text-slate-500 py-2">Loading...</p>
+                <p className="py-2 text-[11px] text-stone-500">Loading…</p>
               ) : pincodes.length === 0 ? (
-                <p className="text-sm text-slate-500 py-2">No pincodes found.</p>
+                <p className="py-2 text-[11px] text-stone-500">No pincodes found.</p>
               ) : (
                 <>
-                  <label className="flex items-center gap-2 py-1.5 text-sm font-medium text-slate-700 cursor-pointer">
+                  <label className="flex cursor-pointer items-center gap-2 py-1 text-[11px] font-medium text-stone-700">
                     <input
                       type="checkbox"
-                      disabled={!!editId && !editPincodes}
-                      checked={pincodes.length > 0 && pincodes.every((p) => selectedPincodes.includes(p._id))}
+                      disabled={pincodesDisabled}
+                      checked={
+                        pincodes.length > 0 &&
+                        pincodes.every((p) => selectedPincodes.includes(String(p._id)))
+                      }
                       onChange={toggleSelectAllPincodes}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
+                      className="h-3.5 w-3.5 rounded border-border accent-brand-600"
                     />
                     Select all on page
                   </label>
-                  <div className="space-y-1 mt-1">
+                  <div className="mt-1 space-y-0.5">
                     {pincodes.map((p) => (
-                      <label key={p._id} className="flex items-center gap-2 py-1 text-sm cursor-pointer hover:bg-slate-100 rounded-lg px-2">
+                      <label
+                        key={p._id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[11px] hover:bg-white"
+                      >
                         <input
                           type="checkbox"
-                          disabled={!!editId && !editPincodes}
-                          checked={selectedPincodes.includes(p._id)}
+                          disabled={pincodesDisabled}
+                          checked={selectedPincodes.includes(String(p._id))}
                           onChange={() => togglePincode(p._id)}
-                          className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
+                          className="h-3.5 w-3.5 rounded border-border accent-brand-600"
                         />
                         <span>{p.pinCode ?? p.pincode ?? p.pin_code ?? p._id}</span>
                       </label>
@@ -411,166 +425,168 @@ const formRef = useRef(null);
                 </>
               )}
             </div>
-            <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
-              <span>Page {pincodePage} of {pincodeTotalPages} · {selectedPincodes.length} selected</span>
+
+            <div className="mt-2 flex items-center justify-between text-[10px] text-stone-500">
+              <span>
+                Page {pincodePage} / {pincodeTotalPages} · {selectedPincodes.length} selected
+              </span>
               <div className="flex gap-1">
                 <button
                   type="button"
-                  disabled={pincodePage <= 1 || pincodesLoading || (!!editId && !editPincodes)}
+                  disabled={pincodePage <= 1 || pincodesLoading || pincodesDisabled}
                   onClick={() => fetchPincodes(pincodePage - 1, pincodeSearch.trim())}
-                  className="px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border border-border px-2 py-0.5 hover:bg-canvas-muted disabled:opacity-50"
                 >
                   Prev
                 </button>
                 <button
                   type="button"
-                  disabled={pincodePage >= pincodeTotalPages || pincodesLoading || (!!editId && !editPincodes)}
+                  disabled={
+                    pincodePage >= pincodeTotalPages || pincodesLoading || pincodesDisabled
+                  }
                   onClick={() => fetchPincodes(pincodePage + 1, pincodeSearch.trim())}
-                  className="px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                  className="rounded-lg border border-border px-2 py-0.5 hover:bg-canvas-muted disabled:opacity-50"
                 >
                   Next
                 </button>
               </div>
             </div>
-            {formErrors.pincodes && <p className="mt-1 text-xs text-red-600">{formErrors.pincodes}</p>}
+            {formErrors.pincodes ? (
+              <p className="text-[10px] text-danger">{formErrors.pincodes}</p>
+            ) : null}
           </div>
+        </FormSection>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Min duration <span className="text-red-500">*</span></label>
+        <FormSection title="Duration & charge">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <Field label="Min duration" required error={formErrors.min}>
               <input
                 type="number"
                 min={1}
                 value={formData.min}
                 onChange={(e) => setFormData({ ...formData, min: e.target.value })}
-                className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none ${
-                  formErrors.min ? "border-red-400" : "border-slate-300"
-                }`}
+                className={`${fieldClass} ${formErrors.min ? fieldErrorClass : ""}`}
               />
-              {formErrors.min && <p className="mt-1 text-xs text-red-600">{formErrors.min}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Max duration <span className="text-red-500">*</span></label>
+            </Field>
+            <Field label="Max duration" required error={formErrors.max}>
               <input
                 type="number"
                 min={1}
                 value={formData.max}
                 onChange={(e) => setFormData({ ...formData, max: e.target.value })}
-                className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none ${
-                  formErrors.max ? "border-red-400" : "border-slate-300"
-                }`}
+                className={`${fieldClass} ${formErrors.max ? fieldErrorClass : ""}`}
               />
-              {formErrors.max && <p className="mt-1 text-xs text-red-600">{formErrors.max}</p>}
-            </div>
+            </Field>
+            <Field label="Unit">
+              <select
+                value={formData.unit}
+                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                className={fieldClass}
+              >
+                <option value="DAY">Days</option>
+                <option value="HOUR">Hours</option>
+                <option value="MINUTE">Minutes</option>
+              </select>
+            </Field>
+            <Field label="Charge (₹)" required error={formErrors.deliveryCharge}>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={formData.deliveryCharge}
+                onChange={(e) => setFormData({ ...formData, deliveryCharge: e.target.value })}
+                className={`${fieldClass} ${formErrors.deliveryCharge ? fieldErrorClass : ""}`}
+              />
+            </Field>
           </div>
+        </FormSection>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Unit</label>
-            <select
-              value={formData.unit}
-              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-400 outline-none"
-            >
-              <option value="DAY">Days</option>
-              <option value="HOUR">Hours</option>
-              <option value="MINUTE">Minutes</option>
-            </select>
+        <FormSection title="Discount" hint="Optional delivery discount.">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <Field label="Discount type">
+              <select
+                value={formData.discountType}
+                onChange={(e) => setFormData({ ...formData, discountType: e.target.value })}
+                className={fieldClass}
+              >
+                <option value="FLAT">Flat</option>
+                <option value="PERCENTAGE">Percentage</option>
+              </select>
+            </Field>
+            <Field label="Discount value">
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={formData.discountValue}
+                onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
+            <Field label="Max discount (₹)">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={formData.maxDiscountAmount}
+                onChange={(e) => setFormData({ ...formData, maxDiscountAmount: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
           </div>
+        </FormSection>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Delivery charge (₹) <span className="text-red-500">*</span></label>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={formData.deliveryCharge}
-              onChange={(e) => setFormData({ ...formData, deliveryCharge: e.target.value })}
-              className={`w-full rounded-xl border px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none ${
-                formErrors.deliveryCharge ? "border-red-400" : "border-slate-300"
-              }`}
-            />
-            {formErrors.deliveryCharge && <p className="mt-1 text-xs text-red-600">{formErrors.deliveryCharge}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Discount type</label>
-            <select
-              value={formData.discountType}
-              onChange={(e) => setFormData({ ...formData, discountType: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-400 outline-none"
-            >
-              <option value="FLAT">Flat</option>
-              <option value="PERCENTAGE">Percentage</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Discount value</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={formData.discountValue}
-              onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Max discount (₹)</label>
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={formData.maxDiscountAmount}
-              onChange={(e) => setFormData({ ...formData, maxDiscountAmount: e.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
+        <label className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-[11px] font-medium text-stone-700">
           <input
             type="checkbox"
             id="isActive"
             checked={formData.isActive}
             onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
+            className="h-3.5 w-3.5 rounded border-border accent-brand-600"
           />
-          <label htmlFor="isActive" className="text-sm font-medium text-slate-700">Active</label>
-        </div>
+          Active
+        </label>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-200">
+        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur-sm">
           <div>
-            {editId && (
+            {editId ? (
               <button
                 type="button"
                 onClick={handleDelete}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 font-medium text-sm disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-bg px-3 py-1.5 text-[11px] font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
               >
-                <Trash2 size={18} />
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete
               </button>
-            )}
+            ) : null}
           </div>
-          <div className="flex gap-3">
-            {onCancel && (
+          <div className="flex flex-wrap gap-2">
+            {onCancel ? (
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-medium text-sm hover:bg-slate-50"
+                className="rounded-lg border border-border px-4 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-canvas-muted"
               >
                 Cancel
               </button>
-            )}
+            ) : null}
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-800 text-white font-medium text-sm hover:bg-slate-900 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving && <Loader2 size={18} className="animate-spin" />}
-              {editId ? "Update" : "Create"}
+              {saving ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" />
+                  {editId ? "Update" : "Create"}
+                </>
+              )}
             </button>
           </div>
         </div>

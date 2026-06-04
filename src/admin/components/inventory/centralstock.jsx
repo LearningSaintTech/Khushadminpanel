@@ -1,4 +1,4 @@
-// src/pages/ItemInventory.jsx   (or wherever your centralstock.jsx is located)
+﻿// src/pages/ItemInventory.jsx   (or wherever your centralstock.jsx is located)
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const inputClass =
-  'w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15 transition disabled:opacity-50 disabled:cursor-not-allowed';
+  'w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-brand-500/15 transition disabled:opacity-50 disabled:cursor-not-allowed';
 const labelClass = 'mb-1 block text-[11px] font-medium text-slate-700';
 const btnPrimary =
   'inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors';
@@ -796,7 +796,7 @@ const ItemInventory = () => {
             type="checkbox"
             checked={showLowStockOnly}
             onChange={(e) => setShowLowStockOnly(e.target.checked)}
-            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
           />
           Only products with low SKUs (on loaded lines)
         </label>
@@ -1035,7 +1035,7 @@ const ItemInventory = () => {
         <details className="group rounded-lg border border-slate-200 bg-white open:shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-semibold text-slate-800 [&::-webkit-details-marker]:hidden">
             <span className="inline-flex items-center gap-1.5">
-              <Package className="h-3.5 w-3.5 text-indigo-600" />
+              <Package className="h-3.5 w-3.5 text-brand-600" />
               Bulk stock file upload
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
@@ -1060,7 +1060,7 @@ const ItemInventory = () => {
                 setBulkFile(f);
                 setBulkLastResult(null);
               }}
-              className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+              className="block text-sm text-stone-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />
             <button
               type="button"
@@ -1071,28 +1071,28 @@ const ItemInventory = () => {
               {bulkSubmitting ? 'Uploading…' : 'Upload & apply'}
             </button>
             <details className="relative">
-              <summary className="list-none cursor-pointer inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">
+              <summary className="list-none cursor-pointer inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium border border-border text-stone-700 hover:bg-brand-50/30">
                 Download template
               </summary>
-              <div className="absolute z-10 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg p-1.5 space-y-1">
+              <div className="absolute z-10 mt-2 w-52 rounded-lg border border-border bg-white shadow-lg p-1.5 space-y-1">
                 <a
                   href="/templates/bulk-stock-upload.sample.csv"
                   download
-                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                  className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                 >
                   CSV format
                 </a>
                 <a
                   href="/templates/bulk-stock-upload.sample.json"
                   download
-                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                  className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                 >
                   JSON format
                 </a>
                 <a
                   href="/templates/bulk-stock-upload.sample.xml"
                   download
-                  className="block rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                  className="block rounded px-2 py-1.5 text-sm text-stone-700 hover:bg-canvas-muted"
                 >
                   Excel format
                 </a>
@@ -1130,7 +1130,7 @@ const ItemInventory = () => {
             <button
               type="button"
               onClick={() => setShowLowStockOnly(false)}
-              className="block mx-auto mt-3 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              className="block mx-auto mt-3 text-sm text-brand-600 hover:text-indigo-800 font-medium"
             >
               Show all products
             </button>
@@ -1211,7 +1211,7 @@ const ItemInventory = () => {
                           type="button"
                           onClick={(e) => toggleLowDetail(e, itemId)}
                           disabled={lowCount === 0}
-                          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-border text-stone-700 hover:bg-canvas-muted disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {showLowPanel ? 'Hide low-SKU list' : 'Show low-SKU list'}
                         </button>
@@ -1219,11 +1219,11 @@ const ItemInventory = () => {
                     </div>
 
                     <div className="flex items-center gap-4 shrink-0 ml-2">
-                      <span className="text-sm text-gray-600">
+                      <span className="text-sm text-stone-600">
                         Page {item.skuPagination?.page || 1}
                       </span>
                       <svg
-                        className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        className={`w-5 h-5 text-stone-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -1244,7 +1244,7 @@ const ItemInventory = () => {
                             Smallest quantity among loaded SKUs: {minAcrossSkus}
                           </span>
                           {partialSkus ? (
-                            <span className="text-xs text-gray-600 ml-1">
+                            <span className="text-xs text-stone-600 ml-1">
                               (computed from {loadedSkuCount} loaded lines)
                             </span>
                           ) : null}
@@ -1268,7 +1268,7 @@ const ItemInventory = () => {
                                 minAcrossSkus != null && st === minAcrossSkus;
                               return (
                                 <tr key={s.sku} className="bg-white">
-                                  <td className="px-4 py-2 font-mono text-gray-900">
+                                  <td className="px-4 py-2 font-mono text-stone-900">
                                     <span className="align-middle">{s.sku}</span>
                                     {atProductMin ? (
                                       <span className="ml-2 align-middle inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-indigo-100 text-indigo-900">
@@ -1279,7 +1279,7 @@ const ItemInventory = () => {
                                   <td className="px-4 py-2 text-right font-semibold text-red-700 tabular-nums">
                                     {st}
                                   </td>
-                                  <td className="px-4 py-2 text-right tabular-nums text-gray-600">
+                                  <td className="px-4 py-2 text-right tabular-nums text-stone-600">
                                     {minCentralStock}
                                   </td>
                                   <td className="px-4 py-2 text-right tabular-nums text-amber-800 font-medium">
@@ -1307,7 +1307,7 @@ const ItemInventory = () => {
                           <p className="text-xs font-semibold text-indigo-900 uppercase tracking-wide mb-2">
                             Update all loaded SKUs at once
                           </p>
-                          <p className="text-xs text-gray-600 mb-3 max-w-2xl">
+                          <p className="text-xs text-stone-600 mb-3 max-w-2xl">
                             Sets the <strong>same central stock</strong> for every SKU shown in the table below
                             ({item.skus.length} line{item.skus.length !== 1 ? "s" : ""}
                             {partialSkus
@@ -1316,7 +1316,7 @@ const ItemInventory = () => {
                             ).
                           </p>
                           <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-3">
-                            <label className="flex flex-col gap-1 text-xs text-gray-600 sm:min-w-[140px]">
+                            <label className="flex flex-col gap-1 text-xs text-stone-600 sm:min-w-[140px]">
                               <span className="font-medium text-gray-800">Stock for each SKU</span>
                               <input
                                 type="number"
@@ -1331,7 +1331,7 @@ const ItemInventory = () => {
                                   }))
                                 }
                                 disabled={bulkAllApplyingId === String(itemId)}
-                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                                className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
                               />
                             </label>
                             <button
@@ -1381,7 +1381,7 @@ const ItemInventory = () => {
                                 return (
                                   <tr
                                     key={skuCode}
-                                    className={`hover:bg-gray-50 ${isLow && !isEditing ? 'bg-amber-50/70' : ''} ${atProductMin && !isEditing ? 'ring-1 ring-inset ring-indigo-200' : ''}`}
+                                    className={`hover:bg-brand-50/30 ${isLow && !isEditing ? 'bg-amber-50/70' : ''} ${atProductMin && !isEditing ? 'ring-1 ring-inset ring-indigo-200' : ''}`}
                                   >
                                     <td className="px-3 py-2 whitespace-nowrap text-[11px] font-mono font-medium text-slate-900">
                                       {sku.sku || '—'}
@@ -1400,7 +1400,7 @@ const ItemInventory = () => {
                                               [editKey]: e.target.value,
                                             }))
                                           }
-                                          className="w-20 rounded-md border border-indigo-300 px-2 py-1 text-[11px] focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                          className="w-20 rounded-md border border-indigo-300 px-2 py-1 text-[11px] focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                                         />
                                       ) : (
                                         <span
@@ -1418,11 +1418,11 @@ const ItemInventory = () => {
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap text-center text-[11px]">
                                       {isEditing ? (
-                                        <span className="text-gray-400">—</span>
+                                        <span className="text-stone-400">—</span>
                                       ) : (
                                         <div className="flex flex-col items-center gap-1">
                                           {isLow ? (
-                                            <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                            <span className="inline-flex rounded-full bg-danger-bg px-2 py-0.5 text-xs font-semibold text-danger">
                                               Low
                                             </span>
                                           ) : (
@@ -1465,7 +1465,7 @@ const ItemInventory = () => {
                                           onClick={(e) =>
                                             startEditing(e, itemId, skuCode, sku.stock)
                                           }
-                                          className="rounded-md px-2 py-1 text-[10px] font-medium text-indigo-600 hover:bg-indigo-50"
+                                          className="rounded-md px-2 py-1 text-[10px] font-medium text-brand-600 hover:bg-indigo-50"
                                         >
                                           Edit
                                         </button>
@@ -1479,7 +1479,7 @@ const ItemInventory = () => {
                         </div>
                         </>
                       ) : (
-                        <div className="p-10 text-center text-gray-500 italic">
+                        <div className="p-10 text-center text-stone-500 italic">
                           No SKUs on this page
                         </div>
                       )}
@@ -1493,8 +1493,8 @@ const ItemInventory = () => {
 
         {/* Pagination */}
         {!loading && itemsPerPage === 'all' && items.length > 0 ? (
-          <div className="mt-10 text-center text-sm text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{items.length}</span> product
+          <div className="mt-10 text-center text-sm text-stone-600">
+            Showing <span className="font-semibold text-stone-900">{items.length}</span> product
             {items.length !== 1 ? 's' : ''} (all pages merged
             {pagination.total != null && pagination.total !== items.length
               ? ` · ${pagination.total} total matching search`

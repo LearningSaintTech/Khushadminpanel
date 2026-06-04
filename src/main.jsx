@@ -12,7 +12,14 @@ import appStore, { persistor } from "./redux/Appstore";
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Provider store={appStore}>
-      <PersistGate loading={null} persistor={persistor}>
+      <PersistGate
+        loading={
+          <div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm text-stone-600">
+            Loading…
+          </div>
+        }
+        persistor={persistor}
+      >
         <BrowserRouter
           future={{
             v7_startTransition: true,

@@ -1,9 +1,10 @@
-// src/pages/admin/Orders.jsx
+﻿// src/pages/admin/Orders.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOrders,
   getOrderItems,
+  getOrderStatusAnalytics,
   getSingleOrder,
   updateOrderItemStatus,
   updateWholeOrderStatus,
@@ -43,6 +44,7 @@ import {
   XCircle,
   Truck,
   RefreshCw,
+  Loader2,
   AlertCircle,
   User,
   CreditCard,
@@ -60,10 +62,74 @@ import {
   AlertTriangle,
   Columns3,
   ChevronDown,
+  SlidersHorizontal,
+  ListChecks,
+  BarChart2,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
+
+/** Fulfilment line statuses — mixed filter uses 2+ distinct values from this set. */
+const FULFILMENT_LINE_STATUSES = new Set([
+  "CREATED",
+  "CONFIRMED",
+  "PROCESSING",
+  "SHIPPED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+  "CANCELLED",
+]);
+
+const FULFILMENT_STATUS_LABELS = {
+  CREATED: "Created",
+  CONFIRMED: "Confirmed",
+  PROCESSING: "Processing",
+  SHIPPED: "Shipped",
+  OUT_FOR_DELIVERY: "Out for delivery",
+  DELIVERED: "Delivered",
+  CANCELLED: "Cancelled",
+};
+
+function normalizeFulfilmentLineStatus(status) {
+  const st = String(status ?? "").trim().toUpperCase();
+  if (st === "CANCELED") return "CANCELLED";
+  return st;
+}
+
+function lineStatusMatchesAdminFilter(itemStatus, filterStatus) {
+  if (!filterStatus) return true;
+  const st = normalizeFulfilmentLineStatus(itemStatus);
+  const f = normalizeFulfilmentLineStatus(filterStatus);
+  if (f === "EXCHANGE") return st.startsWith("EXCHANGE_");
+  if (f === "DELIVERED") return st === "DELIVERED" || st === "EXCHANGE_DELIVERED";
+  return st === f;
+}
+
+/** Mixed tab: 2+ lines with different statuses; optional Status = present on any line. */
+function isOrderMixedLines(order, statusFilter = "") {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (items.length <= 1) return false;
+  const statuses = items
+    .map((it) => normalizeFulfilmentLineStatus(it?.status))
+    .filter(Boolean);
+  if (new Set(statuses).size <= 1) return false;
+  if (!statusFilter) return true;
+  return statuses.some((st) => lineStatusMatchesAdminFilter(st, statusFilter));
+}
+
+function getOrderLineStatusSummary(order) {
+  const counts = {};
+  const items = Array.isArray(order?.items) ? order.items : [];
+  for (const it of items) {
+    const st = normalizeFulfilmentLineStatus(it?.status);
+    if (!st) continue;
+    counts[st] = (counts[st] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([st, n]) => `${n}× ${FULFILMENT_STATUS_LABELS[st] || st.replace(/_/g, " ")}`)
+    .join(" · ");
+}
 
 /** Matches delivery rules + backend `items[].delivery.type` filter (NORMAL, ONE_DAY, 90_MIN) */
 const DELIVERY_TYPE_TABS = [
@@ -73,27 +139,187 @@ const DELIVERY_TYPE_TABS = [
   { value: "90_MIN", label: "90 min" },
 ];
 
-const btnPrimary =
-  "inline-flex items-center justify-center gap-1 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
-const btnOutline =
-  "inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition-colors";
-const btnAmber =
-  "inline-flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm hover:bg-amber-700 transition-colors";
-const inputCompact =
-  "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15";
-const tableScrollShell =
-  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-lg border border-slate-200 bg-white shadow-sm [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
-const tableScrollShellMuted =
-  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-gray-200 bg-white shadow-sm [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
+function getOrdersUiTokens() {
+  return {
+    btnPrimary:
+      "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-brand-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50",
+    btnPrimarySm:
+      "inline-flex h-6 shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded-md bg-brand-600 px-2 text-[10px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50",
+    selectToolbar:
+      "h-6 w-[6.25rem] shrink-0 rounded-md border border-border bg-white px-1.5 text-[10px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-100 disabled:opacity-50",
+    btnOutline:
+      "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted disabled:opacity-40",
+    btnAmber:
+      "inline-flex items-center justify-center gap-1 rounded-lg border border-warning/40 bg-warning px-2.5 py-1 text-[11px] font-medium text-white transition hover:opacity-90",
+    inputCompact:
+      "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100",
+    tableScrollShell:
+      "max-h-[calc(100vh-11rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
+    tableScrollShellMuted:
+      "max-h-[calc(100vh-11rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [scrollbar-width:thin]",
+    pageWrap: "text-stone-900",
+    outerWrap: "",
+    contentWrap: "",
+    toolbarCard: "mb-2 rounded-xl border border-border bg-white p-1.5 shadow-sm",
+    filterCard: "mb-2 overflow-visible rounded-xl border border-border bg-white shadow-sm",
+    tabActive: "bg-brand-600 text-white shadow-sm",
+    tabInactive: "border border-border bg-white text-stone-600 hover:bg-canvas-muted",
+    deliveryTabActive: "bg-brand-600 text-white shadow-sm",
+    deliveryTabInactive: "border border-border bg-white text-stone-600 hover:bg-canvas-muted",
+    paymentTabActive: "bg-warning text-white shadow-sm",
+    paymentTabInactive: "border border-border bg-canvas-muted text-stone-700 hover:bg-white",
+    thead: "sticky top-0 z-10 bg-canvas-muted/95 shadow-[0_1px_0_0_var(--color-border)]",
+    th: "text-[10px] font-semibold uppercase tracking-wide text-stone-500",
+    rowHover: "hover:bg-brand-50/30",
+    checkbox: "h-3.5 w-3.5 rounded border-border accent-brand-600",
+    accentText: "text-brand-700",
+    errorBox:
+      "mb-2 flex items-center gap-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger",
+    bulkBar:
+      "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2 text-[11px] shadow-sm",
+    detailItemsToolbar:
+      "mb-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-white px-2.5 py-1.5 text-[11px] shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
+    analyticsPanel:
+      "mb-2 rounded-xl border border-border bg-white px-2.5 py-2 shadow-sm",
+    analyticsCard:
+      "inline-flex min-w-[5.5rem] flex-col rounded-lg border px-2 py-1.5 text-left transition",
+    analyticsCardActive: "border-brand-500 bg-brand-50 ring-2 ring-brand-200",
+    analyticsCardIdle: "border-border bg-canvas-muted/30 hover:border-brand-300 hover:bg-brand-50/40",
+    detailDocBtn:
+      "inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[9px] font-medium transition disabled:opacity-60",
+    detailDocBtnBrand:
+      "border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100",
+    detailDocBtnMuted:
+      "border-border bg-canvas-muted text-stone-700 hover:bg-white",
+    detailShell: "min-w-0 overflow-hidden rounded-xl border border-border bg-white shadow-sm",
+    detailHeader: "border-b border-border bg-canvas-muted/40 px-3 py-2",
+    detailOverview: "border-b border-border px-2 pb-2 pt-1.5",
+    detailSummaryBox: "overflow-hidden rounded-lg border border-border bg-white",
+    detailSummaryHead:
+      "flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-canvas-muted/40 px-2.5 py-1.5 text-[11px]",
+    detailSummaryCols:
+      "grid divide-y border-border/80 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.82fr)_minmax(0,0.82fr)] lg:divide-x lg:divide-y-0",
+    detailSummaryCol: "min-w-0 p-2",
+    detailSummaryFoot:
+      "grid divide-y border-t border-border/80 lg:grid-cols-2 lg:divide-x lg:divide-y-0",
+    detailBody: "space-y-3 p-3",
+    detailGrid: "grid grid-cols-1 gap-3 sm:grid-cols-3",
+    detailSection: "rounded-lg border border-border bg-canvas-muted/25 p-2.5",
+    detailSectionTitle:
+      "mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500",
+  };
+}
+
+function OrderDetailRow({ label, children, className = "", wide = false }) {
+  return (
+    <>
+      <dt className={`shrink-0 text-stone-500 ${className}`}>{label}</dt>
+      <dd
+        className={`min-w-0 font-medium text-stone-900 ${wide ? "col-span-3" : ""}`}
+      >
+        {children}
+      </dd>
+    </>
+  );
+}
+
+function OrderDetailSectionHead({ title, icon: Icon }) {
+  return (
+    <div className="mb-1 flex items-center gap-1 border-b border-border/50 pb-0.5">
+      {Icon ? <Icon className="h-3 w-3 shrink-0 text-brand-600" aria-hidden /> : null}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+        {title}
+      </h4>
+    </div>
+  );
+}
+
+function OrderDetailDenseGrid({ children, pairs = 2 }) {
+  const cols =
+    pairs === 2
+      ? "grid-cols-[minmax(3.25rem,auto)_minmax(0,1fr)]"
+      : "grid-cols-[minmax(3.25rem,auto)_minmax(0,1fr)_minmax(3.25rem,auto)_minmax(0,1fr)]";
+  return (
+    <dl className={`grid ${cols} gap-x-2.5 gap-y-0.5 text-[11px] leading-snug`}>
+      {children}
+    </dl>
+  );
+}
+
+function OrderDetailBlock({ title, icon: Icon, children, className = "" }) {
+  return (
+    <section className={`min-w-0 ${className}`}>
+      <OrderDetailSectionHead title={title} icon={Icon} />
+      <OrderDetailDenseGrid pairs={1}>{children}</OrderDetailDenseGrid>
+    </section>
+  );
+}
 
 function TableScrollHint() {
   return (
-    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
-      <span aria-hidden className="select-none text-slate-300">
+    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-stone-400">
+      <span aria-hidden className="select-none text-stone-300">
         ↔
       </span>
       <span>Scroll horizontally to view all columns</span>
     </p>
+  );
+}
+
+const LIST_PAGE_LIMIT_OPTIONS = [10, 20, 50, 100];
+
+function ListPaginationFooter({
+  loading,
+  page,
+  totalPages,
+  total = 0,
+  limit,
+  onPageChange,
+  btnOutline,
+  emptyLabel = "0 results",
+}) {
+  const safeTotal = Number(total) || 0;
+  const safeLimit = Math.max(1, Number(limit) || 10);
+  const tp = Math.max(1, Number(totalPages) || 1);
+  const rangeStart = safeTotal === 0 ? 0 : (page - 1) * safeLimit + 1;
+  const rangeEnd = safeTotal === 0 ? 0 : Math.min(page * safeLimit, safeTotal);
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[11px] text-stone-500">
+        {loading ? (
+          "Loading…"
+        ) : safeTotal === 0 ? (
+          emptyLabel
+        ) : (
+          <>
+            Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
+            <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
+            <span className="font-medium text-stone-700">{safeTotal}</span> total · Page{" "}
+            <span className="font-medium text-stone-700">{page}</span> of{" "}
+            <span className="font-medium text-stone-700">{tp}</span>
+          </>
+        )}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={page <= 1 || loading}
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          className={btnOutline}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+        </button>
+        <button
+          type="button"
+          disabled={page >= tp || loading}
+          onClick={() => onPageChange(page + 1)}
+          className={btnOutline}
+        >
+          Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -447,6 +673,52 @@ function firstOrderLineItem(order) {
   return items[0] || null;
 }
 
+function orderLineItems(order) {
+  return Array.isArray(order?.items) ? order.items : [];
+}
+
+function orderListLineKey(item, idx) {
+  return String(item?.itemId || item?._id || `line-${idx}`);
+}
+
+/** Stack each order line in one table cell (same column, one row per order). */
+function OrderListLineStack({ order, children, className = "flex flex-col gap-2 divide-y divide-gray-100" }) {
+  const items = orderLineItems(order);
+  if (!items.length) return <span className="text-xs text-gray-400">—</span>;
+  if (items.length === 1) {
+    return <div className="min-w-0">{children(items[0], 0)}</div>;
+  }
+  return (
+    <div className={className}>
+      {items.map((item, idx) => (
+        <div
+          key={orderListLineKey(item, idx)}
+          className="flex min-w-0 items-start gap-1.5 first:pt-0"
+        >
+          <span
+            className="mt-0.5 shrink-0 tabular-nums text-[9px] font-semibold text-stone-400"
+            title={`Line ${idx + 1}`}
+          >
+            {idx + 1}.
+          </span>
+          <div className="min-w-0 flex-1">{children(item, idx)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Catalog name, or variant / SKU label when name is not on the order snapshot. */
+function getLineProductDisplayName(item) {
+  if (!item || typeof item !== "object") return "";
+  const name = item.name != null ? String(item.name).trim() : "";
+  if (name) return name;
+  const v = item.variant || {};
+  const variantLabel = [v.color, v.size].filter(Boolean).join(" / ");
+  if (variantLabel) return variantLabel;
+  return String(item.sku || v.sku || "").trim();
+}
+
 function itemLikeFromListRow(row) {
   return row?.item && typeof row.item === "object" ? row.item : {};
 }
@@ -482,7 +754,7 @@ function TableStoreLink({ itemId, itemLike }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-0.5 text-xs font-medium text-indigo-700 hover:text-indigo-900"
+      className="inline-flex items-center gap-0.5 text-xs font-medium text-brand-700 hover:text-brand-900"
       title={url}
       onClick={(e) => e.stopPropagation()}
     >
@@ -504,7 +776,7 @@ function StoreItemInfoTrigger({ itemId, itemLike, quantity, onOpenDetails }) {
           e.stopPropagation();
           onOpenDetails?.();
         }}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
         aria-label="Store product link and images"
       >
         <Info className="h-4 w-4" strokeWidth={2} />
@@ -516,7 +788,7 @@ function StoreItemInfoTrigger({ itemId, itemLike, quantity, onOpenDetails }) {
         <p className="text-[11px] font-semibold text-gray-900">
           Quantity: {qtyLabel}
         </p>
-        <p className="mt-1 break-all font-mono text-[10px] leading-snug text-indigo-800">
+        <p className="mt-1 break-all font-mono text-[10px] leading-snug text-brand-800">
           {url}
         </p>
         <p className="mt-1 text-[10px] text-gray-500">Click icon for images</p>
@@ -539,7 +811,7 @@ function StoreOrderInfoTrigger({ order, onOpenDetails }) {
           e.stopPropagation();
           onOpenDetails?.();
         }}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
         aria-label="Store links and images for order lines"
       >
         <Info className="h-3.5 w-3.5" strokeWidth={2} />
@@ -553,7 +825,7 @@ function StoreOrderInfoTrigger({ order, onOpenDetails }) {
           {totalQty || "—"}
         </p>
         {single && url ? (
-          <p className="mt-1 break-all font-mono text-[10px] leading-snug text-indigo-800">
+          <p className="mt-1 break-all font-mono text-[10px] leading-snug text-brand-800">
             {url}
           </p>
         ) : (
@@ -612,7 +884,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "email", label: "Email", defaultVisible: false },
   { key: "notes", label: "Notes", defaultVisible: true },
   { key: "qty", label: "Quantity", defaultVisible: true },
-  { key: "productName", label: "Dress / product name", defaultVisible: false },
+  { key: "productName", label: "Dress / product name", defaultVisible: true },
   { key: "productId", label: "Catalog product ID", defaultVisible: false },
   { key: "lineSku", label: "Line SKU", defaultVisible: false },
   { key: "variantSku", label: "Variant SKU", defaultVisible: false },
@@ -675,6 +947,46 @@ const ORDER_DETAIL_ITEM_DATA_COLUMNS = [
   { key: "storeLink", label: "Store link", defaultVisible: false },
 ];
 
+const ORDER_DETAIL_ITEM_COL_CLASS = {
+  image: "w-12",
+  productName: "min-w-[7rem] max-w-[10.5rem]",
+  productId: "min-w-[4.5rem] max-w-[7rem]",
+  itemId: "min-w-[4.5rem] max-w-[7rem]",
+  lineSku: "min-w-[6rem] max-w-[9rem]",
+  variantSku: "min-w-[6rem] max-w-[9rem]",
+  size: "w-9 text-center",
+  color: "w-9 text-center",
+  qty: "w-8 text-center",
+  price: "w-14 text-right",
+  pincode: "w-14",
+  payment: "w-16",
+  customerName: "min-w-[5.5rem] max-w-[8rem]",
+  customerPhone: "min-w-[5.5rem] max-w-[8rem]",
+  storeLink: "w-14",
+};
+
+function orderDetailItemColClass(key) {
+  return ORDER_DETAIL_ITEM_COL_CLASS[key] || "min-w-0";
+}
+
+/** NORMAL lines that can be included in a new Shiprocket shipment group order. */
+function getShiprocketEligibleItems(order) {
+  if (!order?.items?.length) return [];
+  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
+  const groupAlreadyShipped = new Set(
+    shipments
+      .filter((s) => s?.shiprocket?.orderId)
+      .map((s) => String(s.shipmentGroupId)),
+  );
+  return order.items.filter((item) => {
+    if (String(item.delivery?.type || "").toUpperCase() !== "NORMAL") return false;
+    if (item.shiprocket?.orderId) return false;
+    const gid = String(item.shipmentGroupId || "");
+    if (gid && groupAlreadyShipped.has(gid)) return false;
+    return true;
+  });
+}
+
 function defaultVisibleKeysFor(columns) {
   return columns.filter((c) => c.defaultVisible).map((c) => c.key);
 }
@@ -716,7 +1028,7 @@ function ColumnPickerDropdown({
   onSelectAll,
   open,
   onOpenChange,
-  badgeClass = "bg-indigo-100 text-indigo-900",
+  badgeClass = "bg-brand-100 text-brand-900",
   /** 'end' = anchor to trigger's right (toolbar on the right); 'start' = anchor left */
   align = "end",
 }) {
@@ -731,7 +1043,7 @@ function ColumnPickerDropdown({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+        className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted"
         aria-expanded={open}
         aria-haspopup="dialog"
       >
@@ -746,16 +1058,16 @@ function ColumnPickerDropdown({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-slate-900/25 sm:hidden"
+            className="fixed inset-0 z-40 bg-stone-900/25 sm:hidden"
             aria-label="Close column picker"
             onClick={() => onOpenChange(false)}
           />
           <div
             role="dialog"
             aria-label="Choose columns to show"
-            className={`fixed z-50 flex max-h-[min(70vh,22rem)] w-[calc(100vw-1.5rem)] max-w-sm flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-xl ring-1 ring-black/5 left-1/2 top-[max(5rem,12vh)] -translate-x-1/2 sm:absolute sm:top-full sm:mt-1 sm:max-h-[min(calc(100vh-6rem),20rem)] sm:w-[min(20rem,calc(100vw-1.5rem))] sm:translate-x-0 sm:left-auto ${panelAlignClass}`}
+            className={`fixed z-50 flex max-h-[min(70vh,22rem)] w-[calc(100vw-1.5rem)] max-w-sm flex-col rounded-xl border border-border bg-white p-3 shadow-xl ring-1 ring-black/5 left-1/2 top-[max(5rem,12vh)] -translate-x-1/2 sm:absolute sm:top-full sm:mt-1 sm:max-h-[min(calc(100vh-6rem),20rem)] sm:w-[min(20rem,calc(100vw-1.5rem))] sm:translate-x-0 sm:left-auto ${panelAlignClass}`}
           >
-            <p className="mb-2 shrink-0 text-[11px] font-semibold text-slate-700">
+            <p className="mb-2 shrink-0 text-[11px] font-semibold text-stone-700">
               Choose columns to show
             </p>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 space-y-1">
@@ -768,7 +1080,7 @@ function ColumnPickerDropdown({
                     className={`flex items-start gap-2 rounded-md px-2 py-1.5 text-[11px] leading-snug ${
                       locked
                         ? "cursor-not-allowed opacity-60"
-                        : "cursor-pointer hover:bg-slate-50"
+                        : "cursor-pointer hover:bg-canvas-muted"
                     }`}
                   >
                     <input
@@ -776,32 +1088,32 @@ function ColumnPickerDropdown({
                       checked={checked}
                       disabled={locked}
                       onChange={() => onToggle(col.key)}
-                      className="mt-0.5 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      className="mt-0.5 shrink-0 rounded border-border text-brand-600 focus:ring-brand-500"
                     />
-                    <span className="min-w-0 flex-1 text-slate-800">{col.label}</span>
+                    <span className="min-w-0 flex-1 text-stone-800">{col.label}</span>
                   </label>
                 );
               })}
             </div>
-            <div className="mt-2 flex shrink-0 flex-wrap gap-3 border-t border-slate-100 pt-2">
+            <div className="mt-2 flex shrink-0 flex-wrap gap-3 border-t border-border/80 pt-2">
               <button
                 type="button"
                 onClick={onSelectAll}
-                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                className="text-[11px] font-medium text-brand-600 hover:text-brand-800"
               >
                 Show all
               </button>
               <button
                 type="button"
                 onClick={onReset}
-                className="text-[11px] font-medium text-slate-600 hover:text-slate-800"
+                className="text-[11px] font-medium text-stone-600 hover:text-stone-800"
               >
                 Reset default
               </button>
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="ml-auto text-[11px] font-medium text-slate-500 hover:text-slate-800 sm:hidden"
+                className="ml-auto text-[11px] font-medium text-stone-500 hover:text-stone-800 sm:hidden"
               >
                 Done
               </button>
@@ -858,7 +1170,7 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
       className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 ${lineIndex > 0 ? "mt-4" : ""}`}
     >
       {totalLines > 1 ? (
-        <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+        <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-700">
           Line {lineIndex + 1} of {totalLines}
         </p>
       ) : null}
@@ -897,8 +1209,8 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
           {field("Ship-to pincode", ctx.address?.pincode)}
           {field("Customer name", custName)}
           {field("Customer phone", phone)}
-          <div className="col-span-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 lg:col-span-3">
-            <dt className="text-[10px] font-semibold uppercase tracking-wide text-indigo-900">
+          <div className="col-span-2 rounded-lg border border-brand-100 bg-brand-50/70 px-3 py-2 lg:col-span-3">
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-brand-900">
               Store link
             </dt>
             <dd className="mt-1">
@@ -906,7 +1218,7 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
                 href={u}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-start gap-1 break-all text-xs font-medium text-indigo-700 hover:text-indigo-900"
+                className="inline-flex items-start gap-1 break-all text-xs font-medium text-brand-700 hover:text-brand-900"
               >
                 <span className="min-w-0 flex-1">{u}</span>
                 <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -1188,34 +1500,33 @@ const shiprocketFromItemRow = (row) => {
 function ShiprocketDetails({ sr, compact }) {
   if (!sr) return <span className="text-gray-400">—</span>;
   if (compact) {
+    const meta = [sr.status, sr.courier].filter(Boolean).join(" · ");
     return (
-      <div className="min-w-0 w-full space-y-0.5">
+      <div className="min-w-0 leading-tight">
         {sr.trackingUrl ? (
           <a
             href={sr.trackingUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex max-w-full items-center gap-0.5 text-[11px] font-mono text-indigo-600 hover:underline truncate"
+            className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-brand-600 hover:underline"
             title={sr.awb || "Track"}
           >
-            <ExternalLink size={11} className="shrink-0" />
+            <ExternalLink size={9} className="shrink-0" aria-hidden />
             <span className="truncate">{sr.awb || "Track"}</span>
           </a>
         ) : (
-          <span className="block truncate font-mono text-[11px] text-gray-800" title={sr.awb || undefined}>
+          <span
+            className="block truncate font-mono text-[9px] text-gray-800"
+            title={sr.awb || undefined}
+          >
             {sr.awb || "—"}
           </span>
         )}
-        {sr.status && (
-          <p className="truncate text-[10px] leading-tight text-gray-500" title={sr.status}>
-            {sr.status}
+        {meta ? (
+          <p className="truncate text-[9px] text-stone-500" title={meta}>
+            {meta}
           </p>
-        )}
-        {sr.courier && (
-          <p className="truncate text-[10px] leading-tight text-gray-400" title={sr.courier}>
-            {sr.courier}
-          </p>
-        )}
+        ) : null}
       </div>
     );
   }
@@ -1235,7 +1546,7 @@ function ShiprocketDetails({ sr, compact }) {
               href={sr.trackingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+              className="inline-flex items-center gap-1 text-brand-600 hover:underline"
             >
               {sr.awb}
               <ExternalLink size={12} />
@@ -1256,12 +1567,12 @@ function ShiprocketDetails({ sr, compact }) {
       {(sr.labelUrl || sr.invoiceUrl) && (
         <div className="flex flex-wrap gap-2 pt-1">
           {sr.labelUrl && (
-            <span className="text-xs font-medium text-indigo-600">
+            <span className="text-xs font-medium text-brand-600">
               Label ready
             </span>
           )}
           {sr.invoiceUrl && (
-            <span className="text-xs font-medium text-indigo-600">
+            <span className="text-xs font-medium text-brand-600">
               Invoice ready
             </span>
           )}
@@ -1271,10 +1582,12 @@ function ShiprocketDetails({ sr, compact }) {
   );
 }
 
-const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
+const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle = null }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const basePath = useAdminPanelBasePath();
+  const ui = useMemo(() => getOrdersUiTokens(), []);
+  const listPageTitle = pageTitle || (exchangeOnly ? "Exchange orders" : "Orders");
   const ap = useMemo(
     () => (suffix) =>
       `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/"),
@@ -1293,6 +1606,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  /** By order only: "" | "mixed" | "uniform" */
+  const [lineConsistencyFilter, setLineConsistencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -1328,6 +1643,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState("");
   const [updatingBulk, setUpdatingBulk] = useState(false);
+  // List-level bulk actions (By order / By item lists)
+  const [listSelectedOrderIds, setListSelectedOrderIds] = useState([]);
+  const [listSelectedItemKeys, setListSelectedItemKeys] = useState([]); // `${orderId}__${itemId}`
+  const [listBulkProcessing, setListBulkProcessing] = useState(false);
   // Delivery assignment modal
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [assignmentOrderId, setAssignmentOrderId] = useState(null);
@@ -1367,6 +1686,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     loadVisibleColumnsFromStorage(ORDER_LIST_COLUMNS_STORAGE_KEY, ORDER_LIST_TABLE_COLUMNS),
   );
   const [orderListColumnsOpen, setOrderListColumnsOpen] = useState(false);
+  const [listFiltersOpen, setListFiltersOpen] = useState(false);
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [itemListVisibleColumns, setItemListVisibleColumns] = useState(() =>
     loadVisibleColumnsFromStorage(ITEM_LIST_COLUMNS_STORAGE_KEY, ITEM_LIST_TABLE_COLUMNS),
   );
@@ -1402,6 +1723,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   const [paymentOverrideSaving, setPaymentOverrideSaving] = useState(false);
 
   const [createShiprocketLoading, setCreateShiprocketLoading] = useState(false);
+  const [shiprocketModalOpen, setShiprocketModalOpen] = useState(false);
+  const [shiprocketModalItemIds, setShiprocketModalItemIds] = useState([]);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState({ counts: [], total: 0, view: "order" });
+  const [analyticsError, setAnalyticsError] = useState(null);
 
   useEffect(() => {
     if (exchangeOnly && viewMode !== VIEW_ORDER) {
@@ -1793,6 +2120,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       setLoading(true);
       setError(null);
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
+      const consistencyParam = lineConsistencyFilter || "";
+      dbgOrders("getOrders:request", {
+        lineConsistencyFilter: consistencyParam || "(all)",
+        orderStatus: statusFilter || "(all)",
+        page: pagination.page,
+        limit: pagination.limit,
+      });
       const res = await getOrders(
         pagination.page,
         pagination.limit,
@@ -1804,10 +2138,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         sortOrder,
         deliveryTypeFilter || undefined,
         paymentStatus,
-        paymentMode
+        paymentMode,
+        consistencyParam,
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
+      if (consistencyParam && !res?.data?.appliedFilters?.itemStatusConsistency) {
+        console.warn(
+          "[Orders] itemStatusConsistency filter was not applied by API — use local backend (VITE_API_BASE_URL=http://localhost:5000/api) or deploy KhushBackend.",
+        );
+      }
       const payload = res?.data ?? {};
       const rawList = payload.orders ?? payload.data ?? [];
       const list = exchangeOnly
@@ -1839,11 +2179,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, exchangeOnly]);
+  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, exchangeOnly]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    if (viewMode === VIEW_ORDER && !selectedOrder) {
+      fetchOrders();
+    }
+  }, [fetchOrders, viewMode, selectedOrder]);
 
   const fetchOrderItems = useCallback(async () => {
     try {
@@ -1891,6 +2233,84 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
   }, [viewMode, fetchOrderItems]);
 
+  const fetchStatusAnalytics = useCallback(async () => {
+    try {
+      setAnalyticsLoading(true);
+      setAnalyticsError(null);
+      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
+      const res = await getOrderStatusAnalytics({
+        view: viewMode === VIEW_ITEM ? "item" : "order",
+        search: (viewMode === VIEW_ORDER ? search : itemSearch)?.trim() || "",
+        startDate: dateFrom || "",
+        endDate: dateTo || "",
+        deliveryType: deliveryTypeFilter || "",
+        paymentStatus: paymentStatus || "",
+        paymentMode: paymentMode || "",
+        itemStatusConsistency:
+          viewMode === VIEW_ORDER ? lineConsistencyFilter || "" : "",
+        exchangeOnly: !!exchangeOnly,
+      });
+      const payload = res?.data ?? res ?? {};
+      setAnalyticsData({
+        counts: Array.isArray(payload.counts) ? payload.counts : [],
+        total: payload.total ?? 0,
+        view: payload.view || (viewMode === VIEW_ITEM ? "item" : "order"),
+      });
+    } catch (err) {
+      console.error("Failed to fetch status analytics:", err);
+      setAnalyticsError(apiErrMessage(err, "Failed to load analytics."));
+      setAnalyticsData({ counts: [], total: 0, view: viewMode === VIEW_ITEM ? "item" : "order" });
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [
+    viewMode,
+    search,
+    itemSearch,
+    dateFrom,
+    dateTo,
+    deliveryTypeFilter,
+    paymentFilter,
+    lineConsistencyFilter,
+    exchangeOnly,
+  ]);
+
+  useEffect(() => {
+    if (!analyticsOpen || selectedOrder) return;
+    fetchStatusAnalytics();
+  }, [analyticsOpen, selectedOrder, fetchStatusAnalytics]);
+
+  // Clear list selections whenever filters / paging changes
+  useEffect(() => {
+    setListSelectedOrderIds([]);
+  }, [
+    viewMode,
+    pagination.page,
+    search,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+    deliveryTypeFilter,
+    paymentFilter,
+    exchangeOnly,
+  ]);
+
+  useEffect(() => {
+    setListSelectedItemKeys([]);
+  }, [
+    viewMode,
+    itemPagination.page,
+    itemSearch,
+    itemStatusFilter,
+    dateFrom,
+    dateTo,
+    deliveryTypeFilter,
+    paymentFilter,
+    exchangeOnly,
+  ]);
+
   const handleDownloadManufacturingPdf = async () => {
     try {
       setManufacturingPdfLoading(true);
@@ -1901,7 +2321,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const body = {
         search: searchVal,
-        itemStatus: itemStatusFilter || undefined,
+        itemStatus:
+          viewMode === VIEW_ITEM ? itemStatusFilter || undefined : undefined,
+        orderStatus:
+          viewMode === VIEW_ORDER ? statusFilter || undefined : undefined,
+        itemStatusConsistency:
+          viewMode === VIEW_ORDER && lineConsistencyFilter
+            ? lineConsistencyFilter
+            : undefined,
         deliveryType: deliveryTypeFilter || undefined,
         paymentStatus,
         paymentMode,
@@ -1927,7 +2354,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       const a = document.createElement("a");
       a.href = url;
       const nameParts = [
-        "full",
+        viewMode === VIEW_ORDER && lineConsistencyFilter
+          ? lineConsistencyFilter
+          : "all",
         dateFrom ? `from${dateFrom}` : null,
         dateTo ? `to${dateTo}` : null,
       ].filter(Boolean);
@@ -2147,19 +2576,60 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     }
   };
 
-  const handleCreateShiprocketSingleShipment = async () => {
+  const openShiprocketItemModal = () => {
+    const eligible = getShiprocketEligibleItems(selectedOrder);
+    if (!eligible.length) {
+      toast.error(
+        "No eligible items. Only NORMAL delivery lines without Shiprocket can be selected.",
+      );
+      return;
+    }
+    setShiprocketModalItemIds(
+      eligible.map((it) => String(it.itemId || it._id)),
+    );
+    setShiprocketModalOpen(true);
+  };
+
+  const closeShiprocketItemModal = () => {
+    if (createShiprocketLoading) return;
+    setShiprocketModalOpen(false);
+    setShiprocketModalItemIds([]);
+  };
+
+  const toggleShiprocketModalItem = (itemId) => {
+    const id = String(itemId);
+    setShiprocketModalItemIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleSubmitShiprocketModal = async () => {
     const oid = selectedOrder?.orderId;
     if (!oid) return;
-    if (
-      !window.confirm(
-        "Create Shiprocket order for this order's shipment group(s)? This will create ONE Shiprocket order per shipmentGroupId (NORMAL) and mark items as SHIPPED.",
-      )
-    )
+    const ids = shiprocketModalItemIds.map(String).filter(Boolean);
+    if (!ids.length) {
+      toast.error("Select at least one item");
       return;
+    }
+    const selected = (selectedOrder?.items || []).filter((it) =>
+      ids.includes(String(it.itemId || it._id)),
+    );
+    const groups = [
+      ...new Set(selected.map((it) => String(it.shipmentGroupId || "")).filter(Boolean)),
+    ];
+    if (groups.length !== 1) {
+      toast.error("Selected items must be in the same shipment group");
+      return;
+    }
+
     setCreateShiprocketLoading(true);
     try {
-      await createShiprocketForOrderShipments(oid, {});
-      toast.success("Shiprocket order created");
+      await createShiprocketForOrderShipments(oid, { itemIds: ids });
+      toast.success(
+        `Shiprocket order created for ${ids.length} item${ids.length > 1 ? "s" : ""}`,
+      );
+      setShiprocketModalOpen(false);
+      setShiprocketModalItemIds([]);
       await fetchSingleOrder(oid);
     } catch (err) {
       showBackendErrorsAsToasts(err, "Failed to create Shiprocket order");
@@ -2712,8 +3182,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       CREATED: { bg: "bg-yellow-100", text: "text-yellow-800", Icon: Clock },
       PROCESSING: { bg: "bg-blue-100", text: "text-blue-800", Icon: RefreshCw },
       CONFIRMED: {
-        bg: "bg-indigo-100",
-        text: "text-indigo-800",
+        bg: "bg-brand-100",
+        text: "text-brand-800",
         Icon: RefreshCw,
       },
       SHIPPED: { bg: "bg-purple-100", text: "text-purple-800", Icon: Truck },
@@ -2819,13 +3289,47 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
   };
 
   /** Effective badge + line API / history / Shiprocket return & forward (exchange) or outbound SR */
-  const renderItemStatusBreakdown = (item, { compact = false } = {}) => {
+  const renderItemStatusBreakdown = (item, { compact = false, tableRow = false } = {}) => {
     const ex = getLatestExchange(item);
     const last = getLatestStatusHistoryEntry(item);
     const ret = ex?.shiprocket?.returnOrder;
     const fwd = ex?.shiprocket?.forwardOrder;
     const effective = getDisplayItemStatus(item);
     const lineStatus = item?.status;
+    const lineLabel = formatStatusTokenForUi(lineStatus);
+
+    if (tableRow) {
+      const hint = last
+        ? `${formatStatusTokenForUi(last.previousStatus)} → ${formatStatusTokenForUi(last.status)}`
+        : lineLabel;
+      const titleParts = [`Line (API): ${lineLabel}`];
+      if (last) {
+        titleParts.push(`Last: ${hint}`);
+        if (last.createdAt) {
+          titleParts.push(
+            new Date(last.createdAt).toLocaleString("en-IN", {
+              dateStyle: "short",
+              timeStyle: "short",
+            }),
+          );
+        }
+        if (last.notes) titleParts.push(last.notes);
+      }
+      if (isExchangeLineItem(item)) {
+        if (ret?.status) titleParts.push(`Return SR: ${ret.status}`);
+        if (fwd?.status) titleParts.push(`Forward SR: ${fwd.status}`);
+      } else if (isNormalDeliveryLine(item) && item?.shiprocket?.status) {
+        titleParts.push(`Outbound SR: ${item.shiprocket.status}`);
+      }
+
+      return (
+        <div className="min-w-0 max-w-[9.5rem]" title={titleParts.join(" · ")}>
+          {getStatusBadge(effective)}
+          <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">{hint}</p>
+        </div>
+      );
+    }
+
     const textCls = compact ? "text-[9px]" : "text-[11px]";
     const boxCls = compact
       ? "rounded border border-gray-100 bg-gray-50/90 px-1 py-0.5"
@@ -2930,6 +3434,81 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     ? statusOptions.filter((opt) => isExchangeStatus(opt.value))
     : statusOptions;
 
+  const analyticsCountByStatus = useMemo(() => {
+    const map = new Map();
+    for (const row of analyticsData.counts || []) {
+      if (row?.status) map.set(String(row.status).toUpperCase(), row.count ?? 0);
+    }
+    return map;
+  }, [analyticsData.counts]);
+
+  const analyticsStatusCards = useMemo(() => {
+    const seen = new Set();
+    const cards = [];
+    for (const opt of filteredStatusOptions) {
+      const key = String(opt.value).toUpperCase();
+      const count = analyticsCountByStatus.get(key) ?? 0;
+      if (count > 0) {
+        cards.push({ status: opt.value, label: opt.label, count });
+        seen.add(key);
+      }
+    }
+    for (const row of analyticsData.counts || []) {
+      const key = String(row.status || "").toUpperCase();
+      if (!key || seen.has(key)) continue;
+      const count = row.count ?? 0;
+      if (count > 0) {
+        cards.push({
+          status: key,
+          label: formatStatusTokenForUi(key),
+          count,
+        });
+      }
+    }
+    return cards.sort((a, b) => b.count - a.count);
+  }, [analyticsData.counts, analyticsCountByStatus, filteredStatusOptions]);
+
+  const activeAnalyticsStatus =
+    viewMode === VIEW_ORDER ? statusFilter : itemStatusFilter;
+
+  const applyAnalyticsStatus = (status) => {
+    const next = status || "";
+    if (viewMode === VIEW_ORDER) {
+      setStatusFilter(next);
+      setPagination((p) => ({ ...p, page: 1 }));
+    } else {
+      setItemStatusFilter(next);
+      setItemPagination((p) => ({ ...p, page: 1 }));
+    }
+  };
+
+  const listBulkSelectedCount =
+    viewMode === VIEW_ORDER ? listSelectedOrderIds.length : listSelectedItemKeys.length;
+
+  const hasActiveListFilters = useMemo(
+    () =>
+      Boolean(
+        deliveryTypeFilter ||
+          paymentFilter ||
+          dateFrom ||
+          dateTo ||
+          statusFilter ||
+          lineConsistencyFilter ||
+          itemStatusFilter ||
+          sortOrder !== "desc",
+      ),
+    [
+      deliveryTypeFilter,
+      paymentFilter,
+      dateFrom,
+      dateTo,
+      statusFilter,
+      lineConsistencyFilter,
+      itemStatusFilter,
+      sortOrder,
+    ],
+  );
+
   const renderOrderListCell = (key, order) => {
     switch (key) {
       case "info":
@@ -2955,15 +3534,23 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             }
           />
         );
-      case "image": {
-        const first = firstOrderLineItem(order);
+      case "image":
         return (
-          <TableItemImageThumb itemLike={first} onPickImage={setZoomImageUrl} />
+          <OrderListLineStack
+            order={order}
+            className="flex flex-col items-center gap-2 divide-y divide-gray-100"
+          >
+            {(item) => (
+              <TableItemImageThumb itemLike={item} onPickImage={setZoomImageUrl} />
+            )}
+          </OrderListLineStack>
         );
-      }
       case "orderId":
         return (
-          <span className="block truncate text-xs font-medium text-indigo-600" title={order.orderId || order._id}>
+          <span
+            className={`block truncate text-xs font-medium text-brand-700`}
+            title={order.orderId || order._id}
+          >
             {order.orderId || order._id?.slice(-8).toUpperCase() || "—"}
           </span>
         );
@@ -3011,8 +3598,31 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           </div>
         );
       }
-      case "qty":
-        return order.totalItems || order.totalQuantity || order.items?.length || "?";
+      case "qty": {
+        const items = orderLineItems(order);
+        if (items.length <= 1) {
+          return (
+            <span className="tabular-nums">
+              {(items[0]?.quantity ??
+                order.totalItems ??
+                order.totalQuantity ??
+                items.length) || "?"}
+            </span>
+          );
+        }
+        return (
+          <OrderListLineStack
+            order={order}
+            className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
+          >
+            {(item) => (
+              <span className="tabular-nums text-xs text-gray-700">
+                {item.quantity ?? "—"}
+              </span>
+            )}
+          </OrderListLineStack>
+        );
+      }
       case "total":
         return formatInr(
           order.totalAmount ??
@@ -3024,61 +3634,84 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         const walletUsed = getOrderWalletUsedAmount(order);
         return walletUsed > 0 ? formatInr(walletUsed) : "—";
       }
-      case "status":
-        return getStatusBadge(getDisplayOrderStatus(order));
-      case "courier": {
-        const prev = getOrderShiprocketPreview(order);
-        if (!prev) {
+      case "status": {
+        const items = orderLineItems(order);
+        const orderLevelStatus = order?.status || order?.orderStatus || "";
+        if (lineConsistencyFilter === "mixed" && isOrderMixedLines(order, statusFilter)) {
+          const summary = getOrderLineStatusSummary(order);
           return (
-            <div className="space-y-1">
-              <span className="text-xs text-gray-400">—</span>
-              {hasNormalDeliveryInOrder(order) && (
-                <>
-                  <DocLabelButton
-                    className="w-full"
-                    loading={docDownloadLoading}
-                    loadingType={docActionType}
-                    disabled={docDownloadLoading}
-                    onClick={() => handleLabelForOrder(order)}
-                  />
-                  <DocManifestButton
-                    className="w-full"
-                    loading={docDownloadLoading}
-                    loadingType={docActionType}
-                    disabled={docDownloadLoading}
-                    onClick={() => handleManifestForOrder(order)}
-                  />
-                </>
-              )}
+            <div className="min-w-0 space-y-0.5" title={summary || "Mixed line statuses"}>
+              <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                Mixed
+              </span>
+              {summary ? (
+                <p className="truncate text-[10px] leading-tight text-stone-500">{summary}</p>
+              ) : null}
+            </div>
+          );
+        }
+        if (items.length > 1) {
+          return (
+            <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
+              {(item) => getStatusBadge(getDisplayItemStatus(item) || item?.status)}
+            </OrderListLineStack>
+          );
+        }
+        return (
+          <div className="min-w-0" title="Order status">
+            {getStatusBadge(orderLevelStatus)}
+          </div>
+        );
+      }
+      case "courier": {
+        const items = orderLineItems(order);
+        const docButtons = hasNormalDeliveryInOrder(order) ? (
+          <div className="mt-1 flex flex-col gap-0.5 border-t border-gray-100 pt-1">
+            <DocLabelButton
+              className="w-full"
+              loading={docDownloadLoading}
+              loadingType={docActionType}
+              disabled={docDownloadLoading}
+              onClick={() => handleLabelForOrder(order)}
+              showText={items.length <= 1}
+            />
+            <DocManifestButton
+              className="w-full"
+              loading={docDownloadLoading}
+              loadingType={docActionType}
+              disabled={docDownloadLoading}
+              onClick={() => handleManifestForOrder(order)}
+              showText={items.length <= 1}
+            />
+          </div>
+        ) : null;
+        if (items.length <= 1) {
+          const prev = getOrderShiprocketPreview(order);
+          if (!prev) {
+            return (
+              <div className="space-y-1">
+                <span className="text-xs text-gray-400">—</span>
+                {docButtons}
+              </div>
+            );
+          }
+          return (
+            <div className="space-y-0.5">
+              <ShiprocketDetails sr={prev.primary} compact />
+              {docButtons}
             </div>
           );
         }
         return (
-          <div className="space-y-0.5">
-            <ShiprocketDetails sr={prev.primary} compact />
-            {prev.count > 1 && (
-              <p className="mt-0.5 text-[10px] leading-tight text-gray-400">{prev.count} lines</p>
-            )}
-            {hasNormalDeliveryInOrder(order) && (
-              <>
-                <DocLabelButton
-                  loading={docDownloadLoading}
-                  loadingType={docActionType}
-                  disabled={docDownloadLoading}
-                  onClick={() => handleLabelForOrder(order)}
-                  showText={false}
-                  className="w-full"
-                />
-                <DocManifestButton
-                  loading={docDownloadLoading}
-                  loadingType={docActionType}
-                  disabled={docDownloadLoading}
-                  onClick={() => handleManifestForOrder(order)}
-                  showText={false}
-                  className="w-full"
-                />
-              </>
-            )}
+          <div className="min-w-0 space-y-1">
+            <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
+              {(item) => {
+                const sr = getLineShiprocket(item);
+                if (!sr) return <span className="text-xs text-gray-400">—</span>;
+                return <ShiprocketDetails sr={sr} compact />;
+              }}
+            </OrderListLineStack>
+            {docButtons}
           </div>
         );
       }
@@ -3094,33 +3727,88 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         return formatManufacturingModalDate(order.createdAt);
       case "email":
         return order.user?.email || order.userId?.email || "—";
-      case "productName": {
-        const first = firstOrderLineItem(order);
-        const n = first?.name;
-        const count = order.items?.length || 0;
-        if (!n && count > 1) return `${count} items`;
-        return n || (count > 1 ? `${count} items` : "—");
-      }
+      case "productName":
+        return (
+          <OrderListLineStack order={order}>
+            {(item) => {
+              const label = getLineProductDisplayName(item);
+              return (
+                <span
+                  className="block text-xs font-medium leading-snug text-gray-900"
+                  title={label}
+                >
+                  {label || "—"}
+                </span>
+              );
+            }}
+          </OrderListLineStack>
+        );
       case "productId":
-        return firstOrderLineItem(order)?.productId || "—";
+        return (
+          <OrderListLineStack order={order}>
+            {(item) => (
+              <span className="block text-xs text-gray-700">{item.productId || "—"}</span>
+            )}
+          </OrderListLineStack>
+        );
       case "lineSku":
-        return firstOrderLineItem(order)?.sku || "—";
+        return (
+          <OrderListLineStack order={order}>
+            {(item) => (
+              <span
+                className="block truncate font-mono text-[10px] text-gray-800"
+                title={item.sku || item.variant?.sku}
+              >
+                {item.sku || "—"}
+              </span>
+            )}
+          </OrderListLineStack>
+        );
       case "variantSku":
-        return firstOrderLineItem(order)?.variant?.sku || "—";
+        return (
+          <OrderListLineStack order={order}>
+            {(item) => (
+              <span
+                className="block truncate font-mono text-[10px] text-gray-800"
+                title={item.variant?.sku}
+              >
+                {item.variant?.sku || "—"}
+              </span>
+            )}
+          </OrderListLineStack>
+        );
       case "size":
-        return firstOrderLineItem(order)?.variant?.size || "—";
+        return (
+          <OrderListLineStack
+            order={order}
+            className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
+          >
+            {(item) => (
+              <span className="text-xs text-gray-700">{item.variant?.size || "—"}</span>
+            )}
+          </OrderListLineStack>
+        );
       case "color":
-        return firstOrderLineItem(order)?.variant?.color || "—";
+        return (
+          <OrderListLineStack
+            order={order}
+            className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
+          >
+            {(item) => (
+              <span className="text-xs text-gray-700">{item.variant?.color || "—"}</span>
+            )}
+          </OrderListLineStack>
+        );
       case "pincode":
         return order.address?.pincode || "—";
-      case "storeLink": {
-        const first = firstOrderLineItem(order);
-        return first ? (
-          <TableStoreLink itemId={first.itemId || first._id} itemLike={first} />
-        ) : (
-          "—"
+      case "storeLink":
+        return (
+          <OrderListLineStack order={order}>
+            {(item) => (
+              <TableStoreLink itemId={item.itemId || item._id} itemLike={item} />
+            )}
+          </OrderListLineStack>
         );
-      }
       case "payment":
         return manufacturingPaymentLabel(order.payment);
       case "gatewayOrderId": {
@@ -3184,7 +3872,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         );
       case "orderId":
         return (
-          <span className="font-medium text-indigo-600 truncate block" title={row.orderId}>
+          <span className="font-medium text-brand-600 truncate block" title={row.orderId}>
             {row.orderId || "—"}
           </span>
         );
@@ -3192,12 +3880,17 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         return row.user?.name || row.address?.name || "—";
       case "phone":
         return `${row.user?.countryCode || ""}${row.user?.phoneNumber || "—"}`;
-      case "product":
+      case "product": {
+        const label = getLineProductDisplayName(item);
         return (
-          <span className="font-medium text-gray-900 truncate block max-w-[200px]" title={row.item?.name}>
-            {row.item?.name || row.item?.sku || "—"}
+          <span
+            className="block max-w-[200px] truncate text-xs font-medium text-gray-900"
+            title={label}
+          >
+            {label || "—"}
           </span>
         );
+      }
       case "productId":
         return item.productId || "—";
       case "itemId":
@@ -3271,8 +3964,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     }
   };
 
-  const orderListColSpan = orderListActiveColumns.length + 1;
-  const itemListColSpan = itemListActiveColumns.length + 1;
+  // +1 for trailing actions col, +1 for selection checkbox col
+  const orderListColSpan = orderListActiveColumns.length + (exchangeOnly ? 3 : 2);
+  const itemListColSpan = itemListActiveColumns.length + 2;
+
+  const rowIndexBase = useMemo(
+    () => (pagination.page - 1) * pagination.limit,
+    [pagination.page, pagination.limit],
+  );
 
   const orderListCellTdClass = (key) => {
     switch (key) {
@@ -3280,7 +3979,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       case "image":
         return "px-1 py-2 align-middle text-center";
       case "orderId":
-        return "min-w-0 px-2 py-2 align-top font-medium text-indigo-600";
+        return `min-w-0 px-2 py-2 align-top font-medium text-brand-700`;
       case "qty":
         return "px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums";
       case "total":
@@ -3290,6 +3989,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
         return "min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500";
       case "courier":
         return "min-w-0 px-2 py-2 align-top";
+      case "productName":
+        return "min-w-0 px-2 py-2 align-top max-w-[220px]";
       default:
         return "min-w-0 px-2 py-2 align-top text-xs text-gray-700";
     }
@@ -3303,6 +4004,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
       case "orderId":
         return "px-2 py-2 align-top text-xs";
       case "product":
+      case "productName":
         return "px-2 py-2 align-top max-w-[220px]";
       case "qty":
         return "px-2 py-2 align-top text-center text-xs tabular-nums";
@@ -3326,7 +4028,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           setItemPage(1);
           fetchSingleOrder(customOrderId);
         }}
-        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 transition"
+        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-brand-700 transition hover:bg-brand-50 hover:text-brand-800"
         title="View order details"
         type="button"
       >
@@ -3365,7 +4067,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             setItemPage(1);
             fetchSingleOrder(row.orderId);
           }}
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-50"
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-brand-600 hover:bg-brand-50"
           title="View & update item status"
         >
           View details
@@ -3437,21 +4139,35 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     const v = item.variant || {};
     switch (key) {
       case "image":
-        return <TableItemImageThumb itemLike={item} onPickImage={setZoomImageUrl} sizeClass="h-12 w-12" />;
-      case "productName":
         return (
-          <span className="text-xs font-medium text-gray-900" title={item.name}>
-            {item.name || "—"}
+          <TableItemImageThumb
+            itemLike={item}
+            onPickImage={setZoomImageUrl}
+            sizeClass="h-10 w-10"
+          />
+        );
+      case "productName": {
+        const label = getLineProductDisplayName(item);
+        return (
+          <span
+            className="block truncate text-[11px] font-medium leading-snug text-gray-900"
+            title={label}
+          >
+            {label || "—"}
           </span>
         );
+      }
       case "productId":
         return <span className="text-xs text-gray-700">{item.productId || "—"}</span>;
       case "itemId":
         return <span className="break-all text-[10px] text-gray-600">{itemId || "—"}</span>;
       case "lineSku":
         return (
-          <div className="min-w-0 space-y-1">
-            <div className="truncate text-xs font-medium text-gray-900" title={item.sku || v.sku}>
+          <div className="min-w-0 space-y-0.5">
+            <div
+              className="truncate font-mono text-[10px] font-medium text-gray-900"
+              title={item.sku || v.sku}
+            >
               {item.sku || v.sku || "—"}
             </div>
             {(() => {
@@ -3466,11 +4182,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           </div>
         );
       case "variantSku":
-        return <span className="font-mono text-xs text-gray-800">{v.sku || "—"}</span>;
+        return (
+          <span className="block truncate font-mono text-[10px] text-gray-800" title={v.sku}>
+            {v.sku || "—"}
+          </span>
+        );
       case "size":
-        return v.size || "—";
+        return <span className="text-[11px] font-medium text-stone-800">{v.size || "—"}</span>;
       case "color":
-        return v.color || "—";
+        return <span className="text-[11px] font-medium text-stone-800">{v.color || "—"}</span>;
       case "qty":
         return <span className="tabular-nums text-xs">{item.quantity ?? "—"}</span>;
       case "price":
@@ -3494,192 +4214,631 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50/80">
-      <div className="mx-auto max-w-[1920px] px-1">
-      <div className="mb-3 flex justify-end">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={
-                viewMode === VIEW_ORDER
-                  ? "Search ID, name, phone…"
-                  : "Search order ID, SKU, customer…"
-              }
-              value={viewMode === VIEW_ORDER ? search : itemSearch}
-              onChange={(e) => {
-                if (viewMode === VIEW_ORDER) {
-                  setSearch(e.target.value);
-                  setPagination((p) => ({ ...p, page: 1 }));
-                } else {
-                  setItemSearch(e.target.value);
-                  setItemPagination((p) => ({ ...p, page: 1 }));
-                }
-              }}
-              className={`${inputCompact} pl-8`}
-            />
+  const renderOrderDetailShipDocsCell = (item) => {
+    const docBtn = `${ui.detailDocBtn}`;
+    const brandBtn = `${docBtn} ${ui.detailDocBtnBrand}`;
+    const mutedBtn = `${docBtn} ${ui.detailDocBtnMuted}`;
+    const invoiceTitle =
+      "Invoice is not generated for Created or Confirmed lines";
+
+    const invoiceBtn = canDownloadInvoice(item) ? (
+      <button
+        type="button"
+        disabled={docDownloadLoading}
+        onClick={() => handleGetInvoiceClick(selectedOrder, item)}
+        className={brandBtn}
+        title="Download invoice"
+      >
+        <CreditCard size={10} className="shrink-0" aria-hidden />
+        Inv
+      </button>
+    ) : (
+      <span className="text-[9px] text-amber-700" title={invoiceTitle}>
+        No inv
+      </span>
+    );
+
+    const labelBtn = (
+      <button
+        type="button"
+        disabled={docDownloadLoading}
+        onClick={() => handleLabelForItem(item)}
+        className={brandBtn}
+        title="Download shipping label"
+      >
+        {docDownloadLoading && docActionType === "label" ? (
+          <RefreshCw size={10} className="shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Truck size={10} className="shrink-0" aria-hidden />
+        )}
+        Label
+      </button>
+    );
+
+    const manifestDisabled = (() => {
+      const ids = getShipmentIdsForItem(item);
+      return (
+        ids.length > 0 &&
+        ids.every((id) => downloadedManifestShipments.has(String(id)))
+      );
+    })();
+
+    const manifestBtn = (
+      <button
+        type="button"
+        disabled={docDownloadLoading || manifestDisabled}
+        onClick={() => handleManifestForItem(item)}
+        className={mutedBtn}
+        title={
+          manifestDisabled
+            ? "Manifest already downloaded for this shipment"
+            : "Download manifest"
+        }
+      >
+        {docDownloadLoading && docActionType === "manifest" ? (
+          <RefreshCw size={10} className="shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Package size={10} className="shrink-0" aria-hidden />
+        )}
+        Mnfst
+      </button>
+    );
+
+    if (isNormalDeliveryLine(item)) {
+      const sr = getLineShiprocket(item);
+      return (
+        <div className="min-w-[8.5rem] max-w-[11rem]">
+          <div className="mb-0.5 min-w-0">
+            {sr ? (
+              <ShiprocketDetails sr={sr} compact />
+            ) : (
+              <span className="text-[9px] leading-tight text-amber-800">SR pending</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-0.5">
+            {invoiceBtn}
+            {labelBtn}
+            {manifestBtn}
           </div>
         </div>
-        {!exchangeOnly && (
-          <div className="mx-auto flex max-w-[1920px] gap-1 border-t border-slate-100 px-3 sm:px-4">
-            <button
-              type="button"
-              onClick={() => setViewMode(VIEW_ORDER)}
-              className={`border-b-2 px-2.5 py-2 text-[11px] font-medium transition-colors -mb-px ${
-                viewMode === VIEW_ORDER
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              By order
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode(VIEW_ITEM)}
-              className={`border-b-2 px-2.5 py-2 text-[11px] font-medium transition-colors -mb-px ${
-                viewMode === VIEW_ITEM
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              By item
-            </button>
-          </div>
-        )}
+      );
+    }
+
+    return (
+      <div className="min-w-[6rem] max-w-[9rem]">
+        <div className="flex flex-wrap items-center gap-0.5">{invoiceBtn}</div>
       </div>
+    );
+  };
 
-      <div className="mx-auto w-full max-w-[1920px] min-w-0 px-3 py-3 sm:px-4">
-        {exchangeOnly && (
-          <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-medium text-indigo-700">
-            Exchange orders — by order view only.
-          </div>
-        )}
+  const clearOrderSelection = () => {
+    setSelectedOrder(null);
+    setOrderError(null);
+    setOrderAssignments(null);
+    setSelectedItemIds([]);
+    setBulkStatus("");
+    setSelectedItemIdFromListView(null);
+  };
 
-        <div className="mb-3">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Delivery type
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {DELIVERY_TYPE_TABS.map((tab) => (
-              <button
-                key={tab.value || "all"}
-                type="button"
-                onClick={() => {
-                  setDeliveryTypeFilter(tab.value);
-                  setPagination((p) => ({ ...p, page: 1 }));
-                  setItemPagination((p) => ({ ...p, page: 1 }));
-                }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  deliveryTypeFilter === tab.value
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+  const orderDetailFromItemList = Boolean(
+    selectedOrder && selectedItemIdFromListView,
+  );
+
+  const shiprocketEligibleItems = selectedOrder
+    ? getShiprocketEligibleItems(selectedOrder)
+    : [];
+  const shiprocketModalSelectedItems = shiprocketEligibleItems.filter((it) =>
+    shiprocketModalItemIds.includes(String(it.itemId || it._id)),
+  );
+  const shiprocketModalGroupIds = [
+    ...new Set(
+      shiprocketModalSelectedItems
+        .map((it) => String(it.shipmentGroupId || ""))
+        .filter(Boolean),
+    ),
+  ];
+  const shiprocketModalCanSubmit =
+    shiprocketModalSelectedItems.length > 0 && shiprocketModalGroupIds.length === 1;
+
+  return (
+    <div className={ui.pageWrap}>
+      <div className={ui.outerWrap}>
+        <div className={ui.contentWrap}>
+          <div
+            className={`${ui.toolbarCard} flex flex-nowrap items-center gap-1.5 overflow-x-auto [-webkit-overflow-scrolling:touch]`}
+          >
+              {selectedOrder ? (
+                <button
+                  type="button"
+                  onClick={clearOrderSelection}
+                  className={`${ui.btnOutline} shrink-0 py-1 text-[11px] text-brand-700`}
+                  title={
+                    viewMode === VIEW_ITEM
+                      ? "Back to order items list"
+                      : "Back to orders list"
+                  }
+                >
+                  ← Back
+                </button>
+              ) : null}
+              {listPageTitle ? (
+                <h1 className="shrink-0 whitespace-nowrap text-base font-bold tracking-tight sm:text-lg">
+                  {listPageTitle}
+                </h1>
+              ) : null}
+              <div
+                className={`relative shrink ${
+                  selectedOrder
+                    ? "min-w-[88px] max-w-[150px]"
+                    : "min-w-[100px] max-w-[180px] flex-1"
                 }`}
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+                />
+                <input
+                  type="text"
+                  placeholder={
+                    viewMode === VIEW_ORDER
+                      ? "Search order ID, customer, product name…"
+                      : "Search order ID, product name, SKU…"
+                  }
+                  value={viewMode === VIEW_ORDER ? search : itemSearch}
+                  onChange={(e) => {
+                    if (viewMode === VIEW_ORDER) {
+                      setSearch(e.target.value);
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    } else {
+                      setItemSearch(e.target.value);
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }
+                  }}
+                  className={`${ui.inputCompact} w-full min-w-0 pl-8 py-1.5 text-[11px]`}
+                />
+              </div>
 
-        <div className="mb-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</p>
-          <div className="flex flex-wrap gap-2">
-            {PAYMENT_FILTER_TABS.map((tab) => (
+              {selectedOrder ? (
+                <>
+                  {orderDetailFromItemList ? (
+                    <>
+                      <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-stone-800">
+                        Item · {selectedOrder.orderId || "—"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedItemIdFromListView(null)}
+                        className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                      >
+                        Full order
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-400">
+                        Actions
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openOrderNotesModal(selectedOrder?.orderId)}
+                        className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                      >
+                        <StickyNote className="h-3.5 w-3.5" aria-hidden />
+                        Notes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openShiprocketItemModal}
+                        disabled={createShiprocketLoading}
+                        className={`${ui.btnOutline} shrink-0 border-sky-200 py-1 text-[11px] text-sky-800 hover:bg-sky-50`}
+                        title="Choose items for one Shiprocket order (NORMAL delivery)"
+                      >
+                        {createShiprocketLoading ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <Truck className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        Shiprocket
+                      </button>
+                      {String(selectedOrder?.payment?.mode || "").toUpperCase() !==
+                        "COD" &&
+                        String(selectedOrder?.payment?.status || "").toUpperCase() ===
+                          "PENDING" && (
+                          <button
+                            type="button"
+                            onClick={openPaymentOverrideModal}
+                            className={`${ui.btnAmber} shrink-0 py-1 text-[11px]`}
+                            title="Use only if customer has paid but payment is still pending"
+                          >
+                            Mark paid + Confirm
+                          </button>
+                        )}
+                      <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
+                      <span className="shrink-0 whitespace-nowrap text-[10px] font-medium text-stone-600">
+                        All items
+                      </span>
+                      <select
+                        value={wholeOrderNewStatus}
+                        onChange={(e) => setWholeOrderNewStatus(e.target.value)}
+                        disabled={updatingWholeOrder}
+                        className={ui.selectToolbar}
+                        aria-label="Status for all items"
+                      >
+                        <option value="">Status…</option>
+                        {filteredStatusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleUpdateWholeOrderStatus}
+                        disabled={updatingWholeOrder || !wholeOrderNewStatus}
+                        className={ui.btnPrimarySm}
+                        title="Apply status to all items"
+                      >
+                        {updatingWholeOrder ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
+                        ) : null}
+                        Apply
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : null}
+
+              {!selectedOrder ? (
+                <select
+                  className="h-[30px] w-11 shrink-0 rounded-lg border border-border bg-white px-0.5 py-1 text-center text-[10px] tabular-nums text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  value={viewMode === VIEW_ORDER ? pagination.limit : itemPagination.limit}
+                  disabled={viewMode === VIEW_ORDER ? loading : itemLoading}
+                  onChange={(e) => {
+                    const lim = parseInt(e.target.value, 10) || 10;
+                    if (viewMode === VIEW_ORDER) {
+                      setPagination((p) => ({ ...p, limit: lim, page: 1 }));
+                    } else {
+                      setItemPagination((p) => ({ ...p, limit: lim, page: 1 }));
+                    }
+                  }}
+                  title="Rows per page"
+                  aria-label="Rows per page"
+                >
+                  {LIST_PAGE_LIMIT_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+
+              {!exchangeOnly && !selectedOrder ? (
+                <div className="inline-flex shrink-0 rounded-lg border border-border bg-canvas-muted p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode(VIEW_ORDER)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      viewMode === VIEW_ORDER
+                        ? "bg-white text-brand-700 shadow-sm"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    By order
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode(VIEW_ITEM)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      viewMode === VIEW_ITEM
+                        ? "bg-white text-brand-700 shadow-sm"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    By item
+                  </button>
+                </div>
+              ) : null}
+
+              {viewMode === VIEW_ORDER && !selectedOrder ? (
+                <div
+                  className="inline-flex shrink-0 rounded-lg border border-border bg-canvas-muted p-0.5"
+                  role="group"
+                  aria-label="Line status consistency"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLineConsistencyFilter("");
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      lineConsistencyFilter === ""
+                        ? "bg-white text-brand-700 shadow-sm"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                    title="Status dropdown filters order status"
+                  >
+                    All lines
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLineConsistencyFilter("mixed");
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      lineConsistencyFilter === "mixed"
+                        ? "bg-amber-100 text-amber-900 shadow-sm"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                    title="2+ lines with different statuses; Status dropdown matches any line"
+                  >
+                    Mixed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLineConsistencyFilter("uniform");
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      lineConsistencyFilter === "uniform"
+                        ? "bg-white text-brand-700 shadow-sm"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                    title="Same status on every line; Status dropdown filters order status"
+                  >
+                    Not mixed
+                  </button>
+                </div>
+              ) : null}
+
+              {!selectedOrder ? (
+                <>
+                    <button
+                      type="button"
+                      onClick={() => setListFiltersOpen((open) => !open)}
+                      className={`${ui.btnOutline} text-[11px] py-1 ${
+                        listFiltersOpen ? "ring-2 ring-brand-200" : ""
+                      }`}
+                      aria-expanded={listFiltersOpen}
+                      title={listFiltersOpen ? "Hide filters" : "Show filters"}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                      Filters
+                      {hasActiveListFilters ? (
+                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                          On
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAnalyticsOpen((open) => !open);
+                        if (analyticsOpen) setAnalyticsError(null);
+                      }}
+                      className={`${ui.btnOutline} text-[11px] py-1 ${
+                        analyticsOpen ? "ring-2 ring-brand-200" : ""
+                      }`}
+                      aria-expanded={analyticsOpen}
+                      title={
+                        viewMode === VIEW_ORDER
+                          ? "Order counts by status — click a card to filter the table"
+                          : "Item counts by line status — click a card to filter the table"
+                      }
+                    >
+                      <BarChart2 className="h-3.5 w-3.5" aria-hidden />
+                      Analytics
+                      {activeAnalyticsStatus ? (
+                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                          1
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkActionsOpen((open) => !open)}
+                      className={`${ui.btnOutline} text-[11px] py-1 ${
+                        bulkActionsOpen ? "ring-2 ring-brand-200" : ""
+                      }`}
+                      aria-expanded={bulkActionsOpen}
+                      title={bulkActionsOpen ? "Hide bulk actions" : "Show bulk actions"}
+                    >
+                      <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                      Bulk
+                      {listBulkSelectedCount > 0 ? (
+                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                          {listBulkSelectedCount}
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={manufacturingPdfLoading}
+                      onClick={handleDownloadManufacturingPdf}
+                      className={`${ui.btnOutline} text-[11px] py-1`}
+                      title={
+                        exchangeOnly
+                          ? "Downloads a PDF of exchange lines matching your current filters (max 8,000 lines per file)."
+                          : viewMode === VIEW_ITEM
+                            ? "Downloads a PDF of all matching lines (uses dates, delivery, payment, search + line status from By item). Max 8,000 lines per file."
+                            : "Downloads a PDF of all matching lines (uses dates, delivery, payment, search). Open By item to filter by line status. Max 8,000 lines per file."
+                      }
+                    >
+                      {manufacturingPdfLoading ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <FileDown className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      {exchangeOnly ? "PDF" : "Mfg PDF"}
+                    </button>
+
+                  {!exchangeOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(ap("orders/stale"))}
+                      className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                      title="Open the stale orders report (CONFIRMED 24h+ by default)."
+                    >
+                      <Clock className="h-3.5 w-3.5" aria-hidden />
+                      Stale
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+          </div>
+
+        {!selectedOrder && analyticsOpen ? (
+          <div className={ui.analyticsPanel}>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-semibold text-stone-800">
+                  Status analytics
+                  <span className="ml-1.5 font-normal text-stone-500">
+                    ({viewMode === VIEW_ORDER ? "by order" : "by item"}
+                    {lineConsistencyFilter === "mixed" && viewMode === VIEW_ORDER
+                      ? " · mixed lines"
+                      : ""}
+                    )
+                  </span>
+                </p>
+                <p className="text-[10px] text-stone-500">
+                  Uses current search, dates, delivery & payment filters. Click a card to
+                  filter the table.
+                </p>
+              </div>
               <button
-                key={tab.value || "all-payments"}
                 type="button"
-                onClick={() => {
-                  setPaymentFilter(tab.value);
-                  setPagination((p) => ({ ...p, page: 1 }));
-                  setItemPagination((p) => ({ ...p, page: 1 }));
-                }}
-                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                  paymentFilter === tab.value
-                    ? "bg-amber-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+                onClick={() => fetchStatusAnalytics()}
+                disabled={analyticsLoading}
+                className={`${ui.btnOutline} py-1 text-[10px]`}
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {!selectedOrder && (
-          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-indigo-950">
-                Manufacturing & fulfilment PDF
-              </p>
-              <p className="text-[10px] text-indigo-900/80 mt-0.5 max-w-xl">
-                Exports <span className="font-medium">every line</span> that matches your current filters (up to 8,000
-                lines per file — the PDF header says if the export was capped). Uses{" "}
-                <span className="font-medium">order date range</span>, <span className="font-medium">delivery type</span>
-                , <span className="font-medium">payment</span>, search
-                {exchangeOnly ? (
-                  <>, and <span className="font-medium">exchange</span> lines only.</>
-                ) : viewMode === VIEW_ITEM ? (
-                  <>
-                    , plus <span className="font-medium">line status</span> from the By item tab. The table below is
-                    paginated for browsing; the PDF still includes all matching lines.
-                  </>
+                {analyticsLoading ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
                 ) : (
-                  <>
-                    . Open <span className="font-medium">By item</span> to set line status for the export; dates and
-                    delivery apply from here too.
-                  </>
+                  <RefreshCw className="h-3 w-3" aria-hidden />
                 )}
-              </p>
+                Refresh
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={manufacturingPdfLoading}
-              onClick={handleDownloadManufacturingPdf}
-              className={`${btnPrimary} shrink-0`}
-              title="Downloads one PDF with all order lines matching your filters (max 8,000 per download)."
-            >
-              {manufacturingPdfLoading ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              ) : (
-                <FileDown className="h-3.5 w-3.5" aria-hidden />
-              )}
-              Manufacturing PDF
-            </button>
+            {analyticsError ? (
+              <p className="mb-2 text-[11px] text-danger">{analyticsError}</p>
+            ) : null}
+            {analyticsLoading && !analyticsStatusCards.length ? (
+              <p className="py-4 text-center text-[11px] text-stone-500">Loading counts…</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applyAnalyticsStatus("")}
+                  className={`${ui.analyticsCard} ${
+                    !activeAnalyticsStatus
+                      ? ui.analyticsCardActive
+                      : ui.analyticsCardIdle
+                  }`}
+                >
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-stone-500">
+                    All
+                  </span>
+                  <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
+                    {analyticsData.total ?? 0}
+                  </span>
+                </button>
+                {analyticsStatusCards.map(({ status, label, count }) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => applyAnalyticsStatus(status)}
+                    className={`${ui.analyticsCard} ${
+                      activeAnalyticsStatus === status
+                        ? ui.analyticsCardActive
+                        : ui.analyticsCardIdle
+                    }`}
+                    title={`Show only ${label}`}
+                  >
+                    <span className="max-w-[7rem] truncate text-[9px] font-semibold uppercase tracking-wide text-stone-600">
+                      {label}
+                    </span>
+                    <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
+                      {count}
+                    </span>
+                  </button>
+                ))}
+                {!analyticsLoading && analyticsStatusCards.length === 0 ? (
+                  <p className="py-2 text-[11px] text-stone-500">
+                    No matching {viewMode === VIEW_ORDER ? "orders" : "items"} for current
+                    filters.
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
 
-        {!selectedOrder && !exchangeOnly && (
-          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-amber-950 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
-                Stale orders (CONFIRMED 24h+)
-              </p>
-              <p className="text-[10px] text-amber-900/80 mt-0.5 max-w-xl">
-                Lines stuck in CONFIRMED — review, export PDF, or email report on a dedicated page.
-              </p>
+        {!selectedOrder && listFiltersOpen ? (
+          <div className={`${ui.filterCard} mb-2`}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-3 py-2">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Delivery
+              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {DELIVERY_TYPE_TABS.map((tab) => (
+                  <button
+                    key={tab.value || "all"}
+                    type="button"
+                    onClick={() => {
+                      setDeliveryTypeFilter(tab.value);
+                      setPagination((p) => ({ ...p, page: 1 }));
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      deliveryTypeFilter === tab.value
+                        ? ui.deliveryTabActive
+                        : ui.deliveryTabInactive
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <span
+                className="hidden h-4 w-px shrink-0 bg-border sm:block"
+                aria-hidden
+              />
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                Payment
+              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {PAYMENT_FILTER_TABS.map((tab) => (
+                  <button
+                    key={tab.value || "all-payments"}
+                    type="button"
+                    onClick={() => {
+                      setPaymentFilter(tab.value);
+                      setPagination((p) => ({ ...p, page: 1 }));
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      paymentFilter === tab.value ? ui.paymentTabActive : ui.paymentTabInactive
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate(ap("orders/stale"))}
-              className={`${btnAmber} shrink-0`}
-            >
-              <Clock className="h-3.5 w-3.5" aria-hidden />
-              Stale orders page
-            </button>
           </div>
-        )}
+        ) : null}
 
         {error && viewMode === VIEW_ORDER && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
-            <AlertCircle size={20} />
+          <div className={ui.errorBox}>
+            <AlertCircle size={16} />
             {error}
           </div>
         )}
         {itemError && viewMode === VIEW_ITEM && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-2">
-            <AlertCircle size={20} />
+          <div className={ui.errorBox}>
+            <AlertCircle size={16} />
             {itemError}
           </div>
         )}
@@ -3688,13 +4847,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
           viewMode === VIEW_ORDER ? (
             <>
               {/* Filters: By order */}
-              <div className="mb-3 overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-col gap-2 overflow-visible border-b border-slate-100 bg-slate-50/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs font-semibold text-slate-800">Filters</p>
+              {listFiltersOpen ? (
+              <div className={ui.filterCard}>
+                <div className="flex flex-col gap-2 overflow-visible border-b border-border bg-canvas-muted/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[11px] font-semibold text-stone-800">Filters</p>
                   <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
                     {(dateFrom ||
                       dateTo ||
                       statusFilter ||
+                      lineConsistencyFilter ||
                       paymentFilter ||
                       sortOrder !== "desc") && (
                       <button
@@ -3703,12 +4864,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           setDateFrom("");
                           setDateTo("");
                           setStatusFilter("");
+                          setLineConsistencyFilter("");
                           setPaymentFilter("");
                           setSortBy("createdAt");
                           setSortOrder("desc");
                           setPagination((p) => ({ ...p, page: 1 }));
                         }}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
                       >
                         Clear all
                       </button>
@@ -3724,9 +4886,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="order-filter-from" className="text-xs font-semibold text-gray-500">
+                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="order-filter-from" className="text-[10px] font-semibold text-gray-500">
                       From date
                     </label>
                     <input
@@ -3737,11 +4899,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setDateFrom(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className={ui.inputCompact}
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="order-filter-to" className="text-xs font-semibold text-gray-500">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="order-filter-to" className="text-[10px] font-semibold text-gray-500">
                       To date
                     </label>
                     <input
@@ -3752,12 +4914,17 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setDateTo(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className={ui.inputCompact}
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="order-filter-status" className="text-xs font-semibold text-gray-500">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="order-filter-status" className="text-[10px] font-semibold text-gray-500">
                       Status
+                      {lineConsistencyFilter === "mixed" ? (
+                        <span className="font-normal text-stone-400"> (any line)</span>
+                      ) : (
+                        <span className="font-normal text-stone-400"> (order)</span>
+                      )}
                     </label>
                     <select
                       id="order-filter-status"
@@ -3766,7 +4933,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setStatusFilter(e.target.value);
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className={ui.inputCompact}
                     >
                       <option value="">All statuses</option>
                       {filteredStatusOptions.map((opt) => (
@@ -3776,8 +4943,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       ))}
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="order-filter-sort" className="text-xs font-semibold text-gray-500">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="order-filter-sort" className="text-[10px] font-semibold text-gray-500">
                       Sort
                     </label>
                     <select
@@ -3790,7 +4957,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setSortOrder(order || "desc");
                         setPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className={ui.inputCompact}
                     >
                       <option value="createdAt-desc">Latest first</option>
                       <option value="createdAt-asc">Oldest first</option>
@@ -3798,16 +4965,149 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   </div>
                 </div>
               </div>
+              ) : null}
 
-            <TableScrollHint />
-            <div className={tableScrollShell}>
+            {!loading && orders.length > 0 && !selectedOrder && bulkActionsOpen && (
+              <div className={ui.bulkBar}>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-stone-800">
+                    Bulk actions
+                  </span>
+                  <span className="text-stone-600">
+                    Selected:{" "}
+                    <span className="font-medium text-stone-900">
+                      {listSelectedOrderIds.length}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={listSelectedOrderIds.length === 0 || docDownloadLoading}
+                    onClick={() => {
+                      const selected = new Set(listSelectedOrderIds.map(String));
+                      const shipmentIds = orders
+                        .filter((o) => selected.has(String(o?.orderId)))
+                        .flatMap((o) => getOrderShipmentIds(o))
+                        .filter(Boolean);
+                      const uniq = Array.from(new Set(shipmentIds.map(String)));
+                      if (uniq.length === 0) {
+                        toast.error("No Shiprocket shipment IDs found in selected orders.");
+                        return;
+                      }
+                      handleDownloadLabelsClick(uniq);
+                    }}
+                    className={`${ui.btnOutline} text-[11px] py-1`}
+                    title="Download shipping labels for selected orders (Shiprocket shipment IDs)."
+                  >
+                    Label(s)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={listSelectedOrderIds.length === 0 || docDownloadLoading}
+                    onClick={() => {
+                      const selected = new Set(listSelectedOrderIds.map(String));
+                      const shipmentIds = orders
+                        .filter((o) => selected.has(String(o?.orderId)))
+                        .flatMap((o) => getOrderShipmentIds(o))
+                        .filter(Boolean);
+                      const uniq = Array.from(new Set(shipmentIds.map(String)));
+                      if (uniq.length === 0) {
+                        toast.error("No Shiprocket shipment IDs found in selected orders.");
+                        return;
+                      }
+                      handleDownloadManifestClick(uniq);
+                    }}
+                    className={`${ui.btnOutline} text-[11px] py-1`}
+                    title="Download manifest for selected orders (Shiprocket shipment IDs)."
+                  >
+                    Manifest
+                  </button>
+                  <button
+                    type="button"
+                    disabled={listSelectedOrderIds.length === 0 || listBulkProcessing}
+                    onClick={async () => {
+                      const ids = listSelectedOrderIds.map(String).filter(Boolean);
+                      if (ids.length === 0) return;
+                      const ok = window.confirm(
+                        `Mark ${ids.length} order(s) as PROCESSING?`,
+                      );
+                      if (!ok) return;
+                      setListBulkProcessing(true);
+                      try {
+                        const results = await Promise.allSettled(
+                          ids.map((orderId) =>
+                            updateWholeOrderStatus(orderId, { status: "PROCESSING" }),
+                          ),
+                        );
+                        const failed = results.filter((r) => r.status === "rejected");
+                        if (failed.length) {
+                          toast.error(
+                            `${failed.length}/${ids.length} failed to update. Open console for details.`,
+                          );
+                          failed.slice(0, 3).forEach((f) =>
+                            console.error("[Bulk PROCESSING] failed:", f),
+                          );
+                        } else {
+                          toast.success(`Updated ${ids.length} order(s) to PROCESSING.`);
+                        }
+                        fetchOrders();
+                      } finally {
+                        setListBulkProcessing(false);
+                      }
+                    }}
+                    className={`${ui.btnOutline} text-[11px] py-1`}
+                    title="Mark selected orders as PROCESSING."
+                  >
+                    {listBulkProcessing ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : null}
+                    PROCESSING
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!exchangeOnly && <TableScrollHint />}
+            <div className={ui.tableScrollShell}>
               <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
-                <thead className="sticky top-0 z-[1] bg-slate-50/95 shadow-[0_1px_0_0_rgb(226_232_240)]">
+                <thead className={ui.thead}>
                   <tr>
+                    <th className="w-10 px-1.5 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all orders on page"
+                        checked={
+                          orders.length > 0 &&
+                          orders
+                            .map((o) => String(o?.orderId || ""))
+                            .filter(Boolean)
+                            .every((id) => listSelectedOrderIds.includes(id))
+                        }
+                        onChange={(e) => {
+                          const pageIds = orders
+                            .map((o) => String(o?.orderId || ""))
+                            .filter(Boolean);
+                          if (e.target.checked) {
+                            setListSelectedOrderIds((prev) =>
+                              Array.from(new Set([...prev, ...pageIds])),
+                            );
+                          } else {
+                            setListSelectedOrderIds((prev) =>
+                              prev.filter((id) => !pageIds.includes(id)),
+                            );
+                          }
+                        }}
+                        className={ui.checkbox}
+                      />
+                    </th>
+                    {exchangeOnly ? (
+                      <th className={`w-10 px-1.5 py-1.5 text-center ${ui.th}`}>#</th>
+                    ) : null}
                     {orderListActiveColumns.map((col) => (
                       <th
                         key={col.key}
-                        className={`px-1.5 py-1.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 ${
+                        className={`px-1.5 py-1.5 ${ui.th} ${
                           col.key === "info" ? "px-1 text-center" : ""
                         }`}
                         title={
@@ -3821,27 +5121,60 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         {col.key === "info" ? "Info" : col.key === "orderId" ? "Order" : col.key === "courier" ? "Courier / SR" : col.label}
                       </th>
                     ))}
-                    <th className="px-1.5 py-1.5 text-center text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Details / notes
-                    </th>
+                    <th className={`px-1.5 py-1.5 text-center ${ui.th}`}>Details / notes</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
+                <tbody className={exchangeOnly ? "" : "divide-y divide-gray-100 bg-white"}>
                   {loading ? (
                     <tr>
                       <td colSpan={orderListColSpan} className="py-16 text-center text-gray-500">
-                        Loading orders…
+                        {exchangeOnly ? (
+                          <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
+                            <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                            Loading…
+                          </span>
+                        ) : (
+                          "Loading orders…"
+                        )}
                       </td>
                     </tr>
                   ) : orders.length === 0 ? (
                     <tr>
                       <td colSpan={orderListColSpan} className="py-16 text-center text-gray-500">
-                        No orders found
+                        {exchangeOnly ? "No exchange orders found" : "No orders found"}
                       </td>
                     </tr>
                   ) : (
-                    orders.map((order) => (
-                      <tr key={order._id} className="hover:bg-gray-50/70 transition-colors">
+                    orders.map((order, idx) => (
+                      <tr
+                        key={order._id}
+                        className={`border-t border-border/80 transition-colors ${ui.rowHover} ${
+                          orderLineItems(order).length > 1 ? "[&>td]:align-top" : ""
+                        }`}
+                      >
+                        <td className="px-1.5 py-2 align-middle text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select order ${order?.orderId || ""}`}
+                            checked={listSelectedOrderIds.includes(String(order?.orderId || ""))}
+                            onChange={(e) => {
+                              const id = String(order?.orderId || "");
+                              if (!id) return;
+                              setListSelectedOrderIds((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, id]))
+                                  : prev.filter((x) => x !== id),
+                              );
+                            }}
+                            className={ui.checkbox}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        {exchangeOnly ? (
+                          <td className="px-1.5 py-2 text-center text-[10px] text-stone-500">
+                            {rowIndexBase + idx + 1}
+                          </td>
+                        ) : null}
                         {orderListActiveColumns.map((col) => (
                           <td key={col.key} className={orderListCellTdClass(col.key)}>
                             {renderOrderListCell(col.key, order)}
@@ -3855,44 +5188,36 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   )}
                 </tbody>
               </table>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-3 py-3">
-                <div className="text-sm text-gray-700">
-                  Page <span className="font-medium">{pagination.page}</span> of{" "}
-                  <span className="font-medium">{pagination.totalPages || 1}</span>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={pagination.page <= 1 || loading}
-                    onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
-                    className={btnOutline}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" /> Prev
-                  </button>
-                  <button
-                    disabled={pagination.page >= pagination.totalPages || loading}
-                    onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-                    className={btnOutline}
-                  >
-                    Next <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
             </div>
+
+            <ListPaginationFooter
+              loading={loading}
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              limit={pagination.limit}
+              onPageChange={(nextPage) =>
+                setPagination((p) => ({ ...p, page: nextPage }))
+              }
+              btnOutline={ui.btnOutline}
+              emptyLabel="0 orders"
+            />
             </>
           ) : (
             <>
               {/* Filters: By item */}
-              <div className="mb-6 overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm">
+              {listFiltersOpen ? (
+              <div className="mb-2 overflow-visible rounded-xl border border-border bg-white shadow-sm">
                 <div className="flex flex-col gap-3 overflow-visible border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-sm font-semibold text-gray-800">Filters</p>
+                    <p className="text-[11px] font-semibold text-gray-800">Filters</p>
                     <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
                       <button
                         type="button"
                         onClick={() => setItemListView("table")}
-                        className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
                           itemListViewMode === "table"
-                            ? "bg-white text-indigo-700 shadow-sm"
+                            ? "bg-white text-brand-700 shadow-sm"
                             : "text-gray-600 hover:text-gray-900"
                         }`}
                       >
@@ -3901,9 +5226,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                       <button
                         type="button"
                         onClick={() => setItemListView("cards")}
-                        className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                        className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
                           itemListViewMode === "cards"
-                            ? "bg-white text-indigo-700 shadow-sm"
+                            ? "bg-white text-brand-700 shadow-sm"
                             : "text-gray-600 hover:text-gray-900"
                         }`}
                       >
@@ -3922,7 +5247,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
                       >
                         Clear all
                       </button>
@@ -3941,9 +5266,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="item-filter-from" className="text-xs font-semibold text-gray-500">
+                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="item-filter-from" className="text-[10px] font-semibold text-gray-500">
                       From date
                     </label>
                     <input
@@ -3954,11 +5279,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setDateFrom(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="item-filter-to" className="text-xs font-semibold text-gray-500">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="item-filter-to" className="text-[10px] font-semibold text-gray-500">
                       To date
                     </label>
                     <input
@@ -3969,11 +5294,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setDateTo(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
-                    <label htmlFor="item-filter-status" className="text-xs font-semibold text-gray-500">
+                  <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                    <label htmlFor="item-filter-status" className="text-[10px] font-semibold text-gray-500">
                       Line status
                     </label>
                     <select
@@ -3983,7 +5308,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         setItemStatusFilter(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                     >
                       <option value="">All statuses</option>
                       {filteredStatusOptions.map((opt) => (
@@ -3994,15 +5319,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     </select>
                   </div>
                 </div>
-                <p className="border-t border-gray-100 px-4 py-3 text-xs text-gray-500">
+                <p className="border-t border-gray-100 px-3 py-2.5 text-[11px] text-gray-500 leading-snug">
                   The list is paginated for speed. <span className="font-medium">Download manufacturing PDF</span>{" "}
                   above exports <span className="font-medium">all</span> lines matching dates, delivery, payment, status, and
                   search (not only this page).
                 </p>
               </div>
+              ) : null}
               {itemLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
-                  <RefreshCw className="h-10 w-10 animate-spin text-indigo-500 mb-3" />
+                  <RefreshCw className="h-10 w-10 animate-spin text-brand-600 mb-3" />
                   <p className="text-sm font-medium text-gray-600">
                     Loading order items…
                   </p>
@@ -4019,11 +5345,149 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 </div>
               ) : itemListViewMode === "table" ? (
                 <>
+                  {!itemLoading && orderItems.length > 0 && !selectedOrder && bulkActionsOpen && (
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-white px-3 py-2 text-[11px] shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-stone-800">Bulk actions</span>
+                        <span className="text-stone-600">
+                          Selected:{" "}
+                          <span className="font-medium text-stone-900">
+                            {listSelectedItemKeys.length}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={listSelectedItemKeys.length === 0 || docDownloadLoading}
+                          onClick={() => {
+                            const selected = new Set(listSelectedItemKeys);
+                            const shipmentIds = orderItems
+                              .filter((r) =>
+                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
+                              )
+                              .map((r) => shiprocketFromItemRow(r))
+                              .flatMap((sr) => [sr?.shipmentId, sr?.shipmentGroupId].filter(Boolean))
+                              .map(String);
+                            const uniq = Array.from(new Set(shipmentIds));
+                            if (uniq.length === 0) {
+                              toast.error("No Shiprocket shipment IDs found in selected items.");
+                              return;
+                            }
+                            handleDownloadLabelsClick(uniq);
+                          }}
+                          className={`${ui.btnOutline} text-[11px] py-1`}
+                        >
+                          Label(s)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={listSelectedItemKeys.length === 0 || docDownloadLoading}
+                          onClick={() => {
+                            const selected = new Set(listSelectedItemKeys);
+                            const shipmentIds = orderItems
+                              .filter((r) =>
+                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
+                              )
+                              .map((r) => shiprocketFromItemRow(r))
+                              .flatMap((sr) => [sr?.shipmentId, sr?.shipmentGroupId].filter(Boolean))
+                              .map(String);
+                            const uniq = Array.from(new Set(shipmentIds));
+                            if (uniq.length === 0) {
+                              toast.error("No Shiprocket shipment IDs found in selected items.");
+                              return;
+                            }
+                            handleDownloadManifestClick(uniq);
+                          }}
+                          className={`${ui.btnOutline} text-[11px] py-1`}
+                        >
+                          Manifest
+                        </button>
+                        <button
+                          type="button"
+                          disabled={listSelectedItemKeys.length === 0 || listBulkProcessing}
+                          onClick={async () => {
+                            const selected = new Set(listSelectedItemKeys);
+                            const targets = orderItems
+                              .filter((r) =>
+                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
+                              )
+                              .map((r) => ({
+                                orderId: String(r?.orderId || ""),
+                                itemId: String(r?.itemId || ""),
+                              }))
+                              .filter((t) => t.orderId && t.itemId);
+                            if (targets.length === 0) return;
+                            const ok = window.confirm(
+                              `Mark ${targets.length} item(s) as PROCESSING?`,
+                            );
+                            if (!ok) return;
+                            setListBulkProcessing(true);
+                            try {
+                              const results = await Promise.allSettled(
+                                targets.map((t) =>
+                                  updateOrderItemStatus(t.orderId, t.itemId, { status: "PROCESSING" }),
+                                ),
+                              );
+                              const failed = results.filter((r) => r.status === "rejected");
+                              if (failed.length) {
+                                toast.error(
+                                  `${failed.length}/${targets.length} failed to update. Open console for details.`,
+                                );
+                                failed.slice(0, 3).forEach((f) =>
+                                  console.error("[Bulk PROCESSING items] failed:", f),
+                                );
+                              } else {
+                                toast.success(`Updated ${targets.length} item(s) to PROCESSING.`);
+                              }
+                              fetchOrderItems();
+                            } finally {
+                              setListBulkProcessing(false);
+                            }
+                          }}
+                          className={`${ui.btnOutline} text-[11px] py-1`}
+                        >
+                          {listBulkProcessing ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : null}
+                          PROCESSING
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <TableScrollHint />
-                  <div className={tableScrollShellMuted}>
+                  <div className={ui.tableScrollShellMuted}>
                   <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
                     <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
                       <tr>
+                        <th className="w-10 px-2 py-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all items on page"
+                            checked={
+                              orderItems.length > 0 &&
+                              orderItems
+                                .map((r) => `${String(r?.orderId || "")}__${String(r?.itemId || "")}`)
+                                .filter((k) => !k.startsWith("__"))
+                                .every((k) => listSelectedItemKeys.includes(k))
+                            }
+                            onChange={(e) => {
+                              const pageKeys = orderItems
+                                .map((r) => `${String(r?.orderId || "")}__${String(r?.itemId || "")}`)
+                                .filter((k) => !k.startsWith("__"));
+                              if (e.target.checked) {
+                                setListSelectedItemKeys((prev) =>
+                                  Array.from(new Set([...prev, ...pageKeys])),
+                                );
+                              } else {
+                                setListSelectedItemKeys((prev) =>
+                                  prev.filter((k) => !pageKeys.includes(k)),
+                                );
+                              }
+                            }}
+                            className="h-3.5 w-3.5 rounded border-border text-brand-600"
+                          />
+                        </th>
                         {itemListActiveColumns.map((col) => (
                           <th
                             key={col.key}
@@ -4045,6 +5509,24 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           key={`${row.orderId}-${row.itemId}`}
                           className="hover:bg-gray-50/70 transition-colors"
                         >
+                          <td className="px-2 py-2 align-top text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select item ${row?.itemId || ""}`}
+                              checked={listSelectedItemKeys.includes(`${String(row?.orderId || "")}__${String(row?.itemId || "")}`)}
+                              onChange={(e) => {
+                                const key = `${String(row?.orderId || "")}__${String(row?.itemId || "")}`;
+                                if (key.startsWith("__")) return;
+                                setListSelectedItemKeys((prev) =>
+                                  e.target.checked
+                                    ? Array.from(new Set([...prev, key]))
+                                    : prev.filter((k) => k !== key),
+                                );
+                              }}
+                              className="h-3.5 w-3.5 rounded border-border text-brand-600"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
                           {itemListActiveColumns.map((col) => (
                             <td key={col.key} className={itemListCellTdClass(col.key)}>
                               {renderItemListCell(col.key, row)}
@@ -4062,7 +5544,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   {orderItems.map((row) => (
                     <div
                       key={`${row.orderId}-${row.itemId}`}
-                      className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-indigo-200 hover:shadow-md transition-all duration-200 overflow-hidden"
+                      className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-brand-200 hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
                       <div className="p-5 flex flex-wrap items-center gap-4 sm:gap-6">
                         <TableItemImageThumb
@@ -4096,11 +5578,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         />
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                            <span className="inline-flex items-center rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
                               Order #{row.orderId}
                             </span>
                             {row.deliveryType ? (
-                              <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                              <span className="inline-flex items-center rounded-md bg-canvas-muted px-2 py-0.5 text-xs font-medium text-stone-700">
                                 {DELIVERY_TYPE_TABS.find((t) => t.value === row.deliveryType)?.label ??
                                   String(row.deliveryType).replace(/_/g, " ")}
                               </span>
@@ -4243,7 +5725,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                 setItemPage(1);
                                 fetchSingleOrder(row.orderId);
                               }}
-                              className="rounded-lg p-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 transition-colors"
+                              className="rounded-lg p-2.5 text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-800 transition-colors"
                               title="View & update item status"
                             >
                               <span className="text-sm font-medium">View details</span>
@@ -4255,71 +5737,20 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   ))}
                 </div>
               )}
-              {!itemLoading && orderItems.length > 0 && (
-                <div className="mt-6 flex items-center justify-between border-t border-gray-200 pt-4">
-                  <div className="text-sm text-gray-700">
-                    Page{" "}
-                    <span className="font-medium">{itemPagination.page}</span>{" "}
-                    of{" "}
-                    <span className="font-medium">
-                      {itemPagination.totalPages || 1}
-                    </span>
-                    {itemPagination.total != null && (
-                      <span className="ml-2 text-gray-500">
-                        ({itemPagination.total} item
-                        {itemPagination.total !== 1 ? "s" : ""})
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">Rows per page</label>
-                      <select
-                        value={itemPagination.limit}
-                        disabled={itemLoading}
-                        onChange={(e) => {
-                          const lim = Math.min(100, Math.max(10, Number(e.target.value) || 20));
-                          setItemPagination((p) => ({ ...p, limit: lim, page: 1 }));
-                        }}
-                        className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-                      >
-                        <option value={10}>10</option>
-                        <option value={20}>20</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={itemPagination.page <= 1 || itemLoading}
-                        onClick={() => {
-                          setItemPagination((p) => ({
-                            ...p,
-                            page: Math.max(1, p.page - 1),
-                          }));
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                      >
-                        <ChevronLeft size={16} /> Prev
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          itemPagination.page >= itemPagination.totalPages ||
-                          itemLoading
-                        }
-                        onClick={() => {
-                          setItemPagination((p) => ({ ...p, page: p.page + 1 }));
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-50 hover:bg-gray-50"
-                      >
-                        Next <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {!selectedOrder ? (
+                <ListPaginationFooter
+                  loading={itemLoading}
+                  page={itemPagination.page}
+                  totalPages={itemPagination.totalPages}
+                  total={itemPagination.total}
+                  limit={itemPagination.limit}
+                  onPageChange={(nextPage) =>
+                    setItemPagination((p) => ({ ...p, page: nextPage }))
+                  }
+                  btnOutline={ui.btnOutline}
+                  emptyLabel="0 items"
+                />
+              ) : null}
             </>
           )
         ) : (
@@ -4335,132 +5766,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 : null;
 
             return (
-              <div className="min-w-0 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                {/* Header */}
-                <div className="border-b bg-gray-50 px-6 py-5">
-                  <button
-                    onClick={() => {
-                      setSelectedOrder(null);
-                      setOrderError(null);
-                      setOrderAssignments(null);
-                      setSelectedItemIds([]);
-                      setBulkStatus("");
-                      setSelectedItemIdFromListView(null);
-                    }}
-                    className="mb-3 text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5"
-                  >
-                    ← Back to{" "}
-                    {viewMode === VIEW_ITEM ? "order items" : "orders list"}
-                  </button>
-
-                  {fromItemList ? (
-                    /* Item-based flow: minimal header, no order status */
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">
-                          Item details · Order #{selectedOrder?.orderId || "—"}
-                        </h2>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {selectedOrder?.userId?.name ||
-                            selectedOrder?.address?.name ||
-                            "—"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedItemIdFromListView(null)}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                      >
-                        View full order (all items)
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-900">
-                          Order #{selectedOrder?.orderId || "—"}
-                        </h2>
-                        <p className="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                          <Clock size={16} />
-                          {new Date(selectedOrder?.createdAt).toLocaleString(
-                            "en-IN",
-                            {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            },
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-4">
-                        {getStatusBadge(getDisplayOrderStatus(selectedOrder))}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={handleCreateShiprocketSingleShipment}
-                            disabled={createShiprocketLoading}
-                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-60 inline-flex items-center gap-2"
-                            title="Creates one Shiprocket order per shipment group (NORMAL), not per item"
-                          >
-                            {createShiprocketLoading ? (
-                              <>
-                                <RefreshCw size={14} className="animate-spin" />
-                                Creating…
-                              </>
-                            ) : (
-                              "Create Shiprocket (single)"
-                            )}
-                          </button>
-                          {String(selectedOrder?.payment?.mode || "").toUpperCase() !== "COD" &&
-                            String(selectedOrder?.payment?.status || "").toUpperCase() === "PENDING" && (
-                              <button
-                                type="button"
-                                onClick={openPaymentOverrideModal}
-                                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-                                title="Use only if customer has paid but payment is still pending"
-                              >
-                                Mark paid + Confirm
-                              </button>
-                            )}
-                          <label className="text-sm text-gray-700 whitespace-nowrap">
-                            Update all items:
-                          </label>
-                          <select
-                            value={wholeOrderNewStatus}
-                            onChange={(e) =>
-                              setWholeOrderNewStatus(e.target.value)
-                            }
-                            disabled={updatingWholeOrder}
-                            className="min-w-[160px] rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-60"
-                          >
-                            <option value="">Select status…</option>
-                            {filteredStatusOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={handleUpdateWholeOrderStatus}
-                            disabled={
-                              updatingWholeOrder || !wholeOrderNewStatus
-                            }
-                            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-                          >
-                            {updatingWholeOrder ? (
-                              <>
-                                <RefreshCw size={14} className="animate-spin" />
-                                Applying…
-                              </>
-                            ) : (
-                              "Apply to all"
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
+              <div className={ui.detailShell}>
                 {paymentOverrideOpen && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
                     <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
@@ -4545,29 +5851,150 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   </div>
                 )}
 
+                {shiprocketModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="flex max-h-[min(90vh,32rem)] w-full max-w-lg flex-col rounded-xl border border-border bg-white shadow-xl">
+                      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-stone-900">
+                            Create Shiprocket order
+                          </h3>
+                          <p className="mt-0.5 text-[11px] text-stone-500">
+                            Select NORMAL delivery items to include in one Shiprocket shipment
+                            (same shipment group).
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeShiprocketItemModal}
+                          disabled={createShiprocketLoading}
+                          className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-stone-600 hover:bg-canvas-muted disabled:opacity-60"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+                        {shiprocketEligibleItems.length === 0 ? (
+                          <p className="py-6 text-center text-[11px] text-stone-500">
+                            No eligible items. Lines may already have Shiprocket or are not
+                            NORMAL delivery.
+                          </p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {shiprocketEligibleItems.map((it) => {
+                              const id = String(it.itemId || it._id);
+                              const checked = shiprocketModalItemIds.includes(id);
+                              const label = getLineProductDisplayName(it);
+                              const sku = it.sku || it.variant?.sku || "—";
+                              return (
+                                <li key={id}>
+                                  <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border px-2.5 py-2 hover:bg-brand-50/40 has-[:checked]:border-brand-300 has-[:checked]:bg-brand-50/50">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleShiprocketModalItem(id)}
+                                      className={ui.checkbox}
+                                    />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-[11px] font-medium text-stone-900">
+                                        {label || sku}
+                                      </span>
+                                      <span className="block truncate font-mono text-[10px] text-stone-500">
+                                        {sku}
+                                        {it.shipmentGroupId
+                                          ? ` · ${it.shipmentGroupId}`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 text-[10px] text-stone-500">
+                                      ×{it.quantity ?? 1}
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                        {shiprocketModalSelectedItems.length > 0 &&
+                        shiprocketModalGroupIds.length > 1 ? (
+                          <p className="mt-2 text-[10px] font-medium text-danger">
+                            Selected items span multiple shipment groups. Pick items from one
+                            group only.
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShiprocketModalItemIds(
+                              shiprocketEligibleItems.map((it) =>
+                                String(it.itemId || it._id),
+                              ),
+                            )
+                          }
+                          disabled={
+                            !shiprocketEligibleItems.length || createShiprocketLoading
+                          }
+                          className={`${ui.btnOutline} py-1 text-[11px]`}
+                        >
+                          Select all
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={closeShiprocketItemModal}
+                            disabled={createShiprocketLoading}
+                            className={`${ui.btnOutline} py-1 text-[11px]`}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSubmitShiprocketModal}
+                            disabled={!shiprocketModalCanSubmit || createShiprocketLoading}
+                            className={`${ui.btnPrimary} py-1 text-[11px]`}
+                          >
+                            {createShiprocketLoading ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                Creating…
+                              </>
+                            ) : (
+                              <>
+                                <Truck className="h-3.5 w-3.5" aria-hidden />
+                                Create (
+                                {shiprocketModalSelectedItems.length})
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {orderError && (
-                  <div className="mx-6 mt-5 rounded-lg bg-red-50 p-4 text-red-700 flex items-center gap-3">
-                    <AlertCircle size={20} />
+                  <div className={`${ui.errorBox} mx-3 mt-3`}>
+                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
                     {orderError}
                   </div>
                 )}
 
             {fromItemList && focusedItem ? (
-              /* Item-based flow: only this item's status and details */
-              <div className="p-6">
-                <div className="max-w-2xl space-y-6">
-                  {/* Product card */}
-                  <div className="rounded-xl border-2 border-gray-200 bg-white p-6 shadow-sm">
-                    <div className="flex flex-wrap items-start gap-6">
+              <div className={ui.detailBody}>
+                <div className="mx-auto max-w-2xl space-y-3">
+                  <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
+                    <div className="flex flex-wrap items-start gap-3">
                       {focusedItem.variant?.imageUrl && (
                         <img
                           src={focusedItem.variant.imageUrl}
                           alt={focusedItem.sku}
-                          className="h-28 w-28 rounded-xl object-cover border-2 border-gray-100 shadow-inner"
+                          className="h-20 w-20 rounded-lg border border-border object-cover"
                         />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Order #{selectedOrder?.orderId}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Order #{selectedOrder?.orderId}</p>
                         <p className="mt-1 text-xs text-gray-500 break-all">
                           Item ID: {String(focusedItem.itemId || focusedItem._id || "—")}
                         </p>
@@ -4673,10 +6100,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                             </div>
                           );
                         })()}
-                        <h3 className="text-xl font-bold text-gray-900 mt-1">
-                          {focusedItem.sku || focusedItem.variant?.sku || "—"}
+                        <h3 className="mt-1 text-sm font-semibold text-stone-900">
+                          {getLineProductDisplayName(focusedItem) ||
+                            focusedItem.sku ||
+                            focusedItem.variant?.sku ||
+                            "—"}
                         </h3>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600">
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-stone-600">
                           {focusedItem.variant?.color && <span>Color: {focusedItem.variant.color}</span>}
                           {focusedItem.variant?.size && <span>Size: {focusedItem.variant.size}</span>}
                         </div>
@@ -4696,7 +6126,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                   focusedItem,
                                 )
                               }
-                              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                              className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60"
                             >
                               <CreditCard size={14} />
                               Download invoice
@@ -4722,13 +6152,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   {(() => {
                     const driver = getDriverPartnerDisplay(focusedItem);
                     return driver ? (
-                      <div className="flex items-center gap-4 rounded-xl border-2 border-indigo-100 bg-indigo-50/80 px-5 py-4">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
-                          <UserCircle size={24} className="text-indigo-600" />
+                      <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50/80 px-3 py-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100">
+                          <UserCircle className="h-5 w-5 text-brand-600" aria-hidden />
                         </div>
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">Driver partner</p>
-                          <p className="text-base font-semibold text-gray-900 mt-0.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                            Driver
+                          </p>
+                          <p className="mt-0.5 text-[11px] font-semibold text-stone-900">
                             {driver.name}
                             {driver.phone && <span className="font-normal text-gray-600 ml-1">· {driver.phone}</span>}
                           </p>
@@ -4737,10 +6169,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     ) : null;
                   })()}
                   {isNormalDeliveryLine(focusedItem) && (
-                    <div className="rounded-xl border-2 border-sky-200 bg-sky-50/90 p-5 shadow-sm">
-                      <h4 className="text-sm font-semibold text-sky-900 mb-3 flex items-center gap-2">
-                        <Truck size={16} className="text-sky-700" />
-                        Shiprocket (normal delivery)
+                    <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-3">
+                      <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900">
+                        <Truck className="h-3.5 w-3.5 text-sky-700" aria-hidden />
+                        Shiprocket
                       </h4>
                       {(() => {
                         const sr = getLineShiprocket(focusedItem);
@@ -4766,7 +6198,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                       focusedItem
                                     )
                                   }
-                                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                  className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
                                 >
                                   <CreditCard size={14} />
                                   Download invoice
@@ -4783,7 +6215,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                 type="button"
                                 disabled={docDownloadLoading}
                                 onClick={() => handleLabelForItem(focusedItem)}
-                                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 flex items-center gap-2"
+                                className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
                               >
                                 {docDownloadLoading && docActionType === "label" ? (
                                   <RefreshCw size={14} className="animate-spin" />
@@ -4831,12 +6263,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     </div>
                   )}
                   {/* Change status card */}
-                  <div className="rounded-xl border-2 border-gray-200 bg-gray-50/50 p-6">
-                    <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <RefreshCw size={16} className="text-indigo-600" />
-                      Update item status
-                    </h4>
-                    <div className="flex flex-wrap items-center gap-3">
+                  <div className={ui.detailSection}>
+                    <div className={ui.detailSectionTitle}>
+                      <RefreshCw className="h-3.5 w-3.5 text-brand-600" aria-hidden />
+                      Update status
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <select
                         value={focusedItem.status || "CREATED"}
                         onChange={(e) => {
@@ -4848,28 +6280,27 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           );
                         }}
                         disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
-                        className="min-w-[220px] rounded-lg border-2 border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
+                        className={`${ui.inputCompact} min-w-[12rem] py-1.5`}
                       >
                         {filteredStatusOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
                       {updatingItemId === String(focusedItem.itemId || focusedItem._id) && (
-                        <span className="flex items-center gap-2 text-sm text-indigo-600">
+                        <span className="flex items-center gap-2 text-sm text-brand-600">
                           <RefreshCw size={18} className="animate-spin" />
                           Updating…
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">Select a new status to update this line item.</p>
+                    <p className="mt-1.5 text-[10px] text-stone-500">Select a new status for this line.</p>
                   </div>
-                  {/* Status history */}
                   {focusedItem.statusHistory && focusedItem.statusHistory.length > 0 && (
-                    <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-                      <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                        <Clock size={16} className="text-gray-500" />
+                    <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
+                      <div className={ui.detailSectionTitle}>
+                        <Clock className="h-3.5 w-3.5 text-stone-400" aria-hidden />
                         Status history
-                      </h4>
+                      </div>
                       <ul className="space-y-0">
                         {focusedItem.statusHistory.map((h, i) => (
                           <li
@@ -4892,152 +6323,184 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 </div>
               </div>
             ) : fromItemList && orderLoading ? (
-              <div className="p-12 text-center text-gray-500">Loading item details…</div>
+              <div className="py-10 text-center text-[11px] text-stone-500">Loading item details…</div>
             ) : fromItemList && !focusedItem ? (
-              <div className="p-6 text-center text-gray-500">Item not found in this order.</div>
+              <div className="py-10 text-center text-[11px] text-stone-500">Item not found in this order.</div>
             ) : !fromItemList ? (
-            <div className="p-6 space-y-8">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <User size={18} className="text-indigo-600" />
-                    <h4 className="text-sm font-semibold text-gray-700">Customer</h4>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <p><strong>Name:</strong> {selectedOrder?.userId?.name || "—"}</p>
-                    <p><strong>Phone:</strong> {selectedOrder?.userId?.countryCode || ""}{selectedOrder?.userId?.phoneNumber || "—"}</p>
-                    <p><strong>Email:</strong> {selectedOrder?.userId?.email || "—"}</p>
+            <>
+            <div className={ui.detailOverview}>
+              <div className={ui.detailSummaryBox}>
+                <div className={ui.detailSummaryHead}>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">
+                    Order
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-stone-900">
+                    {selectedOrder?.orderId || "—"}
+                  </span>
+                  <span className="text-stone-300" aria-hidden>
+                    ·
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">
+                    Placed
+                  </span>
+                  <span className="text-stone-700">
+                    {selectedOrder?.createdAt
+                      ? new Date(selectedOrder.createdAt).toLocaleString("en-IN", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
+                      : "—"}
+                  </span>
+                  <div className="ml-auto shrink-0">
+                    {getStatusBadge(
+                      selectedOrder?.status || selectedOrder?.orderStatus || "",
+                    )}
                   </div>
                 </div>
 
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <CreditCard size={18} className="text-indigo-600" />
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Payment
-                          </h4>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                          <p>
-                            <strong>Mode:</strong>{" "}
-                            <span
-                              className={
-                                selectedOrder?.payment?.mode === "COD"
-                                  ? "text-orange-700 font-medium"
-                                  : ""
-                              }
-                            >
-                              {selectedOrder?.payment?.mode || "—"}
-                            </span>
-                          </p>
-                          <p>
-                            <strong>Status:</strong>{" "}
-                            <span
-                              className={
-                                selectedOrder?.payment?.status === "SUCCESS"
-                                  ? "text-green-700 font-medium"
-                                  : selectedOrder?.payment?.status === "PENDING"
-                                    ? "text-amber-700 font-medium"
-                                    : "text-red-700 font-medium"
-                              }
-                            >
-                              {selectedOrder?.payment?.status || "—"}
-                            </span>
-                          </p>
-                          <p>
-                            <strong>Amount:</strong> ₹
-                            {(
-                              selectedOrder?.payment?.amount || 0
-                            ).toLocaleString("en-IN")}
-                          </p>
-                        </div>
-                      </div>
+                <div className={ui.detailSummaryCols}>
+                  <div className={ui.detailSummaryCol}>
+                    <OrderDetailSectionHead title="Customer & delivery" icon={MapPin} />
+                    <OrderDetailDenseGrid pairs={2}>
+                      <OrderDetailRow label="Name">
+                        {(() => {
+                          const billName =
+                            selectedOrder?.user?.name ||
+                            selectedOrder?.userId?.name ||
+                            "";
+                          const shipName = selectedOrder?.address?.name || "";
+                          if (!billName && !shipName) return "—";
+                          if (
+                            billName &&
+                            shipName &&
+                            billName.trim() !== shipName.trim()
+                          ) {
+                            return (
+                              <span>
+                                {billName}{" "}
+                                <span className="font-normal text-stone-500">
+                                  → {shipName}
+                                </span>
+                              </span>
+                            );
+                          }
+                          return billName || shipName || "—";
+                        })()}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Bill ph.">
+                        {(() => {
+                          const cc =
+                            selectedOrder?.user?.countryCode ||
+                            selectedOrder?.userId?.countryCode ||
+                            "";
+                          const ph =
+                            selectedOrder?.user?.phoneNumber ||
+                            selectedOrder?.userId?.phoneNumber ||
+                            "";
+                          return cc || ph ? `${cc}${ph}` : "—";
+                        })()}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Email">
+                        {selectedOrder?.user?.email ||
+                          selectedOrder?.userId?.email ||
+                          "—"}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Del. ph.">
+                        {selectedOrder?.address?.phone || "—"}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Pincode">
+                        {selectedOrder?.address?.pincode || "—"}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Address" wide>
+                        <span className="font-normal text-stone-700">
+                          {selectedOrder?.address?.fullAddress || "—"}
+                        </span>
+                      </OrderDetailRow>
+                    </OrderDetailDenseGrid>
+                  </div>
 
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <MapPin size={18} className="text-indigo-600" />
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Delivery Address
-                          </h4>
-                        </div>
-                        <div className="text-sm space-y-1">
-                          <p className="font-medium">
-                            {selectedOrder?.address?.name || "—"}
-                          </p>
-                          <p>{selectedOrder?.address?.fullAddress || "—"}</p>
-                          <p>
-                            Pincode: {selectedOrder?.address?.pincode || "—"}
-                          </p>
-                          <p>Phone: {selectedOrder?.address?.phone || "—"}</p>
-                        </div>
-                      </div>
+                  <div className={ui.detailSummaryCol}>
+                    <OrderDetailSectionHead title="Payment" icon={CreditCard} />
+                    <OrderDetailDenseGrid pairs={1}>
+                      <OrderDetailRow label="Mode">
+                        <span
+                          className={
+                            selectedOrder?.payment?.mode === "COD"
+                              ? "text-orange-700"
+                              : ""
+                          }
+                        >
+                          {selectedOrder?.payment?.mode || "—"}
+                        </span>
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Status">
+                        <span
+                          className={
+                            selectedOrder?.payment?.status === "SUCCESS"
+                              ? "text-green-700"
+                              : selectedOrder?.payment?.status === "PENDING"
+                                ? "text-amber-700"
+                                : "text-red-700"
+                          }
+                        >
+                          {selectedOrder?.payment?.status || "—"}
+                        </span>
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Paid">
+                        {formatInr(selectedOrder?.payment?.amount || 0)}
+                      </OrderDetailRow>
+                    </OrderDetailDenseGrid>
+                  </div>
 
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <DollarSign size={18} className="text-indigo-600" />
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Pricing
-                          </h4>
-                        </div>
-                        <div className="text-sm space-y-1">
-                          <p>
-                            Subtotal: ₹
-                            {(
-                              selectedOrder?.pricing?.subTotal || 0
-                            ).toLocaleString("en-IN")}
-                          </p>
-                          <p>
-                            Delivery: ₹
-                            {(
-                              selectedOrder?.pricing?.delivery?.totalCharge || 0
-                            ).toLocaleString("en-IN")}
-                          </p>
-                          <p>
-                            GST: ₹
-                            {(
-                              selectedOrder?.pricing?.gst?.totalGst || 0
-                            ).toLocaleString("en-IN")}
-                          </p>
-                          {getOrderWalletUsedAmount(selectedOrder) > 0 && (
-                            <p className="text-emerald-700">
-                              Wallet used: {formatInr(getOrderWalletUsedAmount(selectedOrder))}
-                            </p>
-                          )}
-                          <p className="font-bold text-base pt-2 border-t mt-2">
-                            Final Payable: {formatInr(selectedOrder?.pricing?.finalPayable || 0)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                  <div className={ui.detailSummaryCol}>
+                    <OrderDetailSectionHead title="Pricing" icon={DollarSign} />
+                    <OrderDetailDenseGrid pairs={1}>
+                      <OrderDetailRow label="Subtotal">
+                        {formatInr(selectedOrder?.pricing?.subTotal || 0)}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Delivery">
+                        {formatInr(selectedOrder?.pricing?.delivery?.totalCharge || 0)}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="GST">
+                        {formatInr(selectedOrder?.pricing?.gst?.totalGst || 0)}
+                      </OrderDetailRow>
+                      {getOrderWalletUsedAmount(selectedOrder) > 0 ? (
+                        <OrderDetailRow label="Wallet">
+                          <span className="text-emerald-700">
+                            {formatInr(getOrderWalletUsedAmount(selectedOrder))}
+                          </span>
+                        </OrderDetailRow>
+                      ) : null}
+                      <OrderDetailRow label="Final">
+                        <span className="font-semibold text-stone-900">
+                          {formatInr(selectedOrder?.pricing?.finalPayable || 0)}
+                        </span>
+                      </OrderDetailRow>
+                    </OrderDetailDenseGrid>
+                  </div>
+                </div>
 
-                    {/* Delivery assignments: Reassign / Remove driver */}
-                    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Truck size={18} className="text-indigo-600" />
-                        <h4 className="text-sm font-semibold text-gray-700">
-                          Delivery assignments
-                        </h4>
-                      </div>
+                <div className={ui.detailSummaryFoot}>
+                    <div className={ui.detailSummaryCol}>
+                      <OrderDetailSectionHead title="Delivery assignments" icon={Truck} />
                       {unassignError && (
-                        <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
-                          <AlertCircle size={16} />
+                        <div className={`${ui.errorBox} mb-2`}>
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
                           {unassignError}
                         </div>
                       )}
                       {orderAssignments == null ? (
-                        <p className="text-sm text-gray-500 flex items-center gap-2">
-                          <RefreshCw size={14} className="animate-spin" />
+                        <p className="flex items-center gap-2 text-[11px] text-stone-500">
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
                           Loading assignments…
                         </p>
                       ) : !orderAssignments.assignments?.length ? (
-                        <p className="text-sm text-gray-500">
-                          No delivery assignments yet. Select items in the table
-                          below and click "Assign driver to selected", or assign
-                          when updating status to Shipped / Out for delivery.
+                        <p className="text-[10px] leading-snug text-stone-500">
+                          No driver assigned — select line items below or assign on Shipped /
+                          Out for delivery.
                         </p>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-1.5">
                           {orderAssignments.assignments
                             .filter(
                               (a) =>
@@ -5081,34 +6544,35 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               return (
                                 <div
                                   key={a._id}
-                                  className="flex flex-wrap items-start gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3"
+                                  className="flex flex-wrap items-start gap-1.5 rounded border border-border bg-canvas-muted/30 px-2 py-1.5"
                                 >
-                                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                                  <div className="flex min-w-0 flex-1 items-start gap-2">
                                     <UserCircle
-                                      size={20}
-                                      className="text-indigo-600 shrink-0 mt-0.5"
+                                      className="mt-0.5 h-4 w-4 shrink-0 text-brand-600"
+                                      aria-hidden
                                     />
                                     <div className="min-w-0">
-                                      <p className="text-sm font-medium text-gray-900">
+                                      <p className="text-[11px] font-medium text-stone-900">
                                         {name || "Driver"}
                                         {phone && (
-                                          <span className="text-gray-500 font-normal ml-1">
+                                          <span className="font-normal text-stone-500">
+                                            {" "}
                                             · {phone}
                                           </span>
                                         )}
                                       </p>
-                                      <p className="text-xs text-gray-500 mt-0.5">
+                                      <p className="mt-0.5 text-[10px] text-stone-500">
                                         {a.assignmentType === "ORDER"
                                           ? "Whole order"
                                           : `${assignmentItemIds.length} item(s)`}{" "}
                                         · {a.status}
                                       </p>
                                       {itemSkus.length > 0 && (
-                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                        <div className="mt-1.5 flex flex-wrap gap-1">
                                           {itemSkus.map((sku, idx) => (
                                             <span
                                               key={idx}
-                                              className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
+                                              className="inline-flex rounded-md bg-canvas-muted px-1.5 py-0.5 text-[10px] font-medium text-stone-700"
                                             >
                                               {String(sku)}
                                             </span>
@@ -5117,7 +6581,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                       )}
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex shrink-0 items-center gap-1">
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -5127,10 +6591,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                         )
                                       }
                                       disabled={unassignLoading}
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-600 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                                      className={ui.btnOutline}
                                       title="Assign to a different driver"
                                     >
-                                      <UserPlus size={14} />
+                                      <UserPlus className="h-3.5 w-3.5" aria-hidden />
                                       Reassign
                                     </button>
                                     <button
@@ -5142,11 +6606,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                         )
                                       }
                                       disabled={unassignLoading}
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                      className={`${ui.btnOutline} border-danger/30 text-danger hover:bg-danger-bg`}
                                       title="Remove driver (unassign)"
                                     >
-                                      <UserMinus size={14} />
-                                      Remove driver
+                                      <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                                      Remove
                                     </button>
                                   </div>
                                 </div>
@@ -5158,147 +6622,116 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                 a.status,
                               ),
                           ).length === 0 && (
-                            <p className="text-sm text-gray-500">
-                              No active assignments. Select items below and
-                              click "Assign driver to selected", or assign when
-                              updating status to Shipped / Out for delivery.
+                            <p className="text-[11px] text-stone-500">
+                              No active assignments.
                             </p>
                           )}
                         </div>
                       )}
                     </div>
 
-                    {selectedOrder?.shipments?.length > 0 && (
-                      <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                        <div className="flex items-center gap-2 mb-4">
-                          <Truck size={18} className="text-indigo-600" />
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Shipments / Warehouses
-                          </h4>
-                        </div>
-
-                        {(() => {
-                          const normalShips = (selectedOrder?.shipments || []).filter(
-                            (s) => String(s?.deliveryType || "").toUpperCase() === "NORMAL"
-                          );
-                          const shipmentIds = normalShips
-                            .map((s) => s?.shipmentId ?? s?.shipmentGroupId ?? s?.shipment_id ?? s?._id ?? null)
-                            .filter(Boolean)
-                            .map(String);
-                          const uniqueIds = Array.from(new Set(shipmentIds));
-
-                          if (uniqueIds.length === 0) return null;
-
-                          return (
-                            <div className="flex flex-wrap gap-2 mb-4">
-                              {/* <button
-                                type="button"
-                                disabled={docDownloadLoading}
-                                onClick={() => handleDownloadLabelsClick(uniqueIds)}
-                                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
-                              >
-                                <Truck size={14} />
-                                Download labels
-                              </button> */}
-                              {/* <button
-                                type="button"
-                                disabled={docDownloadLoading}
-                                onClick={() => handleDownloadManifestClick(uniqueIds)}
-                                className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60 flex items-center gap-2"
-                              >
-                                <Package size={14} />
-                                Download manifest
-                              </button> */}
-                            </div>
-                          );
-                        })()}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className={ui.detailSummaryCol}>
+                      <OrderDetailSectionHead title="Shipments" icon={Package} />
+                      {selectedOrder?.shipments?.length > 0 ? (
+                        <div className="flex flex-col gap-1">
                           {selectedOrder.shipments.map((ship, idx) => (
                             <div
                               key={idx}
-                              className="p-4 bg-white rounded border shadow-sm"
+                              className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 rounded border border-border/80 bg-canvas-muted/35 px-2 py-1 text-[10px] leading-snug"
                             >
-                              <p className="font-medium mb-1">
-                                {ship.shipmentGroupId}
-                              </p>
-                              <p>
-                                Warehouse: {ship.warehouseId?.name || "—"} (
-                                {ship.warehouseId?.code || "—"})
-                              </p>
-                              <p>
-                                Status:{" "}
-                                <span className="font-medium">
-                                  {ship.status}
-                                </span>
-                              </p>
-                              <p>Type: {ship.deliveryType}</p>
+                              <span className="font-semibold text-stone-900">
+                                {ship.shipmentGroupId || "—"}
+                              </span>
+                              <span className="text-stone-300" aria-hidden>
+                                ·
+                              </span>
+                              <span className="text-stone-700">
+                                {ship.warehouseId?.name || "—"}
+                                {ship.warehouseId?.code
+                                  ? ` (${ship.warehouseId.code})`
+                                  : ""}
+                              </span>
+                              <span className="text-stone-300" aria-hidden>
+                                ·
+                              </span>
+                              <span className="text-stone-600">
+                                {ship.status || "—"} · {ship.deliveryType || "—"}
+                              </span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700">
-                            Forward shipment
-                          </h4>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            Create replacement forward shipment for NORMAL exchange orders.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={docDownloadLoading}
-                          onClick={() => handleCreateForwardShipmentForOrder(selectedOrder)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-60"
-                        >
-                          {docDownloadLoading && docActionType === "forward" ? (
-                            <RefreshCw size={14} className="animate-spin" />
-                          ) : (
-                            <Truck size={14} />
-                          )}
-                          {docDownloadLoading && docActionType === "forward"
-                            ? "Creating..."
-                            : "Create Forward Shipment"}
-                        </button>
-                      </div>
-                      {(() => {
-                        const forwardPreview = getOrderForwardPreview(selectedOrder);
-                        if (!forwardPreview) return null;
-                        return (
-                          <div className="mt-3 rounded border border-sky-200 bg-white px-3 py-2 text-xs">
-                            <p className="font-medium text-sky-700">Forward shipment created</p>
-                            {forwardPreview.trackingUrl ? (
-                              <a
-                                href={forwardPreview.trackingUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-sky-700 underline"
-                              >
-                                Track forward
-                              </a>
-                            ) : null}
-                          </div>
-                        );
-                      })()}
+                      ) : (
+                        <p className="text-[10px] text-stone-500">No shipment groups yet.</p>
+                      )}
                     </div>
+                </div>
 
-                    <div className="space-y-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                          <ShoppingBag size={20} />
-                          Order Items (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/80 bg-canvas-muted/25 px-2.5 py-1.5 text-[10px]">
+                  <Truck className="h-3 w-3 shrink-0 text-sky-700" aria-hidden />
+                  <span className="font-semibold uppercase tracking-wide text-stone-500">
+                    Forward
+                  </span>
+                  <span className="text-stone-500">NORMAL exchange replacement</span>
+                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={docDownloadLoading}
+                      onClick={() => handleCreateForwardShipmentForOrder(selectedOrder)}
+                      className={`${ui.btnOutline} border-sky-200 py-1 text-[10px] text-sky-800 hover:bg-sky-50`}
+                    >
+                      {docDownloadLoading && docActionType === "forward" ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
+                      ) : (
+                        <Truck className="h-3 w-3" aria-hidden />
+                      )}
+                      Create forward
+                    </button>
+                    {(() => {
+                      const forwardPreview = getOrderForwardPreview(selectedOrder);
+                      if (!forwardPreview) return null;
+                      return (
+                        <span className="text-sky-800">
+                          Created ·{" "}
+                          {forwardPreview.trackingUrl ? (
+                            <a
+                              href={forwardPreview.trackingUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              Track
+                            </a>
+                          ) : (
+                            <span className="text-stone-600">No tracking URL</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={ui.detailBody}>
+                    <div className="space-y-2">
+                      <div className={ui.detailItemsToolbar}>
+                        <ShoppingBag
+                          className="h-3.5 w-3.5 shrink-0 text-brand-600"
+                          aria-hidden
+                        />
+                        <span className="shrink-0 whitespace-nowrap font-semibold text-stone-800">
+                          Line items (
                           {selectedOrder?.totalQuantity ||
                             selectedOrder?.items?.length ||
                             0}
                           )
-                        </h3>
-
-                        {selectedOrder?.items?.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-3">
+                        </span>
+                        {selectedOrder?.items?.length > 0 ? (
+                          <>
+                            <span
+                              className="mx-0.5 h-4 w-px shrink-0 bg-border"
+                              aria-hidden
+                            />
                             <ColumnPickerDropdown
                               columns={ORDER_DETAIL_ITEM_DATA_COLUMNS}
                               visibleKeys={orderDetailItemVisibleColumns}
@@ -5307,12 +6740,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               onSelectAll={selectAllOrderDetailItemColumns}
                               open={orderDetailColumnsOpen}
                               onOpenChange={setOrderDetailColumnsOpen}
-                              badgeClass="bg-emerald-100 text-emerald-900"
+                              align="start"
                             />
-                            <span className="text-sm text-gray-600">
+                            <span className="shrink-0 whitespace-nowrap text-stone-600">
                               {selectedItemIds.length > 0
                                 ? `${selectedItemIds.length} selected`
-                                : "Bulk actions"}
+                                : "Bulk"}
                             </span>
                             <select
                               value={bulkStatus}
@@ -5320,9 +6753,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               disabled={
                                 updatingBulk || selectedItemIds.length === 0
                               }
-                              className="min-w-[180px] rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-60"
+                              className={ui.selectToolbar}
+                              aria-label="Update selected items to status"
                             >
-                              <option value="">Update selected to…</option>
+                              <option value="">Update to…</option>
                               {filteredStatusOptions.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                   {opt.label}
@@ -5330,25 +6764,20 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               ))}
                             </select>
                             <button
+                              type="button"
                               onClick={handleUpdateSelectedItemsStatus}
                               disabled={
                                 updatingBulk ||
                                 selectedItemIds.length === 0 ||
                                 !bulkStatus
                               }
-                              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 flex items-center gap-2"
+                              className={ui.btnPrimarySm}
+                              title="Apply status to selected items"
                             >
                               {updatingBulk ? (
-                                <>
-                                  <RefreshCw
-                                    size={14}
-                                    className="animate-spin"
-                                  />
-                                  Updating…
-                                </>
-                              ) : (
-                                "Apply bulk"
-                              )}
+                                <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
+                              ) : null}
+                              Apply
                             </button>
                             <button
                               type="button"
@@ -5363,28 +6792,28 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                               disabled={
                                 selectedItemIds.length === 0 || assignLoading
                               }
-                              className="rounded-lg border-2 border-indigo-600 px-4 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-60 flex items-center gap-2"
-                              title="Assign a driver to the selected items (e.g. after removing a driver)"
+                              className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                              title="Assign a driver to the selected items"
                             >
-                              <UserPlus size={14} />
-                              Assign driver to selected
+                              <UserPlus className="h-3.5 w-3.5" aria-hidden />
+                              Assign driver
                             </button>
-                          </div>
-                        )}
+                          </>
+                        ) : null}
                       </div>
 
                 {orderLoading ? (
-                  <div className="py-12 text-center text-gray-500">Loading items…</div>
+                  <div className="py-10 text-center text-[11px] text-stone-500">Loading items…</div>
                 ) : !selectedOrder?.items?.length ? (
-                  <div className="py-12 text-center text-gray-500">No items found</div>
+                  <div className="py-10 text-center text-[11px] text-stone-500">No items found</div>
                 ) : (
                   <>
                   <TableScrollHint />
-                  <div className={tableScrollShellMuted}>
-                    <table className="w-full min-w-[1040px] table-auto border-collapse text-left text-sm">
-                      <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
+                  <div className={ui.tableScrollShellMuted}>
+                    <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-xs">
+                      <thead className={ui.thead}>
                         <tr>
-                          <th className="px-1.5 py-2 text-left align-middle">
+                          <th className={`${ui.th} w-8 px-1 py-1 text-center`}>
                             <input
                               type="checkbox"
                               checked={
@@ -5394,25 +6823,34 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                 )
                               }
                               onChange={selectAllOnPage}
-                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              className={ui.checkbox}
                             />
                           </th>
                           {orderDetailItemActiveColumns.map((col) => (
                             <th
                               key={col.key}
-                              className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap"
+                              className={`${ui.th} ${orderDetailItemColClass(col.key)} px-1.5 py-1 text-left`}
                             >
-                              {col.label}
+                              <span className="block truncate" title={col.label}>
+                                {col.label}
+                              </span>
                             </th>
                           ))}
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                          <th className={`${ui.th} w-[6.5rem] px-1.5 py-1 text-left`}>
                             Status
                           </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600" title="Shiprocket — normal delivery only">
+                          <th
+                            className={`${ui.th} w-[6.75rem] px-1.5 py-1 text-left`}
+                            title="Shiprocket — normal delivery only"
+                          >
                             Ship / docs
                           </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-600">Driver</th>
-                          <th className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">Update</th>
+                          <th className={`${ui.th} w-[5.5rem] px-1.5 py-1 text-left`}>
+                            Driver
+                          </th>
+                          <th className={`${ui.th} w-[6.25rem] px-1 py-1 text-center`}>
+                            Update
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 bg-white">
@@ -5422,190 +6860,52 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           const isSelected = selectedItemIds.includes(itemId);
                           const driverDisplay = getDriverPartnerDisplay(item);
                           return (
-                            <tr key={itemId} className={`hover:bg-gray-50/60 ${isSelected ? "bg-indigo-50/50" : ""}`}>
-                              <td className="px-1.5 py-2 align-top">
+                            <tr
+                              key={itemId}
+                              className={`border-t border-border/80 ${ui.rowHover} ${
+                                isSelected ? "bg-brand-50/40" : ""
+                              }`}
+                            >
+                              <td className="px-1 py-1.5 align-middle text-center">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleItemSelection(itemId)}
-                                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  className={ui.checkbox}
                                 />
                               </td>
                               {orderDetailItemActiveColumns.map((col) => (
-                                <td key={col.key} className="min-w-0 px-2 py-2 align-top">
+                                <td
+                                  key={col.key}
+                                  className={`min-w-0 px-1.5 py-1.5 align-middle ${orderDetailItemColClass(col.key)}`}
+                                >
                                   {renderOrderDetailItemDataCell(col.key, item, selectedOrder)}
                                 </td>
                               ))}
-                              <td className="min-w-0 px-2 py-2 align-top">
-                                {renderItemStatusBreakdown(item, { compact: true })}
+                              <td className="min-w-0 px-1.5 py-1.5 align-middle">
+                                {renderItemStatusBreakdown(item, { tableRow: true })}
                               </td>
-                              <td className="min-w-0 px-2 py-2 align-top text-xs">
-                                <div className="space-y-1.5">
-                                  {isNormalDeliveryLine(item) ? (
-                                    (() => {
-                                      const sr = getLineShiprocket(item);
-                                      return (
-                                        <>
-                                          {sr ? (
-                                            <ShiprocketDetails sr={sr} compact />
-                                          ) : (
-                                            <p className="text-[10px] leading-snug text-amber-800">
-                                              Normal — SR pending
-                                            </p>
-                                          )}
-                                          <div className="flex flex-col gap-1">
-                                            {canDownloadInvoice(item) ? (
-                                              <button
-                                                type="button"
-                                                disabled={docDownloadLoading}
-                                                onClick={() =>
-                                                  handleGetInvoiceClick(
-                                                    selectedOrder,
-                                                    item,
-                                                  )
-                                                }
-                                                className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                                title="Download invoice"
-                                              >
-                                                <CreditCard size={11} className="shrink-0" />
-                                                Invoice
-                                              </button>
-                                            ) : (
-                                              <p className="text-[10px] text-amber-700">
-                                                Invoice not for{" "}
-                                                <span className="font-semibold">Created</span> /{" "}
-                                                <span className="font-semibold">Confirmed</span>.
-                                              </p>
-                                            )}
-
-                                            <button
-                                              type="button"
-                                              disabled={docDownloadLoading}
-                                              onClick={() => handleLabelForItem(item)}
-                                              className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                              title="Download shipping label"
-                                            >
-                                              {docDownloadLoading && docActionType === "label" ? (
-                                                <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                              ) : (
-                                                <Truck size={11} className="shrink-0" />
-                                              )}
-                                              {docDownloadLoading && docActionType === "label"
-                                                ? "Loading..."
-                                                : "Label"}
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={
-                                                docDownloadLoading ||
-                                                (() => {
-                                                  const ids = getShipmentIdsForItem(item);
-                                                  return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
-                                                })()
-                                              }
-                                              onClick={() => handleManifestForItem(item)}
-                                              className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                                              title={
-                                                (() => {
-                                                  const ids = getShipmentIdsForItem(item);
-                                                  return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                                    ? "Manifest already downloaded for this shipment"
-                                                    : "Download manifest";
-                                                })()
-                                              }
-                                            >
-                                              {docDownloadLoading && docActionType === "manifest" ? (
-                                                <RefreshCw size={11} className="shrink-0 animate-spin" />
-                                              ) : (
-                                                <Package size={11} className="shrink-0" />
-                                              )}
-                                              {docDownloadLoading && docActionType === "manifest"
-                                                ? "Loading..."
-                                                : "Manifest"}
-                                            </button>
-                                          </div>
-                                        </>
-                                      );
-                                    })()
-                                  ) : canDownloadInvoice(item) ? (
-                                    <button
-                                      type="button"
-                                      disabled={docDownloadLoading}
-                                      onClick={() =>
-                                        handleGetInvoiceClick(
-                                          selectedOrder,
-                                          item,
-                                        )
-                                      }
-                                      className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                      title="Download invoice"
-                                    >
-                                      <CreditCard size={11} className="shrink-0" />
-                                      Invoice
-                                    </button>
-                                  ) : (
-                                    <p className="text-[10px] text-amber-700">
-                                      Invoice not for{" "}
-                                      <span className="font-semibold">Created</span> /{" "}
-                                      <span className="font-semibold">Confirmed</span>.
-                                    </p>
-                                  )}
-                                  {/* <button
-                                    type="button"
-                                    disabled={docDownloadLoading}
-                                    onClick={() => handleLabelForItem(item)}
-                                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
-                                    title="Download shipping label"
-                                  >
-                                    <Truck size={11} className="shrink-0" />
-                                    Label
-                                  </button> */}
-                                  {/* <button
-                                    type="button"
-                                    disabled={
-                                      docDownloadLoading ||
-                                      (() => {
-                                        const ids = getShipmentIdsForItem(item);
-                                        return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
-                                      })()
-                                    }
-                                    onClick={() => handleManifestForItem(item)}
-                                    className="inline-flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60"
-                                    title={
-                                      (() => {
-                                        const ids = getShipmentIdsForItem(item);
-                                        return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                          ? "Manifest already downloaded for this shipment"
-                                          : "Download manifest";
-                                      })()
-                                    }
-                                  >
-                                    <Package size={11} className="shrink-0" />
-                                    Manifest
-                                  </button> */}
-                                </div>
+                              <td className="min-w-0 px-1.5 py-1.5 align-middle">
+                                {renderOrderDetailShipDocsCell(item)}
                               </td>
-                              <td className="min-w-0 px-2 py-2 align-top text-xs text-gray-700">
+                              <td className="min-w-0 px-1.5 py-1.5 align-middle text-[11px] text-gray-700">
                                 {driverDisplay ? (
-                                  <span className="flex min-w-0 flex-col gap-0.5">
-                                    <span className="inline-flex min-w-0 items-center gap-1">
-                                      <UserCircle size={12} className="shrink-0 text-indigo-600" />
-                                      <span className="truncate font-medium" title={driverDisplay.name}>
-                                        {driverDisplay.name}
-                                      </span>
-                                    </span>
-                                    {driverDisplay.phone && (
-                                      <span className="truncate pl-5 text-[10px] text-gray-500 tabular-nums" title={driverDisplay.phone}>
-                                        {driverDisplay.phone}
-                                      </span>
-                                    )}
+                                  <span
+                                    className="block min-w-0 truncate font-medium"
+                                    title={
+                                      driverDisplay.phone
+                                        ? `${driverDisplay.name} · ${driverDisplay.phone}`
+                                        : driverDisplay.name
+                                    }
+                                  >
+                                    {driverDisplay.name}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400">—</span>
                                 )}
                               </td>
-                              <td className="min-w-0 px-1 py-2 align-top text-center">
-                                <div className="relative mx-auto w-full max-w-[160px]">
+                              <td className="min-w-0 px-1 py-1.5 align-middle text-center">
+                                <div className="relative mx-auto w-full max-w-[6.25rem]">
                                   <select
                                     value={item.status || "CREATED"}
                                     onChange={(e) => {
@@ -5613,8 +6913,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                       handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
                                     }}
                                     disabled={isUpdating}
-                                    className={`w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-indigo-500 ${
-                                      isUpdating ? "opacity-60 cursor-wait" : ""
+                                    className={`${ui.selectToolbar} w-full max-w-[6.25rem] ${
+                                      isUpdating ? "cursor-wait opacity-60" : ""
                                     }`}
                                   >
                                     {filteredStatusOptions.map((opt) => (
@@ -5625,7 +6925,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                                   </select>
                                   {isUpdating && (
                                     <div className="absolute inset-0 flex items-center justify-center rounded bg-white/60">
-                                      <RefreshCw size={14} className="animate-spin text-indigo-600" />
+                                      <RefreshCw size={14} className="animate-spin text-brand-600" />
                                     </div>
                                   )}
                                 </div>
@@ -5634,41 +6934,41 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                           );
                         })}
                       </tbody>
-                      <tfoot className="border-t border-slate-200 bg-slate-50/90">
+                      <tfoot className="border-t border-border bg-canvas-muted/90">
                         <tr>
                           <td
                             colSpan={1 + orderDetailItemActiveColumns.length + 4}
-                            className="px-3 py-2.5"
+                            className="px-2.5 py-1.5"
                           >
-                            <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-1 text-xs text-gray-700">
+                            <div className="flex flex-nowrap items-center justify-end gap-x-3 overflow-x-auto text-[11px] text-gray-700">
                               <span>
-                                Subtotal:{" "}
+                                Subtotal{" "}
                                 <span className="font-medium tabular-nums">
                                   {formatInr(selectedOrder?.pricing?.subTotal)}
                                 </span>
                               </span>
                               {getOrderWalletUsedAmount(selectedOrder) > 0 && (
                                 <span className="text-emerald-700">
-                                  Wallet used:{" "}
+                                  Wallet{" "}
                                   <span className="font-medium tabular-nums">
                                     {formatInr(getOrderWalletUsedAmount(selectedOrder))}
                                   </span>
                                 </span>
                               )}
                               <span>
-                                Delivery:{" "}
+                                Delivery{" "}
                                 <span className="font-medium tabular-nums">
                                   {formatInr(selectedOrder?.pricing?.delivery?.totalCharge)}
                                 </span>
                               </span>
                               <span>
-                                GST:{" "}
+                                GST{" "}
                                 <span className="font-medium tabular-nums">
                                   {formatInr(selectedOrder?.pricing?.gst?.totalGst)}
                                 </span>
                               </span>
                               <span className="font-semibold text-gray-900">
-                                Final payable:{" "}
+                                Final{" "}
                                 <span className="tabular-nums">
                                   {formatInr(selectedOrder?.pricing?.finalPayable)}
                                 </span>
@@ -5684,6 +6984,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
 
               </div>
             </div>
+            </>
             ) : null}
 
         {/* Assignment Modal */}
@@ -5717,7 +7018,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                 <select
                   value={selectedDeliveryAgentId}
                   onChange={(e) => setSelectedDeliveryAgentId(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-brand-500"
                 >
                   <option value="">Select driver</option>
                   {deliveryAgentsList
@@ -5750,7 +7051,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   type="button"
                   onClick={handleAssignmentSubmit}
                   disabled={assignLoading || !selectedDeliveryAgentId}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {assignLoading ? (
                     <>
@@ -5791,7 +7092,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   onChange={(e) => setRejectionNote(e.target.value)}
                   placeholder="e.g. Item does not meet exchange policy criteria."
                   rows={4}
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-brand-500"
                 />
               </div>
               {rejectionError && (
@@ -5816,7 +7117,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   type="button"
                   onClick={handleRejectionSubmit}
                   disabled={rejectionSubmitting || !rejectionNote.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {rejectionSubmitting ? (
                     <>
@@ -5849,12 +7150,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               aria-modal="true"
               aria-labelledby="order-notes-modal-title"
             >
-              <div className="border-b border-gray-100 bg-slate-50 px-5 py-3">
+              <div className="border-b border-gray-100 bg-canvas-muted px-5 py-3">
                 <h3
                   id="order-notes-modal-title"
                   className="text-sm font-semibold text-gray-900 flex items-center gap-2"
                 >
-                  <StickyNote size={16} className="text-indigo-600 shrink-0" />
+                  <StickyNote size={16} className="text-brand-600 shrink-0" />
                   Order notes
                 </h3>
                 <p className="mt-0.5 text-xs text-gray-600 truncate" title={orderNotesModalOrderId}>
@@ -5907,7 +7208,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                     rows={3}
                     maxLength={5000}
                     disabled={orderNotesModalSaving || orderNotesModalLoading}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60"
                   />
                   <div className="flex justify-end gap-2 pt-1">
                     <button
@@ -5925,7 +7226,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                         orderNotesModalLoading ||
                         !String(orderNotesModalDraft || "").trim()
                       }
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {orderNotesModalSaving ? "Saving…" : "Save note"}
                     </button>
@@ -5949,7 +7250,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
               aria-modal="true"
               aria-labelledby="store-info-modal-title"
             >
-              <div className="border-b border-gray-100 bg-slate-50 px-5 py-3 text-center">
+              <div className="border-b border-gray-100 bg-canvas-muted px-5 py-3 text-center">
                 <h3
                   id="store-info-modal-title"
                   className="text-sm font-semibold text-gray-900"
@@ -5960,7 +7261,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
                   <p className="mt-0.5 text-xs text-gray-600">{storeInfoModal.title}</p>
                 ) : null}
               </div>
-              <div className="max-h-[calc(90vh-7.5rem)] overflow-y-auto bg-slate-100/60 px-4 py-4 sm:px-6 sm:py-5">
+              <div className="max-h-[calc(90vh-7.5rem)] overflow-y-auto bg-canvas-muted/60 px-4 py-4 sm:px-6 sm:py-5">
                 {storeInfoModal.lines.length === 0 ? (
                   <p className="text-center text-sm text-gray-500">No line items.</p>
                 ) : (
@@ -6012,6 +7313,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER }) => {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

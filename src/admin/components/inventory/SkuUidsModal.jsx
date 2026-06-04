@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+﻿import { useEffect, useState, useCallback } from "react";
 import { getItemSkuUids, updateItemSkuUid } from "../../apis/itemapi";
 
 /**
@@ -67,24 +67,24 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50">
       <div
-        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-gray-200"
+        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-border"
         role="dialog"
         aria-modal="true"
         aria-labelledby="sku-uids-title"
       >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
           <div>
-            <h2 id="sku-uids-title" className="text-lg font-semibold text-gray-900">
+            <h2 id="sku-uids-title" className="text-lg font-semibold text-stone-900">
               SKU UIDs (sku_uid)
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-stone-500 mt-0.5">
               UID segment per sellable SKU line. Editing the code must stay unique for that SKU.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            className="p-2 rounded-lg hover:bg-canvas-muted text-stone-600"
             aria-label="Close"
           >
             ✕
@@ -98,16 +98,16 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
             </div>
           )}
           {loading ? (
-            <p className="text-sm text-gray-500 py-8 text-center">Loading…</p>
+            <p className="text-sm text-stone-500 py-8 text-center">Loading…</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-gray-500 py-8 text-center">
+            <p className="text-sm text-stone-500 py-8 text-center">
               No SKU UID records yet. Save the product with SKUs (and optional UID start codes) to mint UIDs.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-600 border-b border-gray-200">
+                  <tr className="text-left text-stone-600 border-b border-border">
                     <th className="py-2 pr-3 font-medium">Sellable SKU</th>
                     <th className="py-2 pr-3 font-medium">UID code</th>
                     <th className="py-2 pr-3 font-medium">Batch / ref</th>
@@ -124,7 +124,7 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
                         <td className="py-2 pr-3 font-mono text-xs break-all">{r.linkedSku}</td>
                         <td className="py-2 pr-3">
                           <input
-                            className="w-full min-w-[4rem] px-2 py-1.5 border border-gray-300 rounded-md font-mono text-xs"
+                            className="w-full min-w-[4rem] px-2 py-1.5 border border-border rounded-md font-mono text-xs"
                             value={d.code}
                             onChange={(e) =>
                               setDrafts((prev) => ({
@@ -136,7 +136,7 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
                         </td>
                         <td className="py-2 pr-3">
                           <input
-                            className="w-full min-w-[6rem] px-2 py-1.5 border border-gray-300 rounded-md text-xs"
+                            className="w-full min-w-[6rem] px-2 py-1.5 border border-border rounded-md text-xs"
                             value={d.batchRef}
                             onChange={(e) =>
                               setDrafts((prev) => ({
@@ -148,7 +148,7 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
                         </td>
                         <td className="py-2 pr-3">
                           <input
-                            className="w-full min-w-[8rem] px-2 py-1.5 border border-gray-300 rounded-md text-xs"
+                            className="w-full min-w-[8rem] px-2 py-1.5 border border-border rounded-md text-xs"
                             value={d.remarks}
                             onChange={(e) =>
                               setDrafts((prev) => ({
@@ -163,7 +163,7 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
                             type="button"
                             disabled={savingId === idStr}
                             onClick={() => handleSave(r)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-black text-white hover:bg-gray-800 disabled:opacity-50"
+                            className="px-3 py-1.5 text-xs font-medium rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50"
                           >
                             {savingId === idStr ? "…" : "Save"}
                           </button>
@@ -177,11 +177,11 @@ export default function SkuUidsModal({ itemId, open, onClose, onAfterSave }) {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-200 flex justify-end">
+        <div className="px-5 py-3 border-t border-border flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-brand-50/30"
           >
             Close
           </button>

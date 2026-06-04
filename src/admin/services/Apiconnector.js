@@ -1,13 +1,19 @@
 import axios from "axios";
 import appStore from "../../redux/Appstore";
+import { logout } from "../../redux/GlobalSlice";
+import { getLoginPathForPathname } from "../../utils/authRole";
 
 /**
  * Cresate axios instance
  */
+const apiBaseUrl = "https://api.khushpehno.com/api";
+  // import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  // (import.meta.env.DEV
+  //   ? "http://localhost:5000/api"
+  //   : "https://api.khushpehno.com/api");
+
 const axiosInstance = axios.create({
-   baseURL: "https://api.khushpehno.com/api",
-      // baseURL:"https://apidev.khushpehno.com/api",
-      // baseURL:"http://localhost:5000/api",
+  baseURL: apiBaseUrl,
   timeout: 60000,
 });
 
@@ -51,6 +57,21 @@ axiosInstance.interceptors.response.use(
         error?.message ||
         "Something went wrong";
     }
+
+    if (status === 401 && typeof window !== "undefined") {
+      const path = window.location.pathname || "";
+      const isAuthPage =
+        /\/login$|\/verify-otp$|\/otp$|^\/admin\/?$/.test(path) ||
+        path.endsWith("/admin");
+      if (!isAuthPage) {
+        appStore.dispatch(logout());
+        const loginPath = getLoginPathForPathname(path);
+        if (window.location.pathname !== loginPath) {
+          window.location.replace(loginPath);
+        }
+      }
+    }
+
     return Promise.reject(base);
   }
 );

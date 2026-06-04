@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Trash2, Loader2, ImagePlus, Video, ChevronLeft } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  ImagePlus,
+  Video,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   createDesignerItem,
   designerApi,
@@ -68,12 +76,36 @@ function previewKeyForImage(img, idx) {
   return `u-${idx}-${img?.url || ""}-${img?.imageKey || ""}`;
 }
 
-/** Sort by `order` for display; keep array index for remove(). Local Files have no order → stable order. */
-function variantImagesForDisplay(variant) {
-  const raw = Array.isArray(variant?.images) ? variant.images : [];
-  return raw
-    .map((img, originalIndex) => ({ img, originalIndex }))
-    .sort((a, b) => (Number(a.img?.order) || 0) - (Number(b.img?.order) || 0));
+/** Sort API images once by `order`, then keep array index as display + save order. */
+function sortVariantImagesByOrder(images) {
+  const raw = Array.isArray(images) ? images : [];
+  return [...raw]
+    .map((img, idx) => ({ img, idx }))
+    .sort((a, b) => {
+      const oa = Number(a.img?.order);
+      const ob = Number(b.img?.order);
+      const hasA = !isLocalPickedFile(a.img) && !Number.isNaN(oa) && oa > 0;
+      const hasB = !isLocalPickedFile(b.img) && !Number.isNaN(ob) && ob > 0;
+      if (hasA && hasB) return oa - ob || a.idx - b.idx;
+      if (hasA && !hasB) return -1;
+      if (!hasA && hasB) return 1;
+      return a.idx - b.idx;
+    })
+    .map(({ img }) => img);
+}
+
+/** Array order is canonical; sync `order` 1…n on saved media for API. */
+function normalizeVariantImagesArray(images) {
+  return (Array.isArray(images) ? images : []).map((img, idx) => {
+    const order = idx + 1;
+    if (isLocalPickedFile(img)) return img;
+    if (typeof img === "string") return img;
+    return { ...img, order };
+  });
+}
+
+function variantImageCountLabel(count) {
+  return `${count} item${count === 1 ? "" : "s"}`;
 }
 
 /** useLayoutEffect so blob previews paint in the same frame as the new file list (useEffect can look “stuck”). */
@@ -387,35 +419,42 @@ function mapDesignerItemToForm(d) {
               barcode: s.barcode || "",
             })),
             images: Array.isArray(v.images)
-              ? v.images.map((im, orderIdx) => {
-                  if (im == null) return im;
-                  if (typeof im === "string") {
-                    const url = String(im).trim();
-                    if (!url) return im;
-                    return {
-                      url,
-                      imageKey: "",
-                      order: orderIdx + 1,
-                      type: inferVariantMediaType(im),
-                      thumbnail: "",
-                    };
-                  }
-                  if (typeof im !== "object") return im;
-                  const url = String(im.url || "").trim();
-                  const imageKey = String(im.imageKey ?? im.key ?? "").trim();
-                  const orderRaw = im.order;
-                  const order =
-                    orderRaw != null && orderRaw !== "" && !Number.isNaN(Number(orderRaw))
-                      ? Number(orderRaw)
-                      : orderIdx + 1;
-                  const explicit = String(im.type || "").toLowerCase();
-                  const type =
-                    explicit === "video" || explicit === "image"
-                      ? explicit
-                      : inferVariantMediaType(im);
-                  const thumbnail = im.thumbnail != null ? String(im.thumbnail) : "";
-                  return { ...im, url, imageKey, order, type, thumbnail };
-                })
+              ? normalizeVariantImagesArray(
+                  sortVariantImagesByOrder(
+                    v.images.map((im, orderIdx) => {
+                      if (im == null) return im;
+                      if (typeof im === "string") {
+                        const url = String(im).trim();
+                        if (!url) return im;
+                        return {
+                          url,
+                          imageKey: "",
+                          order: orderIdx + 1,
+                          type: inferVariantMediaType(im),
+                          thumbnail: "",
+                        };
+                      }
+                      if (typeof im !== "object") return im;
+                      const url = String(im.url || "").trim();
+                      const imageKey = String(im.imageKey ?? im.key ?? "").trim();
+                      const orderRaw = im.order;
+                      const order =
+                        orderRaw != null &&
+                        orderRaw !== "" &&
+                        !Number.isNaN(Number(orderRaw))
+                          ? Number(orderRaw)
+                          : orderIdx + 1;
+                      const explicit = String(im.type || "").toLowerCase();
+                      const type =
+                        explicit === "video" || explicit === "image"
+                          ? explicit
+                          : inferVariantMediaType(im);
+                      const thumbnail =
+                        im.thumbnail != null ? String(im.thumbnail) : "";
+                      return { ...im, url, imageKey, order, type, thumbnail };
+                    }),
+                  ),
+                )
               : [],
           }))
         : [emptyVariant()],
@@ -1074,7 +1113,10 @@ const DesignerInventoryForm = () => {
     if (!list?.length) return;
     const next = Array.from(list);
     updateVariant(vIdx, (v) => {
-      const images = [...(Array.isArray(v.images) ? v.images : []), ...next];
+      const images = normalizeVariantImagesArray([
+        ...(Array.isArray(v.images) ? v.images : []),
+        ...next,
+      ]);
       return {
         ...v,
         images,
@@ -1090,7 +1132,9 @@ const DesignerInventoryForm = () => {
 
   const removeVariantImage = (vIdx, imgIdx) =>
     updateVariant(vIdx, (v) => {
-      const images = (v.images || []).filter((_, i) => i !== imgIdx);
+      const images = normalizeVariantImagesArray(
+        (v.images || []).filter((_, i) => i !== imgIdx),
+      );
       return {
         ...v,
         images,
@@ -1098,6 +1142,24 @@ const DesignerInventoryForm = () => {
           ...v.color,
           totalImages: images.length,
           isMultipleImages: images.length > 1,
+        },
+      };
+    });
+
+  const moveVariantImage = (vIdx, imgIdx, direction) =>
+    updateVariant(vIdx, (v) => {
+      const images = [...(v.images || [])];
+      const target = imgIdx + direction;
+      if (target < 0 || target >= images.length) return v;
+      [images[imgIdx], images[target]] = [images[target], images[imgIdx]];
+      const normalized = normalizeVariantImagesArray(images);
+      return {
+        ...v,
+        images: normalized,
+        color: {
+          ...v.color,
+          totalImages: normalized.length,
+          isMultipleImages: normalized.length > 1,
         },
       };
     });
@@ -3025,7 +3087,9 @@ const DesignerInventoryForm = () => {
 
         <div className="space-y-2">
           {form.variants.map((variant, vIdx) => {
-            const displayImages = variantImagesForDisplay(variant);
+            const variantImages = Array.isArray(variant.images)
+              ? variant.images
+              : [];
             return (
               <div
                 key={vIdx}
@@ -3110,7 +3174,7 @@ const DesignerInventoryForm = () => {
                         size={14}
                         className="pointer-events-none shrink-0"
                       />
-                      <span className="pointer-events-none">Add</span>
+                      <span className="pointer-events-none">Add more</span>
                       <input
                         type="file"
                         accept="image/*,video/*"
@@ -3120,29 +3184,62 @@ const DesignerInventoryForm = () => {
                       />
                     </label>
                   </div>
-                  {displayImages.length === 0 ? (
+                  <p className="mb-1.5 text-[10px] leading-snug text-stone-500">
+                    Order is left → right (saved as #1, #2, …). New uploads are
+                    added at the end — use arrows to reorder before saving.
+                  </p>
+                  {variantImages.length === 0 ? (
                     <p className="text-xs text-gray-500">
                       No media yet — add images or short videos (MP4, WebM, MOV, etc.) for this color.
                     </p>
                   ) : (
-                    <div className="max-h-80 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
+                    <div className="max-h-96 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
+                      <p className="mb-2 text-[10px] font-medium text-amber-900/90">
+                        {variantImageCountLabel(variantImages.length)} in
+                        display order
+                      </p>
                       <ul className="flex flex-wrap gap-2">
-                        {displayImages.map(({ img, originalIndex }) => (
+                        {variantImages.map((img, imgIdx) => (
                           <li
-                            key={previewKeyForImage(img, originalIndex)}
-                            className="relative shrink-0"
+                            key={previewKeyForImage(img, imgIdx)}
+                            className="flex shrink-0 flex-col items-center gap-1"
                           >
-                            <VariantMediaPreview image={img} />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeVariantImage(vIdx, originalIndex)
-                              }
-                              className="absolute -right-1 -top-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700"
-                              aria-label="Remove media"
-                            >
-                              <Trash2 size={10} />
-                            </button>
+                            <div className="relative">
+                              <span className="absolute -left-1 -top-1 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-800 px-1 text-[10px] font-bold text-white shadow">
+                                {imgIdx + 1}
+                              </span>
+                              <VariantMediaPreview image={img} />
+                              <button
+                                type="button"
+                                onClick={() => removeVariantImage(vIdx, imgIdx)}
+                                className="absolute -right-1 -top-1 rounded-full bg-rose-600 p-0.5 text-white shadow hover:bg-rose-700"
+                                aria-label="Remove media"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                disabled={imgIdx === 0}
+                                onClick={() => moveVariantImage(vIdx, imgIdx, -1)}
+                                className="rounded border border-amber-200 bg-white p-0.5 text-amber-900 hover:bg-amber-50 disabled:opacity-30"
+                                aria-label="Move earlier"
+                                title="Move left"
+                              >
+                                <ChevronLeft size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={imgIdx === variantImages.length - 1}
+                                onClick={() => moveVariantImage(vIdx, imgIdx, 1)}
+                                className="rounded border border-amber-200 bg-white p-0.5 text-amber-900 hover:bg-amber-50 disabled:opacity-30"
+                                aria-label="Move later"
+                                title="Move right"
+                              >
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
                           </li>
                         ))}
                       </ul>

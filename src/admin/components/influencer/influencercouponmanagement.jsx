@@ -1,59 +1,108 @@
-// Influencer Coupon Management: attach/detach coupons for one influencer.
-// Flow: Attach list comes from getCoupons() with isInfluencer=true so only influencer coupons are attachable.
-// Backend will also reject attach if coupon.isInfluencer !== true. See INFLUENCER-COUPON-FLOW.md in coupon folder.
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   getInfluencerCoupons,
   attachCouponToInfluencer,
   detachCouponFromInfluencer,
   getInfluencerCouponHistory,
   getInfluencerAnalytics,
-} from '../../apis/influrncerCouponapi';
-import { getCoupons } from '../../apis/Couponapi';
-import { ArrowLeft, Plus, Unlink, Link2, Search, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+} from "../../apis/influrncerCouponapi";
+import { getCoupons } from "../../apis/Couponapi";
+import {
+  ArrowLeft,
+  Plus,
+  Unlink,
+  Link2,
+  Search,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import {
+  btnOutline,
+  btnPrimary,
+  FormSection,
+  formPageWrap,
+  formToolbar,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+  inputClass,
+} from "./influencerShared";
+
+const PAGE_SIZE = 10;
+const ATTACH_PAGE_SIZE = 8;
+
+function PaginationBar({ page, totalPages, onPage, disabled }) {
+  const total = Math.max(1, totalPages);
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-2 py-2">
+      <button
+        type="button"
+        disabled={disabled || page <= 1}
+        onClick={() => onPage(page - 1)}
+        className={btnOutline}
+      >
+        <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+      </button>
+      <span className="text-[11px] text-stone-600">
+        Page {page} / {total}
+      </span>
+      <button
+        type="button"
+        disabled={disabled || page >= total}
+        onClick={() => onPage(page + 1)}
+        className={btnOutline}
+      >
+        Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </div>
+  );
+}
 
 const InfluencerCouponManage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
+
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(ap("influencer/coupons"));
+  };
 
   const [attachedCoupons, setAttachedCoupons] = useState([]);
   const [allCoupons, setAllCoupons] = useState([]);
   const [history, setHistory] = useState([]);
   const [analytics, setAnalytics] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [showAttach, setShowAttach] = useState(false);
-  const [couponSearch, setCouponSearch] = useState('');
-
-  // Pagination
-  const pageSize = 10;
+  const [couponSearch, setCouponSearch] = useState("");
+  const [attachBusyId, setAttachBusyId] = useState("");
+  const [detachBusyId, setDetachBusyId] = useState("");
   const [attachedPage, setAttachedPage] = useState(1);
   const [attachedTotal, setAttachedTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
-  const attachListPageSize = 8;
   const [attachListPage, setAttachListPage] = useState(1);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-
         const [attachedRes, historyRes, analyticsRes, allCouponsRes] = await Promise.all([
-          getInfluencerCoupons(id, attachedPage, pageSize),
-          getInfluencerCouponHistory(id, historyPage, pageSize),
+          getInfluencerCoupons(id, attachedPage, PAGE_SIZE),
+          getInfluencerCouponHistory(id, historyPage, PAGE_SIZE),
           getInfluencerAnalytics(id),
-          // Only fetch influencer coupons for attaching
-          getCoupons(1, 300, '', 'true'), // adjust limit as needed
+          getCoupons(1, 300, "", "true"),
         ]);
-
         setAttachedCoupons(attachedRes?.data?.coupons || []);
         setAttachedTotal(attachedRes?.data?.total || 0);
-
         setHistory(historyRes?.data?.usages || []);
         setHistoryTotal(historyRes?.data?.total || 0);
-
         setAnalytics(analyticsRes?.data);
         setAllCoupons(allCouponsRes?.data?.data || []);
       } catch (err) {
@@ -62,408 +111,303 @@ const InfluencerCouponManage = () => {
         setLoading(false);
       }
     };
-
     loadData();
   }, [id, attachedPage, historyPage]);
 
   const handleAttach = async (couponId) => {
     try {
+      setAttachBusyId(couponId);
       await attachCouponToInfluencer(couponId, id);
-      // optimistic + refresh
-      setAttachedCoupons((prev) => [
-        ...prev,
-        allCoupons.find((c) => c._id === couponId),
-      ]);
       setShowAttach(false);
-      // better: refetch page 1
-      const res = await getInfluencerCoupons(id, 1, pageSize);
+      setCouponSearch("");
+      setAttachListPage(1);
+      const res = await getInfluencerCoupons(id, 1, PAGE_SIZE);
       setAttachedCoupons(res?.data?.coupons || []);
       setAttachedTotal(res?.data?.total || 0);
       setAttachedPage(1);
     } catch (err) {
-      alert('Failed to attach: ' + (err?.response?.data?.message || 'Error'));
+      alert("Failed to attach: " + (err?.response?.data?.message || "Error"));
+    } finally {
+      setAttachBusyId("");
     }
   };
 
   const handleDetach = async (couponId) => {
-    if (!window.confirm('Really detach this coupon?')) return;
+    if (!window.confirm("Really detach this coupon?")) return;
     try {
+      setDetachBusyId(couponId);
       await detachCouponFromInfluencer(couponId, id);
       setAttachedCoupons((prev) => prev.filter((c) => (c._id || c.couponId) !== couponId));
-    } catch (err) {
-      alert('Detach failed');
+    } catch {
+      alert("Detach failed");
+    } finally {
+      setDetachBusyId("");
     }
   };
 
   const availableCoupons = allCoupons.filter(
     (c) =>
-      // must be marked as influencer coupon
       c.isInfluencer === true &&
-      // not already attached in current list
       !attachedCoupons.some((ac) => (ac._id || ac.couponId) === c._id) &&
-      // either free or already attached to this influencer
       (!c.influencerId || c.influencerId === id) &&
-      // matches search
       (c.code?.toLowerCase().includes(couponSearch.toLowerCase()) ||
-        c.description?.toLowerCase().includes(couponSearch.toLowerCase()))
+        c.description?.toLowerCase().includes(couponSearch.toLowerCase())),
   );
 
-  const attachListTotal = availableCoupons.length;
-  const attachListTotalPages = Math.ceil(attachListTotal / attachListPageSize) || 1;
-  const paginatedAvailableCoupons = availableCoupons.slice(
-    (attachListPage - 1) * attachListPageSize,
-    attachListPage * attachListPageSize
+  const attachListTotalPages = Math.ceil(availableCoupons.length / ATTACH_PAGE_SIZE) || 1;
+  const paginatedAvailable = availableCoupons.slice(
+    (attachListPage - 1) * ATTACH_PAGE_SIZE,
+    attachListPage * ATTACH_PAGE_SIZE,
   );
 
-  const AttachListPagination = () => {
-    if (attachListTotalPages <= 1) return null;
-    return (
-      <div className="flex items-center justify-between px-6 py-3 border-t bg-gray-50 text-xs sm:text-sm">
-        <div className="text-gray-600">
-          Showing{" "}
-          <span className="font-medium">
-            {attachListTotal === 0 ? 0 : (attachListPage - 1) * attachListPageSize + 1}
-          </span>
-          {" – "}
-          <span className="font-medium">
-            {Math.min(attachListPage * attachListPageSize, attachListTotal)}
-          </span>
-          {" of "}
-          <span className="font-medium">{attachListTotal}</span> coupons
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setAttachListPage((p) => Math.max(1, p - 1))}
-            disabled={attachListPage === 1}
-            className="rounded-lg border border-gray-300 px-2 py-1 disabled:opacity-40 hover:bg-gray-100 transition"
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span className="px-2 text-gray-700">
-            {attachListPage} / {attachListTotalPages}
-          </span>
-          <button
-            onClick={() => setAttachListPage((p) => Math.min(attachListTotalPages, p + 1))}
-            disabled={attachListPage === attachListTotalPages}
-            className="rounded-lg border border-gray-300 px-2 py-1 disabled:opacity-40 hover:bg-gray-100 transition"
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const PaginationControls = ({ currentPage, totalItems, onPageChange }) => {
-    const totalPages = Math.ceil(totalItems / pageSize);
-    if (totalPages <= 1) return null;
-
-    return (
-      <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white transition"
-        >
-          <ChevronLeft size={16} /> Previous
-        </button>
-        <span className="text-sm text-gray-600">
-          Page {currentPage} of {totalPages}
-        </span>
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white transition"
-        >
-          Next <ChevronRight size={16} />
-        </button>
-      </div>
-    );
-  };
+  const attachedTotalPages = Math.ceil(attachedTotal / PAGE_SIZE) || 1;
+  const historyTotalPages = Math.ceil(historyTotal / PAGE_SIZE) || 1;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-lg text-gray-600 animate-pulse">Loading coupon data...</div>
+      <div className={formPageWrap}>
+        <div className={formToolbar}>
+          <button type="button" onClick={goBack} className={btnOutline}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Back
+          </button>
+          <h1 className="mr-auto text-base font-bold sm:text-lg">Coupon management</h1>
+        </div>
+        <div className="flex items-center justify-center gap-2 py-12 text-[11px] text-stone-500">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+          Loading…
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50/70 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <button
-              onClick={() => navigate(-1)}
-              className="group flex items-center gap-2 text-gray-600 hover:text-gray-900 transition mb-2"
-            >
-              <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-              Back to Influencers
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-              Coupon Management
-            </h1>
-            <p className="text-gray-600 mt-1.5">
-              Influencer ID: <span className="font-mono text-gray-800">{id}</span>
+    <div className={formPageWrap}>
+      <div className={formToolbar}>
+        <button type="button" onClick={goBack} className={btnOutline} title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          Coupon management
+        </h1>
+        <button type="button" onClick={() => navigate(ap("influencer/coupons"))} className={btnOutline}>
+          All influencers
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowAttach((s) => !s);
+            if (!showAttach) setAttachListPage(1);
+          }}
+          className={showAttach ? btnOutline : btnPrimary}
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          {showAttach ? "Hide attach" : "Attach"}
+        </button>
+      </div>
+
+      {analytics ? (
+        <div className="mb-2 grid grid-cols-2 gap-2 sm:max-w-md">
+          <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+              Redemptions
+            </p>
+            <p className="mt-0.5 text-base font-bold text-stone-900">{analytics.totalUsage ?? 0}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+              Discount given
+            </p>
+            <p className="mt-0.5 text-base font-bold text-success">
+              ₹{(analytics.totalDiscount ?? 0).toLocaleString("en-IN")}
             </p>
           </div>
         </div>
+      ) : null}
 
-        {/* Stats Cards */}
-        {analytics && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow transition-shadow">
-              <p className="text-sm font-medium text-gray-500">Total Redemptions</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.totalUsage ?? 0}</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow transition-shadow">
-              <p className="text-sm font-medium text-gray-500">Total Discount Given</p>
-              <p className="text-3xl font-bold text-emerald-600 mt-2">
-                ₹{(analytics.totalDiscount ?? 0).toLocaleString('en-IN')}
-              </p>
-            </div>
-            {/* Add more stats cards here if available */}
-          </div>
-        )}
-
-        {/* Attached Coupons (table) */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-12">
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
-            <h2 className="text-xl font-semibold text-gray-900">Attached Coupons</h2>
-            <button
-              onClick={() => setShowAttach(!showAttach)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                showAttach
-                  ? 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                  : 'bg-gray-900 text-white hover:bg-gray-800'
-              }`}
-            >
-              <Plus size={16} />
-              {showAttach ? 'Cancel' : 'Attach Coupon'}
-            </button>
-          </div>
-
-          {attachedCoupons.length === 0 ? (
-            <div className="py-20 text-center text-gray-500">No coupons attached yet</div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100">
-                  <thead className="bg-gray-50/80">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Code
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Discount
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 bg-white">
-                    {attachedCoupons.map((c) => {
-                      const code = c.code || c.coupon?.code;
-                      const description = c.description || c.coupon?.description;
-                      const discountType = c.discountType || c.coupon?.discountType;
-                      const discountValue = c.discountValue || c.coupon?.discountValue;
-                      const active = c.isActive ?? c.coupon?.isActive ?? true;
-                      const idForNav = c._id || c.couponId;
-
-                      return (
-                        <tr
-                          key={c._id || c.couponId}
-                          className="hover:bg-gray-50/60 transition-colors"
-                        >
-                          <td
-                            className="px-6 py-3 text-sm font-medium text-indigo-700 cursor-pointer whitespace-nowrap"
-                            onClick={() => idForNav && navigate(`/admin/coupon-analytics/${idForNav}`)}
+      <FormSection
+        title={`Attached coupons (${attachedTotal || attachedCoupons.length})`}
+        hint="Coupons linked to this influencer"
+      >
+        {attachedCoupons.length === 0 ? (
+          <p className="py-8 text-center text-[11px] text-stone-500">No coupons attached yet.</p>
+        ) : (
+          <>
+            <div className={tableScrollShell}>
+              <table className="min-w-[720px] w-full text-[11px]">
+                <thead className={tableHeadClass}>
+                  <tr>
+                    <th className={`${thClass} w-10`}>#</th>
+                    <th className={thClass}>Code</th>
+                    <th className={thClass}>Description</th>
+                    <th className={thClass}>Discount</th>
+                    <th className={`${thClass} text-center`}>Status</th>
+                    <th className={`${thClass} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {attachedCoupons.map((c, idx) => {
+                    const code = c.code || c.coupon?.code;
+                    const description = c.description || c.coupon?.description;
+                    const discountType = c.discountType || c.coupon?.discountType;
+                    const discountValue = c.discountValue || c.coupon?.discountValue;
+                    const active = c.isActive ?? c.coupon?.isActive ?? true;
+                    const couponId = c._id || c.couponId;
+                    return (
+                      <tr key={couponId} className="hover:bg-canvas-muted/50">
+                        <td className="px-2 py-2 text-[10px] text-stone-500">
+                          {(attachedPage - 1) * PAGE_SIZE + idx + 1}
+                        </td>
+                        <td className="px-2 py-2 font-semibold text-brand-700">{code}</td>
+                        <td className="max-w-xs truncate px-2 py-2 text-stone-700">
+                          {description || "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-stone-700">
+                          {discountType === "PERCENT"
+                            ? `${discountValue}% off`
+                            : `₹${discountValue}`}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              active ? "bg-success-bg text-success" : "bg-danger-bg text-danger"
+                            }`}
                           >
-                            {code}
-                          </td>
-                          <td
-                            className="px-6 py-3 text-sm text-gray-700 cursor-pointer"
-                            onClick={() => idForNav && navigate(`/admin/coupon-analytics/${idForNav}`)}
+                            {active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDetach(couponId)}
+                            disabled={detachBusyId === couponId}
+                            className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger-bg px-2 py-1 text-[10px] font-semibold text-danger hover:bg-danger/10 disabled:opacity-50"
                           >
-                            {description || 'No description'}
-                          </td>
-                          <td className="px-6 py-3 text-sm text-gray-700 whitespace-nowrap">
-                            {discountType === 'PERCENT'
-                              ? `${discountValue}% off`
-                              : `Flat ₹${discountValue}`}
-                          </td>
-                          <td className="px-6 py-3 text-sm">
-                            <span
-                              className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                                active
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-red-50 text-red-700'
-                              }`}
-                            >
-                              {active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-3 text-right text-sm">
-                            <button
-                              onClick={() => handleDetach(c._id || c.couponId)}
-                              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition"
-                            >
-                              <Unlink size={14} /> Detach
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <PaginationControls
-                currentPage={attachedPage}
-                totalItems={attachedTotal}
-                onPageChange={setAttachedPage}
-              />
-            </>
-          )}
-        </div>
-
-        {/* Attach Coupon Panel */}
-        {showAttach && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-12">
-            <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/70">
-              <h2 className="text-xl font-semibold text-gray-900">Attach New Coupon</h2>
-              <div className="mt-4 max-w-md relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  placeholder="Search by code or description..."
-                  value={couponSearch}
-                  onChange={(e) => setCouponSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-black/20 focus:border-gray-400 outline-none transition"
-                />
-              </div>
-            </div>
-
-            <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-100">
-              {availableCoupons.length === 0 ? (
-                <div className="py-20 text-center text-gray-500">No matching coupons found</div>
-              ) : (
-                paginatedAvailableCoupons.map((c) => (
-                  <div
-                    key={c._id}
-                    className="px-6 py-5 flex items-center justify-between hover:bg-gray-50/60 transition-colors group"
-                  >
-                    <div
-                      className="cursor-pointer"
-                      onClick={() => navigate(`/admin/coupons/edit/${c._id}`)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium text-gray-900">{c.code}</div>
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                            c.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                          }`}
-                        >
-                          {c.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600 mt-0.5">{c.description}</div>
-                      <div className="text-xs text-gray-500 mt-1 font-medium">
-                        {c.discountType === 'PERCENT'
-                          ? `${c.discountValue}% off`
-                          : `Flat ₹${c.discountValue}`}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleAttach(c._id)}
-                      className="flex items-center gap-1.5 px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition"
-                    >
-                      <Link2 size={15} /> Attach
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-            <AttachListPagination />
-          </div>
-        )}
-
-        {/* Usage History */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3 bg-gray-50/70">
-            <Clock className="text-blue-600" size={20} />
-            <h2 className="text-xl font-semibold text-gray-900">Coupon Usage History</h2>
-          </div>
-
-          {history.length === 0 ? (
-            <div className="py-20 text-center text-gray-500">No usage recorded yet</div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100">
-                  <thead className="bg-gray-50/70">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Order ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Customer
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Coupon
-                      </th>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Discount
-                      </th>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Used At
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {history.map((u, i) => (
-                      <tr key={i} className="hover:bg-gray-50/40 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          #{u.orderId}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900">{u.userName}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{u.phoneNumber}</div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{u.couponCode}</td>
-                        <td className="px-6 py-4 text-right text-emerald-700 font-medium">
-                          ₹{Number(u.discountAmount).toLocaleString('en-IN')}
-                        </td>
-                        <td className="px-6 py-4 text-right text-sm text-gray-600">
-                          {new Date(u.usedAt).toLocaleString('en-IN', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}
+                            <Unlink className="h-3 w-3" aria-hidden />
+                            {detachBusyId === couponId ? "…" : "Detach"}
+                          </button>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <PaginationBar
+              page={attachedPage}
+              totalPages={attachedTotalPages}
+              onPage={setAttachedPage}
+            />
+          </>
+        )}
+      </FormSection>
 
-              <PaginationControls
-                currentPage={historyPage}
-                totalItems={historyTotal}
-                onPageChange={setHistoryPage}
-              />
-            </>
-          )}
+      {showAttach ? (
+        <FormSection title="Attach coupon" hint={`${availableCoupons.length} available`}>
+          <div className="relative max-w-md">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              placeholder="Search code or description…"
+              value={couponSearch}
+              onChange={(e) => {
+                setCouponSearch(e.target.value);
+                setAttachListPage(1);
+              }}
+              className="w-full rounded-lg border border-border bg-white py-1.5 pl-8 pr-2.5 text-[11px] outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+          </div>
+          <div className="divide-y divide-border rounded-lg border border-border">
+            {paginatedAvailable.length === 0 ? (
+              <p className="py-8 text-center text-[11px] text-stone-500">No matching coupons.</p>
+            ) : (
+              paginatedAvailable.map((c) => (
+                <div
+                  key={c._id}
+                  className="flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-canvas-muted/40"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-stone-900">{c.code}</p>
+                    <p className="truncate text-[10px] text-stone-500">{c.description || "—"}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAttach(c._id)}
+                    disabled={attachBusyId === c._id}
+                    className={btnPrimary}
+                  >
+                    <Link2 className="h-3.5 w-3.5" aria-hidden />
+                    {attachBusyId === c._id ? "…" : "Attach"}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          {attachListTotalPages > 1 ? (
+            <PaginationBar
+              page={attachListPage}
+              totalPages={attachListTotalPages}
+              onPage={setAttachListPage}
+            />
+          ) : null}
+        </FormSection>
+      ) : null}
+
+      <FormSection title="Usage history" hint="Redemptions using this influencer's coupons">
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] text-stone-500">
+          <Clock className="h-3.5 w-3.5" aria-hidden />
+          Recent coupon usage
         </div>
-      </div>
+        {history.length === 0 ? (
+          <p className="py-8 text-center text-[11px] text-stone-500">No usage recorded yet.</p>
+        ) : (
+          <>
+            <div className={tableScrollShell}>
+              <table className="min-w-[720px] w-full text-[11px]">
+                <thead className={tableHeadClass}>
+                  <tr>
+                    <th className={thClass}>Order</th>
+                    <th className={thClass}>Customer</th>
+                    <th className={thClass}>Coupon</th>
+                    <th className={`${thClass} text-right`}>Discount</th>
+                    <th className={`${thClass} text-right`}>Used at</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {history.map((u, i) => (
+                    <tr key={i} className="hover:bg-canvas-muted/50">
+                      <td className="px-2 py-2 font-medium text-stone-900">#{u.orderId}</td>
+                      <td className="px-2 py-2">
+                        <p className="text-stone-800">{u.userName}</p>
+                        <p className="text-[10px] text-stone-500">{u.phoneNumber}</p>
+                      </td>
+                      <td className="px-2 py-2 text-stone-700">{u.couponCode}</td>
+                      <td className="px-2 py-2 text-right font-medium text-success">
+                        ₹{Number(u.discountAmount).toLocaleString("en-IN")}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right text-stone-500">
+                        {new Date(u.usedAt).toLocaleString("en-IN", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <PaginationBar
+              page={historyPage}
+              totalPages={historyTotalPages}
+              onPage={setHistoryPage}
+            />
+          </>
+        )}
+      </FormSection>
     </div>
   );
 };

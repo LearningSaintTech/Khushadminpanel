@@ -1,30 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ArrowLeft, Loader2 } from "lucide-react";
-
+import { ArrowLeft, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
-
 import {
   createGiftCardRule,
   getGiftCardRuleById,
   updateGiftCardRule,
 } from "../../apis/GiftcardApi";
+import {
+  alertDanger,
+  btnOutline,
+  btnPrimary,
+  Field,
+  fieldClass,
+  FormSection,
+  formPageWrap,
+  formStickyFooter,
+  formToolbar,
+} from "./giftShared";
 
-const fieldClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
+const initialSlab = { minPrice: "", maxPrice: "", percent: "", label: "" };
 
 const GiftCardForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const basePath = useAdminPanelBasePath();
-
   const ap = (suffix) =>
-    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(
-      /\/+/g,
-      "/",
-    );
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const isEdit = useMemo(() => Boolean(id), [id]);
 
@@ -33,42 +36,36 @@ const GiftCardForm = () => {
     description: "",
     currency: "INR",
     isActive: true,
-
     rules: "",
     image: null,
-
-    slabs: [
-      {
-        minPrice: "",
-        maxPrice: "",
-        percent: "",
-        label: "",
-      },
-    ],
+    slabs: [{ ...initialSlab }],
   });
 
   const [previewImage, setPreviewImage] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]);
   const [loadError, setLoadError] = useState("");
 
-  // ================= FETCH SINGLE =================
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(ap("gift"));
+  };
+
   useEffect(() => {
     if (!isEdit) return;
 
+    let cancelled = false;
+
     const fetchSingle = async () => {
       try {
-        console.log("📦 Fetching Gift Card By ID:", id);
-
         setLoading(true);
         setLoadError("");
 
         const response = await getGiftCardRuleById(id);
-
-        console.log("✅ Gift Card Response:", response);
-
         const item = response?.data?.data || response?.data;
+
+        if (cancelled) return;
 
         if (!item) {
           setLoadError("Gift card not found.");
@@ -80,58 +77,42 @@ const GiftCardForm = () => {
           description: item.description || "",
           currency: item.currency || "INR",
           isActive: Boolean(item.isActive),
-
           rules: Array.isArray(item.rules) ? item.rules.join(", ") : "",
-
           image: null,
-
           slabs:
             Array.isArray(item.slabs) && item.slabs.length > 0
               ? item.slabs.map((slab) => ({
                   minPrice: slab.minPrice ?? "",
                   maxPrice: slab.maxPrice ?? "",
-                 percent: slab.percent ?? "",
+                  percent: slab.percent ?? "",
                   label: slab.label ?? "",
                 }))
-              : [
-                  {
-                    minPrice: "",
-                    maxPrice: "",
-                     percent: "",
-                    label: "",
-                  },
-                ],
+              : [{ ...initialSlab }],
         });
 
         setPreviewImage(item.image || null);
       } catch (err) {
-        console.error("❌ Fetch Single Error:", err);
-
-        setLoadError(
-          extractBackendMessages(err).join("; ") || "Failed to load gift card.",
-        );
+        if (!cancelled) {
+          setLoadError(
+            extractBackendMessages(err).join("; ") || "Failed to load gift card.",
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchSingle();
+    return () => {
+      cancelled = true;
+    };
   }, [id, isEdit]);
 
-  // ================= HANDLE CHANGE =================
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
 
-    console.log("📝 Input Changed:", name, value);
-
     if (name === "image" && files?.[0]) {
-      console.log("🖼️ Selected Image:", files[0]);
-
-      setFormData((prev) => ({
-        ...prev,
-        image: files[0],
-      }));
-
+      setFormData((prev) => ({ ...prev, image: files[0] }));
       setPreviewImage(URL.createObjectURL(files[0]));
     } else {
       setFormData((prev) => ({
@@ -141,37 +122,21 @@ const GiftCardForm = () => {
     }
   };
 
-  // ================= SLAB CHANGE =================
   const handleSlabChange = (index, field, value) => {
     setFormData((prev) => {
       const updatedSlabs = [...prev.slabs];
-
-      updatedSlabs[index][field] = value;
-
-      return {
-        ...prev,
-        slabs: updatedSlabs,
-      };
+      updatedSlabs[index] = { ...updatedSlabs[index], [field]: value };
+      return { ...prev, slabs: updatedSlabs };
     });
   };
 
-  // ================= ADD SLAB =================
   const addSlab = () => {
     setFormData((prev) => ({
       ...prev,
-      slabs: [
-        ...prev.slabs,
-        {
-          minPrice: "",
-          maxPrice: "",
-          percent: "",
-          label: "",
-        },
-      ],
+      slabs: [...prev.slabs, { ...initialSlab }],
     }));
   };
 
-  // ================= REMOVE SLAB =================
   const removeSlab = (index) => {
     setFormData((prev) => ({
       ...prev,
@@ -179,7 +144,6 @@ const GiftCardForm = () => {
     }));
   };
 
-  // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -188,60 +152,37 @@ const GiftCardForm = () => {
       setErrors([]);
 
       const payload = new FormData();
-
       payload.append("name", formData.name.trim());
       payload.append("description", formData.description.trim());
       payload.append("currency", formData.currency);
-      // payload.append("multiplier", String(formData.multiplier));
-const formattedSlabs = formData.slabs.map((slab) => ({
-  minPrice: Number(slab.minPrice),
-  maxPrice:
-    slab.maxPrice === "" ? null : Number(slab.maxPrice),
-  percent: Number(slab.percent),
-  label: slab.label,
-}));
 
-payload.append("slabs", JSON.stringify(formattedSlabs));      payload.append("isActive", formData.isActive ? "true" : "false");
+      const formattedSlabs = formData.slabs.map((slab) => ({
+        minPrice: Number(slab.minPrice),
+        maxPrice: slab.maxPrice === "" ? null : Number(slab.maxPrice),
+        percent: Number(slab.percent),
+        label: slab.label,
+      }));
+      payload.append("slabs", JSON.stringify(formattedSlabs));
+      payload.append("isActive", formData.isActive ? "true" : "false");
 
       const rulesArray = formData.rules
         .split(",")
         .map((r) => r.trim())
         .filter(Boolean);
-
       payload.append("rules", JSON.stringify(rulesArray));
 
       if (formData.image) {
         payload.append("image", formData.image);
       }
 
-      console.log("🚀 Submitting Payload:");
-
-      for (let pair of payload.entries()) {
-        console.log(pair[0], pair[1]);
-      }
-
-      // ================= UPDATE =================
       if (isEdit) {
-        console.log("✏️ Updating Gift Card:", id);
-
-        const response = await updateGiftCardRule(id, payload);
-
-        console.log("✅ Update Response:", response);
-      }
-
-      // ================= CREATE =================
-      else {
-        console.log("🆕 Creating Gift Card");
-
-        const response = await createGiftCardRule(payload);
-
-        console.log("✅ Create Response:", response);
+        await updateGiftCardRule(id, payload);
+      } else {
+        await createGiftCardRule(payload);
       }
 
       navigate(ap("gift"));
     } catch (err) {
-      console.error("❌ Submit Error:", err);
-
       setErrors(
         extractBackendMessages(err).length
           ? extractBackendMessages(err)
@@ -252,346 +193,240 @@ payload.append("slabs", JSON.stringify(formattedSlabs));      payload.append("is
     }
   };
 
-  // ================= LOADING =================
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex min-h-[40vh] items-center justify-center gap-3"
-      >
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
-        <span className="text-slate-600">Loading gift card...</span>
-      </motion.div>
+      <div className={formPageWrap}>
+        <div className={formToolbar}>
+          <button type="button" onClick={goBack} className={btnOutline}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Back
+          </button>
+          <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+            Edit gift card
+          </h1>
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white py-12 text-[11px] text-stone-500 shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+          Loading…
+        </div>
+      </div>
     );
   }
 
-  // ================= ERROR =================
   if (isEdit && loadError) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
-          <p className="text-sm text-rose-700">{loadError}</p>
-
-          <button
-            type="button"
-            onClick={() => navigate(ap("gift"))}
-            className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800"
-          >
-            Back to gift cards
+      <div className={formPageWrap}>
+        <div className={formToolbar}>
+          <button type="button" onClick={goBack} className={btnOutline}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Back
           </button>
+          <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+            Edit gift card
+          </h1>
         </div>
+        <div className={alertDanger}>{loadError}</div>
+        <button
+          type="button"
+          onClick={() => navigate(ap("gift"))}
+          className="text-[11px] font-semibold text-brand-600 hover:text-brand-700"
+        >
+          Back to gift cards
+        </button>
       </div>
     );
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8"
-    >
-      <div className="mx-auto max-w-3xl">
-        {/* BACK BUTTON */}
-        <button
-          type="button"
-          onClick={() => navigate(ap("gift"))}
-          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to gift cards
+    <div className={formPageWrap}>
+      <div className={formToolbar}>
+        <button type="button" onClick={goBack} className={btnOutline} title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
         </button>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          {isEdit ? "Edit gift card" : "Create gift card"}
+        </h1>
+        <button type="button" onClick={() => navigate(ap("gift"))} className={btnOutline}>
+          Close
+        </button>
+      </div>
 
-        {/* CARD */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-6 p-6 sm:p-8">
-            {/* ERRORS */}
-            {errors.length > 0 && (
-              <ul className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {errors.map((msg, index) => (
-                  <li key={index}>• {msg}</li>
-                ))}
-              </ul>
-            )}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {errors.length > 0 ? (
+          <ul className={`${alertDanger} list-inside list-disc space-y-0.5`}>
+            {errors.map((msg, index) => (
+              <li key={index}>{msg}</li>
+            ))}
+          </ul>
+        ) : null}
 
-            {/* BASIC DETAILS */}
-            <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Basic Details
-              </h2>
+        <FormSection title="Basic details" hint="Name, currency, and description">
+          <Field label="Gift card name" required>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className={fieldClass}
+              placeholder="Festive Bonus Card"
+              required
+            />
+          </Field>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="Currency">
+              <select
+                name="currency"
+                value={formData.currency}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                <option value="INR">INR</option>
+                <option value="USD">USD</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Description">
+            <textarea
+              name="description"
+              rows={3}
+              value={formData.description}
+              onChange={handleChange}
+              className={`${fieldClass} resize-none`}
+              placeholder="Short description"
+            />
+          </Field>
+        </FormSection>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {/* NAME */}
-                <div className="md:col-span-2">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Gift Card Name
-                  </label>
-
+        <FormSection title="Price slabs" hint="Min/max price ranges and bonus percent">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={addSlab}
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium text-brand-700 transition hover:bg-brand-100"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Add slab
+            </button>
+          </div>
+          {formData.slabs.map((slab, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-canvas-muted/40 p-2 sm:grid-cols-4"
+            >
+              <Field label="Min price">
+                <input
+                  type="number"
+                  value={slab.minPrice}
+                  onChange={(e) => handleSlabChange(index, "minPrice", e.target.value)}
+                  className={fieldClass}
+                  placeholder="100"
+                />
+              </Field>
+              <Field label="Max price">
+                <input
+                  type="number"
+                  value={slab.maxPrice}
+                  onChange={(e) => handleSlabChange(index, "maxPrice", e.target.value)}
+                  className={fieldClass}
+                  placeholder="499"
+                />
+              </Field>
+              <Field label="Percent">
+                <input
+                  type="number"
+                  step="1"
+                  value={slab.percent}
+                  onChange={(e) => handleSlabChange(index, "percent", e.target.value)}
+                  className={fieldClass}
+                  placeholder="10"
+                />
+              </Field>
+              <Field label="Label">
+                <div className="flex gap-1">
                   <input
                     type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
+                    value={slab.label}
+                    onChange={(e) => handleSlabChange(index, "label", e.target.value)}
                     className={fieldClass}
-                    placeholder="Festive Bonus Card"
-                    required
+                    placeholder="Starter"
                   />
-                </div>
-
-                {/* SLABS */}
-                <div className="md:col-span-2 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Price Slabs
-                    </label>
-
+                  {formData.slabs.length > 1 ? (
                     <button
                       type="button"
-                      onClick={addSlab}
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+                      onClick={() => removeSlab(index)}
+                      className="inline-flex shrink-0 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg px-2 text-danger hover:bg-danger/10"
+                      aria-label="Remove slab"
+                      title="Remove slab"
                     >
-                      Add Slab
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     </button>
-                  </div>
-
-                  {formData.slabs.map((slab, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-4"
-                    >
-                      {/* MIN PRICE */}
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600">
-                          Min Price
-                        </label>
-
-                        <input
-                          type="number"
-                          value={slab.minPrice}
-                          onChange={(e) =>
-                            handleSlabChange(index, "minPrice", e.target.value)
-                          }
-                          className={fieldClass}
-                          placeholder="100"
-                        />
-                      </div>
-
-                      {/* MAX PRICE */}
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600">
-                          Max Price
-                        </label>
-
-                        <input
-                          type="number"
-                          value={slab.maxPrice}
-                          onChange={(e) =>
-                            handleSlabChange(index, "maxPrice", e.target.value)
-                          }
-                          className={fieldClass}
-                          placeholder="499"
-                        />
-                      </div>
-
-                      {/* MULTIPLIER */}
-                     {/* PERCENT */}
-<div>
-  <label className="mb-1 block text-xs font-medium text-slate-600">
-    Percent
-  </label>
-
-  <input
-    type="number"
-    step="1"
-    value={slab.percent}
-    onChange={(e) =>
-      handleSlabChange(index, "percent", e.target.value)
-    }
-    className={fieldClass}
-    placeholder="100"
-  />
-</div>
-
-                      {/* LABEL */}
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-slate-600">
-                          Label
-                        </label>
-
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={slab.label}
-                            onChange={(e) =>
-                              handleSlabChange(index, "label", e.target.value)
-                            }
-                            className={fieldClass}
-                            placeholder="Starter"
-                          />
-
-                          {formData.slabs.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeSlab(index)}
-                              className="rounded-lg bg-rose-100 px-3 text-rose-600 hover:bg-rose-200"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  ) : null}
                 </div>
-
-                {/* MULTIPLIER */}
-                {/* <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Multiplier
-                  </label>
-
-                  <input
-                    type="number"
-                    name="multiplier"
-                    value={formData.multiplier}
-                    onChange={handleChange}
-                    className={fieldClass}
-                    placeholder="2"
-                    required
-                  />
-                </div> */}
-
-                {/* CURRENCY */}
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Currency
-                  </label>
-
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleChange}
-                    className={fieldClass}
-                  >
-                    <option value="INR">INR</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </div>
-
-                {/* DESCRIPTION */}
-                <div className="md:col-span-2">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Description
-                  </label>
-
-                  <textarea
-                    name="description"
-                    rows={4}
-                    value={formData.description}
-                    onChange={handleChange}
-                    className={fieldClass}
-                    placeholder="Short description for the gift card"
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* RULES & IMAGE */}
-            <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Rules & Media
-              </h2>
-
-              {/* RULES */}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Rules (comma separated)
-                </label>
-
-                <textarea
-                  name="rules"
-                  rows={4}
-                  value={formData.rules}
-                  onChange={handleChange}
-                  className={fieldClass}
-                  placeholder="Valid for 30 days, Non-refundable"
-                />
-              </div>
-
-              {/* IMAGE */}
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Upload Image
-                </label>
-
-                <input
-                  type="file"
-                  name="image"
-                  accept="image/*"
-                  onChange={handleChange}
-                  className="block w-full text-sm text-slate-600
-                  file:mr-4 file:rounded-lg file:border-0
-                  file:bg-indigo-50 file:px-4 file:py-2
-                  file:text-sm file:font-medium
-                  file:text-indigo-700 hover:file:bg-indigo-100"
-                />
-
-                {previewImage && (
-                  <img
-                    src={previewImage}
-                    alt="Preview"
-                    className="mt-4 h-28 w-28 rounded-xl border border-slate-200 object-cover shadow-sm"
-                  />
-                )}
-              </div>
-
-              {/* ACTIVE */}
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={formData.isActive}
-                  onChange={handleChange}
-                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-
-                <span className="text-sm font-medium text-slate-800">
-                  Active — visible to customers
-                </span>
-              </label>
-            </section>
-
-            {/* ACTION BUTTONS */}
-            <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-6">
-              <button
-                type="button"
-                onClick={() => navigate(ap("gift"))}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : isEdit ? (
-                  "Save Changes"
-                ) : (
-                  "Create Gift Card"
-                )}
-              </button>
+              </Field>
             </div>
-          </form>
+          ))}
+        </FormSection>
+
+        <FormSection title="Rules & media">
+          <Field label="Rules (comma separated)">
+            <textarea
+              name="rules"
+              rows={3}
+              value={formData.rules}
+              onChange={handleChange}
+              className={`${fieldClass} resize-none`}
+              placeholder="Valid for 30 days, Non-refundable"
+            />
+          </Field>
+          <Field label="Image">
+            <input
+              type="file"
+              name="image"
+              accept="image/*"
+              onChange={handleChange}
+              className="block w-full text-[11px] text-stone-600 file:mr-3 file:rounded-md file:border-0 file:bg-canvas-muted file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
+            />
+            {previewImage ? (
+              <img
+                src={previewImage}
+                alt="Gift card preview"
+                className="mt-2 h-20 w-20 rounded-lg border border-border object-cover"
+              />
+            ) : null}
+          </Field>
+          <label className="inline-flex items-center gap-2 text-[11px] font-medium text-stone-700">
+            <input
+              type="checkbox"
+              name="isActive"
+              checked={formData.isActive}
+              onChange={handleChange}
+              className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+            />
+            Active — visible to customers
+          </label>
+        </FormSection>
+
+        <div className={formStickyFooter}>
+          <button type="button" onClick={() => navigate(ap("gift"))} disabled={submitting} className={btnOutline}>
+            Cancel
+          </button>
+          <button type="submit" disabled={submitting} className={btnPrimary}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Save className="h-3.5 w-3.5" aria-hidden />
+                {isEdit ? "Update" : "Create"}
+              </>
+            )}
+          </button>
         </div>
-      </div>
-    </motion.div>
+      </form>
+    </div>
   );
 };
 

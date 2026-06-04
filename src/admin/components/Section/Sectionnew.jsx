@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiEdit2,
@@ -14,6 +14,17 @@ import {
 } from "../../apis/NewsectionApi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { getSectionDisplayOrders } from "../../utils/sectionDisplay";
+import {
+  btnIconDelete,
+  btnIconEdit,
+  btnPrimary,
+  btnOutline,
+  tabActive,
+  tabInactive,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./sectionShared";
 
 const TYPE_TABS = [
   { id: "ALL", label: "All" },
@@ -147,18 +158,18 @@ function StatusTogglePreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-3 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/50 p-3 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="section-status-preview-title"
     >
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-border/80 px-4 py-3">
           <div>
-            <h2 id="section-status-preview-title" className="text-sm font-semibold text-slate-900">
+            <h2 id="section-status-preview-title" className="text-sm font-semibold text-stone-900">
               Review status change
             </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
+            <p className="mt-0.5 text-[11px] text-stone-500">
               Confirm before {isActivating ? "activating" : "deactivating"} this section
             </p>
           </div>
@@ -166,7 +177,7 @@ function StatusTogglePreviewModal({
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+            className="rounded-lg p-1 text-stone-400 hover:bg-canvas-muted hover:text-stone-600 disabled:opacity-50"
             aria-label="Close preview"
           >
             <X className="h-4 w-4" />
@@ -202,30 +213,30 @@ function StatusTogglePreviewModal({
 
           <dl className="grid gap-2 sm:grid-cols-2">
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Section</dt>
-              <dd className="font-medium text-slate-900">{overview.title}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Section</dt>
+              <dd className="font-medium text-stone-900">{overview.title}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Type</dt>
-              <dd className="font-medium text-slate-900">{overview.type}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Type</dt>
+              <dd className="font-medium text-stone-900">{overview.type}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Section ID</dt>
-              <dd className="break-all font-mono text-[10px] text-slate-700">{overview.sectionId}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Section ID</dt>
+              <dd className="break-all font-mono text-[10px] text-stone-700">{overview.sectionId}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Products</dt>
-              <dd className="tabular-nums text-slate-900">{overview.productCount}</dd>
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Products</dt>
+              <dd className="tabular-nums text-stone-900">{overview.productCount}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Order</dt>
-              <dd className="text-slate-900">
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Order</dt>
+              <dd className="text-stone-900">
                 App {overview.appOrder ?? "—"} · Web {overview.webOrder ?? "—"}
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] font-semibold uppercase text-slate-500">Platforms</dt>
-              <dd className="text-slate-900">
+              <dt className="text-[10px] font-semibold uppercase text-stone-500">Platforms</dt>
+              <dd className="text-stone-900">
                 {overview.isApp ? "App" : ""}
                 {overview.isApp && overview.isWeb ? " · " : ""}
                 {overview.isWeb ? "Web" : ""}
@@ -235,16 +246,16 @@ function StatusTogglePreviewModal({
           </dl>
 
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-500">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
               API request (what will be sent)
             </p>
-            <pre className="max-h-40 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 text-[10px] leading-relaxed text-slate-800">
+            <pre className="max-h-40 overflow-auto rounded-lg border border-border bg-canvas-muted p-2 text-[10px] leading-relaxed text-stone-800">
               {JSON.stringify(overview.apiRequest, null, 2)}
             </pre>
           </div>
         </div>
 
-        <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
+        <div className="flex gap-2 border-t border-border/80 px-4 py-3">
           <button type="button" onClick={onClose} disabled={loading} className={`${btnOutline} flex-1 py-2`}>
             Go back
           </button>
@@ -493,166 +504,146 @@ const Section = () => {
     setDebouncedSearch("");
   };
 
-  const btnPrimary =
-    "inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors";
-  const btnOutline =
-    "inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-colors";
-
   return (
-    <div>
-      <div className="mx-auto max-w-[1600px] pb-4">
-        <div className="mb-3 flex justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              sectionListLog("CREATE navigate — new section (no payload yet)", {
-                discountWillBeSentToApi: false,
-                note: "Discount is only sent after user checks Add discount and confirms review on form",
-              });
-              navigate(ap("section/create"));
-            }}
-            className={btnPrimary}
-          >
-            <FiPlus className="h-3.5 w-3.5" />
-            Create section
-          </button>
-        </div>
+    <div className="text-stone-900">
+      <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-1.5 shadow-sm">
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">Sections</h1>
 
-        <div className="mb-3 space-y-3">
-          <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search title, description, path…"
-              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/15"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {TYPE_TABS.map((tab) => {
-              const active = typeFilter === tab.id;
-              return (
+            <div className="relative w-full min-w-[140px] sm:min-w-[240px] sm:max-w-xs sm:flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search title, description, path…"
+                className="w-full min-w-[140px] max-w-xs rounded-lg border border-border bg-white py-1.5 pl-8 pr-8 text-[11px] text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+              {searchInput && (
                 <button
-                  key={tab.id}
                   type="button"
-                  onClick={() => setTypeFilter(tab.id)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                    active
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                  }`}
+                  onClick={clearSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-stone-400 transition hover:bg-canvas-muted hover:text-stone-600"
+                  aria-label="Clear search"
                 >
-                  {tab.label}
+                  <X className="h-4 w-4" />
                 </button>
-              );
-            })}
-            {hasActiveFilters && !loading && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTypeFilter("ALL");
-                  clearSearch();
-                }}
-                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          {loading && sections.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-16 text-slate-500">
-              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-              <span className="text-xs">Loading sections…</span>
+              )}
             </div>
-          ) : sections.length === 0 ? (
-            <div className="px-4 py-12 text-center">
-              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                <FiLayers className="h-5 w-5" />
-              </div>
-              <h2 className="text-sm font-semibold text-slate-900">{emptyMessage}</h2>
-              <p className="mx-auto mt-1 max-w-sm text-[11px] text-slate-500">
-                {hasActiveFilters
-                  ? "Try another keyword or switch the type filter."
-                  : "Create your first homepage section to showcase products or categories."}
-              </p>
-              {hasActiveFilters ? (
+
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              {TYPE_TABS.map((tab) => {
+                const active = typeFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setTypeFilter(tab.id)}
+                    className={active ? tabActive : tabInactive}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+              {hasActiveFilters && !loading && (
                 <button
                   type="button"
                   onClick={() => {
                     setTypeFilter("ALL");
                     clearSearch();
                   }}
-                  className={`${btnOutline} mt-4`}
+                  className="text-[11px] font-medium text-brand-600 hover:text-brand-800"
                 >
-                  Clear filters
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    sectionListLog("CREATE navigate — new section (no payload yet)", {
-                      discountWillBeSentToApi: false,
-                    });
-                    navigate(ap("section/create"));
-                  }}
-                  className={`${btnPrimary} mt-4`}
-                >
-                  <FiPlus />
-                  Create section
+                  Clear
                 </button>
               )}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/90">
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Preview
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Section
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Type
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Products
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Discount
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Order
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Platforms
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Status
-                    </th>
-                    <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {sections.map((section) => {
+
+            <button
+              type="button"
+              onClick={() => {
+                sectionListLog("CREATE navigate — new section (no payload yet)", {
+                  discountWillBeSentToApi: false,
+                  note: "Discount is only sent after user checks Add discount and confirms review on form",
+                });
+                navigate(ap("section/create"));
+              }}
+              className={`${btnPrimary} shrink-0`}
+            >
+              <FiPlus className="h-3.5 w-3.5" aria-hidden />
+              Create
+            </button>
+      </div>
+
+      <div className={tableScrollShell}>
+        <table className="min-w-[960px] w-full divide-y divide-border text-[11px]">
+          <thead className={tableHeadClass}>
+            <tr>
+              <th className={`${thClass} w-10 text-center`}>#</th>
+              <th className={thClass}>Preview</th>
+              <th className={thClass}>Section</th>
+              <th className={thClass}>Type</th>
+              <th className={thClass}>Products</th>
+              <th className={thClass}>Discount</th>
+              <th className={thClass}>Order</th>
+              <th className={thClass}>Platforms</th>
+              <th className={thClass}>Status</th>
+              <th className={`${thClass} min-w-[100px] text-right`}>Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {loading && sections.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="py-14 text-center text-stone-500">
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+                    Loading sections…
+                  </span>
+                </td>
+              </tr>
+            ) : sections.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-4 py-12 text-center">
+                  <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-canvas-muted text-stone-400">
+                    <FiLayers className="h-4 w-4" aria-hidden />
+                  </div>
+                  <p className="text-sm font-semibold text-stone-900">{emptyMessage}</p>
+                  <p className="mx-auto mt-1 max-w-sm text-[11px] text-stone-500">
+                    {hasActiveFilters
+                      ? "Try another keyword or switch the type filter."
+                      : "Create your first homepage section to showcase products or categories."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    {hasActiveFilters ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTypeFilter("ALL");
+                          clearSearch();
+                        }}
+                        className={btnOutline}
+                      >
+                        Clear filters
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sectionListLog("CREATE navigate — new section (no payload yet)", {
+                            discountWillBeSentToApi: false,
+                          });
+                          navigate(ap("section/create"));
+                        }}
+                        className={btnPrimary}
+                      >
+                        <FiPlus className="h-3.5 w-3.5" aria-hidden />
+                        Create section
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              sections.map((section, idx) => {
                     const img = getBannerUrl(section);
                     const isBusy = busyId === section._id;
                     const categoryName =
@@ -666,33 +657,36 @@ const Section = () => {
                     return (
                       <tr
                         key={section._id}
-                        className="border-t border-slate-100 transition-colors hover:bg-indigo-50/30"
+                        className="transition-colors hover:bg-canvas-muted/50"
                       >
+                        <td className="px-2 py-2 text-center text-[10px] font-semibold text-stone-500">
+                          {(page - 1) * limit + idx + 1}
+                        </td>
                         <td className="px-2 py-1.5">
                           {img ? (
                             <img
                               src={img}
                               alt=""
-                              className="h-10 w-16 rounded-md border border-slate-200 object-cover"
+                              className="h-10 w-16 rounded-md border border-border object-cover"
                               onError={(e) => {
                                 e.target.style.display = "none";
                               }}
                             />
                           ) : (
-                            <div className="flex h-10 w-16 items-center justify-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-[9px] font-medium text-slate-400">
+                            <div className="flex h-10 w-16 items-center justify-center rounded-md border border-dashed border-border bg-canvas-muted text-[9px] font-medium text-stone-400">
                               No image
                             </div>
                           )}
                         </td>
                         <td className="px-2 py-1.5">
-                          <p className="font-medium text-slate-900 line-clamp-2">{section.title}</p>
+                          <p className="font-medium text-stone-900 line-clamp-2">{section.title}</p>
                           {section.text && (
-                            <p className="mt-0.5 max-w-[200px] truncate text-[10px] text-slate-500">
+                            <p className="mt-0.5 max-w-[200px] truncate text-[10px] text-stone-500">
                               {section.text}
                             </p>
                           )}
                           {section.navigation?.navigate && (
-                            <p className="mt-1 font-mono text-[10px] text-indigo-600">
+                            <p className="mt-1 font-mono text-[10px] text-brand-600">
                               {section.navigation.navigate}
                             </p>
                           )}
@@ -708,36 +702,36 @@ const Section = () => {
                             {section.type || "—"}
                           </span>
                           {categoryName && (
-                            <p className="mt-1 max-w-[120px] truncate text-[11px] text-slate-500">
+                            <p className="mt-1 max-w-[120px] truncate text-[11px] text-stone-500">
                               {categoryName}
                             </p>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 tabular-nums text-slate-700">
+                        <td className="px-2 py-1.5 tabular-nums text-stone-700">
                           {section.products?.length ?? 0}
                         </td>
                         <td className="px-2 py-1.5">
                           <span
                             className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
                               formatSectionDiscount(section) === "None"
-                                ? "bg-slate-100 text-slate-600"
+                                ? "bg-canvas-muted text-stone-600"
                                 : "bg-amber-50 text-amber-800 ring-1 ring-amber-200/60"
                             }`}
                           >
                             {formatSectionDiscount(section)}
                           </span>
                         </td>
-                        <td className="px-2 py-1.5 text-[11px] text-slate-600 tabular-nums">
+                        <td className="px-2 py-1.5 text-[11px] text-stone-600 tabular-nums">
                           <div className="flex flex-col gap-0.5">
                             <span>
                               App{" "}
-                              <strong className="text-slate-900">
+                              <strong className="text-stone-900">
                                 {appOrder != null && appOrder !== "" ? appOrder : "—"}
                               </strong>
                             </span>
                             <span>
                               Web{" "}
-                              <strong className="text-slate-900">
+                              <strong className="text-stone-900">
                                 {webOrder != null && webOrder !== "" ? webOrder : "—"}
                               </strong>
                             </span>
@@ -756,7 +750,7 @@ const Section = () => {
                               </span>
                             )}
                             {!section.isApp && !section.isWeb && (
-                              <span className="text-xs text-slate-400">—</span>
+                              <span className="text-xs text-stone-400">—</span>
                             )}
                           </div>
                         </td>
@@ -768,86 +762,77 @@ const Section = () => {
                             className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
                               section.isActive
                                 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 hover:opacity-80"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                : "bg-canvas-muted text-stone-600 hover:bg-stone-200"
                             } disabled:opacity-50`}
                           >
                             {isBusy ? "…" : section.isActive ? "Active" : "Inactive"}
                           </button>
                         </td>
-                        <td className="px-2 py-1.5 text-right">
-                          <div className="inline-flex items-center justify-end gap-0.5">
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => {
-                                sectionListLog("EDIT navigate — row data from list", {
-                                  sectionId: section._id,
-                                  row: snapshotListRow(section),
-                                  existingDiscountOnServer: formatSectionDiscount(section),
-                                  discountWillBeSentOnSave:
-                                    "Only if user keeps Add discount checked with value > 0 on edit form",
-                                  note: "Compare with SectionForm LOAD and SUBMIT preview logs",
-                                });
-                                navigate(ap(`section/edit/${section._id}`));
-                              }}
-                              className="rounded p-1 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"
-                              title="Edit"
-                            >
-                              <FiEdit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleDelete(section._id)}
-                              className="rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                              title="Delete"
-                            >
-                              <FiTrash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                        <td className="px-2 py-2 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => {
+                              sectionListLog("EDIT navigate — row data from list", {
+                                sectionId: section._id,
+                                row: snapshotListRow(section),
+                                existingDiscountOnServer: formatSectionDiscount(section),
+                                discountWillBeSentOnSave:
+                                  "Only if user keeps Add discount checked with value > 0 on edit form",
+                                note: "Compare with SectionForm LOAD and SUBMIT preview logs",
+                              });
+                              navigate(ap(`section/edit/${section._id}`));
+                            }}
+                            className={btnIconEdit}
+                            title="Edit"
+                          >
+                            <FiEdit2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleDelete(section._id)}
+                            className={`${btnIconDelete} ml-1.5`}
+                            title="Delete"
+                          >
+                            <FiTrash2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
 
-          {sections.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-600">
-              <span>
-                Page <span className="font-medium text-slate-800">{page}</span> /{" "}
-                <span className="font-medium text-slate-800">{totalPages}</span>
-                {(pagination?.total != null || filteredTotal > 0) && (
-                  <span className="text-slate-400">
-                    {" "}
-                    · {useClientFilter ? filteredTotal : pagination.total} total
-                  </span>
-                )}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className={btnOutline}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  Prev
-                </button>
-                <button
-                  type="button"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => setPage((p) => p + 1)}
-                  className={btnOutline}
-                >
-                  Next
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">
+          Page {page} of {totalPages}
+          {(pagination?.total != null || filteredTotal > 0) && (
+            <span>
+              {" "}
+              ({useClientFilter ? filteredTotal : pagination.total ?? 0} total)
+            </span>
           )}
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className={btnOutline}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </button>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className={btnOutline}
+          >
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
       </div>
 

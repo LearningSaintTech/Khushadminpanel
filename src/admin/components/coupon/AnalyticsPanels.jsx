@@ -1,6 +1,23 @@
 import React, { useMemo, useState } from "react";
-import { Activity, Smartphone, Store, Users, ChevronLeft, ChevronRight, Trash2, Eye } from "lucide-react";
-import { CardSection, EmptyState, KpiTile, StatusPill, SummaryStat, TimelineTable } from "./AnalyticsUiParts";
+import { Activity, Smartphone, Store, Users, Trash2, Eye } from "lucide-react";
+import {
+  CardSection,
+  EmptyState,
+  KpiTile,
+  PaginationFooter,
+  StatusPill,
+  SummaryStat,
+  TimelineTable,
+} from "./AnalyticsUiParts";
+import {
+  btnIconEdit,
+  btnOutline,
+  btnPrimary,
+  filterInputClass,
+  tableHeadClass,
+  tableScrollShell,
+  thClass,
+} from "./analyticsShared";
 
 export function OverviewPanel({
   pagination,
@@ -169,8 +186,8 @@ export function OverviewPanel({
           : appRows;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
         <KpiTile
           icon={<Activity className="h-5 w-5 text-indigo-600" />}
           title="Events (filtered)"
@@ -213,7 +230,7 @@ export function OverviewPanel({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile
           icon={<Smartphone className="h-5 w-5 text-green-600" />}
           title="Android installs (today)"
@@ -252,51 +269,51 @@ export function OverviewPanel({
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, idx) => (
-              <div key={`skeleton-row-${idx}`} className="h-10 animate-pulse rounded-lg bg-slate-100" />
+              <div key={`skeleton-row-${idx}`} className="h-8 animate-pulse rounded-lg bg-canvas-muted" />
             ))}
           </div>
         ) : selectedRows.length === 0 ? (
           <EmptyState title="No rows available" description="Apply filters and refresh to see analytics rows." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+          <div className={tableScrollShell}>
+            <table className="min-w-full text-[11px]">
+              <thead className={tableHeadClass}>
                 <tr>
                   {selectedKpi === "unique_users" ? (
                     <>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User ID</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Latest Event</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Timestamp</th>
+                      <th className={thClass}>User</th>
+                      <th className={thClass}>User ID</th>
+                      <th className={thClass}>Latest event</th>
+                      <th className={`${thClass} text-right`}>Timestamp</th>
                     </>
                   ) : (
                     <>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Event</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Path / Source</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Timestamp</th>
+                      <th className={thClass}>Event</th>
+                      <th className={thClass}>User</th>
+                      <th className={thClass}>Path / source</th>
+                      <th className={`${thClass} text-right`}>Timestamp</th>
                     </>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-border/60">
                 {selectedRows.map((row, idx) => (
-                  <tr key={`${selectedKpi}-${idx}`}>
+                  <tr key={`${selectedKpi}-${idx}`} className="hover:bg-canvas-muted/50">
                     {selectedKpi === "unique_users" ? (
                       <>
-                        <td className="px-3 py-2 text-xs text-slate-700">{row.user}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">{row.userId}</td>
-                        <td className="px-3 py-2 text-xs text-slate-700">{row.latestEventType}</td>
-                        <td className="px-3 py-2 text-right text-xs text-slate-600">
+                        <td className="px-2 py-1.5 text-stone-700">{row.user}</td>
+                        <td className="px-2 py-1.5 text-stone-500">{row.userId}</td>
+                        <td className="px-2 py-1.5 text-stone-700">{row.latestEventType}</td>
+                        <td className="px-2 py-1.5 text-right text-stone-600">
                           {row.latestTimestamp ? new Date(row.latestTimestamp).toLocaleString("en-IN") : "-"}
                         </td>
                       </>
                     ) : (
                       <>
-                        <td className="px-3 py-2 text-xs text-slate-700">{row.eventType}</td>
-                        <td className="px-3 py-2 text-xs text-slate-700">{row.user}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">{row.path || row.channel || "-"}</td>
-                        <td className="px-3 py-2 text-right text-xs text-slate-600">
+                        <td className="px-2 py-1.5 text-stone-700">{row.eventType}</td>
+                        <td className="px-2 py-1.5 text-stone-700">{row.user}</td>
+                        <td className="px-2 py-1.5 text-stone-500">{row.path || row.channel || "-"}</td>
+                        <td className="px-2 py-1.5 text-right text-stone-600">
                           {row.timestamp ? new Date(row.timestamp).toLocaleString("en-IN") : "-"}
                         </td>
                       </>
@@ -309,27 +326,14 @@ export function OverviewPanel({
         )}
       </CardSection>
 
-      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="text-sm text-slate-600">
-          Page {currentPage} of {totalPages} <span className="text-slate-400">| Total rows: {Number(pagination?.total || 0).toLocaleString()}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => fetchEvents(currentPage - 1)}
-            disabled={currentPage <= 1 || loading}
-            className="rounded-lg border border-slate-300 p-2 disabled:opacity-40"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            onClick={() => fetchEvents(currentPage + 1)}
-            disabled={currentPage >= totalPages || loading}
-            className="rounded-lg border border-slate-300 p-2 disabled:opacity-40"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </div>
+      <PaginationFooter
+        currentPage={currentPage}
+        totalPages={totalPages}
+        total={pagination?.total}
+        loading={loading}
+        onPrev={() => fetchEvents(currentPage - 1)}
+        onNext={() => fetchEvents(currentPage + 1)}
+      />
     </div>
   );
 }
@@ -384,18 +388,14 @@ export function InsightPanel({
     : nonEmptySummaryTimelines;
 
   return (
-    <div className="space-y-5">
-
-      <CardSection
-        title="Insights Lab"
-        actions={<StatusPill status={dashboardStatus} />}
-      >
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row">
+    <div className="space-y-3">
+      <CardSection title="Insights" actions={<StatusPill status={dashboardStatus} />}>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
               value={insightQuery}
               onChange={(e) => setInsightQuery(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm md:max-w-md"
+              className={`${filterInputClass} w-full sm:max-w-md`}
             >
               {INSIGHT_QUERY_OPTIONS.map((opt) => (
                 <option key={opt.id || "none"} value={opt.id}>
@@ -403,17 +403,13 @@ export function InsightPanel({
                 </option>
               ))}
             </select>
-            <button
-              onClick={runInsightQuery}
-              disabled={insightLoading}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
-            >
-              {insightLoading ? "Running..." : "Run Query"}
+            <button type="button" onClick={runInsightQuery} disabled={insightLoading} className={btnPrimary}>
+              {insightLoading ? "Running…" : "Run query"}
             </button>
           </div>
 
           {insightError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <div className="rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
               Query error: {insightError}
             </div>
           ) : null}
@@ -505,21 +501,21 @@ export function InsightPanel({
           ) : null}
 
           {!summaryData?.metrics && insightRows.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
+            <div className={tableScrollShell}>
+              <table className="min-w-full text-[11px]">
+                <thead className={tableHeadClass}>
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Name</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Count</th>
+                    <th className={thClass}>Rank</th>
+                    <th className={thClass}>Name</th>
+                    <th className={`${thClass} text-right`}>Count</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
+                <tbody className="divide-y divide-border/60">
                   {insightRows.map((row, idx) => (
-                    <tr key={row.key}>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-900">#{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{row.label}</td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-indigo-700">{row.count}</td>
+                    <tr key={row.key} className="hover:bg-canvas-muted/50">
+                      <td className="px-2 py-1.5 font-medium text-stone-900">#{idx + 1}</td>
+                      <td className="px-2 py-1.5 text-stone-700">{row.label}</td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-brand-700">{row.count}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -559,8 +555,8 @@ export function ExplorerPanel({
   };
 
   return (
-    <div className="space-y-5">
-      <CardSection title="Event Hotspots (current page)">
+    <div className="space-y-3">
+      <CardSection title="Event hotspots (current page)">
         {Object.keys(eventTypeCounts).length === 0 ? (
           <EmptyState title="No event counts available" description="Try broadening your filters to inspect top event types." />
         ) : (
@@ -569,7 +565,7 @@ export function ExplorerPanel({
               .sort((a, b) => b[1] - a[1])
               .slice(0, 10)
               .map(([eventType, count]) => (
-                <span key={eventType} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                <span key={eventType} className="inline-flex items-center rounded-full border border-border bg-canvas-muted px-2 py-0.5 text-[10px] font-medium text-stone-700">
                   {eventType}: {count}
                 </span>
               ))}
@@ -577,33 +573,32 @@ export function ExplorerPanel({
         )}
       </CardSection>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
+      <div className={tableScrollShell}>
+          <table className="min-w-[900px] w-full text-[11px]">
+            <thead className={tableHeadClass}>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Event</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Source</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Platform</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Session</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Path</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Timestamp</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
+                <th className={thClass}>Event</th>
+                <th className={thClass}>Source</th>
+                <th className={thClass}>Platform</th>
+                <th className={thClass}>User</th>
+                <th className={thClass}>Session</th>
+                <th className={thClass}>Path</th>
+                <th className={`${thClass} text-right`}>Timestamp</th>
+                <th className={`${thClass} text-right`}>Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-border/60">
               {loading ? (
                 Array.from({ length: 8 }).map((_, idx) => (
                   <tr key={`explorer-skeleton-${idx}`}>
-                    <td colSpan={8} className="px-4 py-3">
-                      <div className="h-8 animate-pulse rounded-md bg-slate-100" />
+                    <td colSpan={8} className="px-2 py-2">
+                      <div className="h-6 animate-pulse rounded-md bg-canvas-muted" />
                     </td>
                   </tr>
                 ))
               ) : events.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[11px] text-stone-500">
                     No events found for selected filters.
                   </td>
                 </tr>
@@ -612,49 +607,49 @@ export function ExplorerPanel({
                   const isExpanded = expandedEventId === ev._id;
                   return (
                     <React.Fragment key={ev._id}>
-                      <tr className="hover:bg-slate-50">
-                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-900">{ev.eventType}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{ev.channel || "-"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-xs">{renderPlatformBadge(ev.sourcePlatform)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                      <tr className="hover:bg-canvas-muted/50">
+                        <td className="whitespace-nowrap px-2 py-1.5 font-medium text-stone-900">{ev.eventType}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-stone-700">{ev.channel || "-"}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-[10px]">{renderPlatformBadge(ev.sourcePlatform)}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-stone-600">
                           {ev.userId?.name || ev.userId?._id || ev.userId || "Guest"}
                         </td>
-                        <td className="max-w-[200px] truncate px-4 py-3 text-xs text-slate-600">{ev.sessionId || "-"}</td>
-                        <td className="max-w-[300px] truncate px-4 py-3 text-xs text-slate-600">{ev.path || "-"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right text-xs text-slate-600">
+                        <td className="max-w-[200px] truncate px-2 py-1.5 text-stone-600">{ev.sessionId || "-"}</td>
+                        <td className="max-w-[300px] truncate px-2 py-1.5 text-stone-600">{ev.path || "-"}</td>
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right text-stone-600">
                           {new Date(ev.timestamp || ev.createdAt).toLocaleString("en-IN")}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <div className="inline-flex items-center gap-2">
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                          <div className="inline-flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => setExpandedEventId((prev) => (prev === ev._id ? null : ev._id))}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                              className={btnIconEdit}
+                              title={isExpanded ? "Hide" : "View"}
                             >
-                              <Eye size={12} />
-                              {isExpanded ? "Hide" : "View"}
+                              <Eye className="h-3.5 w-3.5" aria-hidden />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteEvent(ev._id)}
                               disabled={isDeleting}
-                              className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                              className={`${btnOutline} !px-2 !py-1 !text-[10px] !text-danger`}
                             >
-                              <Trash2 size={12} />
-                              Delete
+                              <Trash2 className="h-3 w-3" aria-hidden />
                             </button>
                           </div>
                         </td>
                       </tr>
                       {isExpanded ? (
                         <tr>
-                          <td colSpan={8} className="bg-slate-50 px-4 py-3">
-                            <div className="grid grid-cols-1 gap-3 text-xs text-slate-700 md:grid-cols-2">
+                          <td colSpan={8} className="bg-canvas-muted/40 px-3 py-2">
+                            <div className="grid grid-cols-1 gap-2 text-[11px] text-stone-700 md:grid-cols-2">
                               <div>
-                                <div className="font-semibold text-slate-900">Source Platform</div>
+                                <div className="font-semibold text-stone-900">Source platform</div>
                                 <div>{ev.sourcePlatform || "unknown"}</div>
                               </div>
                               <div>
-                                <div className="font-semibold text-slate-900">Event ID</div>
+                                <div className="font-semibold text-stone-900">Event ID</div>
                                 <div className="break-all">{ev._id || "-"}</div>
                               </div>
                               <div>
@@ -671,7 +666,7 @@ export function ExplorerPanel({
                               </div>
                               <div className="md:col-span-2">
                                 <div className="font-semibold text-slate-900">Meta Payload</div>
-                                <pre className="mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
+                                <pre className="mt-1 max-h-56 overflow-auto rounded-lg border border-border bg-white p-2 text-[10px] text-stone-600">
                                   {JSON.stringify(ev?.meta || {}, null, 2)}
                                 </pre>
                               </div>
@@ -685,29 +680,15 @@ export function ExplorerPanel({
               )}
             </tbody>
           </table>
-        </div>
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="text-sm text-slate-600">
-            Page {currentPage} of {totalPages}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => fetchEvents(currentPage - 1)}
-              disabled={currentPage <= 1 || loading}
-              className="rounded-lg border border-slate-300 p-2 disabled:opacity-40"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              onClick={() => fetchEvents(currentPage + 1)}
-              disabled={currentPage >= totalPages || loading}
-              className="rounded-lg border border-slate-300 p-2 disabled:opacity-40"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-        </div>
       </div>
+
+      <PaginationFooter
+        currentPage={currentPage}
+        totalPages={totalPages}
+        loading={loading}
+        onPrev={() => fetchEvents(currentPage - 1)}
+        onNext={() => fetchEvents(currentPage + 1)}
+      />
     </div>
   );
 }

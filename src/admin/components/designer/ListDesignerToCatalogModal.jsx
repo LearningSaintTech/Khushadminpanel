@@ -24,13 +24,12 @@ import {
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
 import { isVariantVideoMedia, variantMediaUrl } from "../../../utils/variantMedia.js";
+import { btnOutline, btnPrimary, fieldClass } from "./designerShared";
 
-const fieldClass =
-  "w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
-
-const sectionTitle = "mb-2 border-l-4 border-indigo-500 pl-2 text-sm font-semibold text-gray-900";
-const detailGrid = "grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3";
-const detailBox = "rounded-xl border border-gray-200 bg-gray-50/90 p-3";
+const sectionTitle =
+  "mb-2 border-l-4 border-brand-500 pl-2 text-[12px] font-semibold text-stone-900";
+const detailGrid = "grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-2 lg:grid-cols-3";
+const detailBox = "rounded-xl border border-border bg-canvas-muted/50 p-3";
 
 function variantFormImageLabel(im) {
   if (typeof im === "string") return im;
@@ -276,7 +275,7 @@ function DesignerSourceDetails({ d }) {
 
       <div className={detailBox}>
         <h3 className={sectionTitle}>Full description (designer)</h3>
-        <p className="whitespace-pre-wrap break-words text-sm text-gray-800">
+        <p className="whitespace-pre-wrap break-words text-[12px] text-gray-800">
           {(d.description || "").trim() || "—"}
         </p>
       </div>
@@ -290,7 +289,7 @@ function DesignerSourceDetails({ d }) {
           </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <span className="font-medium text-gray-700">Meta description:</span>
-            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-800">
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-[12px] text-gray-800">
               {String(d.metaDescription || "").trim() || "—"}
             </p>
           </div>
@@ -305,11 +304,11 @@ function DesignerSourceDetails({ d }) {
 
       <div className={detailBox}>
         <h3 className={sectionTitle}>Care instructions (designer)</h3>
-        <p className="mb-2 whitespace-pre-wrap break-words text-sm text-gray-800">
+        <p className="mb-2 whitespace-pre-wrap break-words text-[12px] text-gray-800">
           {d?.care?.description?.trim() || "—"}
         </p>
         {Array.isArray(d?.care?.instructions) && d.care.instructions.length > 0 ? (
-          <ul className="space-y-1 text-xs text-gray-700">
+          <ul className="space-y-1 text-[11px] text-gray-700">
             {d.care.instructions.map((inst, idx) => (
               <li key={`care-${idx}`} className="rounded border border-gray-200 bg-white p-2">
                 <div className="flex items-center gap-2">
@@ -413,7 +412,7 @@ function DesignerSourceDetails({ d }) {
                 key={`${variant?.color?.name || "v"}-${idx}`}
                 className="rounded-lg border border-gray-200 bg-white p-3"
               >
-                <div className="text-sm font-semibold text-gray-900">
+                <div className="text-[12px] font-semibold text-gray-900">
                   Variant {idx + 1}: {variant?.color?.name || "—"}{" "}
                   <span className="font-normal text-gray-600">({variant?.color?.hex || "—"})</span>
                 </div>
@@ -456,7 +455,7 @@ function DesignerSourceDetails({ d }) {
                   <p className="mt-2 text-xs text-gray-400">No media URLs on this variant.</p>
                 )}
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[520px] border-collapse text-xs">
+                  <table className="w-full min-w-[520px] border-collapse text-[11px]">
                     <thead>
                       <tr className="border-b border-gray-200 text-left text-gray-600">
                         <th className="py-1.5 pr-2 font-medium">Size</th>
@@ -678,29 +677,24 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-3 sm:p-4">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-black/10 bg-white shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
+      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-white px-4 py-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Publish to main inventory</h2>
-            <p className="text-xs text-gray-500">
+            <h2 className="text-base font-semibold text-stone-900">Publish to main inventory</h2>
+            <p className="text-[11px] text-stone-500">
               Style {designerRow.StyleNumber || "—"} · Prefilled from designer; add catalog fields and save.
             </p>
           </div>
-          <button
-            type="button"
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-            onClick={onClose}
-            disabled={saving}
-          >
+          <button type="button" className={btnOutline} onClick={onClose} disabled={saving}>
             Cancel
           </button>
         </div>
 
         <div className="px-4 py-3">
           {loadingDoc ? (
-            <p className="text-sm text-gray-500">Loading designer item…</p>
+            <p className="text-[12px] text-gray-500">Loading designer item…</p>
           ) : loadErr ? (
-            <p className="text-sm text-red-600">{loadErr}</p>
+            <p className="text-[12px] text-red-600">{loadErr}</p>
           ) : form ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <DesignerSourceDetails d={sourceDesigner} />
@@ -713,10 +707,10 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
               />
 
               <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-3">
-                <h3 className="mb-2 border-l-4 border-indigo-600 pl-2 text-sm font-semibold text-gray-900">
+                <h3 className="mb-2 border-l-4 border-indigo-600 pl-2 text-[12px] font-semibold text-gray-900">
                   Main inventory (catalog) — edit & submit
                 </h3>
-                <p className="mb-3 text-xs text-gray-600">
+                <p className="mb-3 text-[11px] text-gray-600">
                   Primary category and subcategory below are sent to main inventory. All primary and
                   secondary categories from the designer row are included in the create payload
                   automatically.
@@ -820,7 +814,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                     checked={!!form.isActive}
                     onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
                   />
-                  <label htmlFor="ldc-active" className="text-sm text-gray-700">
+                  <label htmlFor="ldc-active" className="text-[12px] text-gray-700">
                     Active in catalog
                   </label>
                 </div>
@@ -1145,20 +1139,11 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
               </div>
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
-                <button
-                  type="button"
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={onClose}
-                  disabled={saving}
-                >
+              <div className="flex justify-end gap-2 border-t border-border pt-3">
+                <button type="button" className={btnOutline} onClick={onClose} disabled={saving}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
+                <button type="submit" disabled={saving} className={btnPrimary}>
                   {saving ? "Creating…" : "Create catalog item & mark listed"}
                 </button>
               </div>
