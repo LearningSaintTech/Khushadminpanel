@@ -23,6 +23,7 @@ import {
   mergeSizeChartsWithPreset,
   presetGenderKeyFromSkuGender,
 } from "../../../utils/sizeChartPresets.js";
+import { compressImageFilesForUpload } from "../../../utils/compressImageForUpload.js";
 
 /** Friendly toast listing every backend validation / error message */
 function showItemSaveErrorToasts(messages, isCreate) {
@@ -30,9 +31,20 @@ function showItemSaveErrorToasts(messages, isCreate) {
     ? "We couldn't create this product"
     : "We couldn't update this product";
 
-  if (!messages?.length) {
+  const normalized = (messages || []).map((m) => String(m || "").trim()).filter(Boolean);
+  const isTimeout = normalized.some((m) => /timeout.*exceeded/i.test(m));
+
+  if (!normalized.length) {
     toast.error(`${headline}. Please try again.`, { duration: 5000 });
     return;
+  }
+
+  if (isTimeout) {
+    normalized.splice(
+      0,
+      normalized.length,
+      "The upload is taking longer than usual. Large images can be slow — wait a bit and try again, or use smaller image files (under 2 MB each).",
+    );
   }
 
   toast.custom(
@@ -53,7 +65,7 @@ function showItemSaveErrorToasts(messages, isCreate) {
           Please fix the following and try again:
         </p>
         <ul className="text-sm text-red-800 space-y-1.5 list-disc pl-4 max-h-52 overflow-y-auto">
-          {messages.map((msg, idx) => (
+          {normalized.map((msg, idx) => (
             <li key={idx}>{msg}</li>
           ))}
         </ul>
@@ -581,6 +593,29 @@ const ItemForm = () => {
       return { ...prev, variants: newVariants };
     });
   };
+
+  const formHasPendingUploadFiles = useMemo(() => {
+    const variantFiles = (form.variants || []).some((variant) =>
+      (variant.images || []).some((img) => img instanceof File),
+    );
+    const measureFiles = ["in", "cm"].some((unit) =>
+      (form.sizeCharts?.[unit]?.measureImages || []).some((img) => img instanceof File),
+    );
+    const policyFiles = [
+      form.care?.instructions,
+      form.shipping,
+      form.codPolicy,
+      form.returnPolicy,
+      form.exchangePolicy,
+      form.cancellationPolicy,
+    ].some((block) => {
+      if (Array.isArray(block)) {
+        return block.some((row) => row?.iconFile instanceof File);
+      }
+      return block?.iconFile instanceof File;
+    });
+    return variantFiles || measureFiles || policyFiles;
+  }, [form]);
 
   const addImageToVariant = (variantIndex, files) => {
     if (!files?.length) return;
@@ -1887,26 +1922,24 @@ const ItemForm = () => {
                           accept="image/*"
                           multiple
                           hidden
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const files = e.target.files;
                             if (files?.length) {
                               // Prevent double-firing by checking if we're already processing
                               const inputKey = `variant-${vIdx}`;
                               const input = fileInputRefs.current[inputKey];
                               if (input?.disabled) return;
-                              
-                              // Temporarily disable to prevent double-firing
+
                               if (input) input.disabled = true;
-                              
-                              addImageToVariant(vIdx, files);
-                              
-                              // Reset input and re-enable after processing
-                              setTimeout(() => {
+                              try {
+                                const compressed = await compressImageFilesForUpload(files);
+                                addImageToVariant(vIdx, compressed);
+                              } finally {
                                 if (input) {
-                                  input.value = '';
+                                  input.value = "";
                                   input.disabled = false;
                                 }
-                              }, 100);
+                              }
                             }
                           }}
                         />
@@ -3119,7 +3152,7 @@ const ItemForm = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Saving...
+                    {formHasPendingUploadFiles ? "Uploading images…" : "Saving..."}
                   </span>
                 ) : (
                   isEdit ? "Update Product" : "Create Product"

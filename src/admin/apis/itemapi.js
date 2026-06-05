@@ -1,6 +1,9 @@
 // src/apis/itemApi.js
 import { apiConnector } from '../services/Apiconnector';
 
+/** Variant images + size-chart uploads can exceed the default 60s axios timeout */
+const ITEM_MULTIPART_TIMEOUT_MS = 300000;
+
 // Internal item endpoints used by this module
 const ITEMS_API = {
   GET_ITEMS_WITH_SKUS: "/items/skus",
@@ -153,7 +156,14 @@ export const createItem = async (formData) => {
       console.log("[itemapi] POST /items/create — FormData keys", [...new Set(keys)]);
     }
     // Do not set Content-Type — browser/axios must add multipart boundary automatically.
-    const response = await apiConnector('POST', '/items/create', formData);
+    const response = await apiConnector(
+      'POST',
+      '/items/create',
+      formData,
+      {},
+      {},
+      { timeout: ITEM_MULTIPART_TIMEOUT_MS },
+    );
     console.log("[itemapi] POST /items/create — success", {
       success: response?.success,
       message: response?.message,
@@ -180,7 +190,14 @@ export const updateItem = async (productId, formData) => {
   if (!productId) throw new Error('productId is required');
 
   try {
-    const response = await apiConnector('PATCH', `/items/update/${productId}`, formData);
+    const response = await apiConnector(
+      'PATCH',
+      `/items/update/${productId}`,
+      formData,
+      {},
+      {},
+      { timeout: ITEM_MULTIPART_TIMEOUT_MS },
+    );
     return response;
   } catch (error) {
     console.error('Error updating item:', error);

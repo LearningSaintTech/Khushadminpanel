@@ -1,4 +1,4 @@
-﻿// src/pages/admin/Orders.jsx
+// src/pages/admin/Orders.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -428,11 +428,26 @@ const getLatestExchange = (item) => {
   return exchanges[0] || null;
 };
 
+/** Progress order for standard fulfilment lines (courier / Shiprocket outbound). */
+const FULFILMENT_FLOW_RANK = {
+  CREATED: 5,
+  CONFIRMED: 10,
+  PROCESSING: 20,
+  PICKUP_GENERATED: 28,
+  PICKUP_EXCEPTION: 29,
+  SHIPPED: 40,
+  OUT_FOR_DELIVERY: 50,
+  DELIVERED: 60,
+  CANCELLED: 90,
+  CANCELED: 90,
+};
+
 /** Progress order for exchange line items — used when backend `item.status` lags Shiprocket/history. */
 const EXCHANGE_FLOW_RANK = {
   EXCHANGE_REQUESTED: 10,
   EXCHANGE_APPROVED: 20,
   EXCHANGE_PICKUP_SCHEDULED: 30,
+  EXCHANGE_PICKUP_EXCEPTION: 35,
   EXCHANGE_OUT_FOR_PICKUP: 40,
   EXCHANGE_PICKED: 50,
   /** Return leg in transit to hub (Shiprocket reverse) */
@@ -475,6 +490,45 @@ const mapExchangeDocumentStatusToItemStatus = (raw) => {
   return map[k] ? normalizeItemStatusToken(map[k]) : null;
 };
 
+/** Shiprocket *outbound* (normal order) human status → fulfilment item status key */
+const mapShiprocketOutboundStatusToItemStatus = (raw) => {
+  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (u.includes("CANCEL") || u === "CANCELED") return "CANCELLED";
+  if (u.includes("DELIVERED") && !u.includes("OUT FOR")) return "DELIVERED";
+  if (u.includes("OUT FOR DELIVERY") || u.includes("OUT_FOR_DELIVERY"))
+    return "OUT_FOR_DELIVERY";
+  if (
+    u.includes("PICKUP EXCEPTION") ||
+    u.includes("PICKUP RESCHEDULED") ||
+    u.includes("PICKUP_RESCHEDULED")
+  )
+    return "PICKUP_EXCEPTION";
+  if (
+    u.includes("PICKUP GENERATED") ||
+    u.includes("LABEL GENERATED") ||
+    u.includes("AWB GENERATED") ||
+    (u.includes("AWB") && u.includes("ASSIGN"))
+  )
+    return "PICKUP_GENERATED";
+  if (
+    u.includes("IN TRANSIT") ||
+    u.includes("SHIPPED") ||
+    u.includes("DISPATCHED") ||
+    (u.includes("PICKED UP") && !u.includes("RETURN"))
+  )
+    return "SHIPPED";
+  if (
+    u === "NEW" ||
+    u.includes("PROCESSING") ||
+    u.includes("MANIFEST") ||
+    u.includes("BOOKED") ||
+    u.includes("READY TO SHIP")
+  )
+    return "PROCESSING";
+  return null;
+};
+
 /** Shiprocket *return* shipment human status → order item status key */
 const mapShiprocketReturnStatusToItemStatus = (raw) => {
   const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
@@ -485,7 +539,10 @@ const mapShiprocketReturnStatusToItemStatus = (raw) => {
     return "EXCHANGE_RETURN_IN_TRANSIT";
   if (u.includes("OUT FOR PICKUP") || u.includes("OUT_FOR_PICKUP") || u.includes("PICKUP ASSIGNED"))
     return "EXCHANGE_OUT_FOR_PICKUP";
+  if (u.includes("PICKUP EXCEPTION") || u.includes("PICKUP RESCHEDULED"))
+    return "EXCHANGE_PICKUP_EXCEPTION";
   if (
+    u.includes("PICKUP GENERATED") ||
     u.includes("SCHEDULED") ||
     u.includes("MANIFEST") ||
     u === "NEW" ||
@@ -522,14 +579,22 @@ const mapShiprocketForwardStatusToItemStatus = (raw) => {
   return null;
 };
 
-const pickHighestExchangeStatus = (candidates) => {
+const getStatusProgressRank = (key) => {
+  const k = normalizeItemStatusToken(key);
+  if (!k) return -1;
+  if (k.startsWith("EXCHANGE_")) return EXCHANGE_FLOW_RANK[k] ?? 0;
+  return FULFILMENT_FLOW_RANK[k] ?? 0;
+};
+
+const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => {
   let best = null;
   let bestRank = -1;
   for (const c of candidates) {
     if (!c) continue;
     const key = normalizeItemStatusToken(c);
-    if (!key.startsWith("EXCHANGE_")) continue;
-    const r = EXCHANGE_FLOW_RANK[key] ?? 0;
+    if (!key) continue;
+    if (exchangeOnly && !key.startsWith("EXCHANGE_")) continue;
+    const r = getStatusProgressRank(key);
     if (r > bestRank) {
       bestRank = r;
       best = key;
@@ -538,46 +603,56 @@ const pickHighestExchangeStatus = (candidates) => {
   return bestRank >= 0 ? best : null;
 };
 
-/**
- * Status to show in the UI for an order line. Uses the max of: `item.status`,
- * `EXCHANGE_*` rows in `statusHistory`, and the latest `exchanges[]` sub-doc +
- * Shiprocket return/forward statuses (backend often leaves `item.status` stale).
- */
-const getDisplayItemStatus = (item) => {
-  const baseRaw = item?.status || "";
-  const base = normalizeItemStatusToken(baseRaw);
-  if (!item) return "";
-  if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
-  if (!isExchangeLineItem(item)) return baseRaw || "";
-
+const collectItemStatusCandidates = (item) => {
   const candidates = [];
-
   const add = (s) => {
-    const n = normalizeItemStatusToken(s);
-    if (n.startsWith("EXCHANGE_")) candidates.push(n);
+    if (!s) return;
+    const mapped =
+      mapShiprocketOutboundStatusToItemStatus(s) ||
+      mapShiprocketReturnStatusToItemStatus(s) ||
+      mapShiprocketForwardStatusToItemStatus(s) ||
+      mapExchangeDocumentStatusToItemStatus(s);
+    if (mapped) candidates.push(mapped);
+    const normalized = normalizeItemStatusToken(s);
+    if (normalized) candidates.push(normalized);
   };
 
-  add(baseRaw);
-  if (Array.isArray(item.statusHistory)) {
+  add(item?.status);
+  if (Array.isArray(item?.statusHistory)) {
     for (const h of item.statusHistory) add(h?.status);
   }
 
-  const ex = getLatestExchange(item);
-  if (ex) {
-    add(mapExchangeDocumentStatusToItemStatus(ex.status));
-    add(
-      mapShiprocketReturnStatusToItemStatus(
-        ex.shiprocket?.returnOrder?.status,
-      ),
-    );
-    add(
-      mapShiprocketForwardStatusToItemStatus(
-        ex.shiprocket?.forwardOrder?.status,
-      ),
-    );
+  if (isExchangeLineItem(item)) {
+    const ex = getLatestExchange(item);
+    if (ex) {
+      add(ex.status);
+      add(ex.shiprocket?.returnOrder?.status);
+      add(ex.shiprocket?.forwardOrder?.status);
+    }
+  } else if (isNormalDeliveryLine(item)) {
+    add(item?.shiprocket?.status);
   }
 
-  const best = pickHighestExchangeStatus(candidates);
+  return candidates;
+};
+
+/**
+ * Single status for UI — merges line API status, history, and Shiprocket/courier
+ * so table, details, and courier column stay aligned.
+ */
+const getDisplayItemStatus = (item) => {
+  if (!item) return "";
+  const baseRaw = item?.status || "";
+  const base = normalizeItemStatusToken(baseRaw);
+  if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
+  if (base === "CANCELLED" || base === "CANCELED") return "CANCELLED";
+
+  const candidates = collectItemStatusCandidates(item);
+  const best = isExchangeLineItem(item)
+    ? pickHighestDisplayStatus(candidates, { exchangeOnly: true }) ||
+      pickHighestDisplayStatus(candidates)
+    : pickHighestDisplayStatus(candidates);
+
   return best || baseRaw || "";
 };
 
@@ -586,13 +661,9 @@ const getDisplayOrderStatus = (order) => {
   const items = order?.items;
   if (!Array.isArray(items) || items.length === 0) return base;
   if (items.length === 1) return getDisplayItemStatus(items[0]) || base;
-  const exchangeItems = items.filter((it) => isExchangeLineItem(it));
-  if (exchangeItems.length === 0) return base;
-  const shown = exchangeItems
-    .map((it) => getDisplayItemStatus(it))
-    .filter(Boolean);
+  const shown = items.map((it) => getDisplayItemStatus(it)).filter(Boolean);
   if (shown.length === 0) return base;
-  const ranked = pickHighestExchangeStatus(shown);
+  const ranked = pickHighestDisplayStatus(shown);
   return ranked || base;
 };
 
@@ -605,6 +676,11 @@ const lineItemFromOrderItemRow = (row) => {
     status: row.itemStatus ?? nested.status ?? "",
     statusHistory: nested.statusHistory,
     exchanges: nested.exchanges,
+    shiprocket: nested.shiprocket ?? row.shiprocket,
+    courier: nested.courier ?? row.courier,
+    delivery:
+      nested.delivery ||
+      (row.deliveryType ? { type: row.deliveryType } : undefined),
   };
 };
 
@@ -1321,6 +1397,118 @@ const getExchangeReason = (exchange) => {
   return String(reason || "").trim();
 };
 
+const formatExchangeDocumentStatusLabel = (status) => {
+  const mapped = mapExchangeDocumentStatusToItemStatus(status);
+  if (mapped) return formatStatusTokenForUi(mapped);
+  return formatStatusTokenForUi(status);
+};
+
+const exchangeHasVisibleDetails = (exchange, item) => {
+  if (isExchangeLineItem(item)) return true;
+  if (!exchange || typeof exchange !== "object") return false;
+  return Boolean(
+    getExchangeReason(exchange) ||
+      extractExchangeImageUrls(exchange).length ||
+      exchange.desiredColor ||
+      exchange.desiredSize ||
+      exchange.replacedItem ||
+      exchange.item ||
+      exchange.status ||
+      String(exchange.adminRemark || "").trim() ||
+      exchange.quantityToExchange,
+  );
+};
+
+function ExchangeDetailsPanel({ item, onZoomImage }) {
+  const latestExchange = getLatestExchange(item);
+  if (!exchangeHasVisibleDetails(latestExchange, item)) return null;
+
+  const exchangeImageUrls = extractExchangeImageUrls(latestExchange);
+  const exchangeReason = getExchangeReason(latestExchange);
+  const orderedVariant = item?.variant || latestExchange?.item?.variant || {};
+  const replacement = latestExchange?.replacedItem;
+  const replacementVariant = replacement?.variant || {};
+  const productName =
+    getLineProductDisplayName(item) ||
+    latestExchange?.item?.name ||
+    item?.name ||
+    item?.sku ||
+    "—";
+  const currentVariantLabel = [orderedVariant.color, orderedVariant.size]
+    .filter(Boolean)
+    .join("/");
+  const wantedVariantLabel = [latestExchange?.desiredColor, latestExchange?.desiredSize]
+    .filter(Boolean)
+    .join("/");
+  const replacementLabel = [replacementVariant.color, replacementVariant.size]
+    .filter(Boolean)
+    .join("/");
+  const thumbUrl = item?.variant?.imageUrl || orderedVariant?.imageUrl || null;
+  const lineStatus = formatStatusTokenForUi(getDisplayItemStatus(item));
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-border bg-canvas-muted/25 px-2 py-1.5 text-[10px] leading-snug">
+      <div className="flex min-w-0 items-start gap-1.5">
+        {thumbUrl ? (
+          <button
+            type="button"
+            onClick={() => onZoomImage?.(thumbUrl)}
+            className="h-8 w-8 shrink-0 overflow-hidden rounded border border-border bg-white"
+            title="Product image"
+          >
+            <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1">
+            <p className="min-w-0 flex-1 truncate font-medium text-stone-900" title={productName}>
+              {productName}
+            </p>
+            <span className="shrink-0 rounded bg-brand-50 px-1 py-0.5 text-[8px] font-semibold text-brand-800 ring-1 ring-brand-200">
+              {lineStatus}
+            </span>
+          </div>
+          <p className="truncate text-[9px] text-stone-600">
+            <span className="text-stone-400">Now</span> {currentVariantLabel || "—"}
+            <span className="mx-0.5 text-stone-300">→</span>
+            <span className="font-medium text-brand-800">
+              {wantedVariantLabel || replacementLabel || replacement?.sku || "—"}
+            </span>
+            {latestExchange?.quantityToExchange ? (
+              <span className="text-stone-400"> · Qty {latestExchange.quantityToExchange}</span>
+            ) : null}
+          </p>
+          {exchangeReason ? (
+            <p className="line-clamp-1 text-[9px] text-stone-500" title={exchangeReason}>
+              {exchangeReason}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {exchangeImageUrls.length > 0 ? (
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
+          {exchangeImageUrls.map((url, idx) => (
+            <button
+              key={`${url}-${idx}`}
+              type="button"
+              onClick={() => onZoomImage?.(url)}
+              className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border bg-white hover:ring-1 hover:ring-brand-200"
+              title={`Photo ${idx + 1}`}
+            >
+              <img
+                src={url}
+                alt={`Exchange upload ${idx + 1}`}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const canDownloadInvoice = (item) => {
   const status = String(item?.status || "").toUpperCase();
   // Show invoice for every line state except the earliest pre-fulfillment ones.
@@ -1500,7 +1688,7 @@ const shiprocketFromItemRow = (row) => {
 function ShiprocketDetails({ sr, compact }) {
   if (!sr) return <span className="text-gray-400">—</span>;
   if (compact) {
-    const meta = [sr.status, sr.courier].filter(Boolean).join(" · ");
+    const meta = [sr.courier].filter(Boolean).join(" · ");
     return (
       <div className="min-w-0 leading-tight">
         {sr.trackingUrl ? (
@@ -3186,6 +3374,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         text: "text-brand-800",
         Icon: RefreshCw,
       },
+      "PICKUP GENERATED": {
+        bg: "bg-sky-100",
+        text: "text-sky-800",
+        Icon: Truck,
+      },
+      "PICKUP EXCEPTION": {
+        bg: "bg-orange-100",
+        text: "text-orange-800",
+        Icon: AlertTriangle,
+      },
       SHIPPED: { bg: "bg-purple-100", text: "text-purple-800", Icon: Truck },
       DELIVERED: {
         bg: "bg-green-100",
@@ -3217,6 +3415,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         bg: "bg-amber-100",
         text: "text-amber-800",
         Icon: Truck,
+      },
+      "EXCHANGE PICKUP EXCEPTION": {
+        bg: "bg-orange-100",
+        text: "text-orange-800",
+        Icon: AlertTriangle,
       },
       "EXCHANGE OUT FOR PICKUP": {
         bg: "bg-amber-100",
@@ -3288,123 +3491,29 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     );
   };
 
-  /** Effective badge + line API / history / Shiprocket return & forward (exchange) or outbound SR */
-  const renderItemStatusBreakdown = (item, { compact = false, tableRow = false } = {}) => {
-    const ex = getLatestExchange(item);
-    const last = getLatestStatusHistoryEntry(item);
-    const ret = ex?.shiprocket?.returnOrder;
-    const fwd = ex?.shiprocket?.forwardOrder;
+  /** Single resolved status badge — aligned with courier / Shiprocket across the page */
+  const renderItemStatusBreakdown = (item, { tableRow = false } = {}) => {
     const effective = getDisplayItemStatus(item);
-    const lineStatus = item?.status;
-    const lineLabel = formatStatusTokenForUi(lineStatus);
-
-    if (tableRow) {
-      const hint = last
-        ? `${formatStatusTokenForUi(last.previousStatus)} → ${formatStatusTokenForUi(last.status)}`
-        : lineLabel;
-      const titleParts = [`Line (API): ${lineLabel}`];
-      if (last) {
-        titleParts.push(`Last: ${hint}`);
-        if (last.createdAt) {
-          titleParts.push(
-            new Date(last.createdAt).toLocaleString("en-IN", {
-              dateStyle: "short",
-              timeStyle: "short",
-            }),
-          );
-        }
-        if (last.notes) titleParts.push(last.notes);
-      }
-      if (isExchangeLineItem(item)) {
-        if (ret?.status) titleParts.push(`Return SR: ${ret.status}`);
-        if (fwd?.status) titleParts.push(`Forward SR: ${fwd.status}`);
-      } else if (isNormalDeliveryLine(item) && item?.shiprocket?.status) {
-        titleParts.push(`Outbound SR: ${item.shiprocket.status}`);
-      }
-
-      return (
-        <div className="min-w-0 max-w-[9.5rem]" title={titleParts.join(" · ")}>
-          {getStatusBadge(effective)}
-          <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">{hint}</p>
-        </div>
-      );
+    const sr = getLineShiprocket(item);
+    const apiStatus = formatStatusTokenForUi(item?.status);
+    const titleParts = [formatStatusTokenForUi(effective)];
+    if (apiStatus !== formatStatusTokenForUi(effective)) {
+      titleParts.push(`API: ${apiStatus}`);
     }
-
-    const textCls = compact ? "text-[9px]" : "text-[11px]";
-    const boxCls = compact
-      ? "rounded border border-gray-100 bg-gray-50/90 px-1 py-0.5"
-      : "rounded-lg border border-gray-200 bg-gray-50/90 px-2 py-1.5";
+    if (sr?.courier) titleParts.push(sr.courier);
+    if (item?.shiprocket?.status) titleParts.push(`SR: ${item.shiprocket.status}`);
 
     return (
-      <div className={`min-w-0 space-y-1 ${compact ? "max-w-[14rem]" : ""}`}>
-        <div className="flex flex-wrap items-center gap-1">
-          {getStatusBadge(effective)}
-          <span
-            className={`${compact ? "text-[8px]" : "text-[9px]"} font-semibold uppercase tracking-wide text-gray-400`}
-          >
-            Effective
-          </span>
-        </div>
-        <div className={`${boxCls} space-y-0.5 ${textCls} leading-snug text-gray-800`}>
-          <p className="break-words">
-            <span className="text-gray-500">Line (API):</span>{" "}
-            <span className="font-semibold text-gray-900">
-              {formatStatusTokenForUi(lineStatus)}
-            </span>
+      <div
+        className={`min-w-0 ${tableRow ? "max-w-[9.5rem]" : "max-w-[12rem]"}`}
+        title={titleParts.join(" · ")}
+      >
+        {getStatusBadge(effective)}
+        {sr?.courier ? (
+          <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">
+            {sr.courier}
           </p>
-          {last ? (
-            <p className="break-words" title={last.notes || undefined}>
-              <span className="text-gray-500">Last change:</span>{" "}
-              <span className="font-medium">
-                {formatStatusTokenForUi(last.previousStatus)} →{" "}
-                {formatStatusTokenForUi(last.status)}
-              </span>
-              {last.createdAt ? (
-                <span className="text-gray-400">
-                  {" "}
-                  ·{" "}
-                  {new Date(last.createdAt).toLocaleString("en-IN", {
-                    dateStyle: "short",
-                    timeStyle: "short",
-                  })}
-                </span>
-              ) : null}
-            </p>
-          ) : null}
-          {isExchangeLineItem(item) ? (
-            <>
-              <p className="break-words">
-                <span className="text-gray-500">Return (Shiprocket):</span>{" "}
-                <span className="font-semibold text-amber-950">
-                  {ret?.status || "—"}
-                </span>
-                {ret?.awbCode ? (
-                  <span className="text-gray-500"> · AWB {ret.awbCode}</span>
-                ) : null}
-              </p>
-              <p className="break-words">
-                <span className="text-gray-500">Forward (Shiprocket):</span>{" "}
-                <span className="font-semibold text-sky-950">
-                  {fwd?.status ||
-                    (fwd?.awbCode || fwd?.shipmentId || fwd?.orderId
-                      ? "Pending / created"
-                      : "—")}
-                </span>
-                {fwd?.awbCode ? (
-                  <span className="text-gray-500"> · AWB {fwd.awbCode}</span>
-                ) : null}
-              </p>
-            </>
-          ) : isNormalDeliveryLine(item) && item?.shiprocket?.status ? (
-            <p className="break-words">
-              <span className="text-gray-500">Outbound (Shiprocket):</span>{" "}
-              <span className="font-medium">{item.shiprocket.status}</span>
-              {item.shiprocket?.awbCode ? (
-                <span className="text-gray-500"> · AWB {item.shiprocket.awbCode}</span>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     );
   };
@@ -3659,7 +3768,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         }
         return (
           <div className="min-w-0" title="Order status">
-            {getStatusBadge(orderLevelStatus)}
+            {getStatusBadge(getDisplayOrderStatus(order) || orderLevelStatus)}
           </div>
         );
       }
@@ -3918,7 +4027,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       case "status":
         return renderItemStatusBreakdown(
           lineItemFromOrderItemRow(row) || { status: row.itemStatus },
-          { compact: true },
         );
       case "delivery":
         return (
@@ -5713,7 +5821,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 lineItemFromOrderItemRow(row) || {
                                   status: row.itemStatus,
                                 },
-                                { compact: true },
                               )}
                             </div>
                             <button
@@ -5998,108 +6105,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         <p className="mt-1 text-xs text-gray-500 break-all">
                           Item ID: {String(focusedItem.itemId || focusedItem._id || "—")}
                         </p>
-                        {(() => {
-                          const exIds = getItemExchangeIds(focusedItem);
-                          if (exIds.length === 0) return null;
-                          return (
-                            <p className="mt-0.5 text-xs text-gray-500 break-all">
-                              Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
-                            </p>
-                          );
-                        })()}
-                        {(() => {
-                          const latestExchange = getLatestExchange(focusedItem);
-                          const exchangeImageUrls = extractExchangeImageUrls(latestExchange);
-                          const exchangeReason = getExchangeReason(latestExchange);
-                          if (!exchangeReason && exchangeImageUrls.length === 0) return null;
-                          return (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                                Exchange details
-                              </p>
-                              {exchangeReason ? (
-                                <p className="mt-1 break-all text-xs text-amber-900">
-                                  Reason: {exchangeReason}
-                                </p>
-                              ) : null}
-                              {latestExchange?.desiredColor || latestExchange?.desiredSize ? (
-                                <p className="mt-1 text-lg font-bold text-amber-900">
-                                  Requested:{" "}
-                                  {[latestExchange?.desiredColor, latestExchange?.desiredSize]
-                                    .filter(Boolean)
-                                    .join(" / ")}
-                                </p>
-                              ) : null}
-                              {latestExchange?.replacedItem ? (
-                                <div className="mt-1 rounded border border-amber-200 bg-white px-2 py-1">
-                                  <p className="text-[11px] font-semibold text-amber-900">
-                                    Replacement item
-                                  </p>
-                                  <p className="text-[11px] text-amber-800">
-                                    {latestExchange.replacedItem?.sku || "—"}
-                                    {latestExchange.replacedItem?.variant?.color
-                                      ? ` · ${latestExchange.replacedItem.variant.color}`
-                                      : ""}
-                                    {latestExchange.replacedItem?.variant?.size
-                                      ? ` · ${latestExchange.replacedItem.variant.size}`
-                                      : ""}
-                                  </p>
-                                  {latestExchange.replacedItem?.variant?.imageUrl ? (
-                                    <div className="mt-1">
-                                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                                        Desired replacement image
-                                      </p>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setZoomImageUrl(
-                                            latestExchange.replacedItem.variant.imageUrl,
-                                          )
-                                        }
-                                        className="block overflow-hidden rounded border border-amber-200 bg-white"
-                                        title="Open desired replacement image"
-                                      >
-                                        <img
-                                          src={latestExchange.replacedItem.variant.imageUrl}
-                                          alt="Desired replacement item"
-                                          className="h-16 w-16 object-cover"
-                                          loading="lazy"
-                                        />
-                                      </button>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {exchangeImageUrls.length > 0 ? (
-                                <>
-                                  <p className="mb-2 mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                    User uploaded exchange pics
-                                  </p>
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                    {exchangeImageUrls.map((url, idx) => (
-                                      <button
-                                        key={`${url}-${idx}`}
-                                        type="button"
-                                        onClick={() => setZoomImageUrl(url)}
-                                        className="group block overflow-hidden rounded-lg border border-gray-200 bg-white text-left"
-                                        title="Open full image"
-                                      >
-                                        <img
-                                          src={url}
-                                          alt={`Exchange upload ${idx + 1}`}
-                                          className="h-20 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                                          loading="lazy"
-                                        />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
-                              ) : (
-                                <p className="mt-1 text-xs text-amber-700">No exchange images uploaded.</p>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        <ExchangeDetailsPanel
+                          item={focusedItem}
+                          onZoomImage={setZoomImageUrl}
+                        />
                         <h3 className="mt-1 text-sm font-semibold text-stone-900">
                           {getLineProductDisplayName(focusedItem) ||
                             focusedItem.sku ||
@@ -6144,7 +6153,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </div>
                     <div className="mt-4 w-full border-t border-gray-100 pt-4">
                       <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                        Status (line, history & Shiprocket)
+                        Status
                       </p>
                       {renderItemStatusBreakdown(focusedItem)}
                     </div>
@@ -6353,7 +6362,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   </span>
                   <div className="ml-auto shrink-0">
                     {getStatusBadge(
-                      selectedOrder?.status || selectedOrder?.orderStatus || "",
+                      getDisplayOrderStatus(selectedOrder) ||
+                        selectedOrder?.status ||
+                        selectedOrder?.orderStatus ||
+                        "",
                     )}
                   </div>
                 </div>
@@ -6713,6 +6725,34 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             </div>
 
             <div className={ui.detailBody}>
+                    {(() => {
+                      const exchangeItems = (selectedOrder?.items || []).filter((it) =>
+                        exchangeHasVisibleDetails(getLatestExchange(it), it),
+                      );
+                      if (!exchangeItems.length) return null;
+                        return (
+                        <div className="mb-2 overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+                          <div className="flex items-center gap-1.5 border-b border-border bg-canvas-muted/40 px-2.5 py-1">
+                            <RefreshCw
+                              className="h-3 w-3 shrink-0 text-brand-600"
+                              aria-hidden
+                            />
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                              Exchanges ({exchangeItems.length})
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1 p-1.5">
+                            {exchangeItems.map((item) => (
+                              <ExchangeDetailsPanel
+                                key={String(item.itemId || item._id)}
+                                item={item}
+                                onZoomImage={setZoomImageUrl}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="space-y-2">
                       <div className={ui.detailItemsToolbar}>
                         <ShoppingBag
