@@ -2,7 +2,9 @@ import { apiConnector } from "../services/Apiconnector";
 
 const REVIEW_API = {
   GET_ALL_REVIEWS: (itemId) => `/reviews/getAll/${itemId}`,
+  GET_SINGLE_REVIEW: (reviewId) => `/reviews/getSingle/${reviewId}`,
   ADMIN_STATS: (itemId) => `/reviews/admin/stats/${itemId}`,
+  ADMIN_CREATE: "/reviews/admin/create",
   UPDATE: (reviewId) => `/reviews/update/${reviewId}`,
   DELETE: (reviewId) => `/reviews/delete/${reviewId}`,
 };

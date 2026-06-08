@@ -6,7 +6,11 @@ import {
   getRewardWallets,
   getRewardTransactions,
 } from "../../apis/MoneyFeaturesapi";
-import { RefreshCw, Wallet, Coins, ArrowLeftRight } from "lucide-react";
+import { RefreshCw, Wallet, Coins, ArrowLeftRight, Download, AlertCircle } from "lucide-react";
+import {
+  exportCashTransactions,
+  exportRewardTransactions,
+} from "./walletTransactionExport";
 
 function StatCard({ label, value, sub }) {
   return (
@@ -61,6 +65,9 @@ const MoneyFeaturesWallet = () => {
   const [txType, setTxType] = useState("");
   const [rewardTxType, setRewardTxType] = useState("");
   const [listLoading, setListLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportError, setExportError] = useState("");
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
@@ -134,6 +141,35 @@ const MoneyFeaturesWallet = () => {
 
   const fmtInr = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
 
+  const handleDownloadTransactions = async () => {
+    setExporting(true);
+    setExportError("");
+    setExportMessage("");
+    try {
+      if (tab === "cash-tx") {
+        const { filename, count } = await exportCashTransactions({
+          source: txSource,
+          type: txType,
+        });
+        setExportMessage(
+          `Downloaded ${count} cash transaction${count === 1 ? "" : "s"} as ${filename}`,
+        );
+      } else if (tab === "reward-tx") {
+        const { filename, count } = await exportRewardTransactions({
+          type: rewardTxType,
+        });
+        setExportMessage(
+          `Downloaded ${count} coin transaction${count === 1 ? "" : "s"} as ${filename}`,
+        );
+      }
+      setTimeout(() => setExportMessage(""), 5000);
+    } catch (err) {
+      setExportError(err?.message || "Failed to export transactions");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const cashSources = overview?.last30Days?.cashTransactions ?? [];
   const rewardTypes = overview?.last30Days?.rewardTransactions ?? [];
 
@@ -199,6 +235,19 @@ const MoneyFeaturesWallet = () => {
           />
         </div>
       ) : null}
+
+      {exportMessage && (
+        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          {exportMessage}
+        </div>
+      )}
+
+      {exportError && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <span>{exportError}</span>
+        </div>
+      )}
 
       {(cashSources.length > 0 || rewardTypes.length > 0) && (
         <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:gap-3">
@@ -317,6 +366,22 @@ const MoneyFeaturesWallet = () => {
           >
             Apply
           </button>
+          {(tab === "cash-tx" || tab === "reward-tx") && (
+            <button
+              type="button"
+              disabled={exporting || listLoading}
+              onClick={handleDownloadTransactions}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Download all matching transactions as CSV"
+            >
+              {exporting ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-700" />
+              ) : (
+                <Download size={14} />
+              )}
+              {exporting ? "Exporting…" : "Download CSV"}
+            </button>
+          )}
         </div>
 
         <div className="max-h-[66vh] overflow-auto">
@@ -352,6 +417,7 @@ const MoneyFeaturesWallet = () => {
                   <th className="px-2.5 py-1.5">Type</th>
                   <th className="px-2.5 py-1.5">Source</th>
                   <th className="px-2.5 py-1.5">Amount</th>
+                  <th className="px-2.5 py-1.5">Credited</th>
                   <th className="px-2.5 py-1.5">After</th>
                   <th className="px-2.5 py-1.5">Status</th>
                 </tr>
@@ -371,6 +437,15 @@ const MoneyFeaturesWallet = () => {
                     <td className="px-2.5 py-1.5">{row.type}</td>
                     <td className="px-2.5 py-1.5">{row.transaction_source || "—"}</td>
                     <td className="px-2.5 py-1.5 font-medium tabular-nums">{fmtInr(row.amount)}</td>
+                    <td className="px-2.5 py-1.5 font-medium tabular-nums text-emerald-700">
+                      {fmtInr(
+                        row.credited_amount != null
+                          ? row.credited_amount
+                          : row.type === "CREDIT"
+                            ? row.amount
+                            : 0,
+                      )}
+                    </td>
                     <td className="px-2.5 py-1.5 tabular-nums text-slate-600">{fmtInr(row.balance_after_transaction)}</td>
                     <td className="px-2.5 py-1.5">{row.status || "—"}</td>
                   </tr>

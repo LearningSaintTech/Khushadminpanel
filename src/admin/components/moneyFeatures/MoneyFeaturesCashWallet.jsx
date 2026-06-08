@@ -9,6 +9,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  Download,
 } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
@@ -25,6 +26,7 @@ import {
   inputClass,
   tableScrollShell,
 } from "./moneyFeaturesShared";
+import { exportCashTransactions } from "./walletTransactionExport";
 
 const CASH_FLOW = [
   {
@@ -232,6 +234,8 @@ const MoneyFeaturesCashWallet = () => {
 
   const [editingUserId, setEditingUserId] = useState(null);
   const [flashMessage, setFlashMessage] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   const fmtInr = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
 
@@ -294,6 +298,28 @@ const MoneyFeaturesCashWallet = () => {
     setEditingUserId((prev) => (prev === uid ? null : uid));
   };
 
+  const handleDownloadTransactions = async () => {
+    setExporting(true);
+    setExportError("");
+    try {
+      const { filename, count } = await exportCashTransactions({
+        source: txSource,
+        type: txType,
+      });
+      setFlashMessage({
+        message: `Downloaded ${count} transaction${count === 1 ? "" : "s"} as ${filename}`,
+        previousBalance: null,
+        newBalance: null,
+        action: "export",
+      });
+      setTimeout(() => setFlashMessage(null), 5000);
+    } catch (err) {
+      setExportError(err?.message || "Failed to export transactions");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleInlineSuccess = (result) => {
     setFlashMessage(result);
     setWallets((prev) => ({
@@ -338,9 +364,17 @@ const MoneyFeaturesCashWallet = () => {
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
           <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
           <span>
-            {flashMessage.message} — {fmtInr(flashMessage.previousBalance)} →{" "}
-            {fmtInr(flashMessage.newBalance)} ({flashMessage.action})
+            {flashMessage.action === "export"
+              ? flashMessage.message
+              : `${flashMessage.message} — ${fmtInr(flashMessage.previousBalance)} → ${fmtInr(flashMessage.newBalance)} (${flashMessage.action})`}
           </span>
+        </div>
+      )}
+
+      {exportError && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <span>{exportError}</span>
         </div>
       )}
 
@@ -489,6 +523,22 @@ const MoneyFeaturesCashWallet = () => {
           >
             Apply filters
           </button>
+          {tab === "tx" && (
+            <button
+              type="button"
+              disabled={exporting || listLoading}
+              onClick={handleDownloadTransactions}
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Download all matching transactions as CSV"
+            >
+              {exporting ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-300 border-t-brand-700" />
+              ) : (
+                <Download size={14} />
+              )}
+              {exporting ? "Exporting…" : "Download CSV"}
+            </button>
+          )}
         </div>
 
         <div className={tableScrollShell}>
@@ -576,6 +626,7 @@ const MoneyFeaturesCashWallet = () => {
                   <th className="px-3 py-2">Type</th>
                   <th className="px-3 py-2">Source</th>
                   <th className="px-3 py-2 text-right">Amount</th>
+                  <th className="px-3 py-2 text-right">Credited</th>
                   <th className="px-3 py-2 text-right">After</th>
                   <th className="px-3 py-2">Status</th>
                 </tr>
@@ -583,7 +634,7 @@ const MoneyFeaturesCashWallet = () => {
               <tbody className="divide-y divide-slate-100">
                 {tx.items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                    <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
                       No transactions
                     </td>
                   </tr>
@@ -625,6 +676,15 @@ const MoneyFeaturesCashWallet = () => {
                       </td>
                       <td className="px-3 py-2 text-right font-medium tabular-nums">
                         {fmtInr(row.amount)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium tabular-nums text-emerald-700">
+                        {fmtInr(
+                          row.credited_amount != null
+                            ? row.credited_amount
+                            : row.type === "CREDIT"
+                              ? row.amount
+                              : 0,
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                         {fmtInr(row.balance_after_transaction)}

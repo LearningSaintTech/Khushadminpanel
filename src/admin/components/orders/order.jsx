@@ -1661,6 +1661,42 @@ const SHIPPING_PROVIDER_OPTIONS = [
   { value: "SELF_SHIPPING", label: "Self Shipping" },
 ];
 
+const shippingProviderLabel = (value) =>
+  SHIPPING_PROVIDER_OPTIONS.find(
+    (opt) => opt.value === String(value || "").toUpperCase(),
+  )?.label || value || "Carrier";
+
+const extractShippingFallbackEntries = (apiRes, extras = {}) => {
+  const data = apiRes?.data ?? apiRes;
+  const entries = [];
+
+  const pushIfFallback = (row) => {
+    if (!row?.fellBackFrom) return;
+    entries.push({
+      orderId: row.orderId ?? extras.orderId ?? data?.orderId ?? null,
+      itemId: row.itemId ?? extras.itemId ?? data?.itemId ?? null,
+      sku: row.sku ?? extras.sku ?? null,
+      deliveryPincode:
+        row.deliveryPincode ??
+        extras.deliveryPincode ??
+        data?.deliveryPincode ??
+        null,
+      fellBackFrom: row.fellBackFrom,
+      fallbackReason: row.fallbackReason ?? null,
+      provider: row.provider ?? "SELF_SHIPPING",
+    });
+  };
+
+  pushIfFallback(data?.shippingResult);
+  if (Array.isArray(data?.shippingResults)) {
+    for (const row of data.shippingResults) {
+      pushIfFallback(row);
+    }
+  }
+
+  return entries;
+};
+
 const getItemShippingProvider = (item) => {
   const p = String(item?.shippingProvider || "").toUpperCase();
   if (p === "DELHIVERY" || p === "SHIPROCKET" || p === "SELF_SHIPPING") return p;
@@ -2217,6 +2253,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [selectedShippingProvider, setSelectedShippingProvider] = useState("SHIPROCKET");
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
   const [shippingProviderSubmitting, setShippingProviderSubmitting] = useState(false);
+  const [shippingFallbackModal, setShippingFallbackModal] = useState(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsData, setAnalyticsData] = useState({ counts: [], total: 0, view: "order" });
@@ -3441,6 +3478,18 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const showShippingFallbackModalIfNeeded = (apiRes, extras = {}) => {
+    const entries = extractShippingFallbackEntries(apiRes, {
+      orderId: selectedOrder?.orderId ?? extras.orderId,
+      deliveryPincode: selectedOrder?.address?.pincode ?? extras.deliveryPincode,
+      ...extras,
+    });
+    if (entries.length) {
+      setShippingFallbackModal(entries);
+    }
+    return entries;
+  };
+
   const runWholeOrderStatusUpdate = async (newStatus, shippingProvider = null) => {
     if (!selectedOrder?.orderId || !newStatus) return;
     setUpdatingWholeOrder(true);
@@ -3463,7 +3512,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       if (newStatus === "PROCESSING" && shippingProvider) {
         body.shippingProvider = shippingProvider;
       }
-      await updateWholeOrderStatus(selectedOrder.orderId, body);
+      const res = await updateWholeOrderStatus(selectedOrder.orderId, body);
+      showShippingFallbackModalIfNeeded(res);
       toast.success(`Order items updated to ${newStatus}.`);
       setWholeOrderNewStatus("");
       await fetchSingleOrder(selectedOrder.orderId);
@@ -3566,6 +3616,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
     setUpdatingBulk(true);
     setOrderError(null);
+    const bulkFallbackEntries = [];
     try {
       for (const itemId of selectedItemIds) {
         const currentItem = selectedOrder?.items?.find(
@@ -3585,11 +3636,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           });
           await approveExchange(exchangeId);
         }
-        await updateOrderItemStatus(
+        const res = await updateOrderItemStatus(
           selectedOrder.orderId,
           itemId,
           buildStatusPayload(bulkStatusValue, currentItem, shippingProvider),
         );
+        bulkFallbackEntries.push(
+          ...extractShippingFallbackEntries(res, {
+            orderId: selectedOrder.orderId,
+            itemId: String(itemId),
+            sku: currentItem?.sku,
+            deliveryPincode: selectedOrder?.address?.pincode,
+          }),
+        );
+      }
+      if (bulkFallbackEntries.length) {
+        setShippingFallbackModal(bulkFallbackEntries);
       }
       toast.success(
         `${selectedItemIds.length} item(s) updated to ${bulkStatusValue}.`,
@@ -3739,6 +3801,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             ),
           );
           const failed = results.filter((r) => r.status === "rejected");
+          const listFallbackEntries = results
+            .filter((r) => r.status === "fulfilled")
+            .flatMap((r) => extractShippingFallbackEntries(r.value, { orderId: null }));
+          if (listFallbackEntries.length) {
+            setShippingFallbackModal(listFallbackEntries);
+          }
           if (failed.length) {
             toast.error(`${failed.length}/${ids.length} failed to update.`);
           } else {
@@ -3761,6 +3829,17 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             ),
           );
           const failed = results.filter((r) => r.status === "rejected");
+          const listItemFallbackEntries = results
+            .filter((r) => r.status === "fulfilled")
+            .flatMap((r, idx) =>
+              extractShippingFallbackEntries(r.value, {
+                orderId: targets[idx]?.orderId,
+                itemId: targets[idx]?.itemId,
+              }),
+            );
+          if (listItemFallbackEntries.length) {
+            setShippingFallbackModal(listItemFallbackEntries);
+          }
           if (failed.length) {
             toast.error(`${failed.length}/${targets.length} failed to update.`);
           } else {
@@ -3868,8 +3947,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         await approveExchange(exchangeId);
       }
       const payload = buildStatusPayload(newStatus, prevItem, shippingProvider);
-      await updateOrderItemStatus(orderId, itemId, payload);
+      const res = await updateOrderItemStatus(orderId, itemId, payload);
+      showShippingFallbackModalIfNeeded(res, {
+        orderId,
+        itemId: stringItemId,
+        sku: prevItem?.sku,
+      });
       toast.success(`Item ${stringItemId} updated to ${newStatus}.`);
+      await fetchSingleOrder(orderId);
       // After setting exchange pickup/delivery status, open assignment modal to assign driver
       if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(newStatus)) {
         const label =
@@ -8169,6 +8254,55 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {shippingFallbackModal?.length > 0 && (
+          <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-amber-200">
+              <div className="px-5 py-4 border-b border-amber-100 bg-amber-50 rounded-t-xl">
+                <h3 className="text-base font-semibold text-amber-950">
+                  Switched to Self Shipping
+                </h3>
+                <p className="text-sm text-amber-900/80 mt-1">
+                  The delivery pincode is not serviceable by the carrier you selected.
+                  These line(s) were updated to <strong>Self Shipping</strong> instead.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3 max-h-[50vh] overflow-y-auto">
+                {shippingFallbackModal.map((entry, idx) => (
+                  <div
+                    key={`${entry.orderId || "order"}-${entry.itemId || idx}-${idx}`}
+                    className="rounded-lg border border-amber-100 bg-amber-50/40 px-4 py-3 text-sm text-gray-800"
+                  >
+                    <p className="font-medium text-gray-900">
+                      {shippingProviderLabel(entry.fellBackFrom)} unavailable
+                      {entry.sku ? ` · ${entry.sku}` : ""}
+                    </p>
+                    {entry.orderId && (
+                      <p className="text-xs text-gray-600 mt-1">Order: {entry.orderId}</p>
+                    )}
+                    {entry.deliveryPincode && (
+                      <p className="text-xs text-gray-600">
+                        Delivery pincode: {entry.deliveryPincode}
+                      </p>
+                    )}
+                    {entry.fallbackReason && (
+                      <p className="text-xs text-amber-900 mt-2">{entry.fallbackReason}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShippingFallbackModal(null)}
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Got it
                 </button>
               </div>
             </div>

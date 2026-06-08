@@ -28,6 +28,56 @@ function itemIdStr(item) {
     : String(id);
 }
 
+function resolveReviewerType(review) {
+  if (review?.reviewerType === "guest" || review?.isGuestReviewer) return "guest";
+  if (review?.reviewerType === "fake" || review?.isFakeReviewer) return "fake";
+  return "user";
+}
+
+function reviewerDisplayName(review) {
+  return (
+    review?.reviewerName ||
+    review?.name ||
+    (resolveReviewerType(review) === "guest" ? "Guest" : "Customer")
+  );
+}
+
+function reviewerTypeBadge(type) {
+  if (type === "guest") {
+    return {
+      label: "Guest",
+      className: "bg-violet-100 text-violet-800 border-violet-200",
+    };
+  }
+  if (type === "fake") {
+    return {
+      label: "Fake profile",
+      className: "bg-amber-100 text-amber-900 border-amber-200",
+    };
+  }
+  return {
+    label: "Registered user",
+    className: "bg-sky-100 text-sky-900 border-sky-200",
+  };
+}
+
+function formatReviewDate(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatPhone(review) {
+  const code = String(review?.countryCode || "").trim();
+  const phone = String(review?.phoneNumber || "").trim();
+  if (!phone) return null;
+  return `${code || ""}${phone}`.trim();
+}
+
 function StarRow({ value, max = 5, size = "sm" }) {
   const n = Number(value) || 0;
   const cls = size === "lg" ? "w-5 h-5" : "w-4 h-4";
@@ -489,17 +539,57 @@ export default function Reviews() {
                 <p className="text-xs text-stone-500">No reviews for this product yet.</p>
               ) : (
                 <ul className="space-y-2">
-                  {itemReviews.map((rev) => (
+                  {itemReviews.map((rev) => {
+                    const reviewerType = resolveReviewerType(rev);
+                    const badge = reviewerTypeBadge(reviewerType);
+                    const phone = formatPhone(rev);
+
+                    return (
                     <li
                       key={rev._id}
                       className="rounded-lg border border-border bg-white p-2"
                     >
                       <div className="mb-1.5 flex items-start justify-between gap-2">
-                        <div>
+                        <div className="min-w-0">
+                          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${badge.className}`}
+                            >
+                              {badge.label}
+                            </span>
+                            <span className="text-[10px] text-stone-400">
+                              {formatReviewDate(rev.createdAt)}
+                            </span>
+                          </div>
                           <StarRow value={Number(rev.rating) || 0} />
-                          <p className="mt-0.5 text-[10px] text-stone-500">
-                            {rev.name || "Customer"}
+                          <p className="mt-0.5 text-xs font-medium text-stone-900">
+                            {reviewerDisplayName(rev)}
                           </p>
+                          {rev.email ? (
+                            <p className="mt-0.5 truncate text-[10px] text-stone-600">
+                              {rev.email}
+                            </p>
+                          ) : null}
+                          {phone ? (
+                            <p className="mt-0.5 text-[10px] text-stone-500">
+                              {phone}
+                            </p>
+                          ) : null}
+                          {rev.userId ? (
+                            <p className="mt-0.5 truncate font-mono text-[9px] text-stone-400">
+                              User: {String(rev.userId)}
+                            </p>
+                          ) : null}
+                          {rev.guestUserId ? (
+                            <p className="mt-0.5 truncate font-mono text-[9px] text-stone-400">
+                              Guest ID: {String(rev.guestUserId)}
+                            </p>
+                          ) : null}
+                          {rev.fakeUserId ? (
+                            <p className="mt-0.5 truncate font-mono text-[9px] text-stone-400">
+                              Fake ID: {String(rev.fakeUserId)}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex shrink-0 gap-1">
                           <button
@@ -544,7 +634,8 @@ export default function Reviews() {
                         </div>
                       )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -573,6 +664,15 @@ export default function Reviews() {
               </button>
             </div>
             <form onSubmit={handleSaveEdit} className="space-y-3 p-3">
+              <div className="rounded-lg border border-border bg-canvas-muted/50 px-2.5 py-2 text-[10px] text-stone-600">
+                <p className="font-semibold text-stone-800">
+                  {reviewerDisplayName(editingReview)}
+                </p>
+                <p className="mt-0.5">
+                  {reviewerTypeBadge(resolveReviewerType(editingReview)).label}
+                  {editingReview.email ? ` · ${editingReview.email}` : ""}
+                </p>
+              </div>
               <div>
                 <label className="mb-1 block text-[10px] font-semibold text-stone-700">
                   Rating
