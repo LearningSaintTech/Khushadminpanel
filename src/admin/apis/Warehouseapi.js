@@ -8,6 +8,7 @@ export const warehouseEndpoints = {
   TOGGLE_WAREHOUSE_STATUS: "/warehouse/toggle-active",
   DELETE_WAREHOUSE: "/warehouse/delete",
   GET_WAREHOUSE_LIST: "/warehouse/getAll",
+  REGISTER_DELHIVERY: (id) => `/warehouse/${id}/delhivery/register`,
 
   // 🔹 Warehouse Pincodes
   GET_WAREHOUSE_PINCODES: "/warehouse",
@@ -47,6 +48,15 @@ export const updateWarehouse = (id, data) => {
     "PUT",
     `${warehouseEndpoints.UPDATE_WAREHOUSE}/${id}`,
     data
+  );
+};
+
+/** Register Khush warehouse as Delhivery pickup location (client warehouse). */
+export const registerWarehouseWithDelhivery = (id, body = {}) => {
+  return apiConnector(
+    "POST",
+    warehouseEndpoints.REGISTER_DELHIVERY(id),
+    body
   );
 };
 

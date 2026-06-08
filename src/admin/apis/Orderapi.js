@@ -112,6 +112,9 @@ const orderEndpoints = {
   /** Create one Shiprocket order per shipmentGroupId (NORMAL) */
   CREATE_SHIPROCKET_FOR_SHIPMENTS: (orderId) => `/admin/orders/${orderId}/shiprocket/create`,
 
+  /** Create Delhivery shipment per shipmentGroupId (NORMAL) */
+  CREATE_DELHIVERY_FOR_SHIPMENTS: (orderId) => `/admin/orders/${orderId}/delhivery/create`,
+
   // Update Single Item Status inside Order
   UPDATE_ITEM_STATUS: (orderId, itemId) =>
     `/admin/orders/${orderId}/items/${itemId}/status`,
@@ -139,6 +142,11 @@ DOWNLOAD_SHIPPING_LABEL: `/admin/orders/shipping-labels/download`,
  
 MANIFEST_DOWNLOAD: `/admin/orders/manifests/download`,
 
+SELF_SHIPPING_LABEL_DOWNLOAD: `/admin/orders/self-shipping-label/download`,
+SELF_SHIPPING_INVOICE_DOWNLOAD: `/admin/orders/self-shipping-invoice/download`,
+
+DOWNLOAD_DELHIVERY_PACKING_SLIP: `/admin/orders/delhivery-packing-slips/download`,
+
 FORWARD_SHIPMENT: (exchangeId) =>
   `/exchangeUser/forward-shipment/${exchangeId}`,
 };
@@ -155,6 +163,28 @@ export const downloadShippingLabel = (shipmentIds) => {
     {}
   );
 };
+export const downloadSelfShippingLabel = (orderId, itemId) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.SELF_SHIPPING_LABEL_DOWNLOAD,
+    { orderId, itemId },
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
+export const downloadSelfShippingInvoice = (orderId, itemId) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.SELF_SHIPPING_INVOICE_DOWNLOAD,
+    { orderId, itemId },
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
 //download Manifest
 export const downloadManifest = (shipmentIds) => {
   return apiConnector(
@@ -253,6 +283,30 @@ export const createShiprocketForOrderShipments = (orderId, body = {}) => {
   );
 };
 
+export const createDelhiveryForOrderShipments = (orderId, body = {}) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.CREATE_DELHIVERY_FOR_SHIPMENTS(orderId),
+    body
+  );
+};
+
+export const downloadDelhiveryPackingSlip = (waybills, options = {}) => {
+  const list = Array.isArray(waybills) ? waybills : [waybills];
+  return apiConnector(
+    "POST",
+    orderEndpoints.DOWNLOAD_DELHIVERY_PACKING_SLIP,
+    {
+      waybill: list,
+      ...(options.lrn ? { lrn: options.lrn } : {}),
+      ...(options.size ? { size: options.size } : {}),
+    },
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
 // ✅ Update Item Status
 export const updateOrderItemStatus = (orderId, itemId, data) => {
   return apiConnector(
@@ -327,6 +381,18 @@ export const getInvoice = (orderId, itemId) => {
   // Do NOT use responseType: "blob" for that, or axios wraps JSON in a Blob and the
   // UI opens a blob: URL of JSON text (broken "PDF") instead of the S3 invoice_url.
   return apiConnector("GET", orderEndpoints.GET_INVOICE(orderId, itemId));
+};
+
+/** Local Khush PDF invoice (Delhivery / fast delivery / self shipping). */
+export const downloadOrderInvoicePdf = (orderId, itemId) => {
+  return apiConnector(
+    "GET",
+    orderEndpoints.GET_INVOICE(orderId, itemId),
+    null,
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
 };
 
 

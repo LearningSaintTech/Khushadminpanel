@@ -1,4 +1,4 @@
-// src/pages/admin/Orders.jsx
+﻿// src/pages/admin/Orders.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -17,11 +17,16 @@ import {
   createForwardShipment,
   getInvoice,
   downloadShippingLabel,
+  downloadSelfShippingLabel,
+  downloadSelfShippingInvoice,
+  downloadDelhiveryPackingSlip,
+  downloadOrderInvoicePdf,
   downloadManifest,
   downloadManufacturingSheetPdf,
   appendOrderNote,
   forceSuccessPaymentAndConfirm,
   createShiprocketForOrderShipments,
+  createDelhiveryForOrderShipments,
 } from "../../apis/Orderapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
@@ -428,6 +433,9 @@ const getLatestExchange = (item) => {
   return exchanges[0] || null;
 };
 
+/** Lines still awaiting fulfilment start — never override with courier/SR/DL hints. */
+const PRE_MANIFEST_LINE_STATUSES = new Set(["CREATED", "CONFIRMED"]);
+
 /** Progress order for standard fulfilment lines (courier / Shiprocket outbound). */
 const FULFILMENT_FLOW_RANK = {
   CREATED: 5,
@@ -529,6 +537,27 @@ const mapShiprocketOutboundStatusToItemStatus = (raw) => {
   return null;
 };
 
+/** Delhivery scan / shipment status → fulfilment item status key */
+const mapDelhiveryStatusToItemStatus = (raw) => {
+  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (u.includes("CANCEL")) return "CANCELLED";
+  if (u.includes("DELIVER")) return "DELIVERED";
+  if (u.includes("OUT FOR") || u.includes("OFD")) return "OUT_FOR_DELIVERY";
+  if (u.includes("TRANSIT") || u.includes("DISPATCH") || u.includes("SHIPPED")) {
+    return "SHIPPED";
+  }
+  if (u.includes("MANIFEST") || u.includes("BOOK") || u.includes("PICKUP")) {
+    return "PROCESSING";
+  }
+  return null;
+};
+
+const canEnrichLineStatusFromCourier = (item) => {
+  const base = normalizeItemStatusToken(item?.status);
+  return Boolean(base && !PRE_MANIFEST_LINE_STATUSES.has(base));
+};
+
 /** Shiprocket *return* shipment human status → order item status key */
 const mapShiprocketReturnStatusToItemStatus = (raw) => {
   const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
@@ -605,20 +634,32 @@ const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => 
 
 const collectItemStatusCandidates = (item) => {
   const candidates = [];
-  const add = (s) => {
+  const add = (s, { mappers = null } = {}) => {
     if (!s) return;
-    const mapped =
-      mapShiprocketOutboundStatusToItemStatus(s) ||
-      mapShiprocketReturnStatusToItemStatus(s) ||
-      mapShiprocketForwardStatusToItemStatus(s) ||
-      mapExchangeDocumentStatusToItemStatus(s);
+    const mapperList = mappers || [
+      mapShiprocketOutboundStatusToItemStatus,
+      mapShiprocketReturnStatusToItemStatus,
+      mapShiprocketForwardStatusToItemStatus,
+      mapDelhiveryStatusToItemStatus,
+      mapExchangeDocumentStatusToItemStatus,
+    ];
+    let mapped = null;
+    for (const fn of mapperList) {
+      mapped = fn(s);
+      if (mapped) break;
+    }
     if (mapped) candidates.push(mapped);
     const normalized = normalizeItemStatusToken(s);
     if (normalized) candidates.push(normalized);
   };
 
   add(item?.status);
-  if (Array.isArray(item?.statusHistory)) {
+
+  const base = normalizeItemStatusToken(item?.status);
+  const allowCourierEnrichment =
+    Boolean(base && !PRE_MANIFEST_LINE_STATUSES.has(base));
+
+  if (allowCourierEnrichment && Array.isArray(item?.statusHistory)) {
     for (const h of item.statusHistory) add(h?.status);
   }
 
@@ -629,16 +670,27 @@ const collectItemStatusCandidates = (item) => {
       add(ex.shiprocket?.returnOrder?.status);
       add(ex.shiprocket?.forwardOrder?.status);
     }
-  } else if (isNormalDeliveryLine(item)) {
-    add(item?.shiprocket?.status);
+  } else if (isNormalDeliveryLine(item) && allowCourierEnrichment) {
+    const provider = getItemShippingProvider(item);
+    if (provider === "SHIPROCKET") {
+      add(item?.shiprocket?.status, {
+        mappers: [mapShiprocketOutboundStatusToItemStatus],
+      });
+    } else if (provider === "DELHIVERY") {
+      add(item?.delhivery?.status, {
+        mappers: [mapDelhiveryStatusToItemStatus],
+      });
+    }
+    // Self shipping: no third-party courier status to merge
   }
 
   return candidates;
 };
 
 /**
- * Single status for UI — merges line API status, history, and Shiprocket/courier
- * so table, details, and courier column stay aligned.
+ * Display status for admin badges.
+ * Uses stored `item.status` for CREATED/CONFIRMED.
+ * After PROCESSING, may advance from Shiprocket/Delhivery only (not self shipping).
  */
 const getDisplayItemStatus = (item) => {
   if (!item) return "";
@@ -646,25 +698,43 @@ const getDisplayItemStatus = (item) => {
   const base = normalizeItemStatusToken(baseRaw);
   if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
   if (base === "CANCELLED" || base === "CANCELED") return "CANCELLED";
+  if (PRE_MANIFEST_LINE_STATUSES.has(base)) return base;
+
+  if (!canEnrichLineStatusFromCourier(item) && !isExchangeLineItem(item)) {
+    return base || baseRaw || "";
+  }
 
   const candidates = collectItemStatusCandidates(item);
-  const best = isExchangeLineItem(item)
+  const enriched = isExchangeLineItem(item)
     ? pickHighestDisplayStatus(candidates, { exchangeOnly: true }) ||
       pickHighestDisplayStatus(candidates)
     : pickHighestDisplayStatus(candidates);
 
-  return best || baseRaw || "";
+  if (enriched === "CANCELLED" && base && base !== "CANCELLED") {
+    return base;
+  }
+
+  const baseRank = getStatusProgressRank(base);
+  const enrichedRank = getStatusProgressRank(enriched);
+  if (enriched && enrichedRank > baseRank) return enriched;
+  return base || enriched || baseRaw || "";
 };
 
 const getDisplayOrderStatus = (order) => {
-  const base = order?.status || order?.orderStatus || "";
+  const base = normalizeItemStatusToken(order?.status || order?.orderStatus || "");
   const items = order?.items;
   if (!Array.isArray(items) || items.length === 0) return base;
-  if (items.length === 1) return getDisplayItemStatus(items[0]) || base;
-  const shown = items.map((it) => getDisplayItemStatus(it)).filter(Boolean);
-  if (shown.length === 0) return base;
-  const ranked = pickHighestDisplayStatus(shown);
-  return ranked || base;
+  if (items.length === 1) {
+    const line = normalizeItemStatusToken(items[0]?.status);
+    return line || getDisplayItemStatus(items[0]) || base;
+  }
+  const lineStatuses = items
+    .map((it) => normalizeItemStatusToken(it?.status))
+    .filter(Boolean);
+  if (lineStatuses.length > 0 && new Set(lineStatuses).size === 1) {
+    return lineStatuses[0];
+  }
+  return base;
 };
 
 /** Rebuild a line-like object from an admin “order item” list row for display helpers. */
@@ -678,6 +748,9 @@ const lineItemFromOrderItemRow = (row) => {
     exchanges: nested.exchanges,
     shiprocket: nested.shiprocket ?? row.shiprocket,
     courier: nested.courier ?? row.courier,
+    shippingProvider: nested.shippingProvider ?? row.shippingProvider,
+    trackingId: nested.trackingId ?? row.trackingId,
+    delhivery: nested.delhivery ?? row.delhivery,
     delivery:
       nested.delivery ||
       (row.deliveryType ? { type: row.deliveryType } : undefined),
@@ -1001,7 +1074,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
   { key: "status", label: "Line status", defaultVisible: true },
   { key: "delivery", label: "Delivery", defaultVisible: true },
-  { key: "shiprocket", label: "Shiprocket", defaultVisible: false },
+  { key: "shiprocket", label: "Courier", defaultVisible: false },
 ];
 
 /** Order detail — line items table (data columns; status/ship/driver/update stay fixed). */
@@ -1056,6 +1129,25 @@ function getShiprocketEligibleItems(order) {
   );
   return order.items.filter((item) => {
     if (String(item.delivery?.type || "").toUpperCase() !== "NORMAL") return false;
+    if (item.shiprocket?.orderId) return false;
+    const gid = String(item.shipmentGroupId || "");
+    if (gid && groupAlreadyShipped.has(gid)) return false;
+    return true;
+  });
+}
+
+/** NORMAL lines that can be included in a new Delhivery package (same shipment group). */
+function getDelhiveryEligibleItems(order) {
+  if (!order?.items?.length) return [];
+  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
+  const groupAlreadyShipped = new Set(
+    shipments
+      .filter((s) => s?.delhivery?.waybill)
+      .map((s) => String(s.shipmentGroupId)),
+  );
+  return order.items.filter((item) => {
+    if (String(item.delivery?.type || "").toUpperCase() !== "NORMAL") return false;
+    if (item.delhivery?.waybill) return false;
     if (item.shiprocket?.orderId) return false;
     const gid = String(item.shipmentGroupId || "");
     if (gid && groupAlreadyShipped.has(gid)) return false;
@@ -1542,8 +1634,147 @@ const dbgOrdersVerbose = (label, ...rest) => {
   console.debug(`[Orders] ${label}`, ...rest);
 };
 
-const isNormalDeliveryLine = (item) =>
-  String(item?.delivery?.type || "").toUpperCase() === "NORMAL";
+const isNormalDeliveryLine = (item, order = null) => {
+  const direct = String(item?.delivery?.type || item?.deliveryType || "").toUpperCase();
+  if (direct) return direct === "NORMAL";
+  const gid = String(item?.shipmentGroupId || "");
+  if (!gid || !Array.isArray(order?.shipments)) return false;
+  const shipment = order.shipments.find((s) => String(s.shipmentGroupId) === gid);
+  return String(shipment?.deliveryType || "").toUpperCase() === "NORMAL";
+};
+
+const isLineManifestedOnCarrier = (item, order = null) => {
+  if (item?.shiprocket?.orderId || item?.delhivery?.waybill) return true;
+  const gid = String(item?.shipmentGroupId || "");
+  if (!gid || !Array.isArray(order?.shipments)) return false;
+  const shipment = order.shipments.find((s) => String(s.shipmentGroupId) === gid);
+  return Boolean(shipment?.shiprocket?.orderId || shipment?.delhivery?.waybill);
+};
+
+const isSelfShippingLine = (item) =>
+  isNormalDeliveryLine(item) &&
+  String(item?.shippingProvider || "").toUpperCase() === "SELF_SHIPPING";
+
+const SHIPPING_PROVIDER_OPTIONS = [
+  { value: "SHIPROCKET", label: "Shiprocket" },
+  { value: "DELHIVERY", label: "Delhivery" },
+  { value: "SELF_SHIPPING", label: "Self Shipping" },
+];
+
+const getItemShippingProvider = (item) => {
+  const p = String(item?.shippingProvider || "").toUpperCase();
+  if (p === "DELHIVERY" || p === "SHIPROCKET" || p === "SELF_SHIPPING") return p;
+  if (item?.delhivery?.waybill) return "DELHIVERY";
+  if (
+    item?.shiprocket?.orderId != null ||
+    item?.shiprocket?.shipmentId != null ||
+    item?.shiprocket?.awbCode
+  ) {
+    return "SHIPROCKET";
+  }
+  return null;
+};
+
+const isDelhiveryLine = (item) =>
+  isNormalDeliveryLine(item) && getItemShippingProvider(item) === "DELHIVERY";
+
+const getDelhiveryWaybill = (item) => {
+  const wb = item?.delhivery?.waybill;
+  if (wb) return String(wb).trim();
+  if (getItemShippingProvider(item) === "DELHIVERY" && item?.trackingId) {
+    return String(item.trackingId).trim();
+  }
+  return null;
+};
+
+const getNormalDeliveryDelhivery = (item) => {
+  if (!item || !isNormalDeliveryLine(item)) return null;
+  const dl = item.delhivery || {};
+  const waybill = getDelhiveryWaybill(item);
+  const hasAny =
+    waybill ||
+    (dl.status && String(dl.status).trim()) ||
+    dl.trackingUrl;
+  if (!hasAny) return null;
+  return {
+    provider: "DELHIVERY",
+    awb: waybill,
+    trackingUrl: dl.trackingUrl || null,
+    status: dl.status || null,
+    courier: item.courier || "Delhivery",
+    lrn: dl.lrn || waybill,
+  };
+};
+
+/** NORMAL line moving to Processing — prompt unless already manifested on a carrier */
+const itemNeedsShippingProviderOnProcessing = (item, newStatus, order = null) => {
+  if (String(newStatus || "").toUpperCase() !== "PROCESSING") return false;
+  if (!isNormalDeliveryLine(item, order)) return false;
+  if (isLineManifestedOnCarrier(item, order)) return false;
+  return true;
+};
+
+const defaultShippingProviderForItem = (item) =>
+  getItemShippingProvider(item) || "SHIPROCKET";
+
+const orderHasItemsNeedingShippingProvider = (order, newStatus, itemIds = null) => {
+  if (String(newStatus || "").toUpperCase() !== "PROCESSING") return false;
+  return (order?.items || []).some((item) => {
+    const id = String(item.itemId || item._id);
+    if (itemIds?.length && !itemIds.map(String).includes(id)) return false;
+    return itemNeedsShippingProviderOnProcessing(item, newStatus, order);
+  });
+};
+
+const buildStatusPayload = (newStatus, item, shippingProvider) => {
+  const payload = { status: newStatus };
+  if (
+    newStatus === "PROCESSING" &&
+    shippingProvider &&
+    isNormalDeliveryLine(item)
+  ) {
+    payload.shippingProvider = shippingProvider;
+  }
+  return payload;
+};
+
+const resolveItemDocIds = (orderObj, itemObj) => {
+  const orderId =
+    orderObj?.orderId || orderObj?._id || orderObj?.id || orderObj?.order_id;
+  const itemId =
+    itemObj?.itemId || itemObj?._id || itemObj?.id || itemObj?.productItemId;
+  return { orderId: orderId ? String(orderId) : null, itemId: itemId ? String(itemId) : null };
+};
+
+const openPdfBlob = (blob, filename, fallbackMsg) => {
+  if (!blob || !(blob instanceof Blob)) {
+    toast.error(fallbackMsg);
+    return;
+  }
+  if (blob.type && blob.type.includes("json")) {
+    blob.text().then((text) => {
+      let msg = fallbackMsg;
+      try {
+        const j = JSON.parse(text);
+        if (j?.message) msg = j.message;
+      } catch {
+        /* ignore */
+      }
+      toast.error(msg);
+    });
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+};
 
 /** Shiprocket / tracking for a line item (NORMAL courier shipments). */
 const getNormalDeliveryShiprocket = (item) => {
@@ -1684,6 +1915,72 @@ const shiprocketFromItemRow = (row) => {
   };
   return getLineShiprocket(line);
 };
+
+function DelhiveryDetails({ dl, compact }) {
+  if (!dl) return <span className="text-gray-400">—</span>;
+  if (compact) {
+    const meta = [dl.status, dl.courier].filter(Boolean).join(" · ");
+    return (
+      <div className="min-w-0 leading-tight">
+        {dl.trackingUrl ? (
+          <a
+            href={dl.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-emerald-700 hover:underline"
+            title={dl.awb || "Track"}
+          >
+            <ExternalLink size={9} className="shrink-0" aria-hidden />
+            <span className="truncate">{dl.awb || "Track"}</span>
+          </a>
+        ) : (
+          <span
+            className="block truncate font-mono text-[9px] text-gray-800"
+            title={dl.awb || undefined}
+          >
+            {dl.awb || "—"}
+          </span>
+        )}
+        {meta ? (
+          <p className="truncate text-[9px] text-stone-500" title={meta}>
+            {meta}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5 text-sm text-gray-800">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-xs font-semibold uppercase text-emerald-700">Delhivery</span>
+        {dl.status && (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900">
+            {dl.status}
+          </span>
+        )}
+      </div>
+      {dl.awb && (
+        <p className="font-mono text-xs">
+          Waybill:{" "}
+          {dl.trackingUrl ? (
+            <a
+              href={dl.trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
+            >
+              {dl.awb}
+              <ExternalLink size={12} />
+            </a>
+          ) : (
+            dl.awb
+          )}
+        </p>
+      )}
+      {dl.courier && <p className="text-xs text-gray-600">Courier: {dl.courier}</p>}
+    </div>
+  );
+}
 
 function ShiprocketDetails({ sr, compact }) {
   if (!sr) return <span className="text-gray-400">—</span>;
@@ -1913,6 +2210,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [createShiprocketLoading, setCreateShiprocketLoading] = useState(false);
   const [shiprocketModalOpen, setShiprocketModalOpen] = useState(false);
   const [shiprocketModalItemIds, setShiprocketModalItemIds] = useState([]);
+  const [createDelhiveryLoading, setCreateDelhiveryLoading] = useState(false);
+  const [delhiveryModalOpen, setDelhiveryModalOpen] = useState(false);
+  const [delhiveryModalItemIds, setDelhiveryModalItemIds] = useState([]);
+  const [shippingProviderModalOpen, setShippingProviderModalOpen] = useState(false);
+  const [selectedShippingProvider, setSelectedShippingProvider] = useState("SHIPROCKET");
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
+  const [shippingProviderSubmitting, setShippingProviderSubmitting] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsData, setAnalyticsData] = useState({ counts: [], total: 0, view: "order" });
@@ -1989,91 +2293,114 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
   const handleGetInvoiceClick = async (orderObj, itemObj) => {
     if (!orderObj || !itemObj) return;
+
+    if (isSelfShippingLine(itemObj)) {
+      const { orderId, itemId } = resolveItemDocIds(orderObj, itemObj);
+      if (!orderId || !itemId) {
+        toast.error("Order or item ID missing for self-shipping invoice.");
+        return;
+      }
+      setDocActionType("invoice");
+      setDocDownloadLoading(true);
+      try {
+        const blob = await downloadSelfShippingInvoice(orderId, itemId);
+        openPdfBlob(
+          blob,
+          `self-shipping-invoice_${orderId}.pdf`,
+          "Failed to download self-shipping invoice",
+        );
+      } catch (err) {
+        toast.error(apiErrMessage(err, "Failed to download self-shipping invoice"));
+      } finally {
+        setDocDownloadLoading(false);
+        setDocActionType(null);
+      }
+      return;
+    }
+
+    if (isDelhiveryLine(itemObj)) {
+      const { orderId, itemId } = resolveItemDocIds(orderObj, itemObj);
+      if (!orderId || !itemId) {
+        toast.error("Order or item ID missing for Delhivery invoice.");
+        return;
+      }
+      setDocActionType("invoice");
+      setDocDownloadLoading(true);
+      try {
+        const blob = await downloadOrderInvoicePdf(orderId, itemId);
+        openPdfBlob(
+          blob,
+          `invoice_${orderId}.pdf`,
+          "Failed to download Delhivery invoice",
+        );
+      } catch (err) {
+        toast.error(apiErrMessage(err, "Failed to download Delhivery invoice"));
+      } finally {
+        setDocDownloadLoading(false);
+        setDocActionType(null);
+      }
+      return;
+    }
+
+    const { orderId, itemId } = resolveItemDocIds(orderObj, itemObj);
+    if (!orderId || !itemId) {
+      toast.error("Order or item ID missing for invoice download.");
+      return;
+    }
+
+    setDocActionType("invoice");
     setDocDownloadLoading(true);
     try {
-      const orderIds = [
-        orderObj?.orderId,
-        orderObj?._id,
-        orderObj?.id,
-        orderObj?.order_id,
-      ]
-        .filter(Boolean)
-        .map(String);
-      const itemIds = [
-        itemObj?.itemId,
-        itemObj?._id,
-        itemObj?.id,
-        itemObj?.productItemId,
-        itemObj?.item_id,
-      ]
-        .filter(Boolean)
-        .map(String);
+      const res = await getInvoice(orderId, itemId);
+      let payload = res?.data ?? res;
 
-      const uniqueOrderIds = Array.from(new Set(orderIds));
-      const uniqueItemIds = Array.from(new Set(itemIds));
-
-      let lastErr = null;
-
-      for (const oid of uniqueOrderIds) {
-        for (const iid of uniqueItemIds) {
+      if (typeof Blob !== "undefined" && payload instanceof Blob) {
+        const mime = (payload.type || "").toLowerCase();
+        const maybeJson =
+          !mime || mime.includes("json") || mime === "text/plain";
+        if (maybeJson) {
           try {
-            const res = await getInvoice(oid, iid);
-            // apiConnector returns response.data — usually JSON:
-            // { is_invoice_created: true, invoice_url: "https://...pdf" }
-            let payload = res?.data ?? res;
-
-            if (typeof Blob !== "undefined" && payload instanceof Blob) {
-              const mime = (payload.type || "").toLowerCase();
-              const maybeJson =
-                !mime ||
-                mime.includes("json") ||
-                mime === "text/plain";
-              if (maybeJson) {
-                try {
-                  payload = JSON.parse(await payload.text());
-                } catch {
-                  lastErr = new Error("Invalid invoice response from server");
-                  continue;
-                }
-              } else {
-                openDocUrl(payload, "Failed to download invoice");
-                return;
-              }
-            }
-
-            const url =
-              payload?.invoice_url ||
-              payload?.invoiceUrl ||
-              payload?.url ||
-              res?.invoice_url ||
-              res?.invoiceUrl ||
-              resolveDocUrl(res) ||
-              resolveDocUrl(payload);
-
-            if (url) {
-              openDocUrl(url, "Failed to download invoice");
-              return;
-            }
-
-            lastErr = new Error(
-              payload?.message ||
-                res?.message ||
-                "Invoice not available for this delivery line"
-            );
-          } catch (err) {
-            lastErr = err;
+            payload = JSON.parse(await payload.text());
+          } catch {
+            toast.error("Invalid invoice response from server");
+            return;
           }
+        } else {
+          openDocUrl(payload, "Failed to download invoice");
+          return;
         }
       }
 
+      const url =
+        payload?.invoice_url ||
+        payload?.invoiceUrl ||
+        payload?.url ||
+        res?.invoice_url ||
+        res?.invoiceUrl ||
+        resolveDocUrl(res) ||
+        resolveDocUrl(payload);
+
+      if (url) {
+        openDocUrl(url, "Failed to download invoice");
+        return;
+      }
+
       toast.error(
-        apiErrMessage(lastErr, "Failed to download invoice (404/Not Found)")
+        apiErrMessage(
+          new Error(
+            payload?.message ||
+              res?.message ||
+              "Invoice not available for this delivery line",
+          ),
+          "Failed to download invoice",
+        ),
       );
     } catch (err) {
       console.error("Invoice download failed:", err);
       toast.error(apiErrMessage(err, "Failed to download invoice"));
     } finally {
       setDocDownloadLoading(false);
+      setDocActionType(null);
     }
   };
 
@@ -2228,12 +2555,63 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     return Array.from(new Set(ids));
   };
 
-  const handleLabelForItem = (item) => {
+  const handleLabelForItem = async (item, orderObj = null) => {
     const forwardLabelUrl = getLatestExchangeForwardOrder(item)?.labelUrl;
     if (forwardLabelUrl) {
       openDocUrl(forwardLabelUrl, "Failed to download shipping label(s)");
       return;
     }
+
+    if (isSelfShippingLine(item)) {
+      const orderCtx = orderObj || selectedOrder || { orderId: item?.orderId };
+      const { orderId: oid, itemId } = resolveItemDocIds(orderCtx, item);
+      if (!oid || !itemId) {
+        toast.error("Order or item ID missing for self-shipping label.");
+        return;
+      }
+      setDocActionType("label");
+      setDocDownloadLoading(true);
+      try {
+        const blob = await downloadSelfShippingLabel(oid, itemId);
+        openPdfBlob(
+          blob,
+          `self-shipping-label_${oid}.pdf`,
+          "Failed to download self-shipping label",
+        );
+      } catch (err) {
+        toast.error(apiErrMessage(err, "Failed to download self-shipping label"));
+      } finally {
+        setDocDownloadLoading(false);
+        setDocActionType(null);
+      }
+      return;
+    }
+
+    if (isDelhiveryLine(item)) {
+      const waybill = getDelhiveryWaybill(item);
+      if (!waybill) {
+        toast.error("Delhivery waybill not available yet for this item.");
+        return;
+      }
+      setDocActionType("label");
+      setDocDownloadLoading(true);
+      try {
+        const lrn = item?.delhivery?.lrn || waybill;
+        const blob = await downloadDelhiveryPackingSlip([waybill], { lrn });
+        openPdfBlob(
+          blob,
+          `delhivery-label_${waybill}.pdf`,
+          "Failed to download Delhivery packing slip",
+        );
+      } catch (err) {
+        toast.error(apiErrMessage(err, "Failed to download Delhivery label"));
+      } finally {
+        setDocDownloadLoading(false);
+        setDocActionType(null);
+      }
+      return;
+    }
+
     const ids = getShipmentIdsForItem(item);
     if (!ids.length) {
       toast.error("Shipment ID not available yet for this item.");
@@ -2243,6 +2621,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   };
 
   const handleManifestForItem = (item) => {
+    const provider = getItemShippingProvider(item);
+    if (provider === "SELF_SHIPPING") {
+      toast.error("Manifest is not used for self-shipped items.");
+      return;
+    }
+    if (provider === "DELHIVERY") {
+      toast.error("Manifest is not used for Delhivery. Download shipping label instead.");
+      return;
+    }
     const ids = getShipmentIdsForItem(item);
     if (!ids.length) {
       toast.error("Shipment ID not available yet for this item.");
@@ -2826,6 +3213,68 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const openDelhiveryItemModal = () => {
+    const eligible = getDelhiveryEligibleItems(selectedOrder);
+    if (!eligible.length) {
+      toast.error(
+        "No eligible items. Only NORMAL delivery lines without Delhivery can be selected.",
+      );
+      return;
+    }
+    setDelhiveryModalItemIds(
+      eligible.map((it) => String(it.itemId || it._id)),
+    );
+    setDelhiveryModalOpen(true);
+  };
+
+  const closeDelhiveryItemModal = () => {
+    if (createDelhiveryLoading) return;
+    setDelhiveryModalOpen(false);
+    setDelhiveryModalItemIds([]);
+  };
+
+  const toggleDelhiveryModalItem = (itemId) => {
+    const id = String(itemId);
+    setDelhiveryModalItemIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleSubmitDelhiveryModal = async () => {
+    const oid = selectedOrder?.orderId;
+    if (!oid) return;
+    const ids = delhiveryModalItemIds.map(String).filter(Boolean);
+    if (!ids.length) {
+      toast.error("Select at least one item");
+      return;
+    }
+    const selected = (selectedOrder?.items || []).filter((it) =>
+      ids.includes(String(it.itemId || it._id)),
+    );
+    const groups = [
+      ...new Set(selected.map((it) => String(it.shipmentGroupId || "")).filter(Boolean)),
+    ];
+    if (groups.length !== 1) {
+      toast.error("Selected items must be in the same shipment group");
+      return;
+    }
+
+    setCreateDelhiveryLoading(true);
+    try {
+      await createDelhiveryForOrderShipments(oid, { itemIds: ids });
+      toast.success(
+        `Delhivery shipment created for ${ids.length} item${ids.length > 1 ? "s" : ""}`,
+      );
+      setDelhiveryModalOpen(false);
+      setDelhiveryModalItemIds([]);
+      await fetchSingleOrder(oid);
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to create Delhivery shipment");
+    } finally {
+      setCreateDelhiveryLoading(false);
+    }
+  };
+
   // Statuses that require a driver to be assigned before changing to this status
   const STATUS_REQUIRES_ASSIGNMENT = ["SHIPPED", "OUT_FOR_DELIVERY"];
   // After updating to these statuses, we open assignment modal so admin can assign a driver
@@ -2992,6 +3441,45 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const runWholeOrderStatusUpdate = async (newStatus, shippingProvider = null) => {
+    if (!selectedOrder?.orderId || !newStatus) return;
+    setUpdatingWholeOrder(true);
+    setOrderError(null);
+    try {
+      if (newStatus === "EXCHANGE_APPROVED") {
+        const targetItems = selectedOrder?.items ?? [];
+        for (const item of targetItems) {
+          const exchangeId = getLatestExchangeId(item);
+          if (!exchangeId) continue;
+          dbgOrders("approveExchange:wholeOrder", {
+            orderId: selectedOrder?.orderId,
+            itemId: item?.itemId || item?._id,
+            exchangeId,
+          });
+          await approveExchange(exchangeId);
+        }
+      }
+      const body = { status: newStatus };
+      if (newStatus === "PROCESSING" && shippingProvider) {
+        body.shippingProvider = shippingProvider;
+      }
+      await updateWholeOrderStatus(selectedOrder.orderId, body);
+      toast.success(`Order items updated to ${newStatus}.`);
+      setWholeOrderNewStatus("");
+      await fetchSingleOrder(selectedOrder.orderId);
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to update whole order status.";
+      setOrderError(msg);
+      showBackendErrorsAsToasts(err, `Failed to set order status to ${newStatus}.`);
+      throw err;
+    } finally {
+      setUpdatingWholeOrder(false);
+    }
+  };
+
   const handleUpdateWholeOrderStatus = async () => {
     if (!selectedOrder?.orderId || !wholeOrderNewStatus) return;
     const label =
@@ -3029,47 +3517,25 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         return;
       }
     }
+
+    if (orderHasItemsNeedingShippingProvider(selectedOrder, wholeOrderNewStatus)) {
+      const firstNeedingProvider = (selectedOrder?.items || []).find((item) =>
+        itemNeedsShippingProviderOnProcessing(item, wholeOrderNewStatus, selectedOrder),
+      );
+      setSelectedShippingProvider(defaultShippingProviderForItem(firstNeedingProvider));
+      setPendingStatusUpdate({ kind: "whole", newStatus: wholeOrderNewStatus });
+      setShippingProviderModalOpen(true);
+      return;
+    }
+
     if (
       !window.confirm(
         `Set all items in this order to "${label}"? (Terminal items like CANCELLED will be skipped.)`,
       )
-    )
+    ) {
       return;
-    setUpdatingWholeOrder(true);
-    setOrderError(null);
-    try {
-      if (wholeOrderNewStatus === "EXCHANGE_APPROVED") {
-        const targetItems = selectedOrder?.items ?? [];
-        for (const item of targetItems) {
-          const exchangeId = getLatestExchangeId(item);
-          if (!exchangeId) continue;
-          dbgOrders("approveExchange:wholeOrder", {
-            orderId: selectedOrder?.orderId,
-            itemId: item?.itemId || item?._id,
-            exchangeId,
-          });
-          await approveExchange(exchangeId);
-        }
-      }
-      await updateWholeOrderStatus(selectedOrder.orderId, {
-        status: wholeOrderNewStatus,
-      });
-      toast.success(`Order items updated to ${wholeOrderNewStatus}.`);
-      setWholeOrderNewStatus("");
-      await fetchSingleOrder(selectedOrder.orderId);
-    } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to update whole order status.";
-      setOrderError(msg);
-      showBackendErrorsAsToasts(
-        err,
-        `Failed to set order status to ${wholeOrderNewStatus}.`,
-      );
-    } finally {
-      setUpdatingWholeOrder(false);
     }
+    await runWholeOrderStatusUpdate(wholeOrderNewStatus);
   };
 
   const toggleItemSelection = (itemId) => {
@@ -3092,6 +3558,73 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         ? prev.filter((id) => !pageIds.includes(id))
         : combined;
     });
+  };
+
+  const runBulkStatusUpdate = async (bulkStatusValue, shippingProvider = null) => {
+    if (!selectedOrder?.orderId || selectedItemIds.length === 0 || !bulkStatusValue) {
+      return;
+    }
+    setUpdatingBulk(true);
+    setOrderError(null);
+    try {
+      for (const itemId of selectedItemIds) {
+        const currentItem = selectedOrder?.items?.find(
+          (it) => String(it.itemId || it._id) === String(itemId),
+        );
+        if (bulkStatusValue === "EXCHANGE_APPROVED") {
+          const exchangeId = getLatestExchangeId(currentItem);
+          if (!exchangeId) {
+            throw new Error(
+              `No exchange found for item ${String(itemId)} to approve.`,
+            );
+          }
+          dbgOrders("approveExchange:bulk", {
+            orderId: selectedOrder?.orderId,
+            itemId,
+            exchangeId,
+          });
+          await approveExchange(exchangeId);
+        }
+        await updateOrderItemStatus(
+          selectedOrder.orderId,
+          itemId,
+          buildStatusPayload(bulkStatusValue, currentItem, shippingProvider),
+        );
+      }
+      toast.success(
+        `${selectedItemIds.length} item(s) updated to ${bulkStatusValue}.`,
+      );
+      if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(bulkStatusValue)) {
+        if (
+          window.confirm(
+            `Assign a driver for these ${selectedItemIds.length} item(s)?`,
+          )
+        ) {
+          openAssignmentModal(
+            selectedOrder.orderId,
+            [...selectedItemIds],
+            bulkStatusValue,
+            true,
+          );
+        }
+      }
+      setSelectedItemIds([]);
+      setBulkStatus("");
+      await fetchSingleOrder(selectedOrder.orderId);
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to update selected items.";
+      setOrderError(msg);
+      showBackendErrorsAsToasts(
+        err,
+        `Failed to set selected items to ${bulkStatusValue}.`,
+      );
+      throw err;
+    } finally {
+      setUpdatingBulk(false);
+    }
   };
 
   const handleUpdateSelectedItemsStatus = async () => {
@@ -3138,75 +3671,119 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         return;
       }
     }
+
+    const bulkNeedsProvider = selectedItemIds.some((id) => {
+      const item = selectedOrder?.items?.find(
+        (it) => String(it.itemId || it._id) === String(id),
+      );
+      return itemNeedsShippingProviderOnProcessing(item, bulkStatus, selectedOrder);
+    });
+    if (bulkNeedsProvider) {
+      const firstNeedingProvider = selectedItemIds
+        .map((id) =>
+          selectedOrder?.items?.find(
+            (it) => String(it.itemId || it._id) === String(id),
+          ),
+        )
+        .find((item) =>
+          itemNeedsShippingProviderOnProcessing(item, bulkStatus, selectedOrder),
+        );
+      setSelectedShippingProvider(defaultShippingProviderForItem(firstNeedingProvider));
+      setPendingStatusUpdate({ kind: "bulk", newStatus: bulkStatus });
+      setShippingProviderModalOpen(true);
+      return;
+    }
+
     if (
       !window.confirm(
         `Set ${selectedItemIds.length} selected item(s) to "${label}"?`,
       )
-    )
+    ) {
       return;
-    setUpdatingBulk(true);
-    setOrderError(null);
+    }
+    await runBulkStatusUpdate(bulkStatus);
+  };
+
+  const executePendingStatusUpdate = async () => {
+    const pending = pendingStatusUpdate;
+    if (!pending) return;
+    setShippingProviderSubmitting(true);
     try {
-      for (const itemId of selectedItemIds) {
-        const currentItem = selectedOrder?.items?.find(
-          (it) => String(it.itemId || it._id) === String(itemId),
+      if (pending.kind === "single") {
+        await handleUpdateItemStatus(
+          pending.orderId,
+          pending.itemId,
+          pending.newStatus,
+          {
+            shippingProvider: selectedShippingProvider,
+            skipProviderPrompt: true,
+          },
         );
-        if (bulkStatus === "EXCHANGE_APPROVED") {
-          const exchangeId = getLatestExchangeId(currentItem);
-          if (!exchangeId) {
-            throw new Error(
-              `No exchange found for item ${String(itemId)} to approve.`,
-            );
-          }
-          dbgOrders("approveExchange:bulk", {
-            orderId: selectedOrder?.orderId,
-            itemId,
-            exchangeId,
-          });
-          await approveExchange(exchangeId);
-        }
-        await updateOrderItemStatus(selectedOrder.orderId, itemId, {
-          status: bulkStatus,
-        });
-      }
-      toast.success(
-        `${selectedItemIds.length} item(s) updated to ${bulkStatus}.`,
-      );
-      if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(bulkStatus)) {
-        if (
-          window.confirm(
-            `Assign a driver for these ${selectedItemIds.length} item(s)?`,
-          )
-        ) {
-          openAssignmentModal(
-            selectedOrder.orderId,
-            [...selectedItemIds],
-            bulkStatus,
-            true,
+      } else if (pending.kind === "bulk") {
+        await runBulkStatusUpdate(pending.newStatus, selectedShippingProvider);
+      } else if (pending.kind === "whole") {
+        await runWholeOrderStatusUpdate(
+          pending.newStatus,
+          selectedShippingProvider,
+        );
+      } else if (pending.kind === "listOrders") {
+        const ids = pending.orderIds || [];
+        setListBulkProcessing(true);
+        try {
+          const results = await Promise.allSettled(
+            ids.map((orderId) =>
+              updateWholeOrderStatus(orderId, {
+                status: "PROCESSING",
+                shippingProvider: selectedShippingProvider,
+              }),
+            ),
           );
+          const failed = results.filter((r) => r.status === "rejected");
+          if (failed.length) {
+            toast.error(`${failed.length}/${ids.length} failed to update.`);
+          } else {
+            toast.success(`Updated ${ids.length} order(s) to PROCESSING.`);
+          }
+          fetchOrders();
+        } finally {
+          setListBulkProcessing(false);
+        }
+      } else if (pending.kind === "listItems") {
+        const targets = pending.targets || [];
+        setListBulkProcessing(true);
+        try {
+          const results = await Promise.allSettled(
+            targets.map((t) =>
+              updateOrderItemStatus(t.orderId, t.itemId, {
+                status: "PROCESSING",
+                shippingProvider: selectedShippingProvider,
+              }),
+            ),
+          );
+          const failed = results.filter((r) => r.status === "rejected");
+          if (failed.length) {
+            toast.error(`${failed.length}/${targets.length} failed to update.`);
+          } else {
+            toast.success(`Updated ${targets.length} item(s) to PROCESSING.`);
+          }
+          fetchOrderItems();
+        } finally {
+          setListBulkProcessing(false);
         }
       }
-      setSelectedItemIds([]);
-      setBulkStatus("");
-      await fetchSingleOrder(selectedOrder.orderId);
+      setShippingProviderModalOpen(false);
+      setPendingStatusUpdate(null);
     } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to update selected items.";
-      setOrderError(msg);
-      showBackendErrorsAsToasts(
-        err,
-        `Failed to set selected items to ${bulkStatus}.`,
-      );
+      showBackendErrorsAsToasts(err, "Failed to update status with carrier");
     } finally {
-      setUpdatingBulk(false);
+      setShippingProviderSubmitting(false);
     }
   };
 
-  const handleUpdateItemStatus = async (orderId, itemId, newStatus) => {
+  const handleUpdateItemStatus = async (orderId, itemId, newStatus, options = {}) => {
     if (!orderId || !itemId || !newStatus) return;
     const stringItemId = String(itemId);
+    const { shippingProvider = null, skipProviderPrompt = false } = options;
 
     // Exchange rejected: open modal to collect rejection note (required by backend)
     if (newStatus === "EXCHANGE_REJECTED") {
@@ -3214,6 +3791,25 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setRejectionNote("");
       setRejectionError(null);
       setRejectionModalOpen(true);
+      return;
+    }
+
+    const prevItem = selectedOrder?.items?.find(
+      (it) => String(it.itemId || it._id) === stringItemId,
+    );
+
+    if (
+      !skipProviderPrompt &&
+      itemNeedsShippingProviderOnProcessing(prevItem, newStatus, selectedOrder)
+    ) {
+      setSelectedShippingProvider(defaultShippingProviderForItem(prevItem));
+      setPendingStatusUpdate({
+        kind: "single",
+        orderId,
+        itemId: stringItemId,
+        newStatus,
+      });
+      setShippingProviderModalOpen(true);
       return;
     }
 
@@ -3244,15 +3840,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
         return;
       }
-    } else {
+    } else if (!skipProviderPrompt) {
       const label =
         statusOptions.find((o) => o.value === newStatus)?.label || newStatus;
       if (!window.confirm(`Update to "${label}"?`)) return;
     }
     setUpdatingItemId(stringItemId);
-    const prevItem = selectedOrder?.items?.find(
-      (it) => String(it.itemId || it._id) === stringItemId,
-    );
     const prevStatus = prevItem?.status;
     setSelectedOrder((prev) => {
       if (!prev) return prev;
@@ -3266,7 +3859,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       };
     });
     try {
-      const payload = { status: newStatus };
       if (newStatus === "EXCHANGE_APPROVED") {
         const exchangeId = getLatestExchangeId(prevItem);
         if (!exchangeId) {
@@ -3275,6 +3867,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         dbgOrders("approveExchange:single", { orderId, itemId, exchangeId });
         await approveExchange(exchangeId);
       }
+      const payload = buildStatusPayload(newStatus, prevItem, shippingProvider);
       await updateOrderItemStatus(orderId, itemId, payload);
       toast.success(`Item ${stringItemId} updated to ${newStatus}.`);
       // After setting exchange pickup/delivery status, open assignment modal to assign driver
@@ -3491,17 +4084,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     );
   };
 
-  /** Single resolved status badge — aligned with courier / Shiprocket across the page */
+  /** Single resolved status badge — stored line status first; courier hint in tooltip */
   const renderItemStatusBreakdown = (item, { tableRow = false } = {}) => {
-    const effective = getDisplayItemStatus(item);
-    const sr = getLineShiprocket(item);
-    const apiStatus = formatStatusTokenForUi(item?.status);
+    const apiStatus = normalizeItemStatusToken(item?.status);
+    const effective = apiStatus || getDisplayItemStatus(item);
+    const provider = getItemShippingProvider(item);
+    const sr = provider === "SHIPROCKET" ? getLineShiprocket(item) : null;
+    const dl = provider === "DELHIVERY" ? getNormalDeliveryDelhivery(item) : null;
     const titleParts = [formatStatusTokenForUi(effective)];
-    if (apiStatus !== formatStatusTokenForUi(effective)) {
-      titleParts.push(`API: ${apiStatus}`);
+    const enriched = getDisplayItemStatus(item);
+    if (apiStatus && enriched && apiStatus !== enriched) {
+      titleParts.push(`Courier sync: ${formatStatusTokenForUi(enriched)}`);
     }
+    if (provider === "SELF_SHIPPING") titleParts.push("Self shipping");
     if (sr?.courier) titleParts.push(sr.courier);
-    if (item?.shiprocket?.status) titleParts.push(`SR: ${item.shiprocket.status}`);
+    if (sr?.status) titleParts.push(`Shiprocket: ${sr.status}`);
+    if (dl?.status) titleParts.push(`Delhivery: ${dl.status}`);
 
     return (
       <div
@@ -3762,13 +4360,23 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         if (items.length > 1) {
           return (
             <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
-              {(item) => getStatusBadge(getDisplayItemStatus(item) || item?.status)}
+              {(item) =>
+                getStatusBadge(
+                  normalizeItemStatusToken(item?.status) ||
+                    getDisplayItemStatus(item) ||
+                    item?.status,
+                )
+              }
             </OrderListLineStack>
           );
         }
         return (
           <div className="min-w-0" title="Order status">
-            {getStatusBadge(getDisplayOrderStatus(order) || orderLevelStatus)}
+            {getStatusBadge(
+              normalizeItemStatusToken(items[0]?.status) ||
+                getDisplayOrderStatus(order) ||
+                orderLevelStatus,
+            )}
           </div>
         );
       }
@@ -4043,8 +4651,33 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           : "—";
       case "shiprocket": {
         if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") return "—";
-        const sr = shiprocketFromItemRow(row);
-        return sr ? <ShiprocketDetails sr={sr} compact /> : <span className="text-xs text-amber-700">No AWB yet</span>;
+        const line = lineItemFromOrderItemRow(row);
+        const provider = getItemShippingProvider(line);
+        if (provider === "SELF_SHIPPING") {
+          const ref = line?.trackingId || "—";
+          return (
+            <div className="min-w-0 leading-tight">
+              <span className="text-[9px] font-semibold uppercase text-violet-700">Self</span>
+              <p className="truncate font-mono text-[9px] text-stone-700" title={ref}>
+                {ref}
+              </p>
+            </div>
+          );
+        }
+        if (provider === "DELHIVERY") {
+          const dl = getNormalDeliveryDelhivery(line);
+          return dl ? (
+            <DelhiveryDetails dl={dl} compact />
+          ) : (
+            <span className="text-xs text-amber-700">DL pending</span>
+          );
+        }
+        const sr = getLineShiprocket(line);
+        return sr ? (
+          <ShiprocketDetails sr={sr} compact />
+        ) : (
+          <span className="text-xs text-amber-700">SR pending</span>
+        );
       }
       case "payment":
         return manufacturingPaymentLabel(row.payment);
@@ -4156,6 +4789,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const renderItemListActions = (row) => {
     const rowItem = {
       ...(row.item && typeof row.item === "object" ? row.item : {}),
+      itemId: row.itemId ?? row.productItemId ?? row.item?.itemId,
+      shippingProvider: row.shippingProvider ?? row.item?.shippingProvider,
+      trackingId: row.trackingId ?? row.item?.trackingId,
+      delhivery: row.delhivery ?? row.item?.delhivery,
       delivery: { type: row.deliveryType || row.item?.delivery?.type },
       shipmentId: row.item?.shipmentId ?? row.shipmentId ?? null,
       shipmentGroupId: row.item?.shipmentGroupId ?? row.shipmentGroupId ?? null,
@@ -4186,13 +4823,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={docDownloadLoading}
-              onClick={() => handleLabelForItem(rowItem)}
+              onClick={() => handleLabelForItem(rowItem, { orderId: row.orderId })}
             />
             <DocManifestButton
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={
                 docDownloadLoading ||
+                getItemShippingProvider(rowItem) === "SELF_SHIPPING" ||
+                getItemShippingProvider(rowItem) === "DELHIVERY" ||
                 (() => {
                   const ids = getShipmentIdsForItem(rowItem);
                   return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
@@ -4363,7 +5002,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       </button>
     );
 
+    const provider = getItemShippingProvider(item);
     const manifestDisabled = (() => {
+      if (provider === "DELHIVERY" || provider === "SELF_SHIPPING") return true;
       const ids = getShipmentIdsForItem(item);
       return (
         ids.length > 0 &&
@@ -4391,6 +5032,45 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         Mnfst
       </button>
     );
+
+    if (isSelfShippingLine(item)) {
+      const ref = item?.trackingId || "—";
+      return (
+        <div className="min-w-[8.5rem] max-w-[11rem]">
+          <div className="mb-0.5 min-w-0">
+            <span className="text-[9px] font-semibold uppercase text-violet-700">
+              Self Shipping
+            </span>
+            <p className="truncate font-mono text-[9px] text-stone-700" title={ref}>
+              Ref: {ref}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-0.5">
+            {invoiceBtn}
+            {labelBtn}
+          </div>
+        </div>
+      );
+    }
+
+    if (isDelhiveryLine(item)) {
+      const dl = getNormalDeliveryDelhivery(item);
+      return (
+        <div className="min-w-[8.5rem] max-w-[11rem]">
+          <div className="mb-0.5 min-w-0">
+            {dl ? (
+              <DelhiveryDetails dl={dl} compact />
+            ) : (
+              <span className="text-[9px] leading-tight text-amber-800">DL pending</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-0.5">
+            {invoiceBtn}
+            {labelBtn}
+          </div>
+        </div>
+      );
+    }
 
     if (isNormalDeliveryLine(item)) {
       const sr = getLineShiprocket(item);
@@ -4447,6 +5127,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   ];
   const shiprocketModalCanSubmit =
     shiprocketModalSelectedItems.length > 0 && shiprocketModalGroupIds.length === 1;
+
+  const delhiveryEligibleItems = selectedOrder
+    ? getDelhiveryEligibleItems(selectedOrder)
+    : [];
+  const delhiveryModalSelectedItems = delhiveryEligibleItems.filter((it) =>
+    delhiveryModalItemIds.includes(String(it.itemId || it._id)),
+  );
+  const delhiveryModalGroupIds = [
+    ...new Set(
+      delhiveryModalSelectedItems
+        .map((it) => String(it.shipmentGroupId || ""))
+        .filter(Boolean),
+    ),
+  ];
+  const delhiveryModalCanSubmit =
+    delhiveryModalSelectedItems.length > 0 && delhiveryModalGroupIds.length === 1;
 
   return (
     <div className={ui.pageWrap}>
@@ -4525,41 +5221,59 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-400">
                         Actions
                       </span>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openOrderNotesModal(selectedOrder?.orderId)}
+                    className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                  >
+                    <StickyNote className="h-3.5 w-3.5" aria-hidden />
+                    Notes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openShiprocketItemModal}
+                    disabled={createShiprocketLoading}
+                    className={`${ui.btnOutline} shrink-0 border-sky-200 py-1 text-[11px] text-sky-800 hover:bg-sky-50`}
+                    title="Choose items for one Shiprocket order (NORMAL delivery)"
+                  >
+                    {createShiprocketLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Truck className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                    Shiprocket
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openDelhiveryItemModal}
+                    disabled={createDelhiveryLoading}
+                    className={`${ui.btnOutline} shrink-0 border-emerald-200 py-1 text-[11px] text-emerald-800 hover:bg-emerald-50`}
+                    title="Choose items for one Delhivery package (NORMAL delivery)"
+                  >
+                    {createDelhiveryLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Truck className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                    Delhivery
+                  </button>
+                  {String(selectedOrder?.payment?.mode || "").toUpperCase() !==
+                    "COD" &&
+                    String(selectedOrder?.payment?.status || "").toUpperCase() ===
+                      "PENDING" && (
                       <button
                         type="button"
-                        onClick={() => openOrderNotesModal(selectedOrder?.orderId)}
-                        className={`${ui.btnOutline} shrink-0 py-1 text-[11px]`}
+                        onClick={openPaymentOverrideModal}
+                        className={`${ui.btnAmber} shrink-0 py-1 text-[11px]`}
+                        title="Use only if customer has paid but payment is still pending"
                       >
-                        <StickyNote className="h-3.5 w-3.5" aria-hidden />
-                        Notes
+                        Mark paid + Confirm
                       </button>
-                      <button
-                        type="button"
-                        onClick={openShiprocketItemModal}
-                        disabled={createShiprocketLoading}
-                        className={`${ui.btnOutline} shrink-0 border-sky-200 py-1 text-[11px] text-sky-800 hover:bg-sky-50`}
-                        title="Choose items for one Shiprocket order (NORMAL delivery)"
-                      >
-                        {createShiprocketLoading ? (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                        ) : (
-                          <Truck className="h-3.5 w-3.5" aria-hidden />
-                        )}
-                        Shiprocket
-                      </button>
-                      {String(selectedOrder?.payment?.mode || "").toUpperCase() !==
-                        "COD" &&
-                        String(selectedOrder?.payment?.status || "").toUpperCase() ===
-                          "PENDING" && (
-                          <button
-                            type="button"
-                            onClick={openPaymentOverrideModal}
-                            className={`${ui.btnAmber} shrink-0 py-1 text-[11px]`}
-                            title="Use only if customer has paid but payment is still pending"
-                          >
-                            Mark paid + Confirm
-                          </button>
-                        )}
+                    )}
+                  {!orderDetailFromItemList ? (
+                    <>
                       <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
                       <span className="shrink-0 whitespace-nowrap text-[10px] font-medium text-stone-600">
                         All items
@@ -4591,7 +5305,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         Apply
                       </button>
                     </>
-                  )}
+                  ) : null}
                 </>
               ) : null}
 
@@ -5134,35 +5848,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   <button
                     type="button"
                     disabled={listSelectedOrderIds.length === 0 || listBulkProcessing}
-                    onClick={async () => {
+                    onClick={() => {
                       const ids = listSelectedOrderIds.map(String).filter(Boolean);
                       if (ids.length === 0) return;
-                      const ok = window.confirm(
-                        `Mark ${ids.length} order(s) as PROCESSING?`,
-                      );
-                      if (!ok) return;
-                      setListBulkProcessing(true);
-                      try {
-                        const results = await Promise.allSettled(
-                          ids.map((orderId) =>
-                            updateWholeOrderStatus(orderId, { status: "PROCESSING" }),
-                          ),
-                        );
-                        const failed = results.filter((r) => r.status === "rejected");
-                        if (failed.length) {
-                          toast.error(
-                            `${failed.length}/${ids.length} failed to update. Open console for details.`,
-                          );
-                          failed.slice(0, 3).forEach((f) =>
-                            console.error("[Bulk PROCESSING] failed:", f),
-                          );
-                        } else {
-                          toast.success(`Updated ${ids.length} order(s) to PROCESSING.`);
-                        }
-                        fetchOrders();
-                      } finally {
-                        setListBulkProcessing(false);
-                      }
+                      setSelectedShippingProvider("SHIPROCKET");
+                      setPendingStatusUpdate({ kind: "listOrders", orderIds: ids });
+                      setShippingProviderModalOpen(true);
                     }}
                     className={`${ui.btnOutline} text-[11px] py-1`}
                     title="Mark selected orders as PROCESSING."
@@ -5514,7 +6205,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         <button
                           type="button"
                           disabled={listSelectedItemKeys.length === 0 || listBulkProcessing}
-                          onClick={async () => {
+                          onClick={() => {
                             const selected = new Set(listSelectedItemKeys);
                             const targets = orderItems
                               .filter((r) =>
@@ -5526,32 +6217,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               }))
                               .filter((t) => t.orderId && t.itemId);
                             if (targets.length === 0) return;
-                            const ok = window.confirm(
-                              `Mark ${targets.length} item(s) as PROCESSING?`,
-                            );
-                            if (!ok) return;
-                            setListBulkProcessing(true);
-                            try {
-                              const results = await Promise.allSettled(
-                                targets.map((t) =>
-                                  updateOrderItemStatus(t.orderId, t.itemId, { status: "PROCESSING" }),
-                                ),
-                              );
-                              const failed = results.filter((r) => r.status === "rejected");
-                              if (failed.length) {
-                                toast.error(
-                                  `${failed.length}/${targets.length} failed to update. Open console for details.`,
-                                );
-                                failed.slice(0, 3).forEach((f) =>
-                                  console.error("[Bulk PROCESSING items] failed:", f),
-                                );
-                              } else {
-                                toast.success(`Updated ${targets.length} item(s) to PROCESSING.`);
-                              }
-                              fetchOrderItems();
-                            } finally {
-                              setListBulkProcessing(false);
-                            }
+                            setSelectedShippingProvider("SHIPROCKET");
+                            setPendingStatusUpdate({ kind: "listItems", targets });
+                            setShippingProviderModalOpen(true);
                           }}
                           className={`${ui.btnOutline} text-[11px] py-1`}
                         >
@@ -5728,80 +6396,102 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 : "—"}
                             </span>
                           </div>
-                          {String(row.deliveryType || "").toUpperCase() === "NORMAL" && (
-                            <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 mt-1">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900 mb-1.5">
-                                Shiprocket
-                              </p>
-                              {(() => {
-                                const sr = shiprocketFromItemRow(row);
-                                return sr ? (
-                                  <ShiprocketDetails sr={sr} />
-                                ) : (
-                                  <p className="text-xs text-amber-800">
-                                    No AWB / tracking yet (normal delivery — create shipment when ready).
-                                  </p>
-                                );
-                              })()}
-                            </div>
-                          )}
-                          {(() => {
-                            const rowItem = {
-                              ...(row.item && typeof row.item === "object" ? row.item : {}),
-                              delivery: {
-                                type: row.deliveryType || row.item?.delivery?.type,
-                              },
-                              shipmentId:
-                                row.item?.shipmentId ?? row.shipmentId ?? null,
-                              shipmentGroupId:
-                                row.item?.shipmentGroupId ??
-                                row.shipmentGroupId ??
-                                null,
-                              shiprocket: {
-                                ...(row.item?.shiprocket || {}),
-                                shipmentId:
-                                  row.item?.shiprocket?.shipmentId ??
-                                  row.item?.shipmentId ??
-                                  row.shipmentId ??
-                                  null,
-                                shipmentGroupId:
-                                  row.item?.shiprocket?.shipmentGroupId ??
-                                  row.item?.shipmentGroupId ??
-                                  row.shipmentGroupId ??
-                                  null,
-                              },
-                            };
-                            if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") {
-                              return null;
-                            }
+                          {String(row.deliveryType || "").toUpperCase() === "NORMAL" && (() => {
+                            const rowItem = lineItemFromOrderItemRow(row);
+                            const provider = getItemShippingProvider(rowItem);
+                            const borderTone =
+                              provider === "DELHIVERY"
+                                ? "border-emerald-200 bg-emerald-50/80"
+                                : provider === "SELF_SHIPPING"
+                                  ? "border-violet-200 bg-violet-50/80"
+                                  : "border-sky-200 bg-sky-50/80";
+                            const titleTone =
+                              provider === "DELHIVERY"
+                                ? "text-emerald-900"
+                                : provider === "SELF_SHIPPING"
+                                  ? "text-violet-900"
+                                  : "text-sky-900";
+                            const providerLabel =
+                              provider === "DELHIVERY"
+                                ? "Delhivery"
+                                : provider === "SELF_SHIPPING"
+                                  ? "Self Shipping"
+                                  : "Shiprocket";
+                            const showManifest =
+                              provider !== "DELHIVERY" && provider !== "SELF_SHIPPING";
                             return (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                <DocLabelButton
-                                  loading={docDownloadLoading}
-                                  loadingType={docActionType}
-                                  disabled={docDownloadLoading}
-                                  onClick={() => handleLabelForItem(rowItem)}
-                                />
-                                <DocManifestButton
-                                  loading={docDownloadLoading}
-                                  loadingType={docActionType}
-                                  disabled={
-                                    docDownloadLoading ||
-                                    (() => {
-                                      const ids = getShipmentIdsForItem(rowItem);
-                                      return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
-                                    })()
-                                  }
-                                  onClick={() => handleManifestForItem(rowItem)}
-                                  title={
-                                    (() => {
-                                      const ids = getShipmentIdsForItem(rowItem);
-                                      return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                        ? "Manifest already downloaded"
-                                        : "Download manifest";
-                                    })()
-                                  }
-                                />
+                              <div className={`rounded-lg border px-3 py-2 mt-1 ${borderTone}`}>
+                                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${titleTone}`}>
+                                  {providerLabel}
+                                </p>
+                                {provider === "SELF_SHIPPING" ? (
+                                  <p className="text-xs text-stone-700">
+                                    {rowItem?.trackingId ? (
+                                      <>
+                                        Ref:{" "}
+                                        <span className="font-mono font-semibold">{rowItem.trackingId}</span>
+                                      </>
+                                    ) : (
+                                      "In-house — add reference when marking Shipped."
+                                    )}
+                                  </p>
+                                ) : provider === "DELHIVERY" ? (
+                                  (() => {
+                                    const dl = getNormalDeliveryDelhivery(rowItem);
+                                    return dl ? (
+                                      <DelhiveryDetails dl={dl} />
+                                    ) : (
+                                      <p className="text-xs text-amber-800">No Delhivery waybill yet.</p>
+                                    );
+                                  })()
+                                ) : (() => {
+                                  const sr = getLineShiprocket(rowItem);
+                                  return sr ? (
+                                    <ShiprocketDetails sr={sr} />
+                                  ) : (
+                                    <p className="text-xs text-amber-800">
+                                      No AWB yet — choose carrier at Processing.
+                                    </p>
+                                  );
+                                })()}
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  <DocLabelButton
+                                    loading={docDownloadLoading}
+                                    loadingType={docActionType}
+                                    disabled={docDownloadLoading}
+                                    onClick={() => handleLabelForItem(rowItem, { orderId: row.orderId })}
+                                  />
+                                  {showManifest && (
+                                    <DocManifestButton
+                                      loading={docDownloadLoading}
+                                      loadingType={docActionType}
+                                      disabled={
+                                        docDownloadLoading ||
+                                        (() => {
+                                          const ids = getShipmentIdsForItem(rowItem);
+                                          return (
+                                            ids.length > 0 &&
+                                            ids.every((id) =>
+                                              downloadedManifestShipments.has(String(id)),
+                                            )
+                                          );
+                                        })()
+                                      }
+                                      onClick={() => handleManifestForItem(rowItem)}
+                                      title={
+                                        (() => {
+                                          const ids = getShipmentIdsForItem(rowItem);
+                                          return ids.length > 0 &&
+                                            ids.every((id) =>
+                                              downloadedManifestShipments.has(String(id)),
+                                            )
+                                            ? "Manifest already downloaded"
+                                            : "Download manifest";
+                                        })()
+                                      }
+                                    />
+                                  )}
+                                </div>
                               </div>
                             );
                           })()}
@@ -6081,6 +6771,129 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   </div>
                 )}
 
+                {delhiveryModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+                    <div className="flex max-h-[min(90vh,32rem)] w-full max-w-lg flex-col rounded-xl border border-border bg-white shadow-xl">
+                      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-stone-900">
+                            Create Delhivery shipment
+                          </h3>
+                          <p className="mt-0.5 text-[11px] text-stone-500">
+                            Select NORMAL delivery items to include in one Delhivery package
+                            (same shipment group, one waybill).
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeDelhiveryItemModal}
+                          disabled={createDelhiveryLoading}
+                          className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-stone-600 hover:bg-canvas-muted disabled:opacity-60"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+                        {delhiveryEligibleItems.length === 0 ? (
+                          <p className="py-6 text-center text-[11px] text-stone-500">
+                            No eligible items. Lines may already have Delhivery or are not
+                            NORMAL delivery.
+                          </p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {delhiveryEligibleItems.map((it) => {
+                              const id = String(it.itemId || it._id);
+                              const checked = delhiveryModalItemIds.includes(id);
+                              const label = getLineProductDisplayName(it);
+                              const sku = it.sku || it.variant?.sku || "—";
+                              return (
+                                <li key={id}>
+                                  <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border px-2.5 py-2 hover:bg-emerald-50/40 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50/50">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleDelhiveryModalItem(id)}
+                                      className={ui.checkbox}
+                                    />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-[11px] font-medium text-stone-900">
+                                        {label || sku}
+                                      </span>
+                                      <span className="block truncate font-mono text-[10px] text-stone-500">
+                                        {sku}
+                                        {it.shipmentGroupId
+                                          ? ` · ${it.shipmentGroupId}`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 text-[10px] text-stone-500">
+                                      ×{it.quantity ?? 1}
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                        {delhiveryModalSelectedItems.length > 0 &&
+                        delhiveryModalGroupIds.length > 1 ? (
+                          <p className="mt-2 text-[10px] font-medium text-danger">
+                            Selected items span multiple shipment groups. Pick items from one
+                            group only.
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDelhiveryModalItemIds(
+                              delhiveryEligibleItems.map((it) =>
+                                String(it.itemId || it._id),
+                              ),
+                            )
+                          }
+                          disabled={
+                            !delhiveryEligibleItems.length || createDelhiveryLoading
+                          }
+                          className={`${ui.btnOutline} py-1 text-[11px]`}
+                        >
+                          Select all
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={closeDelhiveryItemModal}
+                            disabled={createDelhiveryLoading}
+                            className={`${ui.btnOutline} py-1 text-[11px]`}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSubmitDelhiveryModal}
+                            disabled={!delhiveryModalCanSubmit || createDelhiveryLoading}
+                            className={`${ui.btnPrimary} border-emerald-600 bg-emerald-600 py-1 text-[11px] hover:bg-emerald-700`}
+                          >
+                            {createDelhiveryLoading ? (
+                              <>
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                Creating…
+                              </>
+                            ) : (
+                              <>
+                                <Truck className="h-3.5 w-3.5" aria-hidden />
+                                Create (
+                                {delhiveryModalSelectedItems.length})
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {orderError && (
                   <div className={`${ui.errorBox} mx-3 mt-3`}>
                     <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
@@ -6177,100 +6990,132 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       </div>
                     ) : null;
                   })()}
-                  {isNormalDeliveryLine(focusedItem) && (
-                    <div className="rounded-xl border border-sky-200 bg-sky-50/90 p-3">
-                      <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900">
-                        <Truck className="h-3.5 w-3.5 text-sky-700" aria-hidden />
-                        Shiprocket
-                      </h4>
-                      {(() => {
-                        const sr = getLineShiprocket(focusedItem);
-                        return (
-                          <div className="space-y-2">
-                            {sr ? (
-                              <ShiprocketDetails sr={sr} />
+                  {isNormalDeliveryLine(focusedItem) && (() => {
+                    const provider = getItemShippingProvider(focusedItem);
+                    const borderTone =
+                      provider === "DELHIVERY"
+                        ? "border-emerald-200 bg-emerald-50/90"
+                        : provider === "SELF_SHIPPING"
+                          ? "border-violet-200 bg-violet-50/90"
+                          : "border-sky-200 bg-sky-50/90";
+                    const titleTone =
+                      provider === "DELHIVERY"
+                        ? "text-emerald-900"
+                        : provider === "SELF_SHIPPING"
+                          ? "text-violet-900"
+                          : "text-sky-900";
+                    const providerLabel =
+                      provider === "DELHIVERY"
+                        ? "Delhivery"
+                        : provider === "SELF_SHIPPING"
+                          ? "Self Shipping"
+                          : "Shiprocket";
+                    const sr = getLineShiprocket(focusedItem);
+                    const dl = getNormalDeliveryDelhivery(focusedItem);
+                    const showManifest =
+                      provider !== "DELHIVERY" && provider !== "SELF_SHIPPING";
+                    return (
+                      <div className={`rounded-xl border p-3 ${borderTone}`}>
+                        <h4 className={`mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${titleTone}`}>
+                          <Truck className="h-3.5 w-3.5" aria-hidden />
+                          Courier — {providerLabel}
+                        </h4>
+                        <div className="space-y-2">
+                          {provider === "SELF_SHIPPING" ? (
+                            <p className="text-sm text-stone-700">
+                              {focusedItem.trackingId ? (
+                                <>
+                                  Reference:{" "}
+                                  <span className="font-mono font-semibold">{focusedItem.trackingId}</span>
+                                </>
+                              ) : (
+                                "In-house shipment — add tracking reference when marking Shipped."
+                              )}
+                            </p>
+                          ) : provider === "DELHIVERY" ? (
+                            dl ? (
+                              <DelhiveryDetails dl={dl} />
                             ) : (
                               <p className="text-sm text-amber-800">
-                                No Shiprocket shipment linked yet. After you create the shipment, AWB and tracking will
-                                appear here.
+                                No Delhivery waybill yet. Move to Processing with Delhivery to manifest.
                               </p>
-                            )}
+                            )
+                          ) : sr ? (
+                            <ShiprocketDetails sr={sr} />
+                          ) : (
+                            <p className="text-sm text-amber-800">
+                              No Shiprocket shipment linked yet. Choose Shiprocket at Processing to manifest.
+                            </p>
+                          )}
 
-                            <div className="flex flex-wrap gap-2">
-                              {canDownloadInvoice(focusedItem) ? (
-                                <button
-                                  type="button"
-                                  disabled={docDownloadLoading}
-                                  onClick={() =>
-                                    handleGetInvoiceClick(
-                                      selectedOrder,
-                                      focusedItem
-                                    )
-                                  }
-                                  className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
-                                >
-                                  <CreditCard size={14} />
-                                  Download invoice
-                                </button>
-                              ) : (
-                                <p className="text-xs text-amber-700">
-                                  Invoice is not available when status is{" "}
-                                  <span className="font-semibold">Created</span> or{" "}
-                                  <span className="font-semibold">Confirmed</span>.
-                                </p>
-                              )}
-
+                          <div className="flex flex-wrap gap-2">
+                            {canDownloadInvoice(focusedItem) ? (
                               <button
                                 type="button"
                                 disabled={docDownloadLoading}
-                                onClick={() => handleLabelForItem(focusedItem)}
+                                onClick={() =>
+                                  handleGetInvoiceClick(selectedOrder, focusedItem)
+                                }
                                 className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
                               >
-                                {docDownloadLoading && docActionType === "label" ? (
-                                  <RefreshCw size={14} className="animate-spin" />
-                                ) : (
-                                  <Truck size={14} />
-                                )}
-                                {docDownloadLoading && docActionType === "label"
-                                  ? "Loading..."
-                                  : "Download label"}
+                                <CreditCard size={14} />
+                                Download invoice
                               </button>
+                            ) : (
+                              <p className="text-xs text-amber-700">
+                                Invoice is not available when status is{" "}
+                                <span className="font-semibold">Created</span> or{" "}
+                                <span className="font-semibold">Confirmed</span>.
+                              </p>
+                            )}
 
+                            <button
+                              type="button"
+                              disabled={docDownloadLoading}
+                              onClick={() => handleLabelForItem(focusedItem, selectedOrder)}
+                              className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
+                            >
+                              {docDownloadLoading && docActionType === "label" ? (
+                                <RefreshCw size={14} className="animate-spin" />
+                              ) : (
+                                <Truck size={14} />
+                              )}
+                              {docDownloadLoading && docActionType === "label"
+                                ? "Loading..."
+                                : "Download label"}
+                            </button>
+
+                            {showManifest && (
                               <button
                                 type="button"
                                 disabled={
                                   docDownloadLoading ||
                                   (() => {
                                     const ids = getShipmentIdsForItem(focusedItem);
-                                    return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)));
+                                    return (
+                                      ids.length > 0 &&
+                                      ids.every((id) =>
+                                        downloadedManifestShipments.has(String(id)),
+                                      )
+                                    );
                                   })()
                                 }
                                 onClick={() => handleManifestForItem(focusedItem)}
                                 className="rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-60 flex items-center gap-2"
-                                title={
-                                  (() => {
-                                    const ids = getShipmentIdsForItem(focusedItem);
-                                    return ids.length > 0 && ids.every((id) => downloadedManifestShipments.has(String(id)))
-                                      ? "Manifest already downloaded for this shipment"
-                                      : "Download manifest";
-                                  })()
-                                }
                               >
                                 {docDownloadLoading && docActionType === "manifest" ? (
                                   <RefreshCw size={14} className="animate-spin" />
                                 ) : (
                                   <Package size={14} />
                                 )}
-                                {docDownloadLoading && docActionType === "manifest"
-                                  ? "Loading..."
-                                  : "Manifest"}
+                                Manifest
                               </button>
-                            </div>
+                            )}
                           </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* Change status card */}
                   <div className={ui.detailSection}>
                     <div className={ui.detailSectionTitle}>
@@ -6362,9 +7207,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   </span>
                   <div className="ml-auto shrink-0">
                     {getStatusBadge(
-                      getDisplayOrderStatus(selectedOrder) ||
-                        selectedOrder?.status ||
-                        selectedOrder?.orderStatus ||
+                      normalizeItemStatusToken(
+                        selectedOrder?.status || selectedOrder?.orderStatus,
+                      ) ||
+                        getDisplayOrderStatus(selectedOrder) ||
                         "",
                     )}
                   </div>
@@ -7323,6 +8169,75 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {shippingProviderModalOpen && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Choose shipping carrier
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Normal delivery items moving to Processing will use the selected method.
+                  Self shipping skips third-party APIs — add tracking when marking Shipped.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                {SHIPPING_PROVIDER_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 ${
+                      selectedShippingProvider === opt.value
+                        ? opt.value === "DELHIVERY"
+                          ? "border-emerald-400 bg-emerald-50"
+                          : opt.value === "SELF_SHIPPING"
+                            ? "border-violet-400 bg-violet-50"
+                            : "border-sky-400 bg-sky-50"
+                        : "border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="shippingProvider"
+                      value={opt.value}
+                      checked={selectedShippingProvider === opt.value}
+                      onChange={() => setSelectedShippingProvider(opt.value)}
+                    />
+                    <span className="text-sm font-medium text-gray-900">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={shippingProviderSubmitting}
+                  onClick={() => {
+                    setShippingProviderModalOpen(false);
+                    setPendingStatusUpdate(null);
+                  }}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={shippingProviderSubmitting}
+                  onClick={executePendingStatusUpdate}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60 inline-flex items-center gap-2"
+                >
+                  {shippingProviderSubmitting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Updating…
+                    </>
+                  ) : (
+                    "Confirm & update"
+                  )}
                 </button>
               </div>
             </div>

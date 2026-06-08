@@ -5,6 +5,7 @@ import {
   createWarehouse,
   updateWarehouse,
   getWarehouseById,
+  registerWarehouseWithDelhivery,
 } from "../../apis/Warehouseapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 
@@ -29,6 +30,8 @@ const WarehouseForm = () => {
     `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [loading, setLoading] = useState(false);
+  const [delhiveryRegistering, setDelhiveryRegistering] = useState(false);
+  const [delhiverySuccess, setDelhiverySuccess] = useState("");
   const [form, setForm] = useState({
     name: "",
     code: "",
@@ -40,6 +43,8 @@ const WarehouseForm = () => {
       country: "India",
     },
     isActive: true,
+    delhiveryPickupLocationName: "",
+    delhiveryRegisterPhone: "",
   });
   const [error, setError] = useState("");
 
@@ -68,6 +73,8 @@ const WarehouseForm = () => {
             country: addr.country || "India",
           },
           isActive: warehouse.isActive !== false,
+          delhiveryPickupLocationName: warehouse.delhiveryPickupLocationName || "",
+          delhiveryRegisterPhone: "",
         });
       }
     } catch (err) {
@@ -135,6 +142,8 @@ const WarehouseForm = () => {
           country: form.address.country.trim() || "India",
         },
         isActive: form.isActive,
+        delhiveryPickupLocationName:
+          form.delhiveryPickupLocationName.trim() || null,
       };
 
       if (isEdit) {
@@ -149,6 +158,50 @@ const WarehouseForm = () => {
       setError(err?.response?.data?.message || "Failed to save warehouse");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegisterDelhivery = async () => {
+    if (!isEdit || !id) return;
+    if (!form.address.line.trim() || !form.address.city.trim() || !/^\d{6}$/.test(form.address.pinCode.trim())) {
+      setError("Save a complete address (line, city, 6-digit pincode) before registering with Delhivery.");
+      return;
+    }
+    const phone = String(form.delhiveryRegisterPhone || "").replace(/\D/g, "");
+    if (phone.length !== 10) {
+      setError("Enter a 10-digit contact phone for Delhivery warehouse registration.");
+      return;
+    }
+
+    const pickupName =
+      form.delhiveryPickupLocationName.trim() || form.name.trim();
+    if (!pickupName) {
+      setError("Warehouse name or Delhivery pickup name is required.");
+      return;
+    }
+
+    try {
+      setDelhiveryRegistering(true);
+      setError("");
+      setDelhiverySuccess("");
+      const res = await registerWarehouseWithDelhivery(id, {
+        pickupName,
+        phone,
+      });
+      const wh = res?.data?.data || res?.data || {};
+      const registeredName = wh.delhiveryPickupLocationName || pickupName;
+      setForm((prev) => ({
+        ...prev,
+        delhiveryPickupLocationName: registeredName,
+      }));
+      setDelhiverySuccess(
+        `Registered with Delhivery as "${registeredName}". You can retry Delhivery shipment on the order.`
+      );
+    } catch (err) {
+      console.error("Delhivery warehouse registration failed:", err);
+      setError(err?.message || err?.response?.data?.message || "Delhivery registration failed");
+    } finally {
+      setDelhiveryRegistering(false);
     }
   };
 
@@ -175,6 +228,12 @@ const WarehouseForm = () => {
       {error ? (
         <div className="mb-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger">
           {error}
+        </div>
+      ) : null}
+
+      {delhiverySuccess ? (
+        <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+          {delhiverySuccess}
         </div>
       ) : null}
 
@@ -207,6 +266,55 @@ const WarehouseForm = () => {
             placeholder="e.g. MUM-01"
             className={inputClass}
           />
+        </div>
+
+        <div>
+          <label className={labelClass}>Delhivery pickup location name</label>
+          <input
+            type="text"
+            name="delhiveryPickupLocationName"
+            value={form.delhiveryPickupLocationName}
+            onChange={handleChange}
+            placeholder="Exact name registered in Delhivery"
+            className={inputClass}
+          />
+          <p className="mt-1 text-[10px] leading-snug text-stone-500">
+            Must match the warehouse/pickup name in your Delhivery account exactly
+            (case-sensitive). Used when manifesting Delhivery shipments from this
+            warehouse. If empty, the warehouse name is used.
+          </p>
+          {isEdit ? (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                Register with Delhivery
+              </p>
+              <p className="text-[10px] leading-snug text-emerald-900/80">
+                If you see &quot;ClientWarehouse matching query does not exist&quot;, this
+                warehouse is not registered in Delhivery yet. Save address details,
+                then register once — the pickup name above will be created in Delhivery.
+              </p>
+              <div>
+                <label className={labelClass}>Contact phone (10 digits)</label>
+                <input
+                  type="tel"
+                  name="delhiveryRegisterPhone"
+                  value={form.delhiveryRegisterPhone}
+                  onChange={handleChange}
+                  placeholder="9876543210"
+                  maxLength={10}
+                  className={inputClass}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleRegisterDelhivery}
+                disabled={delhiveryRegistering || loading}
+                className="inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {delhiveryRegistering ? "Registering…" : "Register with Delhivery"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div>

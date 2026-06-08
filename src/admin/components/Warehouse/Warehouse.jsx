@@ -151,6 +151,7 @@ export default function Warehouse() {
         phone: wh.phone || "—",
         email: wh.email || "",
         isActive: wh.isActive !== false,
+        delhiveryPickup: wh.delhiveryPickupLocationName || "",
         createdAt: wh.createdAt || "",
       }));
 
@@ -606,7 +607,15 @@ export default function Warehouse() {
                         {(currentPage - 1) * limit + idx + 1}
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap font-semibold text-stone-900">
-                        {wh.name}
+                        <div>{wh.name}</div>
+                        {wh.delhiveryPickup ? (
+                          <div
+                            className="mt-0.5 max-w-[14rem] truncate text-[10px] font-normal text-emerald-700"
+                            title={`Delhivery pickup: ${wh.delhiveryPickup}`}
+                          >
+                            Delhivery: {wh.delhiveryPickup}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="hidden max-w-xs truncate px-2 py-2 text-stone-600 md:table-cell">
                         {wh.address}
