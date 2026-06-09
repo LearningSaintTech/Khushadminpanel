@@ -30,6 +30,18 @@ import {
   mergeSizeChartsWithPreset,
 } from "../../../utils/sizeChartPresets.js";
 import { CARE_ICON_OPTIONS } from "../../../utils/designerCareIconOptions.js";
+import {
+  CARE_ICON_ACCEPT,
+  CARE_ICON_UPLOAD_HINT,
+  MEASURE_IMAGE_ACCEPT,
+  MEASURE_IMAGE_UPLOAD_HINT,
+  VARIANT_MEDIA_ACCEPT,
+  VARIANT_MEDIA_UPLOAD_HINT,
+  partitionFilesByValidator,
+  validateCareIconFile,
+  validateMeasureImageFile,
+  validateVariantMediaFile,
+} from "../../../utils/inventoryMediaUploadRules.js";
 
 function isLocalPickedFile(img) {
   if (img == null || typeof img !== "object") return false;
@@ -630,6 +642,7 @@ const DesignerInventoryForm = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [submitErrors, setSubmitErrors] = useState([]);
+  const [uploadValidationErrors, setUploadValidationErrors] = useState([]);
   const [loadItem, setLoadItem] = useState(isEdit);
   /** Admin-only field; shown read-only on edit. */
   const [readOnlyListed, setReadOnlyListed] = useState(null);
@@ -1111,7 +1124,15 @@ const DesignerInventoryForm = () => {
   const addVariantImages = (vIdx, e) => {
     const list = e.target.files;
     if (!list?.length) return;
-    const next = Array.from(list);
+    const { accepted: next, errors } = partitionFilesByValidator(
+      list,
+      validateVariantMediaFile,
+    );
+    setUploadValidationErrors(errors);
+    if (!next.length) {
+      e.target.value = "";
+      return;
+    }
     updateVariant(vIdx, (v) => {
       const images = normalizeVariantImagesArray([
         ...(Array.isArray(v.images) ? v.images : []),
@@ -1305,7 +1326,12 @@ const DesignerInventoryForm = () => {
 
   const addSizeChartImages = (side, files) => {
     if (!files?.length) return;
-    const next = Array.from(files);
+    const { accepted: next, errors } = partitionFilesByValidator(
+      files,
+      validateMeasureImageFile,
+    );
+    setUploadValidationErrors(errors);
+    if (!next.length) return;
     setForm((s) => {
       const chart = s.sizeCharts[side];
       return {
@@ -2120,6 +2146,16 @@ const DesignerInventoryForm = () => {
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-800">
               {submitErrors.map((msg, idx) => (
+                <li key={idx}>{msg}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {uploadValidationErrors.length > 0 ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+            <p className="font-semibold text-rose-950">Upload not allowed:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-rose-800">
+              {uploadValidationErrors.map((msg, idx) => (
                 <li key={idx}>{msg}</li>
               ))}
             </ul>
@@ -3029,18 +3065,27 @@ const DesignerInventoryForm = () => {
                       </label>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept={CARE_ICON_ACCEPT}
                         className={fieldClass}
                         required={!inst?.iconKey && !inst?.iconUrl}
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null;
-                          updateCareInstruction(idx, "iconFile", file);
-                          if (file) {
-                            updateCareInstruction(idx, "iconKey", "");
-                            updateCareInstruction(idx, "iconUrl", "");
+                          e.target.value = "";
+                          if (!file) return;
+                          const result = validateCareIconFile(file);
+                          if (!result.ok) {
+                            setUploadValidationErrors([result.error]);
+                            return;
                           }
+                          setUploadValidationErrors([]);
+                          updateCareInstruction(idx, "iconFile", file);
+                          updateCareInstruction(idx, "iconKey", "");
+                          updateCareInstruction(idx, "iconUrl", "");
                         }}
                       />
+                      <p className="mt-1 text-[10px] text-stone-500">
+                        {CARE_ICON_UPLOAD_HINT}
+                      </p>
                     </div>
                   </div>
 
@@ -3177,7 +3222,7 @@ const DesignerInventoryForm = () => {
                       <span className="pointer-events-none">Add more</span>
                       <input
                         type="file"
-                        accept="image/*,video/*"
+                        accept={VARIANT_MEDIA_ACCEPT}
                         multiple
                         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         onChange={(e) => addVariantImages(vIdx, e)}
@@ -3185,12 +3230,14 @@ const DesignerInventoryForm = () => {
                     </label>
                   </div>
                   <p className="mb-1.5 text-[10px] leading-snug text-stone-500">
-                    Order is left → right (saved as #1, #2, …). New uploads are
-                    added at the end — use arrows to reorder before saving.
+                    {VARIANT_MEDIA_UPLOAD_HINT} Order is left → right (saved as
+                    #1, #2, …). New uploads are added at the end — use arrows to
+                    reorder before saving.
                   </p>
                   {variantImages.length === 0 ? (
                     <p className="text-xs text-gray-500">
-                      No media yet — add images or short videos (MP4, WebM, MOV, etc.) for this color.
+                      No media yet — add images or a short product video for this
+                      color.
                     </p>
                   ) : (
                     <div className="max-h-96 overflow-y-auto rounded-md border border-amber-100/90 bg-white/90 p-2">
@@ -3742,15 +3789,19 @@ const DesignerInventoryForm = () => {
                       + Add
                       <input
                         type="file"
-                        accept="image/*"
+                        accept={MEASURE_IMAGE_ACCEPT}
                         multiple
                         className="hidden"
-                        onChange={(e) =>
-                          addSizeChartImages(side, e.target.files)
-                        }
+                        onChange={(e) => {
+                          addSizeChartImages(side, e.target.files);
+                          e.target.value = "";
+                        }}
                       />
                     </label>
                   </div>
+                  <p className="mb-2 text-[10px] text-stone-500">
+                    {MEASURE_IMAGE_UPLOAD_HINT}
+                  </p>
                   {chart.measureImages.length === 0 ? (
                     <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
                       No images for this unit

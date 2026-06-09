@@ -406,24 +406,28 @@ async function copyTextToClipboard(value, label = "Copied") {
   }
 }
 
-const getItemExchangeIds = (item) =>
-  Array.isArray(item?.exchanges)
-    ? item.exchanges.map((ex) => ex?._id).filter(Boolean).map(String)
-    : [];
-
-const getLatestExchangeId = (item) => {
-  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
-  if (exchanges.length === 0) return null;
-  exchanges.sort((a, b) => {
-    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
-    return bTs - aTs;
-  });
-  return exchanges[0]?._id ? String(exchanges[0]._id) : null;
+/** Admin APIs may attach exchanges on `item.exchanges` or `item.exchange.exchanges`. */
+const getItemExchanges = (item) => {
+  if (!item || typeof item !== "object") return [];
+  if (Array.isArray(item.exchanges) && item.exchanges.length) return item.exchanges;
+  const nested = item.exchange;
+  if (nested && typeof nested === "object" && Array.isArray(nested.exchanges)) {
+    return nested.exchanges;
+  }
+  return [];
 };
 
+const getExchangeRecordId = (exchange) => {
+  if (!exchange || typeof exchange !== "object") return null;
+  const id = exchange._id ?? exchange.exchangeId ?? exchange.id;
+  return id != null && String(id).trim() ? String(id) : null;
+};
+
+const getItemExchangeIds = (item) =>
+  getItemExchanges(item).map(getExchangeRecordId).filter(Boolean);
+
 const getLatestExchange = (item) => {
-  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
+  const exchanges = [...getItemExchanges(item)];
   if (exchanges.length === 0) return null;
   exchanges.sort((a, b) => {
     const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
@@ -431,6 +435,22 @@ const getLatestExchange = (item) => {
     return bTs - aTs;
   });
   return exchanges[0] || null;
+};
+
+const getLatestExchangeId = (item) => getExchangeRecordId(getLatestExchange(item));
+
+const formatExchangeSwapSummary = (item) => {
+  const ex = getLatestExchange(item);
+  if (!ex) return "";
+  const orderedVariant = item?.variant || ex?.item?.variant || {};
+  const replacement = ex?.replacedItem;
+  const replacementVariant = replacement?.variant || {};
+  const now = [orderedVariant.color, orderedVariant.size].filter(Boolean).join("/");
+  const want =
+    [ex.desiredColor, ex.desiredSize].filter(Boolean).join("/") ||
+    [replacementVariant.color, replacementVariant.size].filter(Boolean).join("/");
+  if (!now && !want) return "";
+  return `${now || "—"} → ${want || "—"}`;
 };
 
 /** Lines still awaiting fulfilment start — never override with courier/SR/DL hints. */
@@ -745,7 +765,7 @@ const lineItemFromOrderItemRow = (row) => {
     ...nested,
     status: row.itemStatus ?? nested.status ?? "",
     statusHistory: nested.statusHistory,
-    exchanges: nested.exchanges,
+    exchanges: getItemExchanges(nested),
     shiprocket: nested.shiprocket ?? row.shiprocket,
     courier: nested.courier ?? row.courier,
     shippingProvider: nested.shippingProvider ?? row.shippingProvider,
@@ -822,8 +842,10 @@ function firstOrderLineItem(order) {
   return items[0] || null;
 }
 
-function orderLineItems(order) {
-  return Array.isArray(order?.items) ? order.items : [];
+function orderLineItems(order, { exchangeLinesOnly = false } = {}) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!exchangeLinesOnly) return items;
+  return items.filter((item) => hasActiveExchangeStatus(item));
 }
 
 function orderListLineKey(item, idx) {
@@ -831,8 +853,13 @@ function orderListLineKey(item, idx) {
 }
 
 /** Stack each order line in one table cell (same column, one row per order). */
-function OrderListLineStack({ order, children, className = "flex flex-col gap-2 divide-y divide-gray-100" }) {
-  const items = orderLineItems(order);
+function OrderListLineStack({
+  order,
+  children,
+  className = "flex flex-col gap-2 divide-y divide-gray-100",
+  exchangeLinesOnly = false,
+}) {
+  const items = orderLineItems(order, { exchangeLinesOnly });
   if (!items.length) return <span className="text-xs text-gray-400">—</span>;
   if (items.length === 1) {
     return <div className="min-w-0">{children(items[0], 0)}</div>;
@@ -1511,7 +1538,7 @@ const exchangeHasVisibleDetails = (exchange, item) => {
   );
 };
 
-function ExchangeDetailsPanel({ item, onZoomImage }) {
+function ExchangeDetailsPanel({ item, onZoomImage, embedded = false }) {
   const latestExchange = getLatestExchange(item);
   if (!exchangeHasVisibleDetails(latestExchange, item)) return null;
 
@@ -1537,9 +1564,60 @@ function ExchangeDetailsPanel({ item, onZoomImage }) {
     .join("/");
   const thumbUrl = item?.variant?.imageUrl || orderedVariant?.imageUrl || null;
   const lineStatus = formatStatusTokenForUi(getDisplayItemStatus(item));
+  const exchangeId = getExchangeRecordId(latestExchange);
+  const docStatus = formatExchangeDocumentStatusLabel(latestExchange?.status);
+
+  if (embedded) {
+    return (
+      <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug text-stone-600">
+        <p className="truncate" title={`${currentVariantLabel} → ${wantedVariantLabel || replacementLabel}`}>
+          <span className="text-stone-400">Now</span> {currentVariantLabel || "—"}
+          <span className="mx-0.5 text-stone-300">→</span>
+          <span className="font-medium text-stone-800">
+            {wantedVariantLabel || replacementLabel || replacement?.sku || "—"}
+          </span>
+          {latestExchange?.quantityToExchange ? (
+            <span className="text-stone-400"> · Qty {latestExchange.quantityToExchange}</span>
+          ) : null}
+        </p>
+        {exchangeReason ? (
+          <p className="line-clamp-1 text-stone-500" title={exchangeReason}>
+            {exchangeReason}
+          </p>
+        ) : null}
+        {exchangeId || docStatus ? (
+          <p className="truncate text-stone-400">
+            {exchangeId ? <span title="Exchange ID">#{exchangeId}</span> : null}
+            {exchangeId && docStatus ? " · " : null}
+            {docStatus ? <span>{docStatus}</span> : null}
+          </p>
+        ) : null}
+        {exchangeImageUrls.length > 0 ? (
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
+            {exchangeImageUrls.map((url, idx) => (
+              <button
+                key={`${url}-${idx}`}
+                type="button"
+                onClick={() => onZoomImage?.(url)}
+                className="h-6 w-6 shrink-0 overflow-hidden rounded border border-border bg-white hover:ring-1 hover:ring-brand-200"
+                title={`Photo ${idx + 1}`}
+              >
+                <img
+                  src={url}
+                  alt={`Exchange upload ${idx + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-border bg-canvas-muted/25 px-2 py-1.5 text-[10px] leading-snug">
+    <div className="flex flex-col gap-1 rounded-lg border border-border bg-canvas-muted/25 px-2 py-1.5 text-[10px] leading-snug">
       <div className="flex min-w-0 items-start gap-1.5">
         {thumbUrl ? (
           <button
@@ -1556,14 +1634,14 @@ function ExchangeDetailsPanel({ item, onZoomImage }) {
             <p className="min-w-0 flex-1 truncate font-medium text-stone-900" title={productName}>
               {productName}
             </p>
-            <span className="shrink-0 rounded bg-brand-50 px-1 py-0.5 text-[8px] font-semibold text-brand-800 ring-1 ring-brand-200">
+            <span className="shrink-0 rounded bg-canvas-muted px-1 py-0.5 text-[8px] font-semibold text-stone-700 ring-1 ring-border">
               {lineStatus}
             </span>
           </div>
           <p className="truncate text-[9px] text-stone-600">
             <span className="text-stone-400">Now</span> {currentVariantLabel || "—"}
             <span className="mx-0.5 text-stone-300">→</span>
-            <span className="font-medium text-brand-800">
+            <span className="font-medium text-stone-800">
               {wantedVariantLabel || replacementLabel || replacement?.sku || "—"}
             </span>
             {latestExchange?.quantityToExchange ? (
@@ -1573,6 +1651,13 @@ function ExchangeDetailsPanel({ item, onZoomImage }) {
           {exchangeReason ? (
             <p className="line-clamp-1 text-[9px] text-stone-500" title={exchangeReason}>
               {exchangeReason}
+            </p>
+          ) : null}
+          {exchangeId || docStatus ? (
+            <p className="truncate text-[9px] text-stone-400">
+              {exchangeId ? <span title="Exchange ID">#{exchangeId}</span> : null}
+              {exchangeId && docStatus ? " · " : null}
+              {docStatus ? <span>Request: {docStatus}</span> : null}
             </p>
           ) : null}
         </div>
@@ -1611,13 +1696,30 @@ const canDownloadInvoice = (item) => {
 const isExchangeStatus = (status) =>
   String(status || "").toUpperCase().startsWith("EXCHANGE_");
 
+const hasActiveExchangeStatus = (itemOrStatus) => {
+  const st =
+    typeof itemOrStatus === "string"
+      ? itemOrStatus
+      : itemOrStatus?.status ?? itemOrStatus?.itemStatus;
+  return isExchangeStatus(st);
+};
+
 const isExchangeLineItem = (item) =>
-  isExchangeStatus(item?.status) || (Array.isArray(item?.exchanges) && item.exchanges.length > 0);
+  hasActiveExchangeStatus(item) || getItemExchanges(item).length > 0;
 
 const isExchangeOrderEntry = (order) => {
-  if (isExchangeStatus(order?.status || order?.orderStatus)) return true;
-  return Array.isArray(order?.items) && order.items.some((item) => isExchangeLineItem(item));
+  if (hasActiveExchangeStatus(order?.status || order?.orderStatus)) return true;
+  return (
+    Array.isArray(order?.items) &&
+    order.items.some((item) => hasActiveExchangeStatus(item))
+  );
 };
+
+const isExchangeListRow = (row) =>
+  hasActiveExchangeStatus(row?.itemStatus ?? row?.item?.status ?? row?.status);
+
+/** Default status filter on the exchange orders list. */
+const EXCHANGE_DEFAULT_LIST_STATUS = "EXCHANGE_REQUESTED";
 
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
 const ORDERS_DEBUG =
@@ -1907,7 +2009,7 @@ const getOrderShipmentIds = (order) => {
       it?.shipmentGroupId,
       it?.shiprocket?.shipmentId,
       it?.shiprocket?.shipmentGroupId,
-      it?.exchanges?.[0]?.shiprocket?.forwardOrder?.shipmentId,
+      getLatestExchange(it)?.shiprocket?.forwardOrder?.shipmentId,
     ]
       .filter(Boolean)
       .map(String);
@@ -1935,9 +2037,9 @@ const getOrderForwardCreateTarget = (order) => {
   for (const item of items) {
     if (!isNormalDeliveryLine(item)) continue;
     if (!isExchangeStatus(item?.status)) continue;
-    const latestExchange = getLatestExchange(item);
-    if (!latestExchange?._id) continue;
-    return { exchangeId: String(latestExchange._id), item };
+    const exchangeId = getLatestExchangeId(item);
+    if (!exchangeId) continue;
+    return { exchangeId, item };
   }
   return null;
 };
@@ -2260,10 +2362,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [analyticsError, setAnalyticsError] = useState(null);
 
   useEffect(() => {
-    if (exchangeOnly && viewMode !== VIEW_ORDER) {
-      setViewMode(VIEW_ORDER);
-    }
-  }, [exchangeOnly, viewMode]);
+    if (!exchangeOnly) return;
+    setViewMode(VIEW_ORDER);
+    setStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
+    setItemStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
+  }, [exchangeOnly]);
 
   const resolveDocUrl = (res) => {
     if (!res) return null;
@@ -2585,7 +2688,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       item?.shipmentGroupId,
       item?.shiprocket?.shipmentId,
       item?.shiprocket?.shipmentGroupId,
-      item?.exchanges?.[0]?.shiprocket?.forwardOrder?.shipmentId,
+      getLatestExchange(item)?.shiprocket?.forwardOrder?.shipmentId,
     ]
       .filter(Boolean)
       .map(String);
@@ -2739,11 +2842,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         page: pagination.page,
         limit: pagination.limit,
       });
+      const effectiveOrderStatus =
+        exchangeOnly && !statusFilter ? EXCHANGE_DEFAULT_LIST_STATUS : statusFilter;
       const res = await getOrders(
         pagination.page,
         pagination.limit,
         search,
-        statusFilter,
+        effectiveOrderStatus,
         dateFrom || undefined,
         dateTo || undefined,
         sortBy,
@@ -2804,12 +2909,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setItemLoading(true);
       setItemError(null);
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
+      const effectiveItemStatus =
+        exchangeOnly && !itemStatusFilter ? EXCHANGE_DEFAULT_LIST_STATUS : itemStatusFilter;
       const res = await getOrderItems(
         itemPagination.page,
         itemPagination.limit,
         itemSearch,
         "",
-        itemStatusFilter,
+        effectiveItemStatus,
         dateFrom || undefined,
         dateTo || undefined,
         deliveryTypeFilter || undefined,
@@ -2825,7 +2932,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       });
       const rawItems = Array.isArray(payload.items) ? payload.items : [];
       const list = exchangeOnly
-        ? rawItems.filter((row) => isExchangeLineItem(row?.item || row))
+        ? rawItems.filter((row) => isExchangeListRow(row))
         : rawItems;
       setOrderItems(list);
       setItemPagination((prev) => ({
@@ -3058,7 +3165,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       const singlePayload = res?.data ?? res;
       dbgOrdersVerbose("getSingleOrder:order", singlePayload);
       if (exchangeOnly && singlePayload?.items) {
-        const filteredItems = singlePayload.items.filter((it) => isExchangeLineItem(it));
+        const filteredItems = singlePayload.items.filter((it) =>
+          hasActiveExchangeStatus(it),
+        );
         setSelectedOrder({ ...singlePayload, items: filteredItems });
       } else {
         setSelectedOrder(singlePayload || null);
@@ -4213,8 +4322,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     { value: "EXCHANGE_APPROVED", label: "Exchange approved" },
     { value: "EXCHANGE_REJECTED", label: "Exchange rejected" },
     { value: "EXCHANGE_PICKUP_SCHEDULED", label: "Exchange pickup scheduled" },
+    { value: "EXCHANGE_PICKUP_EXCEPTION", label: "Exchange pickup exception" },
     { value: "EXCHANGE_OUT_FOR_PICKUP", label: "Exchange out for pickup" },
     { value: "EXCHANGE_PICKED", label: "Exchange picked" },
+    { value: "EXCHANGE_RETURN_IN_TRANSIT", label: "Exchange return in transit" },
     { value: "EXCHANGE_RECEIVED", label: "Exchange received" },
     { value: "EXCHANGE_PROCESSING", label: "Exchange processing" },
     { value: "EXCHANGE_SHIPPED", label: "Exchange shipped" },
@@ -4223,7 +4334,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     { value: "EXCHANGE_COMPLETED", label: "Exchange completed" },
   ];
   const filteredStatusOptions = exchangeOnly
-    ? statusOptions.filter((opt) => isExchangeStatus(opt.value))
+    ? statusOptions.filter(
+        (opt) =>
+          isExchangeStatus(opt.value) && opt.value !== EXCHANGE_DEFAULT_LIST_STATUS,
+      )
     : statusOptions;
 
   const analyticsCountByStatus = useMemo(() => {
@@ -4301,6 +4415,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     ],
   );
 
+  const ListLineStack = (props) => (
+    <OrderListLineStack exchangeLinesOnly={exchangeOnly} {...props} />
+  );
+
   const renderOrderListCell = (key, order) => {
     switch (key) {
       case "info":
@@ -4328,14 +4446,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       case "image":
         return (
-          <OrderListLineStack
+          <ListLineStack
             order={order}
             className="flex flex-col items-center gap-2 divide-y divide-gray-100"
           >
             {(item) => (
               <TableItemImageThumb itemLike={item} onPickImage={setZoomImageUrl} />
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "orderId":
         return (
@@ -4391,7 +4509,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "qty": {
-        const items = orderLineItems(order);
+        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
         if (items.length <= 1) {
           return (
             <span className="tabular-nums">
@@ -4403,7 +4521,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           );
         }
         return (
-          <OrderListLineStack
+          <ListLineStack
             order={order}
             className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
           >
@@ -4412,7 +4530,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 {item.quantity ?? "—"}
               </span>
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       }
       case "total":
@@ -4427,7 +4545,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         return walletUsed > 0 ? formatInr(walletUsed) : "—";
       }
       case "status": {
-        const items = orderLineItems(order);
+        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
         const orderLevelStatus = order?.status || order?.orderStatus || "";
         if (lineConsistencyFilter === "mixed" && isOrderMixedLines(order, statusFilter)) {
           const summary = getOrderLineStatusSummary(order);
@@ -4444,7 +4562,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         }
         if (items.length > 1) {
           return (
-            <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
+            <ListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
               {(item) =>
                 getStatusBadge(
                   normalizeItemStatusToken(item?.status) ||
@@ -4452,7 +4570,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     item?.status,
                 )
               }
-            </OrderListLineStack>
+            </ListLineStack>
           );
         }
         return (
@@ -4466,7 +4584,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "courier": {
-        const items = orderLineItems(order);
+        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
         const docButtons = hasNormalDeliveryInOrder(order) ? (
           <div className="mt-1 flex flex-col gap-0.5 border-t border-gray-100 pt-1">
             <DocLabelButton
@@ -4506,13 +4624,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         }
         return (
           <div className="min-w-0 space-y-1">
-            <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
+            <ListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
               {(item) => {
                 const sr = getLineShiprocket(item);
                 if (!sr) return <span className="text-xs text-gray-400">—</span>;
                 return <ShiprocketDetails sr={sr} compact />;
               }}
-            </OrderListLineStack>
+            </ListLineStack>
             {docButtons}
           </div>
         );
@@ -4531,44 +4649,68 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         return order.user?.email || order.userId?.email || "—";
       case "productName":
         return (
-          <OrderListLineStack order={order}>
+          <ListLineStack order={order}>
             {(item) => {
               const label = getLineProductDisplayName(item);
+              const swap = exchangeOnly ? formatExchangeSwapSummary(item) : "";
               return (
-                <span
-                  className="block text-xs font-medium leading-snug text-gray-900"
-                  title={label}
-                >
-                  {label || "—"}
-                </span>
+                <div className="min-w-0 max-w-[220px]">
+                  <span
+                    className="block truncate text-xs font-medium leading-snug text-gray-900"
+                    title={label}
+                  >
+                    {label || "—"}
+                  </span>
+                  {swap ? (
+                    <span
+                      className="block truncate text-[10px] leading-tight text-stone-500"
+                      title={swap}
+                    >
+                      {swap}
+                    </span>
+                  ) : null}
+                </div>
               );
             }}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "productId":
         return (
-          <OrderListLineStack order={order}>
+          <ListLineStack order={order}>
             {(item) => (
               <span className="block text-xs text-gray-700">{item.productId || "—"}</span>
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "lineSku":
         return (
-          <OrderListLineStack order={order}>
-            {(item) => (
-              <span
-                className="block truncate font-mono text-[10px] text-gray-800"
-                title={item.sku || item.variant?.sku}
-              >
-                {item.sku || "—"}
-              </span>
-            )}
-          </OrderListLineStack>
+          <ListLineStack order={order}>
+            {(item) => {
+              const exchangeId = exchangeOnly ? getLatestExchangeId(item) : null;
+              return (
+                <div className="min-w-0">
+                  <span
+                    className="block truncate font-mono text-[10px] text-gray-800"
+                    title={item.sku || item.variant?.sku}
+                  >
+                    {item.sku || "—"}
+                  </span>
+                  {exchangeId ? (
+                    <span
+                      className="block truncate font-mono text-[10px] text-stone-400"
+                      title={`Exchange #${exchangeId}`}
+                    >
+                      #{exchangeId}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            }}
+          </ListLineStack>
         );
       case "variantSku":
         return (
-          <OrderListLineStack order={order}>
+          <ListLineStack order={order}>
             {(item) => (
               <span
                 className="block truncate font-mono text-[10px] text-gray-800"
@@ -4577,39 +4719,39 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 {item.variant?.sku || "—"}
               </span>
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "size":
         return (
-          <OrderListLineStack
+          <ListLineStack
             order={order}
             className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
           >
             {(item) => (
               <span className="text-xs text-gray-700">{item.variant?.size || "—"}</span>
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "color":
         return (
-          <OrderListLineStack
+          <ListLineStack
             order={order}
             className="flex flex-col items-center gap-1.5 divide-y divide-gray-100"
           >
             {(item) => (
               <span className="text-xs text-gray-700">{item.variant?.color || "—"}</span>
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "pincode":
         return order.address?.pincode || "—";
       case "storeLink":
         return (
-          <OrderListLineStack order={order}>
+          <ListLineStack order={order}>
             {(item) => (
               <TableStoreLink itemId={item.itemId || item._id} itemLike={item} />
             )}
-          </OrderListLineStack>
+          </ListLineStack>
         );
       case "payment":
         return manufacturingPaymentLabel(order.payment);
@@ -4683,10 +4825,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       case "phone":
         return `${row.user?.countryCode || ""}${row.user?.phoneNumber || "—"}`;
       case "product": {
-        const label = getLineProductDisplayName(item);
+        const line = lineItemFromOrderItemRow(row) || item;
+        const label = getLineProductDisplayName(line);
         return (
           <span
-            className="block max-w-[200px] truncate text-xs font-medium text-gray-900"
+            className="block max-w-[240px] truncate text-xs font-medium text-stone-900"
             title={label}
           >
             {label || "—"}
@@ -4735,8 +4878,39 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             })
           : "—";
       case "shiprocket": {
-        if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") return "—";
         const line = lineItemFromOrderItemRow(row);
+        if (hasActiveExchangeStatus(line)) {
+          const fwd = getExchangeForwardShiprocket(line);
+          const retLeg = getLatestExchange(line)?.shiprocket?.returnOrder;
+          if (!fwd && !retLeg) {
+            return <span className="text-xs text-amber-700">SR pending</span>;
+          }
+          return (
+            <div className="min-w-0 space-y-1">
+              {retLeg?.awbCode || retLeg?.status ? (
+                <div>
+                  <span className="text-[9px] font-semibold uppercase text-stone-500">Return</span>
+                  <ShiprocketDetails
+                    sr={{
+                      awb: retLeg.awbCode || retLeg.awb,
+                      status: retLeg.status,
+                      trackingUrl: retLeg.trackingUrl,
+                      courier: retLeg.courierName,
+                    }}
+                    compact
+                  />
+                </div>
+              ) : null}
+              {fwd ? (
+                <div>
+                  <span className="text-[9px] font-semibold uppercase text-stone-500">Forward</span>
+                  <ShiprocketDetails sr={fwd} compact />
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+        if (String(row.deliveryType || "").toUpperCase() !== "NORMAL") return "—";
         const provider = getItemShippingProvider(line);
         if (provider === "SELF_SHIPPING") {
           const ref = line?.trackingId || "—";
@@ -4791,7 +4965,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   };
 
   // +1 for trailing actions col, +1 for selection checkbox col
-  const orderListColSpan = orderListActiveColumns.length + (exchangeOnly ? 3 : 2);
+  const orderListColSpan = orderListActiveColumns.length + 2;
   const itemListColSpan = itemListActiveColumns.length + 2;
 
   const rowIndexBase = useMemo(
@@ -5445,7 +5619,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 </div>
               ) : null}
 
-              {viewMode === VIEW_ORDER && !selectedOrder ? (
+              {viewMode === VIEW_ORDER && !selectedOrder && !exchangeOnly ? (
                 <div
                   className="inline-flex shrink-0 rounded-lg border border-border bg-canvas-muted p-0.5"
                   role="group"
@@ -5577,7 +5751,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       ) : (
                         <FileDown className="h-3.5 w-3.5" aria-hidden />
                       )}
-                      {exchangeOnly ? "PDF" : "Mfg PDF"}
+                      Mfg PDF
                     </button>
 
                   {!exchangeOnly ? (
@@ -5770,7 +5944,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
-                          setStatusFilter("");
+                          setStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
                           setLineConsistencyFilter("");
                           setPaymentFilter("");
                           setSortBy("createdAt");
@@ -5842,7 +6016,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       }}
                       className={ui.inputCompact}
                     >
-                      <option value="">All statuses</option>
+                      {exchangeOnly ? (
+                        <>
+                          <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
+                          <option value="EXCHANGE">All exchange statuses</option>
+                        </>
+                      ) : (
+                        <option value="">All statuses</option>
+                      )}
                       {filteredStatusOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -5952,7 +6133,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               </div>
             )}
 
-            {!exchangeOnly && <TableScrollHint />}
+            <TableScrollHint />
             <div className={ui.tableScrollShell}>
               <table className="w-full min-w-[1120px] border-collapse text-left text-xs">
                 <thead className={ui.thead}>
@@ -5985,9 +6166,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         className={ui.checkbox}
                       />
                     </th>
-                    {exchangeOnly ? (
-                      <th className={`w-10 px-1.5 py-1.5 text-center ${ui.th}`}>#</th>
-                    ) : null}
                     {orderListActiveColumns.map((col) => (
                       <th
                         key={col.key}
@@ -6008,18 +6186,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     <th className={`px-1.5 py-1.5 text-center ${ui.th}`}>Details / notes</th>
                   </tr>
                 </thead>
-                <tbody className={exchangeOnly ? "" : "divide-y divide-gray-100 bg-white"}>
+                <tbody className="divide-y divide-gray-100 bg-white">
                   {loading ? (
                     <tr>
                       <td colSpan={orderListColSpan} className="py-16 text-center text-gray-500">
-                        {exchangeOnly ? (
-                          <span className="inline-flex items-center gap-2 text-[11px] text-stone-500">
-                            <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                            Loading…
-                          </span>
-                        ) : (
-                          "Loading orders…"
-                        )}
+                        Loading orders…
                       </td>
                     </tr>
                   ) : orders.length === 0 ? (
@@ -6029,11 +6200,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       </td>
                     </tr>
                   ) : (
-                    orders.map((order, idx) => (
+                    orders.map((order) => (
                       <tr
                         key={order._id}
                         className={`border-t border-border/80 transition-colors ${ui.rowHover} ${
-                          orderLineItems(order).length > 1 ? "[&>td]:align-top" : ""
+                          orderLineItems(order, { exchangeLinesOnly: exchangeOnly }).length > 1
+                            ? "[&>td]:align-top"
+                            : ""
                         }`}
                       >
                         <td className="px-1.5 py-2 align-middle text-center">
@@ -6054,11 +6227,6 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
-                        {exchangeOnly ? (
-                          <td className="px-1.5 py-2 text-center text-[10px] text-stone-500">
-                            {rowIndexBase + idx + 1}
-                          </td>
-                        ) : null}
                         {orderListActiveColumns.map((col) => (
                           <td key={col.key} className={orderListCellTdClass(col.key)}>
                             {renderOrderListCell(col.key, order)}
@@ -6091,18 +6259,18 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             <>
               {/* Filters: By item */}
               {listFiltersOpen ? (
-              <div className="mb-2 overflow-visible rounded-xl border border-border bg-white shadow-sm">
-                <div className="flex flex-col gap-3 overflow-visible border-b border-gray-100 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className={`${ui.filterCard} mb-2`}>
+                <div className="flex flex-col gap-3 overflow-visible border-b border-border bg-canvas-muted/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-[11px] font-semibold text-gray-800">Filters</p>
-                    <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-100">
+                    <p className="text-[11px] font-semibold text-stone-800">Filters</p>
+                    <div className="inline-flex rounded-lg border border-border bg-canvas-muted p-0.5">
                       <button
                         type="button"
                         onClick={() => setItemListView("table")}
                         className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
                           itemListViewMode === "table"
-                            ? "bg-white text-brand-700 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900"
+                            ? ui.tabActive
+                            : ui.tabInactive
                         }`}
                       >
                         Table
@@ -6112,8 +6280,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         onClick={() => setItemListView("cards")}
                         className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
                           itemListViewMode === "cards"
-                            ? "bg-white text-brand-700 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900"
+                            ? ui.tabActive
+                            : ui.tabInactive
                         }`}
                       >
                         Cards
@@ -6127,11 +6295,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
-                          setItemStatusFilter("");
+                          setItemStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
                           setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
-                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                        className={`${ui.btnOutline} py-1 text-[11px]`}
                       >
                         Clear all
                       </button>
@@ -6145,14 +6313,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         onSelectAll={selectAllItemListColumns}
                         open={itemListColumnsOpen}
                         onOpenChange={setItemListColumnsOpen}
-                        badgeClass="bg-violet-100 text-violet-900"
+                        badgeClass="bg-brand-100 text-brand-900"
                       />
                     )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="item-filter-from" className="text-[10px] font-semibold text-gray-500">
+                    <label htmlFor="item-filter-from" className="text-[10px] font-semibold text-stone-500">
                       From date
                     </label>
                     <input
@@ -6163,11 +6331,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         setDateFrom(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                      className={ui.inputCompact}
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="item-filter-to" className="text-[10px] font-semibold text-gray-500">
+                    <label htmlFor="item-filter-to" className="text-[10px] font-semibold text-stone-500">
                       To date
                     </label>
                     <input
@@ -6178,11 +6346,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         setDateTo(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                      className={ui.inputCompact}
                     />
                   </div>
                   <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
-                    <label htmlFor="item-filter-status" className="text-[10px] font-semibold text-gray-500">
+                    <label htmlFor="item-filter-status" className="text-[10px] font-semibold text-stone-500">
                       Line status
                     </label>
                     <select
@@ -6192,9 +6360,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         setItemStatusFilter(e.target.value);
                         setItemPagination((p) => ({ ...p, page: 1 }));
                       }}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] text-gray-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+                      className={ui.inputCompact}
                     >
-                      <option value="">All statuses</option>
+                      {exchangeOnly ? (
+                        <>
+                          <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
+                          <option value="EXCHANGE">All exchange statuses</option>
+                        </>
+                      ) : (
+                        <option value="">All statuses</option>
+                      )}
                       {filteredStatusOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -6203,27 +6378,27 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </select>
                   </div>
                 </div>
-                <p className="border-t border-gray-100 px-3 py-2.5 text-[11px] text-gray-500 leading-snug">
-                  The list is paginated for speed. <span className="font-medium">Download manufacturing PDF</span>{" "}
+                <p className="border-t border-border px-3 py-2.5 text-[11px] text-stone-500 leading-snug">
+                  The list is paginated for speed. <span className="font-medium">Mfg PDF</span>{" "}
                   above exports <span className="font-medium">all</span> lines matching dates, delivery, payment, status, and
                   search (not only this page).
                 </p>
               </div>
               ) : null}
               {itemLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
+                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-border bg-canvas-muted/30">
                   <RefreshCw className="h-10 w-10 animate-spin text-brand-600 mb-3" />
-                  <p className="text-sm font-medium text-gray-600">
+                  <p className="text-sm font-medium text-stone-600">
                     Loading order items…
                   </p>
                 </div>
               ) : orderItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-gray-200 bg-white">
-                  <Package className="h-12 w-12 text-gray-300 mb-3" />
-                  <p className="text-sm font-medium text-gray-600">
-                    No order items found
+                <div className="flex flex-col items-center justify-center py-20 rounded-xl border-2 border-dashed border-border bg-white">
+                  <Package className="h-12 w-12 text-stone-300 mb-3" />
+                  <p className="text-sm font-medium text-stone-600">
+                    {exchangeOnly ? "No exchange order items found" : "No order items found"}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-stone-500 mt-1">
                     Try changing the status filter or search
                   </p>
                 </div>
@@ -6317,11 +6492,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </div>
                   )}
                   <TableScrollHint />
-                  <div className={ui.tableScrollShellMuted}>
-                  <table className="w-full min-w-[960px] table-auto border-collapse text-left text-sm">
-                    <thead className="sticky top-0 z-[1] bg-gray-50 shadow-[0_1px_0_0_rgb(229_231_235)]">
+                  <div className={ui.tableScrollShell}>
+                  <table className="w-full min-w-[960px] table-auto border-collapse text-left text-xs">
+                    <thead className={ui.thead}>
                       <tr>
-                        <th className="w-10 px-2 py-2.5 text-center">
+                        <th className="w-10 px-1.5 py-1.5 text-center">
                           <input
                             type="checkbox"
                             aria-label="Select all items on page"
@@ -6346,31 +6521,29 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 );
                               }
                             }}
-                            className="h-3.5 w-3.5 rounded border-border text-brand-600"
+                            className={ui.checkbox}
                           />
                         </th>
                         {itemListActiveColumns.map((col) => (
                           <th
                             key={col.key}
-                            className={`px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600 ${
+                            className={`px-1.5 py-1.5 ${ui.th} ${
                               col.key === "info" ? "text-center" : ""
                             }`}
                           >
                             {col.key === "info" ? "Info" : col.label}
                           </th>
                         ))}
-                        <th className="px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-600">
-                          Actions
-                        </th>
+                        <th className={`px-1.5 py-1.5 text-center ${ui.th}`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {orderItems.map((row) => (
                         <tr
                           key={`${row.orderId}-${row.itemId}`}
-                          className="hover:bg-gray-50/70 transition-colors"
+                          className={`border-t border-border/80 transition-colors ${ui.rowHover}`}
                         >
-                          <td className="px-2 py-2 align-top text-center">
+                          <td className="px-1.5 py-2 align-top text-center">
                             <input
                               type="checkbox"
                               aria-label={`Select item ${row?.itemId || ""}`}
@@ -6384,7 +6557,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                     : prev.filter((k) => k !== key),
                                 );
                               }}
-                              className="h-3.5 w-3.5 rounded border-border text-brand-600"
+                              className={ui.checkbox}
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
@@ -6393,7 +6566,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               {renderItemListCell(col.key, row)}
                             </td>
                           ))}
-                          <td className="px-2 py-2 align-top">{renderItemListActions(row)}</td>
+                          <td className="px-1.5 py-2 align-top">{renderItemListActions(row)}</td>
                         </tr>
                       ))}
                     </tbody>
