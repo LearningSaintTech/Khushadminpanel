@@ -1,5 +1,9 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { clearAdminOtpSessionStorage, clearDesignerSessionStorage } from "../utils/authRole";
+import {
+  clearAdminOtpSessionStorage,
+  clearDesignerSessionStorage,
+  clearSupportAgentSessionStorage,
+} from "../utils/authRole";
 
 const initialState = {
   loading: false,
@@ -69,6 +73,7 @@ const globalSlice = createSlice({
       localStorage.removeItem("influencer");
       clearDesignerSessionStorage();
       clearAdminOtpSessionStorage();
+      clearSupportAgentSessionStorage();
     },
   },
 });

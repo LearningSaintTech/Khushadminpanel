@@ -7,6 +7,7 @@ import {
   Bell,
   FileText,
   Mail,
+  Headphones,
   Megaphone,
   Package,
   Tags,
@@ -274,6 +275,23 @@ export default function SidebarMainNav({
       >
         <Mail size={ICON} className={iconClass} />
         <span className="truncate">Contact Requests</span>
+      </Link>,
+    );
+
+    push(
+      "Support Tickets",
+      ["support", "ticket", "chat"],
+      canUse(["support-tickets"]),
+      <Link
+        key="support-tickets"
+        to={ap("support-tickets")}
+        className={linkClass(
+          isActive(ap("support-tickets")) ||
+            location.pathname.startsWith(`${ap("support-tickets")}/`),
+        )}
+      >
+        <Headphones size={ICON} className={iconClass} />
+        <span className="truncate">Support Tickets</span>
       </Link>,
     );
 

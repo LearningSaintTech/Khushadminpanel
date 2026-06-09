@@ -64,6 +64,10 @@ import AdminEmailTemplatesPage from "../admin/components/notifications/AdminEmai
 import AdminBroadcastPage from "../admin/components/notifications/AdminBroadcastPage";
 import AdminNotificationTestPage from "../admin/components/notifications/AdminNotificationTestPage";
 import ContactUs from "../admin/components/ContactUs/ContactUs";
+import SupportAgentList from "../admin/components/support/agents/SupportAgentList";
+import SupportAgentForm from "../admin/components/support/agents/SupportAgentForm";
+import SupportTicketList from "../admin/components/support/tickets/SupportTicketList";
+import SupportTicketDetail from "../admin/components/support/tickets/SupportTicketDetail";
 import AuditLogsPage from "../admin/components/audit/AuditLogsPage";
 import InventoryCodesPage from "../admin/components/inventory/InventoryCodesPage";
 import InventoryCodeForm from "../admin/components/inventory/InventoryCodeForm";
@@ -222,6 +226,11 @@ export const adminPanelChildRoutes = [
   <Route key="mf-coins-redirect" path="money-features/redeem-coins" element={<Navigate to="money-features/points-wallet" replace />} />,
   <Route key="prof" path="profile" element={<Profile />} />,
   <Route key="contact" path="contact-us" element={<ContactUs />} />,
+  <Route key="sup-tix" path="support-tickets" element={<SupportTicketList />} />,
+  <Route key="sup-tix-d" path="support-tickets/:id" element={<SupportTicketDetail />} />,
+  <Route key="sup-ag" path="support-agents" element={<SupportAgentList />} />,
+  <Route key="sup-ag-cr" path="support-agents/create" element={<SupportAgentForm />} />,
+  <Route key="sup-ag-ed" path="support-agents/edit/:id" element={<SupportAgentForm />} />,
   <Route key="notif" path="notifications" element={<AdminNotificationsPage />} />,
   <Route key="notif-sent" path="notifications/sent" element={<AdminNotificationHistoryPage />} />,
   <Route key="notif-hist" path="notifications/history" element={<AdminNotificationHistoryPage />} />,

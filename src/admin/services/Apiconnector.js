@@ -9,7 +9,7 @@ import { getLoginPathForPathname } from "../../utils/authRole";
 const apiBaseUrl = "https://api.khushpehno.com/api";
 // const apiBaseUrl = "https://apidev.khushpehno.com/api";
 // const apiBaseUrl = "https://apidev.khushpehno.com/api";
-// const apiBaseUrl =
+// const apiBaseUrl ="http://localhost:5000/api";
 //   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
 //   (import.meta.env.DEV
 //     ? "http://localhost:5000/api"

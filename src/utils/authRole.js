@@ -34,6 +34,8 @@ export function getLoginPathForRole(role) {
       return "/designer/login";
     case "INFLUENCER":
       return "/influencer/login";
+    case "AGENT":
+      return "/support-agent/login";
     default:
       return "/admin";
   }
@@ -51,6 +53,8 @@ export function getHomePathForRole(role) {
       return "/designer/dashboard";
     case "INFLUENCER":
       return "/influencer/dashboard";
+    case "AGENT":
+      return "/support-agent/tickets";
     default:
       return "/admin";
   }
@@ -61,6 +65,7 @@ export function getLoginPathForAllowedRoles(allowedRoles = []) {
   if (allowedRoles.includes("DESIGNER")) return "/designer/login";
   if (allowedRoles.includes("INFLUENCER")) return "/influencer/login";
   if (allowedRoles.includes("DRIVER")) return "/driver/login";
+  if (allowedRoles.includes("AGENT")) return "/support-agent/login";
   if (allowedRoles.includes("SUBADMIN")) return "/subadmin/login";
   if (allowedRoles.includes("ADMIN")) return "/admin";
   return "/admin";
@@ -91,10 +96,22 @@ export function clearAdminOtpSessionStorage() {
   }
 }
 
+export function clearSupportAgentSessionStorage() {
+  try {
+    sessionStorage.removeItem("supportAgentId");
+    sessionStorage.removeItem("supportAgentPhone");
+    localStorage.removeItem("supportAgent_agentId");
+    localStorage.removeItem("supportAgent_phone");
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Drop tokens from other panels so refresh does not cross-login. */
 export function clearOtherPanelSessions(activeRole) {
   const role = normalizeRole(activeRole);
   if (role !== "DESIGNER") clearDesignerSessionStorage();
+  if (role !== "AGENT") clearSupportAgentSessionStorage();
   if (role !== "ADMIN" && role !== "SUBADMIN") clearAdminOtpSessionStorage();
 }
 
@@ -105,6 +122,7 @@ export function getLoginPathForPathname(pathname = "") {
   if (p.startsWith("/subadmin")) return "/subadmin/login";
   if (p.startsWith("/influencer")) return "/influencer/login";
   if (p.startsWith("/driver")) return "/driver/login";
+  if (p.startsWith("/support-agent")) return "/support-agent/login";
   if (p.startsWith("/admin")) return "/admin";
   return "/admin";
 }

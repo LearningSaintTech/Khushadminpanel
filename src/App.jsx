@@ -3,6 +3,7 @@ import { Toaster } from "react-hot-toast";
 import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
+import SupportAgentRoutes from "./routes/supportAgentRoutes";
 import SubAdminRoutes from "./routes/subadminroutes";
 import DesignerRoutes from "./routes/designerroutes";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -30,7 +31,10 @@ function App() {
       <Route path="/influencer/*" element={<InfluencerRoutes />} />
       
       {/* Driver Routes */}
-       <Route path="/driver/*" element={<DriverRoutes />} /> 
+       <Route path="/driver/*" element={<DriverRoutes />} />
+
+      {/* Support Agent Routes */}
+      <Route path="/support-agent/*" element={<SupportAgentRoutes />} />
       
       {/* SubAdmin Routes */}
       <Route path="/subadmin/*" element={<SubAdminRoutes />} />

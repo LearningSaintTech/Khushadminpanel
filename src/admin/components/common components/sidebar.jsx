@@ -17,6 +17,7 @@ import {
   Users,
   UserPlus,
   Truck,
+  Headphones,
   ShieldCheck,
   Search,
   X,
@@ -693,6 +694,19 @@ const Sidebar = ({
                 >
                   <Truck size={16} className={panelIconClass} />
                   {!collapsed && <span className="truncate">Driver</span>}
+                </Link>
+              </SidebarTooltip>
+
+              <SidebarTooltip label="Support Agents" show={collapsed} lightMode={!isDark}>
+                <Link
+                  to={ap("support-agents")}
+                  className={`group ${panelItemClass(
+                    isActive(ap("support-agents")) ||
+                      location.pathname.startsWith(`${ap("support-agents")}/`),
+                  )}`}
+                >
+                  <Headphones size={16} className={panelIconClass} />
+                  {!collapsed && <span className="truncate">Support Agents</span>}
                 </Link>
               </SidebarTooltip>
 
