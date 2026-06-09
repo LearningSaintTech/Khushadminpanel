@@ -168,6 +168,20 @@ export default function SidebarMainNav({
     );
 
     push(
+      "Donations",
+      ["donation", "donations", "charity", "contribute"],
+      canUse(["donation"]) || canUse(["admin"]),
+      <Link
+        key="donation"
+        to={ap("donation")}
+        className={linkClass(location.pathname.startsWith(ap("donation")))}
+      >
+        <HandCoins size={ICON} className={iconClass} />
+        <span className="truncate">Donations</span>
+      </Link>,
+    );
+
+    push(
       "Analytics",
       ["analytics", "workspace", "events", "coupon"],
       canUse(["admin"]) || canUse(["coupons"]),
@@ -1005,6 +1019,7 @@ export default function SidebarMainNav({
     if (matchesQuery("Rewards", ["rewards", "points", "coins"], q))
       setIsMoneyFeaturesOpen(true);
     if (matchesQuery("Orders", ["order", "exchange"], q)) setIsOrdersOpen(true);
+    
   }, [searchQuery]);
 
   if (entries.length === 0 && searchQuery.trim()) {

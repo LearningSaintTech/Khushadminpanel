@@ -94,6 +94,7 @@ import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
 import UsPolicy from "../admin/components/Policy/uspPolicy";
 import UspPolicyForm from "../admin/components/Policy/UspPolicyForm";
+import Donation from "../admin/components/Donation/Donations";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -233,4 +234,5 @@ export const adminPanelChildRoutes = [
   <Route key="usp" path="usp" element={<UsPolicy />} />,
   <Route key="usp-cr" path="usp/create" element={<UspPolicyForm />} />,
   <Route key="usp-ed" path="usp/edit/:id" element={<UspPolicyForm />} />,
+  <Route key="den" path="donation" element={<Donation/>}/>,
 ];

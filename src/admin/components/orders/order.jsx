@@ -66,6 +66,96 @@ import {
   ListChecks,
   BarChart2,
 } from "lucide-react";
+import {
+  mergeOrderItemsFromListSnapshot,
+  normalizeOrderDetailPayload,
+  resolveItemsForExchangeDetailView,
+} from "./orderDetailHelpers";
+import { ExchangeDetailsPanel, exchangeHasVisibleDetails } from "./orderExchangePanel";
+import {
+  getLineShiprocket,
+  getNormalDeliveryShiprocket,
+  getOrderForwardCreateTarget,
+  getOrderForwardPreview,
+  getOrderNormalShiprocketPreview,
+  getOrderShipmentIds,
+  getOrderShiprocketPreview,
+  hasNormalDeliveryInOrder,
+  shiprocketFromItemRow,
+  ShiprocketDetails,
+} from "./orderShiprocketUtils";
+import {
+  formatStatusTokenForUi,
+  getDisplayItemStatus,
+  getDisplayOrderStatus,
+  getItemExchangeIds,
+  getLatestExchange,
+  getLatestExchangeForwardOrder,
+  getLatestExchangeId,
+  getUiItemStatus,
+  isExchangeLineItem,
+  isExchangeOrderEntry,
+  isExchangeStatus,
+  isNormalDeliveryLine,
+  lineItemFromOrderItemRow,
+} from "./orderStatusUtils";
+import {
+  buildAnalyticsCountMap,
+  buildAnalyticsStatusCards,
+  getEffectiveItemStatusConsistency,
+  getFilteredStatusOptions,
+  lineStatusMatchesAdminFilter,
+  ORDER_STATUS_OPTIONS,
+  orderHasMixedLineStatuses,
+  orderMatchesStatusListFilter,
+  summarizeOrderLineStatuses,
+} from "./orderFilterUtils";
+import {
+  DELIVERY_TYPE_TABS,
+  PAYMENT_FILTER_TABS,
+  paymentFilterToQuery,
+  apiErrMessage,
+  getBackendErrorMessages,
+  showBackendErrorsAsToasts,
+  copyTextToClipboard,
+  getStorefrontProductUrl,
+  collectItemLikeImageUrls,
+  firstOrderLineItem,
+  orderLineItems,
+  orderListLineKey,
+  OrderListLineStack,
+  getLineProductDisplayName,
+  itemLikeFromListRow,
+  TableItemImageThumb,
+  TableStoreLink,
+  StoreItemInfoTrigger,
+  StoreOrderInfoTrigger,
+  formatManufacturingModalDate,
+  manufacturingPaymentLabel,
+  getOrderWalletUsedAmount,
+  formatInr,
+  ORDER_LIST_COLUMNS_STORAGE_KEY,
+  ITEM_LIST_COLUMNS_STORAGE_KEY,
+  ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY,
+  ORDER_LIST_TABLE_COLUMNS,
+  ITEM_LIST_TABLE_COLUMNS,
+  ORDER_DETAIL_ITEM_DATA_COLUMNS,
+  orderDetailItemColClass,
+  getShiprocketEligibleItems,
+  loadVisibleColumnsFromStorage,
+  persistVisibleColumns,
+  ColumnPickerDropdown,
+  ManufacturingLineCard,
+  getOrdersUiTokens,
+  OrderDetailRow,
+  OrderDetailSectionHead,
+  OrderDetailDenseGrid,
+  OrderDetailBlock,
+  TableScrollHint,
+  LIST_PAGE_LIMIT_OPTIONS,
+  ListPaginationFooter,
+} from "./orderUiShared.jsx";
+import { OrderAnalyticsPanel } from "./OrderAnalyticsPanel";
 
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
@@ -97,1434 +187,26 @@ function normalizeFulfilmentLineStatus(status) {
   return st;
 }
 
-function lineStatusMatchesAdminFilter(itemStatus, filterStatus) {
-  if (!filterStatus) return true;
-  const st = normalizeFulfilmentLineStatus(itemStatus);
-  const f = normalizeFulfilmentLineStatus(filterStatus);
-  if (f === "EXCHANGE") return st.startsWith("EXCHANGE_");
-  if (f === "DELIVERED") return st === "DELIVERED" || st === "EXCHANGE_DELIVERED";
-  return st === f;
-}
-
 /** Mixed tab: 2+ lines with different statuses; optional Status = present on any line. */
 function isOrderMixedLines(order, statusFilter = "") {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  if (items.length <= 1) return false;
-  const statuses = items
-    .map((it) => normalizeFulfilmentLineStatus(it?.status))
-    .filter(Boolean);
-  if (new Set(statuses).size <= 1) return false;
+  if (!orderHasMixedLineStatuses(order)) return false;
   if (!statusFilter) return true;
-  return statuses.some((st) => lineStatusMatchesAdminFilter(st, statusFilter));
+  const items = Array.isArray(order?.items) ? order.items : [];
+  return items.some((it) =>
+    lineStatusMatchesAdminFilter(it?.status, statusFilter),
+  );
 }
 
 function getOrderLineStatusSummary(order) {
-  const counts = {};
-  const items = Array.isArray(order?.items) ? order.items : [];
-  for (const it of items) {
-    const st = normalizeFulfilmentLineStatus(it?.status);
-    if (!st) continue;
-    counts[st] = (counts[st] || 0) + 1;
-  }
-  return Object.entries(counts)
-    .map(([st, n]) => `${n}× ${FULFILMENT_STATUS_LABELS[st] || st.replace(/_/g, " ")}`)
-    .join(" · ");
+  return summarizeOrderLineStatuses(order);
 }
 
-/** Matches delivery rules + backend `items[].delivery.type` filter (NORMAL, ONE_DAY, 90_MIN) */
-const DELIVERY_TYPE_TABS = [
-  { value: "", label: "All" },
-  { value: "NORMAL", label: "Normal" },
-  { value: "ONE_DAY", label: "One day" },
-  { value: "90_MIN", label: "90 min" },
-];
-
-function getOrdersUiTokens() {
-  return {
-    btnPrimary:
-      "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-brand-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50",
-    btnPrimarySm:
-      "inline-flex h-6 shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded-md bg-brand-600 px-2 text-[10px] font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50",
-    selectToolbar:
-      "h-6 w-[6.25rem] shrink-0 rounded-md border border-border bg-white px-1.5 text-[10px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-100 disabled:opacity-50",
-    btnOutline:
-      "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-stone-700 transition hover:bg-canvas-muted disabled:opacity-40",
-    btnAmber:
-      "inline-flex items-center justify-center gap-1 rounded-lg border border-warning/40 bg-warning px-2.5 py-1 text-[11px] font-medium text-white transition hover:opacity-90",
-    inputCompact:
-      "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100",
-    tableScrollShell:
-      "max-h-[calc(100vh-11rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
-    tableScrollShellMuted:
-      "max-h-[calc(100vh-11rem)] w-full min-w-0 overflow-auto overscroll-contain rounded-xl border border-border bg-white shadow-sm [scrollbar-width:thin]",
-    pageWrap: "text-stone-900",
-    outerWrap: "",
-    contentWrap: "",
-    toolbarCard: "mb-2 rounded-xl border border-border bg-white p-1.5 shadow-sm",
-    filterCard: "mb-2 overflow-visible rounded-xl border border-border bg-white shadow-sm",
-    tabActive: "bg-brand-600 text-white shadow-sm",
-    tabInactive: "border border-border bg-white text-stone-600 hover:bg-canvas-muted",
-    deliveryTabActive: "bg-brand-600 text-white shadow-sm",
-    deliveryTabInactive: "border border-border bg-white text-stone-600 hover:bg-canvas-muted",
-    paymentTabActive: "bg-warning text-white shadow-sm",
-    paymentTabInactive: "border border-border bg-canvas-muted text-stone-700 hover:bg-white",
-    thead: "sticky top-0 z-10 bg-canvas-muted/95 shadow-[0_1px_0_0_var(--color-border)]",
-    th: "text-[10px] font-semibold uppercase tracking-wide text-stone-500",
-    rowHover: "hover:bg-brand-50/30",
-    checkbox: "h-3.5 w-3.5 rounded border-border accent-brand-600",
-    accentText: "text-brand-700",
-    errorBox:
-      "mb-2 flex items-center gap-2 rounded-xl border border-danger/30 bg-danger-bg px-3 py-2 text-[11px] text-danger",
-    bulkBar:
-      "mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2 text-[11px] shadow-sm",
-    detailItemsToolbar:
-      "mb-2 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-white px-2.5 py-1.5 text-[11px] shadow-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
-    analyticsPanel:
-      "mb-2 rounded-xl border border-border bg-white px-2.5 py-2 shadow-sm",
-    analyticsCard:
-      "inline-flex min-w-[5.5rem] flex-col rounded-lg border px-2 py-1.5 text-left transition",
-    analyticsCardActive: "border-brand-500 bg-brand-50 ring-2 ring-brand-200",
-    analyticsCardIdle: "border-border bg-canvas-muted/30 hover:border-brand-300 hover:bg-brand-50/40",
-    detailDocBtn:
-      "inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[9px] font-medium transition disabled:opacity-60",
-    detailDocBtnBrand:
-      "border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100",
-    detailDocBtnMuted:
-      "border-border bg-canvas-muted text-stone-700 hover:bg-white",
-    detailShell: "min-w-0 overflow-hidden rounded-xl border border-border bg-white shadow-sm",
-    detailHeader: "border-b border-border bg-canvas-muted/40 px-3 py-2",
-    detailOverview: "border-b border-border px-2 pb-2 pt-1.5",
-    detailSummaryBox: "overflow-hidden rounded-lg border border-border bg-white",
-    detailSummaryHead:
-      "flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-canvas-muted/40 px-2.5 py-1.5 text-[11px]",
-    detailSummaryCols:
-      "grid divide-y border-border/80 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.82fr)_minmax(0,0.82fr)] lg:divide-x lg:divide-y-0",
-    detailSummaryCol: "min-w-0 p-2",
-    detailSummaryFoot:
-      "grid divide-y border-t border-border/80 lg:grid-cols-2 lg:divide-x lg:divide-y-0",
-    detailBody: "space-y-3 p-3",
-    detailGrid: "grid grid-cols-1 gap-3 sm:grid-cols-3",
-    detailSection: "rounded-lg border border-border bg-canvas-muted/25 p-2.5",
-    detailSectionTitle:
-      "mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500",
-  };
-}
-
-function OrderDetailRow({ label, children, className = "", wide = false }) {
-  return (
-    <>
-      <dt className={`shrink-0 text-stone-500 ${className}`}>{label}</dt>
-      <dd
-        className={`min-w-0 font-medium text-stone-900 ${wide ? "col-span-3" : ""}`}
-      >
-        {children}
-      </dd>
-    </>
-  );
-}
-
-function OrderDetailSectionHead({ title, icon: Icon }) {
-  return (
-    <div className="mb-1 flex items-center gap-1 border-b border-border/50 pb-0.5">
-      {Icon ? <Icon className="h-3 w-3 shrink-0 text-brand-600" aria-hidden /> : null}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
-        {title}
-      </h4>
-    </div>
-  );
-}
-
-function OrderDetailDenseGrid({ children, pairs = 2 }) {
-  const cols =
-    pairs === 2
-      ? "grid-cols-[minmax(3.25rem,auto)_minmax(0,1fr)]"
-      : "grid-cols-[minmax(3.25rem,auto)_minmax(0,1fr)_minmax(3.25rem,auto)_minmax(0,1fr)]";
-  return (
-    <dl className={`grid ${cols} gap-x-2.5 gap-y-0.5 text-[11px] leading-snug`}>
-      {children}
-    </dl>
-  );
-}
-
-function OrderDetailBlock({ title, icon: Icon, children, className = "" }) {
-  return (
-    <section className={`min-w-0 ${className}`}>
-      <OrderDetailSectionHead title={title} icon={Icon} />
-      <OrderDetailDenseGrid pairs={1}>{children}</OrderDetailDenseGrid>
-    </section>
-  );
-}
-
-function TableScrollHint() {
-  return (
-    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-stone-400">
-      <span aria-hidden className="select-none text-stone-300">
-        ↔
-      </span>
-      <span>Scroll horizontally to view all columns</span>
-    </p>
-  );
-}
-
-const LIST_PAGE_LIMIT_OPTIONS = [10, 20, 50, 100];
-
-function ListPaginationFooter({
-  loading,
-  page,
-  totalPages,
-  total = 0,
-  limit,
-  onPageChange,
-  btnOutline,
-  emptyLabel = "0 results",
-}) {
-  const safeTotal = Number(total) || 0;
-  const safeLimit = Math.max(1, Number(limit) || 10);
-  const tp = Math.max(1, Number(totalPages) || 1);
-  const rangeStart = safeTotal === 0 ? 0 : (page - 1) * safeLimit + 1;
-  const rangeEnd = safeTotal === 0 ? 0 : Math.min(page * safeLimit, safeTotal);
-
-  return (
-    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-[11px] text-stone-500">
-        {loading ? (
-          "Loading…"
-        ) : safeTotal === 0 ? (
-          emptyLabel
-        ) : (
-          <>
-            Showing <span className="font-medium text-stone-700">{rangeStart}</span>–
-            <span className="font-medium text-stone-700">{rangeEnd}</span> of{" "}
-            <span className="font-medium text-stone-700">{safeTotal}</span> total · Page{" "}
-            <span className="font-medium text-stone-700">{page}</span> of{" "}
-            <span className="font-medium text-stone-700">{tp}</span>
-          </>
-        )}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={page <= 1 || loading}
-          onClick={() => onPageChange(Math.max(1, page - 1))}
-          className={btnOutline}
-        >
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
-        </button>
-        <button
-          type="button"
-          disabled={page >= tp || loading}
-          onClick={() => onPageChange(page + 1)}
-          className={btnOutline}
-        >
-          Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Maps UI tab → API query (pending Razorpay/Nimble, not COD) */
-const PAYMENT_FILTER_TABS = [
-  { value: "", label: "All payments" },
-  { value: "pending_online", label: "Pending online (not COD)" },
-];
-
-const paymentFilterToQuery = (paymentFilter) => {
-  if (paymentFilter === "pending_online") {
-    return { paymentStatus: "PENDING", paymentMode: "ONLINE" };
-  }
-  return { paymentStatus: undefined, paymentMode: undefined };
-};
-
-/** apiConnector rejects with a string message; success body is { success, message, data } */
-const apiErrMessage = (err, fallback) =>
-  typeof err === "string" ? err : err?.response?.data?.message || err?.message || fallback;
-
-const getBackendErrorMessages = (err, fallback) => {
-  const data = err?.response?.data ?? {};
-  const messages = [];
-  const push = (value) => {
-    if (!value) return;
-    const str = String(value).trim();
-    if (!str) return;
-    if (!messages.includes(str)) messages.push(str);
-  };
-
-  if (typeof err === "string") push(err);
-  push(data?.message);
-  push(data?.error);
-  push(err?.message);
-
-  const errors = data?.errors;
-  if (Array.isArray(errors)) {
-    errors.forEach((entry) => {
-      if (typeof entry === "string") {
-        push(entry);
-        return;
-      }
-      push(entry?.msg || entry?.message || entry?.error);
-      if (entry?.path && (entry?.msg || entry?.message)) {
-        push(`${entry.path}: ${entry.msg || entry.message}`);
-      }
-    });
-  } else if (errors && typeof errors === "object") {
-    Object.entries(errors).forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        value.forEach((v) => push(`${key}: ${v}`));
-      } else if (value && typeof value === "object") {
-        push(value?.message || value?.msg || `${key}: ${JSON.stringify(value)}`);
-      } else {
-        push(`${key}: ${value}`);
-      }
-    });
-  }
-
-  if (messages.length === 0 && fallback) push(fallback);
-  return messages;
-};
-
-const showBackendErrorsAsToasts = (err, fallback) => {
-  const msgs = getBackendErrorMessages(err, fallback);
-  msgs.slice(0, 6).forEach((m) => toast.error(m, { duration: 5500 }));
-  return msgs[0] || fallback;
-};
-
-async function copyTextToClipboard(value, label = "Copied") {
-  const text = value == null ? "" : String(value);
-  if (!text.trim()) return;
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success(label);
-  } catch (err) {
-    console.error("Clipboard copy failed:", err);
-    toast.error("Copy failed");
-  }
-}
-
-const getItemExchangeIds = (item) =>
-  Array.isArray(item?.exchanges)
-    ? item.exchanges.map((ex) => ex?._id).filter(Boolean).map(String)
-    : [];
-
-const getLatestExchangeId = (item) => {
-  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
-  if (exchanges.length === 0) return null;
-  exchanges.sort((a, b) => {
-    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
-    return bTs - aTs;
-  });
-  return exchanges[0]?._id ? String(exchanges[0]._id) : null;
-};
-
-const getLatestExchange = (item) => {
-  const exchanges = Array.isArray(item?.exchanges) ? [...item.exchanges] : [];
-  if (exchanges.length === 0) return null;
-  exchanges.sort((a, b) => {
-    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
-    return bTs - aTs;
-  });
-  return exchanges[0] || null;
-};
-
-/** Progress order for standard fulfilment lines (courier / Shiprocket outbound). */
-const FULFILMENT_FLOW_RANK = {
-  CREATED: 5,
-  CONFIRMED: 10,
-  PROCESSING: 20,
-  PICKUP_GENERATED: 28,
-  PICKUP_EXCEPTION: 29,
-  SHIPPED: 40,
-  OUT_FOR_DELIVERY: 50,
-  DELIVERED: 60,
-  CANCELLED: 90,
-  CANCELED: 90,
-};
-
-/** Progress order for exchange line items — used when backend `item.status` lags Shiprocket/history. */
-const EXCHANGE_FLOW_RANK = {
-  EXCHANGE_REQUESTED: 10,
-  EXCHANGE_APPROVED: 20,
-  EXCHANGE_PICKUP_SCHEDULED: 30,
-  EXCHANGE_PICKUP_EXCEPTION: 35,
-  EXCHANGE_OUT_FOR_PICKUP: 40,
-  EXCHANGE_PICKED: 50,
-  /** Return leg in transit to hub (Shiprocket reverse) */
-  EXCHANGE_RETURN_IN_TRANSIT: 55,
-  EXCHANGE_RECEIVED: 60,
-  EXCHANGE_PROCESSING: 70,
-  EXCHANGE_SHIPPED: 80,
-  EXCHANGE_OUT_FOR_DELIVERY: 90,
-  EXCHANGE_DELIVERED: 100,
-  EXCHANGE_COMPLETED: 110,
-};
-
-const normalizeItemStatusToken = (s) =>
-  String(s || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "_");
-
-const mapExchangeDocumentStatusToItemStatus = (raw) => {
-  const k = String(raw || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, "");
-  const map = {
-    requested: "EXCHANGE_REQUESTED",
-    pending: "EXCHANGE_REQUESTED",
-    approved: "EXCHANGE_APPROVED",
-    rejected: "EXCHANGE_REJECTED",
-    pickupscheduled: "EXCHANGE_PICKUP_SCHEDULED",
-    outforpickup: "EXCHANGE_OUT_FOR_PICKUP",
-    pickedup: "EXCHANGE_PICKED",
-    picked: "EXCHANGE_PICKED",
-    received: "EXCHANGE_RECEIVED",
-    processing: "EXCHANGE_PROCESSING",
-    shipped: "EXCHANGE_SHIPPED",
-    outfordelivery: "EXCHANGE_OUT_FOR_DELIVERY",
-    delivered: "EXCHANGE_DELIVERED",
-    completed: "EXCHANGE_COMPLETED",
-  };
-  return map[k] ? normalizeItemStatusToken(map[k]) : null;
-};
-
-/** Shiprocket *outbound* (normal order) human status → fulfilment item status key */
-const mapShiprocketOutboundStatusToItemStatus = (raw) => {
-  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
-  if (!u) return null;
-  if (u.includes("CANCEL") || u === "CANCELED") return "CANCELLED";
-  if (u.includes("DELIVERED") && !u.includes("OUT FOR")) return "DELIVERED";
-  if (u.includes("OUT FOR DELIVERY") || u.includes("OUT_FOR_DELIVERY"))
-    return "OUT_FOR_DELIVERY";
-  if (
-    u.includes("PICKUP EXCEPTION") ||
-    u.includes("PICKUP RESCHEDULED") ||
-    u.includes("PICKUP_RESCHEDULED")
-  )
-    return "PICKUP_EXCEPTION";
-  if (
-    u.includes("PICKUP GENERATED") ||
-    u.includes("LABEL GENERATED") ||
-    u.includes("AWB GENERATED") ||
-    (u.includes("AWB") && u.includes("ASSIGN"))
-  )
-    return "PICKUP_GENERATED";
-  if (
-    u.includes("IN TRANSIT") ||
-    u.includes("SHIPPED") ||
-    u.includes("DISPATCHED") ||
-    (u.includes("PICKED UP") && !u.includes("RETURN"))
-  )
-    return "SHIPPED";
-  if (
-    u === "NEW" ||
-    u.includes("PROCESSING") ||
-    u.includes("MANIFEST") ||
-    u.includes("BOOKED") ||
-    u.includes("READY TO SHIP")
-  )
-    return "PROCESSING";
-  return null;
-};
-
-/** Shiprocket *return* shipment human status → order item status key */
-const mapShiprocketReturnStatusToItemStatus = (raw) => {
-  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
-  if (!u) return null;
-  if (u.includes("RETURN PICKED UP") || u === "PICKED UP" || u.includes("RIDER PICKED"))
-    return "EXCHANGE_PICKED";
-  if (u.includes("RETURN IN TRANSIT") || (u.includes("IN TRANSIT") && u.includes("RETURN")))
-    return "EXCHANGE_RETURN_IN_TRANSIT";
-  if (u.includes("OUT FOR PICKUP") || u.includes("OUT_FOR_PICKUP") || u.includes("PICKUP ASSIGNED"))
-    return "EXCHANGE_OUT_FOR_PICKUP";
-  if (u.includes("PICKUP EXCEPTION") || u.includes("PICKUP RESCHEDULED"))
-    return "EXCHANGE_PICKUP_EXCEPTION";
-  if (
-    u.includes("PICKUP GENERATED") ||
-    u.includes("SCHEDULED") ||
-    u.includes("MANIFEST") ||
-    u === "NEW" ||
-    u.includes("LABEL GENERATED")
-  )
-    return "EXCHANGE_PICKUP_SCHEDULED";
-  if (u.includes("DELIVERED") && (u.includes("RETURN") || u.includes("REVERSE") || u.includes("SELLER")))
-    return "EXCHANGE_RECEIVED";
-  return null;
-};
-
-/** Shiprocket *forward* replacement shipment — takes priority once return is created / in parallel */
-const mapShiprocketForwardStatusToItemStatus = (raw) => {
-  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
-  if (!u) return null;
-  if (u.includes("DELIVERED")) return "EXCHANGE_DELIVERED";
-  if (u.includes("OUT FOR DELIVERY") || u.includes("OUT_FOR_DELIVERY"))
-    return "EXCHANGE_OUT_FOR_DELIVERY";
-  if (
-    u.includes("SHIPPED") ||
-    u.includes("IN TRANSIT") ||
-    u.includes("PICKED UP") ||
-    u.includes("DISPATCHED")
-  )
-    return "EXCHANGE_SHIPPED";
-  if (
-    u.includes("NEW") ||
-    u.includes("PROCESSING") ||
-    u.includes("LABEL") ||
-    u.includes("MANIFEST") ||
-    u.includes("BOOKED")
-  )
-    return "EXCHANGE_PROCESSING";
-  return null;
-};
-
-const getStatusProgressRank = (key) => {
-  const k = normalizeItemStatusToken(key);
-  if (!k) return -1;
-  if (k.startsWith("EXCHANGE_")) return EXCHANGE_FLOW_RANK[k] ?? 0;
-  return FULFILMENT_FLOW_RANK[k] ?? 0;
-};
-
-const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => {
-  let best = null;
-  let bestRank = -1;
-  for (const c of candidates) {
-    if (!c) continue;
-    const key = normalizeItemStatusToken(c);
-    if (!key) continue;
-    if (exchangeOnly && !key.startsWith("EXCHANGE_")) continue;
-    const r = getStatusProgressRank(key);
-    if (r > bestRank) {
-      bestRank = r;
-      best = key;
-    }
-  }
-  return bestRank >= 0 ? best : null;
-};
-
-const collectItemStatusCandidates = (item) => {
-  const candidates = [];
-  const add = (s) => {
-    if (!s) return;
-    const mapped =
-      mapShiprocketOutboundStatusToItemStatus(s) ||
-      mapShiprocketReturnStatusToItemStatus(s) ||
-      mapShiprocketForwardStatusToItemStatus(s) ||
-      mapExchangeDocumentStatusToItemStatus(s);
-    if (mapped) candidates.push(mapped);
-    const normalized = normalizeItemStatusToken(s);
-    if (normalized) candidates.push(normalized);
-  };
-
-  add(item?.status);
-  if (Array.isArray(item?.statusHistory)) {
-    for (const h of item.statusHistory) add(h?.status);
-  }
-
-  if (isExchangeLineItem(item)) {
-    const ex = getLatestExchange(item);
-    if (ex) {
-      add(ex.status);
-      add(ex.shiprocket?.returnOrder?.status);
-      add(ex.shiprocket?.forwardOrder?.status);
-    }
-  } else if (isNormalDeliveryLine(item)) {
-    add(item?.shiprocket?.status);
-  }
-
-  return candidates;
-};
-
-/**
- * Single status for UI — merges line API status, history, and Shiprocket/courier
- * so table, details, and courier column stay aligned.
- */
-const getDisplayItemStatus = (item) => {
-  if (!item) return "";
-  const baseRaw = item?.status || "";
-  const base = normalizeItemStatusToken(baseRaw);
-  if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
-  if (base === "CANCELLED" || base === "CANCELED") return "CANCELLED";
-
-  const candidates = collectItemStatusCandidates(item);
-  const best = isExchangeLineItem(item)
-    ? pickHighestDisplayStatus(candidates, { exchangeOnly: true }) ||
-      pickHighestDisplayStatus(candidates)
-    : pickHighestDisplayStatus(candidates);
-
-  return best || baseRaw || "";
-};
-
-const getDisplayOrderStatus = (order) => {
-  const base = order?.status || order?.orderStatus || "";
-  const items = order?.items;
-  if (!Array.isArray(items) || items.length === 0) return base;
-  if (items.length === 1) return getDisplayItemStatus(items[0]) || base;
-  const shown = items.map((it) => getDisplayItemStatus(it)).filter(Boolean);
-  if (shown.length === 0) return base;
-  const ranked = pickHighestDisplayStatus(shown);
-  return ranked || base;
-};
-
-/** Rebuild a line-like object from an admin “order item” list row for display helpers. */
-const lineItemFromOrderItemRow = (row) => {
-  if (!row || typeof row !== "object") return null;
-  const nested = row.item && typeof row.item === "object" ? row.item : {};
-  return {
-    ...nested,
-    status: row.itemStatus ?? nested.status ?? "",
-    statusHistory: nested.statusHistory,
-    exchanges: nested.exchanges,
-    shiprocket: nested.shiprocket ?? row.shiprocket,
-    courier: nested.courier ?? row.courier,
-    delivery:
-      nested.delivery ||
-      (row.deliveryType ? { type: row.deliveryType } : undefined),
-  };
-};
-
-const STORE_PUBLIC_ORIGIN =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_PUBLIC_STORE_URL
-    ? String(import.meta.env.VITE_PUBLIC_STORE_URL).trim().replace(/\/$/, "")
-    : "https://khushpehno.com";
-
-function slugifyForStoreProduct(name) {
-  if (!name) return "";
-  return String(name)
-    .toLowerCase()
-    .replace(/['".,!?()[\]{}:;@#$%^&*+=~`|\\/<>]/g, " ")
-    .replace(/&/g, " and ")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function getStorefrontProductUrl(itemId, itemLike) {
-  const idStr = itemId != null ? String(itemId) : "";
-  if (!idStr) return STORE_PUBLIC_ORIGIN;
-  const label = itemLike?.name || itemLike?.sku || "";
-  const slug = slugifyForStoreProduct(label);
-  const path = slug ? `/product/${slug}/${idStr}` : `/product/${idStr}`;
-  return `${STORE_PUBLIC_ORIGIN}${path}`;
-}
-
-function collectItemLikeImageUrls(itemLike) {
-  const urls = [];
-  const push = (u) => {
-    if (typeof u !== "string") return;
-    const t = u.trim();
-    if (t && !urls.includes(t)) urls.push(t);
-  };
-  if (!itemLike || typeof itemLike !== "object") return urls;
-  push(itemLike.variant?.imageUrl);
-  if (Array.isArray(itemLike.variant?.images)) {
-    itemLike.variant.images.forEach((x) => {
-      if (typeof x === "string") push(x);
-      else if (x?.url) push(x.url);
-    });
-  }
-  if (Array.isArray(itemLike.images)) {
-    itemLike.images.forEach((x) => {
-      if (typeof x === "string") push(x);
-      else if (x?.url) push(x.url);
-    });
-  }
-  if (Array.isArray(itemLike.variants)) {
-    itemLike.variants.forEach((v) => {
-      push(v?.imageUrl);
-      if (Array.isArray(v?.images)) {
-        v.images.forEach((img) => {
-          if (typeof img === "string") push(img);
-          else if (img?.url) push(img.url);
-        });
-      }
-    });
-  }
-  return urls;
-}
-
-function firstOrderLineItem(order) {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  return items[0] || null;
-}
-
-function orderLineItems(order) {
-  return Array.isArray(order?.items) ? order.items : [];
-}
-
-function orderListLineKey(item, idx) {
-  return String(item?.itemId || item?._id || `line-${idx}`);
-}
-
-/** Stack each order line in one table cell (same column, one row per order). */
-function OrderListLineStack({ order, children, className = "flex flex-col gap-2 divide-y divide-gray-100" }) {
-  const items = orderLineItems(order);
-  if (!items.length) return <span className="text-xs text-gray-400">—</span>;
-  if (items.length === 1) {
-    return <div className="min-w-0">{children(items[0], 0)}</div>;
-  }
-  return (
-    <div className={className}>
-      {items.map((item, idx) => (
-        <div
-          key={orderListLineKey(item, idx)}
-          className="flex min-w-0 items-start gap-1.5 first:pt-0"
-        >
-          <span
-            className="mt-0.5 shrink-0 tabular-nums text-[9px] font-semibold text-stone-400"
-            title={`Line ${idx + 1}`}
-          >
-            {idx + 1}.
-          </span>
-          <div className="min-w-0 flex-1">{children(item, idx)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Catalog name, or variant / SKU label when name is not on the order snapshot. */
-function getLineProductDisplayName(item) {
-  if (!item || typeof item !== "object") return "";
-  const name = item.name != null ? String(item.name).trim() : "";
-  if (name) return name;
-  const v = item.variant || {};
-  const variantLabel = [v.color, v.size].filter(Boolean).join(" / ");
-  if (variantLabel) return variantLabel;
-  return String(item.sku || v.sku || "").trim();
-}
-
-function itemLikeFromListRow(row) {
-  return row?.item && typeof row.item === "object" ? row.item : {};
-}
-
-function TableItemImageThumb({ itemLike, onPickImage, sizeClass = "h-10 w-10" }) {
-  const imgs = collectItemLikeImageUrls(itemLike);
-  if (!imgs[0]) {
-    return (
-      <div
-        className={`flex ${sizeClass} items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 text-[9px] text-gray-400`}
-      >
-        —
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={() => onPickImage?.(imgs[0])}
-      className={`${sizeClass} shrink-0 overflow-hidden rounded border border-gray-200 bg-gray-50`}
-      title="View image"
-    >
-      <img src={imgs[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
-    </button>
-  );
-}
-
-function TableStoreLink({ itemId, itemLike }) {
-  const url = getStorefrontProductUrl(itemId, itemLike);
-  if (!itemId) return <span className="text-xs text-gray-400">—</span>;
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-0.5 text-xs font-medium text-brand-700 hover:text-brand-900"
-      title={url}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <ExternalLink size={12} className="shrink-0" />
-      Store
-    </a>
-  );
-}
-
-function StoreItemInfoTrigger({ itemId, itemLike, quantity, onOpenDetails }) {
-  const url = getStorefrontProductUrl(itemId, itemLike);
-  const qtyLabel =
-    quantity != null && quantity !== "" ? String(quantity) : "—";
-  return (
-    <div className="relative flex shrink-0 self-start pt-0.5 group">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails?.();
-        }}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
-        aria-label="Store product link and images"
-      >
-        <Info className="h-4 w-4" strokeWidth={2} />
-      </button>
-      <div
-        role="tooltip"
-        className="pointer-events-none invisible absolute left-0 top-full z-[80] mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-2.5 text-left opacity-0 shadow-lg transition-opacity duration-150 group-hover:visible group-hover:opacity-100"
-      >
-        <p className="text-[11px] font-semibold text-gray-900">
-          Quantity: {qtyLabel}
-        </p>
-        <p className="mt-1 break-all font-mono text-[10px] leading-snug text-brand-800">
-          {url}
-        </p>
-        <p className="mt-1 text-[10px] text-gray-500">Click icon for images</p>
-      </div>
-    </div>
-  );
-}
-
-function StoreOrderInfoTrigger({ order, onOpenDetails }) {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const totalQty = items.reduce((s, it) => s + Number(it?.quantity ?? 0), 0);
-  const single = items.length === 1;
-  const first = single ? items[0] : null;
-  const url = first ? getStorefrontProductUrl(first.itemId, first) : null;
-  return (
-    <div className="relative flex shrink-0 justify-center group">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails?.();
-        }}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
-        aria-label="Store links and images for order lines"
-      >
-        <Info className="h-3.5 w-3.5" strokeWidth={2} />
-      </button>
-      <div
-        role="tooltip"
-        className="pointer-events-none invisible absolute left-1/2 top-full z-[80] mt-1 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-2.5 text-left opacity-0 shadow-lg transition-opacity duration-150 group-hover:visible group-hover:opacity-100"
-      >
-        <p className="text-[11px] font-semibold text-gray-900">
-          {items.length} line{items.length === 1 ? "" : "s"} · Qty total:{" "}
-          {totalQty || "—"}
-        </p>
-        {single && url ? (
-          <p className="mt-1 break-all font-mono text-[10px] leading-snug text-brand-800">
-            {url}
-          </p>
-        ) : (
-          <p className="mt-1 text-[10px] text-gray-600">
-            Multiple products — click for links and images
-          </p>
-        )}
-        <p className="mt-1 text-[10px] text-gray-500">Click icon for gallery</p>
-      </div>
-    </div>
-  );
-}
-
-/** Same idea as manufacturing PDF (Asia/Kolkata, en-IN). */
-function formatManufacturingModalDate(d) {
-  if (d == null || d === "") return "—";
-  try {
-    return new Date(d).toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "numeric",
-      month: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return String(d);
-  }
-}
-
-function getOrderWalletUsedAmount(order) {
-  if (!order) return 0;
-  const raw = order.pricing?.walletUsedAmount ?? order.walletUsedAmount ?? 0;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function formatInr(amount) {
-  return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
-}
-
-const ORDER_LIST_COLUMNS_STORAGE_KEY = "khush_admin_order_list_visible_columns";
-const ITEM_LIST_COLUMNS_STORAGE_KEY = "khush_admin_item_list_visible_columns";
-const ORDER_DETAIL_ITEM_COLUMNS_STORAGE_KEY = "khush_admin_order_detail_item_visible_columns";
-
-/** By order — main table column config (render fns added inside Orders). */
-const ORDER_LIST_TABLE_COLUMNS = [
-  { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
-  { key: "image", label: "Image", defaultVisible: true },
-  { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
-  { key: "date", label: "Order date", defaultVisible: true },
-  { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
-  { key: "customer", label: "Customer name", defaultVisible: true },
-  { key: "phone", label: "Customer phone", defaultVisible: true },
-  { key: "email", label: "Email", defaultVisible: false },
-  { key: "notes", label: "Notes", defaultVisible: true },
-  { key: "qty", label: "Quantity", defaultVisible: true },
-  { key: "productName", label: "Dress / product name", defaultVisible: true },
-  { key: "productId", label: "Catalog product ID", defaultVisible: false },
-  { key: "lineSku", label: "Line SKU", defaultVisible: false },
-  { key: "variantSku", label: "Variant SKU", defaultVisible: false },
-  { key: "size", label: "Size", defaultVisible: false },
-  { key: "color", label: "Color", defaultVisible: false },
-  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
-  { key: "storeLink", label: "Store link", defaultVisible: false },
-  { key: "total", label: "Order amount", defaultVisible: true },
-  { key: "walletUsed", label: "Wallet used", defaultVisible: true },
-  { key: "payment", label: "Payment (order)", defaultVisible: false },
-  { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
-  { key: "status", label: "Status", defaultVisible: true },
-  { key: "courier", label: "Courier / Shiprocket", defaultVisible: true },
-  { key: "city", label: "City", defaultVisible: false },
-];
-
-/** By item — table view column config. */
-const ITEM_LIST_TABLE_COLUMNS = [
-  { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
-  { key: "image", label: "Image", defaultVisible: true },
-  { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
-  { key: "date", label: "Order date", defaultVisible: true },
-  { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
-  { key: "customer", label: "Customer name", defaultVisible: true },
-  { key: "phone", label: "Customer phone", defaultVisible: true },
-  { key: "product", label: "Dress / product name", defaultVisible: true },
-  { key: "productId", label: "Catalog product ID", defaultVisible: false },
-  { key: "itemId", label: "Item ID", defaultVisible: false },
-  { key: "sku", label: "Line SKU", defaultVisible: true },
-  { key: "variantSku", label: "Variant SKU", defaultVisible: false },
-  { key: "size", label: "Size", defaultVisible: true },
-  { key: "color", label: "Color", defaultVisible: true },
-  { key: "variant", label: "Size / color (combined)", defaultVisible: false },
-  { key: "qty", label: "Quantity", defaultVisible: true },
-  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
-  { key: "storeLink", label: "Store link", defaultVisible: false },
-  { key: "payment", label: "Payment (order)", defaultVisible: false },
-  { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
-  { key: "status", label: "Line status", defaultVisible: true },
-  { key: "delivery", label: "Delivery", defaultVisible: true },
-  { key: "shiprocket", label: "Shiprocket", defaultVisible: false },
-];
-
-/** Order detail — line items table (data columns; status/ship/driver/update stay fixed). */
-const ORDER_DETAIL_ITEM_DATA_COLUMNS = [
-  { key: "image", label: "Image", defaultVisible: true },
-  { key: "productName", label: "Dress / product name", defaultVisible: true },
-  { key: "productId", label: "Catalog product ID", defaultVisible: false },
-  { key: "itemId", label: "Item ID", defaultVisible: false },
-  { key: "lineSku", label: "Line SKU", defaultVisible: true },
-  { key: "variantSku", label: "Variant SKU", defaultVisible: true },
-  { key: "size", label: "Size", defaultVisible: true },
-  { key: "color", label: "Color", defaultVisible: true },
-  { key: "qty", label: "Quantity", defaultVisible: true },
-  { key: "price", label: "Price", defaultVisible: true },
-  { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
-  { key: "payment", label: "Payment (order)", defaultVisible: false },
-  { key: "customerName", label: "Customer name", defaultVisible: false },
-  { key: "customerPhone", label: "Customer phone", defaultVisible: false },
-  { key: "storeLink", label: "Store link", defaultVisible: false },
-];
-
-const ORDER_DETAIL_ITEM_COL_CLASS = {
-  image: "w-12",
-  productName: "min-w-[7rem] max-w-[10.5rem]",
-  productId: "min-w-[4.5rem] max-w-[7rem]",
-  itemId: "min-w-[4.5rem] max-w-[7rem]",
-  lineSku: "min-w-[6rem] max-w-[9rem]",
-  variantSku: "min-w-[6rem] max-w-[9rem]",
-  size: "w-9 text-center",
-  color: "w-9 text-center",
-  qty: "w-8 text-center",
-  price: "w-14 text-right",
-  pincode: "w-14",
-  payment: "w-16",
-  customerName: "min-w-[5.5rem] max-w-[8rem]",
-  customerPhone: "min-w-[5.5rem] max-w-[8rem]",
-  storeLink: "w-14",
-};
-
-function orderDetailItemColClass(key) {
-  return ORDER_DETAIL_ITEM_COL_CLASS[key] || "min-w-0";
-}
-
-/** NORMAL lines that can be included in a new Shiprocket shipment group order. */
-function getShiprocketEligibleItems(order) {
-  if (!order?.items?.length) return [];
-  const shipments = Array.isArray(order.shipments) ? order.shipments : [];
-  const groupAlreadyShipped = new Set(
-    shipments
-      .filter((s) => s?.shiprocket?.orderId)
-      .map((s) => String(s.shipmentGroupId)),
-  );
-  return order.items.filter((item) => {
-    if (String(item.delivery?.type || "").toUpperCase() !== "NORMAL") return false;
-    if (item.shiprocket?.orderId) return false;
-    const gid = String(item.shipmentGroupId || "");
-    if (gid && groupAlreadyShipped.has(gid)) return false;
-    return true;
-  });
-}
-
-function defaultVisibleKeysFor(columns) {
-  return columns.filter((c) => c.defaultVisible).map((c) => c.key);
-}
-
-function loadVisibleColumnsFromStorage(storageKey, columns) {
-  const fallback = defaultVisibleKeysFor(columns);
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return fallback;
-    const validKeys = new Set(columns.map((c) => c.key));
-    const keys = [...new Set(parsed.filter((k) => validKeys.has(k)))];
-    columns.filter((c) => c.alwaysVisible).forEach((c) => {
-      if (!keys.includes(c.key)) keys.unshift(c.key);
-    });
-    columns.filter((c) => c.defaultVisible).forEach((c) => {
-      if (!keys.includes(c.key)) keys.push(c.key);
-    });
-    return keys.length ? keys : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function persistVisibleColumns(storageKey, keys) {
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(keys));
-  } catch {
-    /* ignore */
-  }
-}
-
-function ColumnPickerDropdown({
-  columns,
-  visibleKeys,
-  onToggle,
-  onReset,
-  onSelectAll,
-  open,
-  onOpenChange,
-  badgeClass = "bg-brand-100 text-brand-900",
-  /** 'end' = anchor to trigger's right (toolbar on the right); 'start' = anchor left */
-  align = "end",
-}) {
-  const activeCount = columns.filter((c) => visibleKeys.includes(c.key)).length;
-  const panelAlignClass =
-    align === "start"
-      ? "sm:left-0 sm:right-auto"
-      : "sm:right-0 sm:left-auto";
-
-  return (
-    <div className="relative shrink-0" data-order-column-picker>
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-      >
-        <Columns3 className="h-3.5 w-3.5 shrink-0" />
-        Columns
-        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${badgeClass}`}>
-          {activeCount}
-        </span>
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-stone-900/25 sm:hidden"
-            aria-label="Close column picker"
-            onClick={() => onOpenChange(false)}
-          />
-          <div
-            role="dialog"
-            aria-label="Choose columns to show"
-            className={`fixed z-50 flex max-h-[min(70vh,22rem)] w-[calc(100vw-1.5rem)] max-w-sm flex-col rounded-xl border border-border bg-white p-3 shadow-xl ring-1 ring-black/5 left-1/2 top-[max(5rem,12vh)] -translate-x-1/2 sm:absolute sm:top-full sm:mt-1 sm:max-h-[min(calc(100vh-6rem),20rem)] sm:w-[min(20rem,calc(100vw-1.5rem))] sm:translate-x-0 sm:left-auto ${panelAlignClass}`}
-          >
-            <p className="mb-2 shrink-0 text-[11px] font-semibold text-stone-700">
-              Choose columns to show
-            </p>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 space-y-1">
-              {columns.map((col) => {
-                const checked = visibleKeys.includes(col.key);
-                const locked = !!col.alwaysVisible;
-                return (
-                  <label
-                    key={col.key}
-                    className={`flex items-start gap-2 rounded-md px-2 py-1.5 text-[11px] leading-snug ${
-                      locked
-                        ? "cursor-not-allowed opacity-60"
-                        : "cursor-pointer hover:bg-canvas-muted"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={locked}
-                      onChange={() => onToggle(col.key)}
-                      className="mt-0.5 shrink-0 rounded border-border text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="min-w-0 flex-1 text-stone-800">{col.label}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-2 flex shrink-0 flex-wrap gap-3 border-t border-border/80 pt-2">
-              <button
-                type="button"
-                onClick={onSelectAll}
-                className="text-[11px] font-medium text-brand-600 hover:text-brand-800"
-              >
-                Show all
-              </button>
-              <button
-                type="button"
-                onClick={onReset}
-                className="text-[11px] font-medium text-stone-600 hover:text-stone-800"
-              >
-                Reset default
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="ml-auto text-[11px] font-medium text-stone-500 hover:text-stone-800 sm:hidden"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function manufacturingPaymentLabel(payment) {
-  if (!payment || typeof payment !== "object") return "—";
-  const mode = payment.mode != null ? String(payment.mode) : "";
-  const status = payment.status != null ? String(payment.status) : "";
-  if (mode && status) return `${mode} / ${status}`;
-  if (mode) return mode;
-  if (status) return status;
-  return "—";
-}
-
-function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
-  const item = line.itemLike && typeof line.itemLike === "object" ? line.itemLike : {};
-  const variant = item.variant && typeof item.variant === "object" ? item.variant : {};
-  const ctx = line.ctx && typeof line.ctx === "object" ? line.ctx : {};
-  const u = getStorefrontProductUrl(line.itemId, item);
-  const imgs = collectItemLikeImageUrls(item);
-  const qtyStr =
-    line.quantity != null && line.quantity !== ""
-      ? String(line.quantity)
-      : item.quantity != null
-        ? String(item.quantity)
-        : "—";
-  const custName = ctx.user?.name || ctx.address?.name || "—";
-  const phone =
-    [ctx.user?.countryCode, ctx.user?.phoneNumber].filter(Boolean).join("") ||
-    (ctx.address?.phone ? String(ctx.address.phone) : "") ||
-    "—";
-  const pay = manufacturingPaymentLabel(ctx.payment);
-
-  const field = (label, value, colClass = "") => (
-    <div className={`min-w-0 ${colClass}`}>
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-        {label}
-      </dt>
-      <dd className="mt-0.5 break-words text-xs font-medium leading-snug text-gray-900">
-        {value != null && value !== "" ? String(value) : "—"}
-      </dd>
-    </div>
-  );
-
-  return (
-    <div
-      className={`rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 ${lineIndex > 0 ? "mt-4" : ""}`}
-    >
-      {totalLines > 1 ? (
-        <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-          Line {lineIndex + 1} of {totalLines}
-        </p>
-      ) : null}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-        <div className="mx-auto flex w-full max-w-[10rem] shrink-0 flex-col items-center lg:mx-0">
-          {imgs[0] ? (
-            <button
-              type="button"
-              onClick={() => onPickImage?.(imgs[0])}
-              className="h-36 w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-sm lg:h-40"
-            >
-              <img
-                src={imgs[0]}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            </button>
-          ) : (
-            <div className="flex h-36 w-full items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-center text-[10px] text-gray-400 lg:h-40">
-              No image
-            </div>
-          )}
-        </div>
-        <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-2.5 text-left sm:gap-x-5 lg:grid-cols-3">
-          {field("Order ID", ctx.orderId)}
-          {field("Order date", formatManufacturingModalDate(ctx.orderCreatedAt))}
-          {field("Quantity", qtyStr)}
-          {field("Dress / product name", item.name, "col-span-2 lg:col-span-3")}
-          {field("Catalog product ID", item.productId)}
-          {field("Line SKU", item.sku)}
-          {field("Variant SKU", variant.sku)}
-          {field("Size", variant.size)}
-          {field("Color", variant.color)}
-          {field("Payment (order)", pay, "col-span-2 lg:col-span-3")}
-          {field("Ship-to pincode", ctx.address?.pincode)}
-          {field("Customer name", custName)}
-          {field("Customer phone", phone)}
-          <div className="col-span-2 rounded-lg border border-brand-100 bg-brand-50/70 px-3 py-2 lg:col-span-3">
-            <dt className="text-[10px] font-semibold uppercase tracking-wide text-brand-900">
-              Store link
-            </dt>
-            <dd className="mt-1">
-              <a
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-start gap-1 break-all text-xs font-medium text-brand-700 hover:text-brand-900"
-              >
-                <span className="min-w-0 flex-1">{u}</span>
-                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              </a>
-            </dd>
-          </div>
-        </dl>
-      </div>
-      {imgs.length > 1 ? (
-        <div className="mt-4 border-t border-gray-100 pt-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-            More images
-          </p>
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6">
-            {imgs.slice(1).map((src) => (
-              <button
-                key={src}
-                type="button"
-                onClick={() => onPickImage?.(src)}
-                className="overflow-hidden rounded-md border border-gray-200 bg-white"
-              >
-                <img
-                  src={src}
-                  alt=""
-                  className="aspect-square w-full object-cover"
-                  loading="lazy"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Latest timeline entry (by createdAt) — shows previous → current transition */
-const getLatestStatusHistoryEntry = (item) => {
-  const arr = Array.isArray(item?.statusHistory) ? [...item.statusHistory] : [];
-  if (arr.length === 0) return null;
-  arr.sort(
-    (a, b) =>
-      new Date(a?.createdAt || 0).getTime() -
-      new Date(b?.createdAt || 0).getTime(),
-  );
-  return arr[arr.length - 1];
-};
-
-const formatStatusTokenForUi = (token) => {
-  if (token == null || token === "") return "—";
-  const s = String(token).trim();
-  if (!s) return "—";
-  const t = s.toUpperCase().replace(/_/g, " ");
-  return t.charAt(0) + t.slice(1).toLowerCase();
-};
-
-const getLatestExchangeForwardOrder = (item) => {
-  const latest = getLatestExchange(item);
-  const forward = latest?.shiprocket?.forwardOrder;
-  if (!forward || typeof forward !== "object") return null;
-  return forward;
-};
-
-
-const extractExchangeImageUrls = (exchange) => {
-  if (!exchange || typeof exchange !== "object") return [];
-  const candidates = [
-    exchange.images,
-    exchange.imageUrls,
-    exchange.uploadedImages,
-    exchange.exchangeImages,
-    exchange.proofImages,
-    exchange.media,
-    exchange.mediaUrls,
-    exchange.photos,
-  ];
-  const urls = [];
-  candidates.forEach((entry) => {
-    if (!entry) return;
-    const list = Array.isArray(entry) ? entry : [entry];
-    list.forEach((v) => {
-      const value =
-        typeof v === "string"
-          ? v
-          : v?.url || v?.secure_url || v?.imageUrl || v?.src || null;
-      if (value) urls.push(String(value));
-    });
-  });
-  return Array.from(new Set(urls.filter(Boolean)));
-};
-
-const getExchangeReason = (exchange) => {
-  if (!exchange || typeof exchange !== "object") return "";
-  const reason =
-    exchange.reason ||
-    exchange.exchangeReason ||
-    exchange.requestReason ||
-    exchange.note ||
-    "";
-  return String(reason || "").trim();
-};
-
-const formatExchangeDocumentStatusLabel = (status) => {
-  const mapped = mapExchangeDocumentStatusToItemStatus(status);
-  if (mapped) return formatStatusTokenForUi(mapped);
-  return formatStatusTokenForUi(status);
-};
-
-const exchangeHasVisibleDetails = (exchange, item) => {
-  if (isExchangeLineItem(item)) return true;
-  if (!exchange || typeof exchange !== "object") return false;
-  return Boolean(
-    getExchangeReason(exchange) ||
-      extractExchangeImageUrls(exchange).length ||
-      exchange.desiredColor ||
-      exchange.desiredSize ||
-      exchange.replacedItem ||
-      exchange.item ||
-      exchange.status ||
-      String(exchange.adminRemark || "").trim() ||
-      exchange.quantityToExchange,
-  );
-};
-
-function ExchangeDetailsPanel({ item, onZoomImage }) {
-  const latestExchange = getLatestExchange(item);
-  if (!exchangeHasVisibleDetails(latestExchange, item)) return null;
-
-  const exchangeImageUrls = extractExchangeImageUrls(latestExchange);
-  const exchangeReason = getExchangeReason(latestExchange);
-  const orderedVariant = item?.variant || latestExchange?.item?.variant || {};
-  const replacement = latestExchange?.replacedItem;
-  const replacementVariant = replacement?.variant || {};
-  const productName =
-    getLineProductDisplayName(item) ||
-    latestExchange?.item?.name ||
-    item?.name ||
-    item?.sku ||
-    "—";
-  const currentVariantLabel = [orderedVariant.color, orderedVariant.size]
-    .filter(Boolean)
-    .join("/");
-  const wantedVariantLabel = [latestExchange?.desiredColor, latestExchange?.desiredSize]
-    .filter(Boolean)
-    .join("/");
-  const replacementLabel = [replacementVariant.color, replacementVariant.size]
-    .filter(Boolean)
-    .join("/");
-  const thumbUrl = item?.variant?.imageUrl || orderedVariant?.imageUrl || null;
-  const lineStatus = formatStatusTokenForUi(getDisplayItemStatus(item));
-
-  return (
-    <div className="flex flex-col gap-1 rounded-md border border-border bg-canvas-muted/25 px-2 py-1.5 text-[10px] leading-snug">
-      <div className="flex min-w-0 items-start gap-1.5">
-        {thumbUrl ? (
-          <button
-            type="button"
-            onClick={() => onZoomImage?.(thumbUrl)}
-            className="h-8 w-8 shrink-0 overflow-hidden rounded border border-border bg-white"
-            title="Product image"
-          >
-            <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-          </button>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1">
-            <p className="min-w-0 flex-1 truncate font-medium text-stone-900" title={productName}>
-              {productName}
-            </p>
-            <span className="shrink-0 rounded bg-brand-50 px-1 py-0.5 text-[8px] font-semibold text-brand-800 ring-1 ring-brand-200">
-              {lineStatus}
-            </span>
-          </div>
-          <p className="truncate text-[9px] text-stone-600">
-            <span className="text-stone-400">Now</span> {currentVariantLabel || "—"}
-            <span className="mx-0.5 text-stone-300">→</span>
-            <span className="font-medium text-brand-800">
-              {wantedVariantLabel || replacementLabel || replacement?.sku || "—"}
-            </span>
-            {latestExchange?.quantityToExchange ? (
-              <span className="text-stone-400"> · Qty {latestExchange.quantityToExchange}</span>
-            ) : null}
-          </p>
-          {exchangeReason ? (
-            <p className="line-clamp-1 text-[9px] text-stone-500" title={exchangeReason}>
-              {exchangeReason}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      {exchangeImageUrls.length > 0 ? (
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
-          {exchangeImageUrls.map((url, idx) => (
-            <button
-              key={`${url}-${idx}`}
-              type="button"
-              onClick={() => onZoomImage?.(url)}
-              className="h-7 w-7 shrink-0 overflow-hidden rounded border border-border bg-white hover:ring-1 hover:ring-brand-200"
-              title={`Photo ${idx + 1}`}
-            >
-              <img
-                src={url}
-                alt={`Exchange upload ${idx + 1}`}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const canDownloadInvoice = (item) => {
   const status = String(item?.status || "").toUpperCase();
   // Show invoice for every line state except the earliest pre-fulfillment ones.
   // (Shipped, out for delivery, delivered, exchange*, cancelled, etc. all allowed.)
   return !["CREATED", "CONFIRMED"].includes(status);
-};
-
-const isExchangeStatus = (status) =>
-  String(status || "").toUpperCase().startsWith("EXCHANGE_");
-
-const isExchangeLineItem = (item) =>
-  isExchangeStatus(item?.status) || (Array.isArray(item?.exchanges) && item.exchanges.length > 0);
-
-const isExchangeOrderEntry = (order) => {
-  if (isExchangeStatus(order?.status || order?.orderStatus)) return true;
-  return Array.isArray(order?.items) && order.items.some((item) => isExchangeLineItem(item));
 };
 
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
@@ -1541,234 +223,6 @@ const dbgOrdersVerbose = (label, ...rest) => {
   if (!ORDERS_DEBUG) return;
   console.debug(`[Orders] ${label}`, ...rest);
 };
-
-const isNormalDeliveryLine = (item) =>
-  String(item?.delivery?.type || "").toUpperCase() === "NORMAL";
-
-/** Shiprocket / tracking for a line item (NORMAL courier shipments). */
-const getNormalDeliveryShiprocket = (item) => {
-  if (!item || !isNormalDeliveryLine(item)) return null;
-  const sr = item.shiprocket || {};
-  const awb = sr.awbCode || item.trackingId || null;
-  const hasAny =
-    awb ||
-    sr.orderId != null ||
-    sr.shipmentId != null ||
-    (sr.status && String(sr.status).trim()) ||
-    (item.courier && String(item.courier).trim());
-  if (!hasAny) return null;
-  return {
-    awb,
-    trackingUrl:
-      sr.trackingUrl ||
-      (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
-    status: sr.status || null,
-    shiprocketOrderId: sr.orderId ?? null,
-    // Backend download endpoints often expect shipment group id.
-    shipmentId: sr.shipmentId ?? item.shipmentId ?? null,
-    shipmentGroupId:
-      sr.shipmentGroupId ??
-      item.shipmentGroupId ??
-      sr.shipment_group_id ??
-      item.shipment_group_id ??
-      null,
-    courier: item.courier || null,
-    labelUrl: sr.labelUrl || null,
-    invoiceUrl: sr.invoiceUrl || null,
-  };
-};
-
-const getExchangeForwardShiprocket = (item) => {
-  const fwd = getLatestExchangeForwardOrder(item);
-  if (!fwd) return null;
-  const awb = fwd.awbCode || item?.trackingId || null;
-  const hasAny =
-    awb ||
-    fwd.orderId != null ||
-    fwd.shipmentId != null ||
-    (fwd.status && String(fwd.status).trim()) ||
-    (fwd.courierName && String(fwd.courierName).trim());
-  if (!hasAny) return null;
-  return {
-    awb,
-    trackingUrl:
-      fwd.trackingUrl ||
-      (awb ? `https://shiprocket.co/tracking/${encodeURIComponent(String(awb))}` : null),
-    status: fwd.status || null,
-    shiprocketOrderId: fwd.orderId ?? null,
-    shipmentId: fwd.shipmentId ?? null,
-    shipmentGroupId: null,
-    courier: fwd.courierName || item?.courier || null,
-    labelUrl: fwd.labelUrl || null,
-    invoiceUrl: fwd.invoiceUrl || null,
-  };
-};
-
-const getLineShiprocket = (item) => {
-  if (!item) return null;
-  if (isExchangeStatus(item?.status)) {
-    const forward = getExchangeForwardShiprocket(item);
-    if (forward) return forward;
-  }
-  return getNormalDeliveryShiprocket(item);
-};
-
-const getOrderNormalShiprocketPreview = (order) => {
-  const items = order?.items || [];
-  const rows = items.map((it) => getNormalDeliveryShiprocket(it)).filter(Boolean);
-  if (rows.length === 0) return null;
-  return { primary: rows[0], count: rows.length };
-};
-
-const getOrderShiprocketPreview = (order) => {
-  const items = order?.items || [];
-  const rows = items.map((it) => getLineShiprocket(it)).filter(Boolean);
-  if (rows.length === 0) return null;
-  return { primary: rows[0], count: rows.length };
-};
-
-const getOrderShipmentIds = (order) => {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const ids = items.flatMap((it) => {
-    const sr = getLineShiprocket(it);
-    const forward = getLatestExchangeForwardOrder(it);
-    return [
-      sr?.shipmentId,
-      sr?.shipmentGroupId,
-      forward?.shipmentId,
-      it?.shipmentId,
-      it?.shipmentGroupId,
-      it?.shiprocket?.shipmentId,
-      it?.shiprocket?.shipmentGroupId,
-      it?.exchanges?.[0]?.shiprocket?.forwardOrder?.shipmentId,
-    ]
-      .filter(Boolean)
-      .map(String);
-  });
-  return Array.from(new Set(ids));
-};
-
-const getOrderForwardPreview = (order) => {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  for (const item of items) {
-    const forward = getLatestExchangeForwardOrder(item);
-    if (forward?.shipmentId || forward?.trackingUrl || forward?.awbCode) {
-      return forward;
-    }
-  }
-  return null;
-};
-
-const hasNormalDeliveryInOrder = (order) =>
-  Array.isArray(order?.items) &&
-  order.items.some((item) => isNormalDeliveryLine(item));
-
-const getOrderForwardCreateTarget = (order) => {
-  const items = Array.isArray(order?.items) ? order.items : [];
-  for (const item of items) {
-    if (!isNormalDeliveryLine(item)) continue;
-    if (!isExchangeStatus(item?.status)) continue;
-    const latestExchange = getLatestExchange(item);
-    if (!latestExchange?._id) continue;
-    return { exchangeId: String(latestExchange._id), item };
-  }
-  return null;
-};
-
-/** Merge admin item-row shape (deliveryType + nested item) into a line for shiprocket helpers */
-const shiprocketFromItemRow = (row) => {
-  if (!row) return null;
-  const line = {
-    ...(row.item && typeof row.item === "object" ? row.item : {}),
-    delivery: { type: row.deliveryType || row.item?.delivery?.type },
-  };
-  return getLineShiprocket(line);
-};
-
-function ShiprocketDetails({ sr, compact }) {
-  if (!sr) return <span className="text-gray-400">—</span>;
-  if (compact) {
-    const meta = [sr.courier].filter(Boolean).join(" · ");
-    return (
-      <div className="min-w-0 leading-tight">
-        {sr.trackingUrl ? (
-          <a
-            href={sr.trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-brand-600 hover:underline"
-            title={sr.awb || "Track"}
-          >
-            <ExternalLink size={9} className="shrink-0" aria-hidden />
-            <span className="truncate">{sr.awb || "Track"}</span>
-          </a>
-        ) : (
-          <span
-            className="block truncate font-mono text-[9px] text-gray-800"
-            title={sr.awb || undefined}
-          >
-            {sr.awb || "—"}
-          </span>
-        )}
-        {meta ? (
-          <p className="truncate text-[9px] text-stone-500" title={meta}>
-            {meta}
-          </p>
-        ) : null}
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1.5 text-sm text-gray-800">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-xs font-semibold uppercase text-sky-700">Shiprocket</span>
-        {sr.status && (
-          <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900">{sr.status}</span>
-        )}
-      </div>
-      {sr.awb && (
-        <p className="font-mono text-xs">
-          AWB:{" "}
-          {sr.trackingUrl ? (
-            <a
-              href={sr.trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-brand-600 hover:underline"
-            >
-              {sr.awb}
-              <ExternalLink size={12} />
-            </a>
-          ) : (
-            sr.awb
-          )}
-        </p>
-      )}
-      {sr.courier && <p className="text-xs text-gray-600">Courier: {sr.courier}</p>}
-      {(sr.shiprocketOrderId != null || sr.shipmentId != null) && (
-        <p className="text-xs text-gray-500">
-          {sr.shiprocketOrderId != null && <>SR order: {sr.shiprocketOrderId}</>}
-          {sr.shiprocketOrderId != null && sr.shipmentId != null && " · "}
-          {sr.shipmentId != null && <>Shipment: {sr.shipmentId}</>}
-        </p>
-      )}
-      {(sr.labelUrl || sr.invoiceUrl) && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {sr.labelUrl && (
-            <span className="text-xs font-medium text-brand-600">
-              Label ready
-            </span>
-          )}
-          {sr.invoiceUrl && (
-            <span className="text-xs font-medium text-brand-600">
-              Invoice ready
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle = null }) => {
   const navigate = useNavigate();
@@ -1866,6 +320,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [zoomImageUrl, setZoomImageUrl] = useState(null);
   const [storeInfoModal, setStoreInfoModal] = useState(null);
   const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
+    () => new Set(),
+  );
+  const [downloadedLabelShipments, setDownloadedLabelShipments] = useState(
     () => new Set(),
   );
   const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
@@ -2112,6 +569,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
       if (labelUrl) {
         openDocUrl(labelUrl, "Failed to download shipping label(s)");
+        setDownloadedLabelShipments((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.add(String(id)));
+          return next;
+        });
         return;
       }
 
@@ -2228,10 +690,39 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     return Array.from(new Set(ids));
   };
 
+  const markLabelDownloaded = (ids, item) => {
+    setDownloadedLabelShipments((prev) => {
+      const next = new Set(prev);
+      (ids || []).forEach((id) => next.add(String(id)));
+      const itemKey = item?.itemId || item?._id;
+      if (itemKey) next.add(`item:${itemKey}`);
+      return next;
+    });
+  };
+
+  const isLabelDownloadedForItem = (item) => {
+    const ids = getShipmentIdsForItem(item);
+    if (ids.length > 0) {
+      return ids.every((id) => downloadedLabelShipments.has(String(id)));
+    }
+    const itemKey = item?.itemId || item?._id;
+    return itemKey ? downloadedLabelShipments.has(`item:${itemKey}`) : false;
+  };
+
+  const isLabelDownloadedForOrder = (order) => {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    if (!items.length) {
+      const ids = getOrderShipmentIds(order);
+      return ids.length > 0 && ids.every((id) => downloadedLabelShipments.has(String(id)));
+    }
+    return items.every((it) => isLabelDownloadedForItem(it));
+  };
+
   const handleLabelForItem = (item) => {
     const forwardLabelUrl = getLatestExchangeForwardOrder(item)?.labelUrl;
     if (forwardLabelUrl) {
       openDocUrl(forwardLabelUrl, "Failed to download shipping label(s)");
+      markLabelDownloaded(getShipmentIdsForItem(item), item);
       return;
     }
     const ids = getShipmentIdsForItem(item);
@@ -2308,9 +799,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setLoading(true);
       setError(null);
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
-      const consistencyParam = lineConsistencyFilter || "";
+      const consistencyParam = getEffectiveItemStatusConsistency(lineConsistencyFilter);
       dbgOrders("getOrders:request", {
-        lineConsistencyFilter: consistencyParam || "(all)",
+        lineConsistencyFilter: lineConsistencyFilter || "(all)",
+        effectiveConsistency: consistencyParam || "(all)",
         orderStatus: statusFilter || "(all)",
         page: pagination.page,
         limit: pagination.limit,
@@ -2338,11 +830,28 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       }
       const payload = res?.data ?? {};
       const rawList = payload.orders ?? payload.data ?? [];
-      const list = exchangeOnly
+      let list = exchangeOnly
         ? (Array.isArray(rawList)
             ? rawList.filter((row) => isExchangeOrderEntry(row))
             : [])
         : rawList;
+      if (Array.isArray(list) && lineConsistencyFilter) {
+        const before = list.length;
+        list = list.filter((order) =>
+          orderMatchesStatusListFilter(order, {
+            statusFilter,
+            lineConsistencyFilter,
+          }),
+        );
+        if (before !== list.length) {
+          dbgOrders("getOrders:clientConsistencyFilter", {
+            before,
+            after: list.length,
+            statusFilter: statusFilter || "(all)",
+            lineConsistencyFilter,
+          });
+        }
+      }
       dbgOrdersVerbose("getOrders:payload", payload);
       dbgOrders("getOrders:summary", {
         rowCount: Array.isArray(list) ? list.length : 0,
@@ -2400,7 +909,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         pagination: payload.pagination,
       });
       const rawItems = Array.isArray(payload.items) ? payload.items : [];
-      const list = exchangeOnly
+      let list = exchangeOnly
         ? rawItems.filter((row) => isExchangeLineItem(row?.item || row))
         : rawItems;
       setOrderItems(list);
@@ -2435,7 +944,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         paymentStatus: paymentStatus || "",
         paymentMode: paymentMode || "",
         itemStatusConsistency:
-          viewMode === VIEW_ORDER ? lineConsistencyFilter || "" : "",
+          viewMode === VIEW_ORDER
+            ? getEffectiveItemStatusConsistency(lineConsistencyFilter) || ""
+            : "",
         exchangeOnly: !!exchangeOnly,
       });
       const payload = res?.data ?? res ?? {};
@@ -2514,8 +1025,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         orderStatus:
           viewMode === VIEW_ORDER ? statusFilter || undefined : undefined,
         itemStatusConsistency:
-          viewMode === VIEW_ORDER && lineConsistencyFilter
-            ? lineConsistencyFilter
+          viewMode === VIEW_ORDER
+            ? getEffectiveItemStatusConsistency(lineConsistencyFilter) || undefined
             : undefined,
         deliveryType: deliveryTypeFilter || undefined,
         paymentStatus,
@@ -2621,24 +1132,31 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
-  const fetchSingleOrder = async (orderId) => {
+  const fetchSingleOrder = async (orderId, listOrderSnapshot = null) => {
     if (!orderId) return;
     try {
       setOrderLoading(true);
       setOrderError(null);
       setUnassignError(null);
       setOrderAssignments(null);
-      // Fetch with page 1 and high limit so all items in the order are returned
       const res = await getSingleOrder(orderId, 1, itemLimit);
       dbgOrders("getSingleOrder:response", { orderId, res });
-      const singlePayload = res?.data ?? res;
+      let singlePayload = normalizeOrderDetailPayload(res);
       dbgOrdersVerbose("getSingleOrder:order", singlePayload);
-      if (exchangeOnly && singlePayload?.items) {
-        const filteredItems = singlePayload.items.filter((it) => isExchangeLineItem(it));
-        setSelectedOrder({ ...singlePayload, items: filteredItems });
-      } else {
-        setSelectedOrder(singlePayload || null);
+      if (!singlePayload) {
+        setSelectedOrder(null);
+        setOrderError("Could not load order details.");
+        return;
       }
+      if (listOrderSnapshot) {
+        singlePayload = mergeOrderItemsFromListSnapshot(singlePayload, listOrderSnapshot);
+      }
+      const items = exchangeOnly
+        ? resolveItemsForExchangeDetailView(singlePayload)
+        : Array.isArray(singlePayload.items)
+          ? singlePayload.items
+          : [];
+      setSelectedOrder({ ...singlePayload, items });
       // Fetch assignment view for Reassign / Remove driver
       try {
         const assignRes = await getAssignmentView(orderId);
@@ -3493,13 +2011,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
   /** Single resolved status badge — aligned with courier / Shiprocket across the page */
   const renderItemStatusBreakdown = (item, { tableRow = false } = {}) => {
-    const effective = getDisplayItemStatus(item);
+    const effective = getUiItemStatus(item);
     const sr = getLineShiprocket(item);
-    const apiStatus = formatStatusTokenForUi(item?.status);
     const titleParts = [formatStatusTokenForUi(effective)];
-    if (apiStatus !== formatStatusTokenForUi(effective)) {
-      titleParts.push(`API: ${apiStatus}`);
-    }
     if (sr?.courier) titleParts.push(sr.courier);
     if (item?.shiprocket?.status) titleParts.push(`SR: ${item.shiprocket.status}`);
 
@@ -3518,64 +2032,21 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     );
   };
 
-  const statusOptions = [
-    { value: "CREATED", label: "Created" },
-    { value: "CONFIRMED", label: "Confirmed" },
-    { value: "PROCESSING", label: "Processing" },
-    { value: "SHIPPED", label: "Shipped" },
-    { value: "OUT_FOR_DELIVERY", label: "Out for delivery" },
-    { value: "DELIVERED", label: "Delivered" },
-    { value: "CANCELLED", label: "Cancelled" },
-    { value: "EXCHANGE_REQUESTED", label: "Exchange requested" },
-    { value: "EXCHANGE_APPROVED", label: "Exchange approved" },
-    { value: "EXCHANGE_REJECTED", label: "Exchange rejected" },
-    { value: "EXCHANGE_PICKUP_SCHEDULED", label: "Exchange pickup scheduled" },
-    { value: "EXCHANGE_OUT_FOR_PICKUP", label: "Exchange out for pickup" },
-    { value: "EXCHANGE_PICKED", label: "Exchange picked" },
-    { value: "EXCHANGE_RECEIVED", label: "Exchange received" },
-    { value: "EXCHANGE_PROCESSING", label: "Exchange processing" },
-    { value: "EXCHANGE_SHIPPED", label: "Exchange shipped" },
-    { value: "EXCHANGE_OUT_FOR_DELIVERY", label: "Exchange out for delivery" },
-    { value: "EXCHANGE_DELIVERED", label: "Exchange delivered" },
-    { value: "EXCHANGE_COMPLETED", label: "Exchange completed" },
-  ];
-  const filteredStatusOptions = exchangeOnly
-    ? statusOptions.filter((opt) => isExchangeStatus(opt.value))
-    : statusOptions;
+  const statusOptions = ORDER_STATUS_OPTIONS;
+  const filteredStatusOptions = useMemo(
+    () => getFilteredStatusOptions(exchangeOnly),
+    [exchangeOnly],
+  );
 
-  const analyticsCountByStatus = useMemo(() => {
-    const map = new Map();
-    for (const row of analyticsData.counts || []) {
-      if (row?.status) map.set(String(row.status).toUpperCase(), row.count ?? 0);
-    }
-    return map;
-  }, [analyticsData.counts]);
+  const analyticsCountByStatus = useMemo(
+    () => buildAnalyticsCountMap(analyticsData.counts),
+    [analyticsData.counts],
+  );
 
-  const analyticsStatusCards = useMemo(() => {
-    const seen = new Set();
-    const cards = [];
-    for (const opt of filteredStatusOptions) {
-      const key = String(opt.value).toUpperCase();
-      const count = analyticsCountByStatus.get(key) ?? 0;
-      if (count > 0) {
-        cards.push({ status: opt.value, label: opt.label, count });
-        seen.add(key);
-      }
-    }
-    for (const row of analyticsData.counts || []) {
-      const key = String(row.status || "").toUpperCase();
-      if (!key || seen.has(key)) continue;
-      const count = row.count ?? 0;
-      if (count > 0) {
-        cards.push({
-          status: key,
-          label: formatStatusTokenForUi(key),
-          count,
-        });
-      }
-    }
-    return cards.sort((a, b) => b.count - a.count);
-  }, [analyticsData.counts, analyticsCountByStatus, filteredStatusOptions]);
+  const analyticsStatusCards = useMemo(
+    () => buildAnalyticsStatusCards(filteredStatusOptions, analyticsCountByStatus),
+    [filteredStatusOptions, analyticsCountByStatus],
+  );
 
   const activeAnalyticsStatus =
     viewMode === VIEW_ORDER ? statusFilter : itemStatusFilter;
@@ -3589,6 +2060,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setItemStatusFilter(next);
       setItemPagination((p) => ({ ...p, page: 1 }));
     }
+  };
+
+  const statusSelectValue = (item) => {
+    const ui = getUiItemStatus(item);
+    if (filteredStatusOptions.some((o) => o.value === ui)) return ui;
+    return item?.status || "CREATED";
   };
 
   const listBulkSelectedCount =
@@ -3762,7 +2239,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         if (items.length > 1) {
           return (
             <OrderListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
-              {(item) => getStatusBadge(getDisplayItemStatus(item) || item?.status)}
+              {(item) => getStatusBadge(getUiItemStatus(item))}
             </OrderListLineStack>
           );
         }
@@ -3781,6 +2258,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={docDownloadLoading}
+              reprint={isLabelDownloadedForOrder(order)}
               onClick={() => handleLabelForOrder(order)}
               showText={items.length <= 1}
             />
@@ -4123,19 +2601,21 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const openOrderDetail = (order) => {
+    const customOrderId = order?.orderId;
+    if (!customOrderId) {
+      setError("Order is missing valid orderId");
+      return;
+    }
+    setSelectedItemIdFromListView(null);
+    setItemPage(1);
+    fetchSingleOrder(customOrderId, order);
+  };
+
   const renderOrderListActions = (order) => (
     <div className="flex flex-col items-center gap-1">
       <button
-        onClick={() => {
-          const customOrderId = order.orderId;
-          if (!customOrderId) {
-            setError("Order is missing valid orderId");
-            return;
-          }
-          setSelectedItemIdFromListView(null);
-          setItemPage(1);
-          fetchSingleOrder(customOrderId);
-        }}
+        onClick={() => openOrderDetail(order)}
         className="rounded-md px-1.5 py-1 text-[11px] font-medium text-brand-700 transition hover:bg-brand-50 hover:text-brand-800"
         title="View order details"
         type="button"
@@ -4186,6 +2666,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={docDownloadLoading}
+              reprint={isLabelDownloadedForItem(rowItem)}
               onClick={() => handleLabelForItem(rowItem)}
             />
             <DocManifestButton
@@ -4352,14 +2833,18 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         disabled={docDownloadLoading}
         onClick={() => handleLabelForItem(item)}
         className={brandBtn}
-        title="Download shipping label"
+        title={
+          isLabelDownloadedForItem(item)
+            ? "Reprint shipping label"
+            : "Download shipping label"
+        }
       >
         {docDownloadLoading && docActionType === "label" ? (
           <RefreshCw size={10} className="shrink-0 animate-spin" aria-hidden />
         ) : (
           <Truck size={10} className="shrink-0" aria-hidden />
         )}
-        Label
+        {isLabelDownloadedForItem(item) ? "Reprint" : "Label"}
       </button>
     );
 
@@ -4663,7 +3148,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         ? "bg-white text-brand-700 shadow-sm"
                         : "text-stone-600 hover:text-stone-900"
                     }`}
-                    title="Status dropdown filters order status"
+                    title="Show all orders. When a status is selected, only orders where every line matches that status."
                   >
                     All lines
                   </button>
@@ -4678,7 +3163,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         ? "bg-amber-100 text-amber-900 shadow-sm"
                         : "text-stone-600 hover:text-stone-900"
                     }`}
-                    title="2+ lines with different statuses; Status dropdown matches any line"
+                    title="Only orders with 2+ different line statuses; Status matches if any line matches"
                   >
                     Mixed
                   </button>
@@ -4693,9 +3178,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         ? "bg-white text-brand-700 shadow-sm"
                         : "text-stone-600 hover:text-stone-900"
                     }`}
-                    title="Same status on every line; Status dropdown filters order status"
+                    title="Same status on every line; Status must match all lines"
                   >
-                    Not mixed
+                    Same status
                   </button>
                 </div>
               ) : null}
@@ -4797,90 +3282,18 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           </div>
 
         {!selectedOrder && analyticsOpen ? (
-          <div className={ui.analyticsPanel}>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-[11px] font-semibold text-stone-800">
-                  Status analytics
-                  <span className="ml-1.5 font-normal text-stone-500">
-                    ({viewMode === VIEW_ORDER ? "by order" : "by item"}
-                    {lineConsistencyFilter === "mixed" && viewMode === VIEW_ORDER
-                      ? " · mixed lines"
-                      : ""}
-                    )
-                  </span>
-                </p>
-                <p className="text-[10px] text-stone-500">
-                  Uses current search, dates, delivery & payment filters. Click a card to
-                  filter the table.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => fetchStatusAnalytics()}
-                disabled={analyticsLoading}
-                className={`${ui.btnOutline} py-1 text-[10px]`}
-              >
-                {analyticsLoading ? (
-                  <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
-                ) : (
-                  <RefreshCw className="h-3 w-3" aria-hidden />
-                )}
-                Refresh
-              </button>
-            </div>
-            {analyticsError ? (
-              <p className="mb-2 text-[11px] text-danger">{analyticsError}</p>
-            ) : null}
-            {analyticsLoading && !analyticsStatusCards.length ? (
-              <p className="py-4 text-center text-[11px] text-stone-500">Loading counts…</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => applyAnalyticsStatus("")}
-                  className={`${ui.analyticsCard} ${
-                    !activeAnalyticsStatus
-                      ? ui.analyticsCardActive
-                      : ui.analyticsCardIdle
-                  }`}
-                >
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-stone-500">
-                    All
-                  </span>
-                  <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
-                    {analyticsData.total ?? 0}
-                  </span>
-                </button>
-                {analyticsStatusCards.map(({ status, label, count }) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => applyAnalyticsStatus(status)}
-                    className={`${ui.analyticsCard} ${
-                      activeAnalyticsStatus === status
-                        ? ui.analyticsCardActive
-                        : ui.analyticsCardIdle
-                    }`}
-                    title={`Show only ${label}`}
-                  >
-                    <span className="max-w-[7rem] truncate text-[9px] font-semibold uppercase tracking-wide text-stone-600">
-                      {label}
-                    </span>
-                    <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
-                      {count}
-                    </span>
-                  </button>
-                ))}
-                {!analyticsLoading && analyticsStatusCards.length === 0 ? (
-                  <p className="py-2 text-[11px] text-stone-500">
-                    No matching {viewMode === VIEW_ORDER ? "orders" : "items"} for current
-                    filters.
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </div>
+          <OrderAnalyticsPanel
+            ui={ui}
+            viewMode={viewMode}
+            lineConsistencyFilter={lineConsistencyFilter}
+            analyticsLoading={analyticsLoading}
+            analyticsError={analyticsError}
+            analyticsTotal={analyticsData.total}
+            analyticsStatusCards={analyticsStatusCards}
+            activeStatus={activeAnalyticsStatus}
+            onSelectStatus={applyAnalyticsStatus}
+            onRefresh={() => fetchStatusAnalytics()}
+          />
         ) : null}
 
         {!selectedOrder && listFiltersOpen ? (
@@ -5030,8 +3443,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       Status
                       {lineConsistencyFilter === "mixed" ? (
                         <span className="font-normal text-stone-400"> (any line)</span>
+                      ) : statusFilter ? (
+                        <span className="font-normal text-stone-400"> (every line)</span>
                       ) : (
-                        <span className="font-normal text-stone-400"> (order)</span>
+                        <span className="font-normal text-stone-400"> (all lines same)</span>
                       )}
                     </label>
                     <select
@@ -5258,7 +3673,24 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         key={order._id}
                         className={`border-t border-border/80 transition-colors ${ui.rowHover} ${
                           orderLineItems(order).length > 1 ? "[&>td]:align-top" : ""
-                        }`}
+                        }${exchangeOnly ? " cursor-pointer" : ""}`}
+                        onClick={
+                          exchangeOnly
+                            ? () => openOrderDetail(order)
+                            : undefined
+                        }
+                        role={exchangeOnly ? "button" : undefined}
+                        tabIndex={exchangeOnly ? 0 : undefined}
+                        onKeyDown={
+                          exchangeOnly
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  openOrderDetail(order);
+                                }
+                              }
+                            : undefined
+                        }
                       >
                         <td className="px-1.5 py-2 align-middle text-center">
                           <input
@@ -5288,7 +3720,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                             {renderOrderListCell(col.key, order)}
                           </td>
                         ))}
-                        <td className="px-1 py-2 align-middle text-center">
+                        <td className="px-1 py-2 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                           {renderOrderListActions(order)}
                         </td>
                       </tr>
@@ -5780,6 +4212,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                   loading={docDownloadLoading}
                                   loadingType={docActionType}
                                   disabled={docDownloadLoading}
+                                  reprint={isLabelDownloadedForItem(rowItem)}
                                   onClick={() => handleLabelForItem(rowItem)}
                                 />
                                 <DocManifestButton
@@ -6108,6 +4541,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         <ExchangeDetailsPanel
                           item={focusedItem}
                           onZoomImage={setZoomImageUrl}
+                          getLineProductDisplayName={getLineProductDisplayName}
                         />
                         <h3 className="mt-1 text-sm font-semibold text-stone-900">
                           {getLineProductDisplayName(focusedItem) ||
@@ -6225,6 +4659,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 disabled={docDownloadLoading}
                                 onClick={() => handleLabelForItem(focusedItem)}
                                 className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
+                                title={
+                                  isLabelDownloadedForItem(focusedItem)
+                                    ? "Reprint shipping label"
+                                    : "Download shipping label"
+                                }
                               >
                                 {docDownloadLoading && docActionType === "label" ? (
                                   <RefreshCw size={14} className="animate-spin" />
@@ -6233,7 +4672,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 )}
                                 {docDownloadLoading && docActionType === "label"
                                   ? "Loading..."
-                                  : "Download label"}
+                                  : isLabelDownloadedForItem(focusedItem)
+                                    ? "Reprint label"
+                                    : "Download label"}
                               </button>
 
                               <button
@@ -6279,7 +4720,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <select
-                        value={focusedItem.status || "CREATED"}
+                        value={statusSelectValue(focusedItem)}
                         onChange={(e) => {
                           const newVal = e.target.value;
                           handleUpdateItemStatus(
@@ -6747,6 +5188,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 key={String(item.itemId || item._id)}
                                 item={item}
                                 onZoomImage={setZoomImageUrl}
+                                getLineProductDisplayName={getLineProductDisplayName}
                               />
                             ))}
                           </div>
@@ -6947,7 +5389,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               <td className="min-w-0 px-1 py-1.5 align-middle text-center">
                                 <div className="relative mx-auto w-full max-w-[6.25rem]">
                                   <select
-                                    value={item.status || "CREATED"}
+                                    value={statusSelectValue(item)}
                                     onChange={(e) => {
                                       const newVal = e.target.value;
                                       handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);

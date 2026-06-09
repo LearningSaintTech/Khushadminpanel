@@ -11,7 +11,7 @@ const orderEndpoints = {
     }
 
     if (status) {
-      url += `&orderStatus=${status}`;
+      url += `&orderStatus=${encodeURIComponent(status)}`;
     }
 
     if (startDate) {

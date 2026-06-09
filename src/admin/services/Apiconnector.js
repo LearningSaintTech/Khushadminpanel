@@ -4,9 +4,9 @@ import { logout } from "../../redux/GlobalSlice";
 import { getLoginPathForPathname } from "../../utils/authRole";
 
 /**
- * Cresate axios instance
+ * Cresate axios instancecommit
  */
-const apiBaseUrl = "http://localhost:5000/api";
+const apiBaseUrl = "https://apidev.khushpehno.com/api";
   // import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
   // (import.meta.env.DEV
   //   ? "http://localhost:5000/api"

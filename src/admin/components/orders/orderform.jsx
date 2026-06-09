@@ -31,14 +31,16 @@ export function DocLabelButton({
   title,
   showText = true,
   className = "",
+  reprint = false,
 }) {
   const busy = loading && loadingType === "label";
+  const text = reprint ? "Reprint" : "Label";
   return (
     <button
       type="button"
       disabled={disabled || busy}
       onClick={onClick}
-      title={title}
+      title={title || (reprint ? "Reprint shipping label" : "Download shipping label")}
       className={`${btnDocSmLabel} ${className}`.trim()}
     >
       {busy ? (
@@ -46,7 +48,7 @@ export function DocLabelButton({
       ) : (
         <Truck size={ICON} className="shrink-0" />
       )}
-      {showText ? (busy ? "…" : "Label") : null}
+      {showText ? (busy ? "…" : text) : null}
     </button>
   );
 }
