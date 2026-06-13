@@ -2019,16 +2019,14 @@ const getOrderShipmentIds = (order) => {
     const forward = getLatestExchangeForwardOrder(it);
     return [
       sr?.shipmentId,
-      sr?.shipmentGroupId,
       forward?.shipmentId,
       it?.shipmentId,
-      it?.shipmentGroupId,
       it?.shiprocket?.shipmentId,
-      it?.shiprocket?.shipmentGroupId,
       getLatestExchange(it)?.shiprocket?.forwardOrder?.shipmentId,
     ]
       .filter(Boolean)
-      .map(String);
+      .map(String)
+      .filter(isLikelyShiprocketShipmentId);
   });
   return Array.from(new Set(ids));
 };
@@ -2047,6 +2045,27 @@ const getOrderForwardPreview = (order) => {
 const hasNormalDeliveryInOrder = (order) =>
   Array.isArray(order?.items) &&
   order.items.some((item) => isNormalDeliveryLine(item));
+
+const labelItemKey = (orderId, itemId) =>
+  `${String(orderId || "")}:${String(itemId || "")}`;
+
+const isLineLabelEligible = (item) => {
+  if (!isNormalDeliveryLine(item)) return false;
+  if (isSelfShippingLineOrUnmanifested(item)) return true;
+  if (isDelhiveryLine(item) && getDelhiveryWaybill(item)) return true;
+  if (getLatestExchangeForwardOrder(item)?.labelUrl) return true;
+  const ids = [
+    getLineShiprocket(item)?.shipmentId,
+    getLatestExchangeForwardOrder(item)?.shipmentId,
+    item?.shipmentId,
+    item?.shiprocket?.shipmentId,
+    getLatestExchange(item)?.shiprocket?.forwardOrder?.shipmentId,
+  ]
+    .filter(Boolean)
+    .map(String)
+    .filter(isLikelyShiprocketShipmentId);
+  return ids.length > 0;
+};
 
 const getOrderForwardCreateTarget = (order) => {
   const items = Array.isArray(order?.items) ? order.items : [];
@@ -2068,6 +2087,23 @@ const shiprocketFromItemRow = (row) => {
     delivery: { type: row.deliveryType || row.item?.delivery?.type },
   };
   return getLineShiprocket(line);
+};
+
+const getShipmentIdsFromItemRow = (row) => {
+  const line = lineItemFromOrderItemRow(row);
+  if (!line) return [];
+  const sr = getLineShiprocket(line);
+  const forward = getLatestExchangeForwardOrder(line);
+  return [
+    sr?.shipmentId,
+    forward?.shipmentId,
+    line?.shipmentId,
+    line?.shiprocket?.shipmentId,
+    getLatestExchange(line)?.shiprocket?.forwardOrder?.shipmentId,
+  ]
+    .filter(Boolean)
+    .map(String)
+    .filter(isLikelyShiprocketShipmentId);
 };
 
 function DelhiveryDetails({ dl, compact }) {
@@ -2233,6 +2269,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     [basePath],
   );
   const openedFromQueryRef = useRef(false);
+  const docRefreshRef = useRef({ refreshAfterLabel: async () => {} });
   const [viewMode, setViewMode] = useState(
     defaultViewMode === VIEW_ITEM ? VIEW_ITEM : VIEW_ORDER,
   ); // "order" | "item"
@@ -2318,6 +2355,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [zoomImageUrl, setZoomImageUrl] = useState(null);
   const [storeInfoModal, setStoreInfoModal] = useState(null);
   const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
+    () => new Set(),
+  );
+  const [downloadedLabelItemKeys, setDownloadedLabelItemKeys] = useState(
     () => new Set(),
   );
   const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
@@ -2561,6 +2601,82 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const isItemLabelDownloaded = useCallback(
+    (item, orderId = null) => {
+      const oid = orderId || item?.orderId || selectedOrder?.orderId || "";
+      const iid = item?.itemId || item?._id || item?.productItemId || "";
+      if (oid && iid && downloadedLabelItemKeys.has(labelItemKey(oid, iid))) {
+        return true;
+      }
+      return Boolean(item?.labelDownloadedAt);
+    },
+    [downloadedLabelItemKeys, selectedOrder?.orderId],
+  );
+
+  const isOrderLabelDownloaded = useCallback(
+    (order) => {
+      const items = (order?.items || []).filter(isLineLabelEligible);
+      return (
+        items.length > 0 &&
+        items.every((it) => isItemLabelDownloaded(it, order?.orderId))
+      );
+    },
+    [isItemLabelDownloaded],
+  );
+
+  const markLabelDownloadedLocally = useCallback(
+    (orderId, itemId) => {
+      if (!orderId || itemId == null) return;
+      const key = labelItemKey(orderId, itemId);
+      const stampedAt = new Date().toISOString();
+      setDownloadedLabelItemKeys((prev) => {
+        const next = new Set(prev);
+        next.add(key);
+        return next;
+      });
+      setSelectedOrder((prev) => {
+        if (!prev || String(prev.orderId) !== String(orderId)) return prev;
+        return {
+          ...prev,
+          items: (prev.items || []).map((it) =>
+            String(it.itemId) === String(itemId)
+              ? { ...it, labelDownloadedAt: stampedAt }
+              : it,
+          ),
+        };
+      });
+      setOrders((prev) =>
+        (Array.isArray(prev) ? prev : []).map((o) => {
+          if (String(o.orderId) !== String(orderId)) return o;
+          return {
+            ...o,
+            items: (o.items || []).map((it) =>
+              String(it.itemId) === String(itemId)
+                ? { ...it, labelDownloadedAt: stampedAt }
+                : it,
+            ),
+          };
+        }),
+      );
+      setOrderItems((prev) =>
+        (Array.isArray(prev) ? prev : []).map((row) => {
+          const rowItemId = row.itemId ?? row.productItemId ?? row.item?.itemId;
+          if (String(row.orderId) !== String(orderId) || String(rowItemId) !== String(itemId)) {
+            return row;
+          }
+          return {
+            ...row,
+            labelDownloadedAt: stampedAt,
+            item: row.item
+              ? { ...row.item, labelDownloadedAt: stampedAt }
+              : row.item,
+          };
+        }),
+      );
+    },
+    [],
+  );
+
   const handleDownloadLabelsClick = async (shipmentIds) => {
     const ids = Array.isArray(shipmentIds) ? shipmentIds.filter(Boolean) : [];
     if (!ids.length) return;
@@ -2596,6 +2712,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
       if (labelUrl) {
         openDocUrl(labelUrl, "Failed to download shipping label(s)");
+        await docRefreshRef.current.refreshAfterLabel();
         return;
       }
 
@@ -2733,6 +2850,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           `self-shipping-label_${oid}.pdf`,
           "Failed to download self-shipping label",
         );
+        markLabelDownloadedLocally(oid, itemId);
+        await docRefreshRef.current.refreshAfterLabel(oid);
       } catch (err) {
         toast.error(apiErrMessage(err, "Failed to download self-shipping label"));
       } finally {
@@ -2758,6 +2877,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           `delhivery-label_${waybill}.pdf`,
           "Failed to download Delhivery packing slip",
         );
+        const oid =
+          orderObj?.orderId ||
+          selectedOrder?.orderId ||
+          item?.orderId ||
+          null;
+        if (oid && item?.itemId) {
+          markLabelDownloadedLocally(oid, item.itemId);
+        }
+        await docRefreshRef.current.refreshAfterLabel(oid);
       } catch (err) {
         toast.error(apiErrMessage(err, "Failed to download Delhivery label"));
       } finally {
@@ -2794,8 +2922,41 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   };
 
   const handleLabelForOrder = (order) => {
+    const normalItems = (order?.items || []).filter(isNormalDeliveryLine);
+    if (!normalItems.length) {
+      toast.error("No shippable items in this order.");
+      return;
+    }
+
+    const selfShipLines = normalItems.filter(isSelfShippingLineOrUnmanifested);
+    if (selfShipLines.length === normalItems.length) {
+      if (selfShipLines.length === 1) {
+        handleLabelForItem(selfShipLines[0], order);
+        return;
+      }
+      toast.error("Download label for each self-shipped line separately.");
+      return;
+    }
+
+    const delhiveryLines = normalItems.filter(
+      (it) => isDelhiveryLine(it) && getDelhiveryWaybill(it),
+    );
+    if (delhiveryLines.length === normalItems.length) {
+      if (delhiveryLines.length === 1) {
+        handleLabelForItem(delhiveryLines[0], order);
+        return;
+      }
+      toast.error("Download label for each Delhivery line separately.");
+      return;
+    }
+
     const ids = getOrderShipmentIds(order);
     if (!ids.length) {
+      const fallback = normalItems.find(isSelfShippingLineOrUnmanifested);
+      if (fallback) {
+        handleLabelForItem(fallback, order);
+        return;
+      }
       toast.error("Shipment ID not available yet for this order.");
       return;
     }
@@ -2968,6 +3129,46 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
   }, [viewMode, fetchOrderItems]);
+
+  useEffect(() => {
+    const keys = [];
+    const collect = (orderId, itemId, labelDownloadedAt) => {
+      if (orderId && itemId && labelDownloadedAt) {
+        keys.push(labelItemKey(orderId, itemId));
+      }
+    };
+
+    (Array.isArray(orders) ? orders : []).forEach((order) => {
+      (order.items || []).forEach((item) => {
+        collect(order.orderId, item.itemId, item.labelDownloadedAt);
+      });
+    });
+
+    if (selectedOrder?.orderId) {
+      (selectedOrder.items || []).forEach((item) => {
+        collect(selectedOrder.orderId, item.itemId, item.labelDownloadedAt);
+      });
+    }
+
+    (Array.isArray(orderItems) ? orderItems : []).forEach((row) => {
+      const itemId = row.itemId ?? row.productItemId ?? row.item?.itemId;
+      const ts = row.labelDownloadedAt ?? row.item?.labelDownloadedAt;
+      collect(row.orderId, itemId, ts);
+    });
+
+    if (!keys.length) return;
+    setDownloadedLabelItemKeys((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      keys.forEach((key) => {
+        if (!next.has(key)) {
+          next.add(key);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [orders, selectedOrder, orderItems]);
 
   const fetchStatusAnalytics = useCallback(async () => {
     try {
@@ -3210,6 +3411,20 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setOrderError(apiErrMessage(err, "Could not load order details."));
     } finally {
       setOrderLoading(false);
+    }
+  };
+
+  docRefreshRef.current.refreshAfterLabel = async (orderId = null) => {
+    const oid = orderId || selectedOrder?.orderId || null;
+    if (oid && selectedOrder?.orderId === oid) {
+      await fetchSingleOrder(oid);
+    } else if (selectedOrder?.orderId) {
+      await fetchSingleOrder(selectedOrder.orderId);
+    }
+    if (viewMode === VIEW_ITEM) {
+      await fetchOrderItems();
+    } else if (viewMode === VIEW_ORDER && !selectedOrder) {
+      await fetchOrders();
     }
   };
 
@@ -4622,6 +4837,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={docDownloadLoading}
+              downloaded={isOrderLabelDownloaded(order)}
               onClick={() => handleLabelForOrder(order)}
               showText={items.length <= 1}
             />
@@ -5079,6 +5295,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         ...(row.item?.shiprocket || {}),
         shipmentId: row.item?.shiprocket?.shipmentId ?? row.item?.shipmentId ?? row.shipmentId ?? null,
       },
+      labelDownloadedAt: row.item?.labelDownloadedAt ?? row.labelDownloadedAt ?? null,
     };
     const isNormal = String(row.deliveryType || "").toUpperCase() === "NORMAL";
     return (
@@ -5102,6 +5319,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               loading={docDownloadLoading}
               loadingType={docActionType}
               disabled={docDownloadLoading}
+              downloaded={isItemLabelDownloaded(rowItem)}
               onClick={() => handleLabelForItem(rowItem, { orderId: row.orderId })}
             />
             <DocManifestButton
@@ -5264,20 +5482,21 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       </span>
     );
 
+    const labelDownloaded = isItemLabelDownloaded(item);
     const labelBtn = (
       <button
         type="button"
         disabled={docDownloadLoading}
         onClick={() => handleLabelForItem(item)}
-        className={brandBtn}
-        title="Download shipping label"
+        className={labelDownloaded ? `${docBtn} ${ui.detailDocBtnMuted}` : brandBtn}
+        title={labelDownloaded ? "Reprint shipping label" : "Download shipping label"}
       >
         {docDownloadLoading && docActionType === "label" ? (
           <RefreshCw size={10} className="shrink-0 animate-spin" aria-hidden />
         ) : (
           <Truck size={10} className="shrink-0" aria-hidden />
         )}
-        Label
+        {labelDownloaded ? "Reprint" : "Label"}
       </button>
     );
 
@@ -6480,9 +6699,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               .filter((r) =>
                                 selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
                               )
-                              .map((r) => shiprocketFromItemRow(r))
-                              .flatMap((sr) => [sr?.shipmentId, sr?.shipmentGroupId].filter(Boolean))
-                              .map(String);
+                              .flatMap((r) => getShipmentIdsFromItemRow(r));
                             const uniq = Array.from(new Set(shipmentIds));
                             if (uniq.length === 0) {
                               toast.error("No Shiprocket shipment IDs found in selected items.");
@@ -6503,9 +6720,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               .filter((r) =>
                                 selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
                               )
-                              .map((r) => shiprocketFromItemRow(r))
-                              .flatMap((sr) => [sr?.shipmentId, sr?.shipmentGroupId].filter(Boolean))
-                              .map(String);
+                              .flatMap((r) => getShipmentIdsFromItemRow(r));
                             const uniq = Array.from(new Set(shipmentIds));
                             if (uniq.length === 0) {
                               toast.error("No Shiprocket shipment IDs found in selected items.");
@@ -6764,6 +6979,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                     loading={docDownloadLoading}
                                     loadingType={docActionType}
                                     disabled={docDownloadLoading}
+                                    downloaded={isItemLabelDownloaded(rowItem)}
                                     onClick={() => handleLabelForItem(rowItem, { orderId: row.orderId })}
                                   />
                                   {showManifest && (
@@ -7378,7 +7594,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               type="button"
                               disabled={docDownloadLoading}
                               onClick={() => handleLabelForItem(focusedItem, selectedOrder)}
-                              className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
+                              className={
+                                isItemLabelDownloaded(focusedItem)
+                                  ? "rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60 flex items-center gap-2"
+                                  : "rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-60 flex items-center gap-2"
+                              }
+                              title={
+                                isItemLabelDownloaded(focusedItem)
+                                  ? "Reprint shipping label"
+                                  : "Download shipping label"
+                              }
                             >
                               {docDownloadLoading && docActionType === "label" ? (
                                 <RefreshCw size={14} className="animate-spin" />
@@ -7387,7 +7612,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               )}
                               {docDownloadLoading && docActionType === "label"
                                 ? "Loading..."
-                                : "Download label"}
+                                : isItemLabelDownloaded(focusedItem)
+                                  ? "Reprint label"
+                                  : "Download label"}
                             </button>
 
                             {showManifest && (

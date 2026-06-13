@@ -9,6 +9,8 @@ export const btnDocSmManifest =
   "inline-flex items-center justify-center gap-0.5 rounded border border-border bg-canvas-muted px-1.5 py-0.5 text-[9px] font-medium text-stone-700 transition hover:bg-white disabled:opacity-50";
 export const btnDocSmInvoice =
   "inline-flex items-center justify-center gap-0.5 rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[9px] font-medium text-brand-700 transition hover:bg-brand-100 disabled:opacity-50";
+export const btnDocSmReprint =
+  "inline-flex items-center justify-center gap-0.5 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50";
 
 export const orderLabelClass =
   "text-[10px] font-semibold uppercase tracking-wide text-stone-500";
@@ -31,22 +33,26 @@ export function DocLabelButton({
   title,
   showText = true,
   className = "",
+  downloaded = false,
 }) {
   const busy = loading && loadingType === "label";
+  const btnClass = downloaded ? btnDocSmReprint : btnDocSmLabel;
+  const labelText = busy ? "…" : downloaded ? "Reprint" : "Label";
+  const defaultTitle = downloaded ? "Reprint shipping label" : "Download shipping label";
   return (
     <button
       type="button"
       disabled={disabled || busy}
       onClick={onClick}
-      title={title}
-      className={`${btnDocSmLabel} ${className}`.trim()}
+      title={title ?? defaultTitle}
+      className={`${btnClass} ${className}`.trim()}
     >
       {busy ? (
         <RefreshCw size={ICON} className="shrink-0 animate-spin" />
       ) : (
         <Truck size={ICON} className="shrink-0" />
       )}
-      {showText ? (busy ? "…" : "Label") : null}
+      {showText ? labelText : null}
     </button>
   );
 }
