@@ -197,11 +197,19 @@ export default function StaleOrdersPage() {
       const res = await runStaleOrderAlertEmail(staleHours);
       const data = res?.data?.data ?? res?.data ?? res;
       if (data?.emailSent) {
-        toast.success("Stale order alert email sent");
+        const count = data?.recipientCount ?? data?.recipients?.length ?? 0;
+        const partial = data?.emailPartialFailure;
+        toast.success(
+          partial
+            ? `Stale alert sent to ${count - (data?.failedRecipients?.length ?? 0)}/${count} recipients`
+            : `Stale order alert email sent to ${count || "all"} recipient(s)`,
+        );
       } else if (data?.skippedReason === "no_stale_orders") {
         toast.success("No stale orders — email not sent");
+      } else if (data?.skippedReason === "no_recipients") {
+        toast.error("Set STALE_ORDER_ALERT_EMAIL_TO on the server (comma-separated emails)");
       } else {
-        toast.error(data?.emailError || "Set STALE_ORDER_ALERT_EMAIL_TO on the server");
+        toast.error(data?.emailError || "Could not send stale order alert email");
       }
     } catch (err) {
       toast.error(getBackendErrorMessages(err, "Could not send stale order alert email")[0]);
@@ -357,7 +365,7 @@ export default function StaleOrdersPage() {
             disabled={staleEmailLoading || staleLoading}
             onClick={handleSendStaleAlertEmail}
             className={staleBtnWarning}
-            title="Sends to STALE_ORDER_ALERT_EMAIL_TO on server"
+            title="Sends PDF to all STALE_ORDER_ALERT_EMAIL_TO addresses (comma-separated on server)"
           >
             {staleEmailLoading ? (
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />

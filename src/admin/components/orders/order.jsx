@@ -1053,7 +1053,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
   { key: "image", label: "Image", defaultVisible: true },
   { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
-  { key: "date", label: "Order date", defaultVisible: true },
+  { key: "date", label: "Date & time", defaultVisible: true },
   { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
   { key: "customer", label: "Customer name", defaultVisible: true },
   { key: "phone", label: "Customer phone", defaultVisible: true },
@@ -1082,7 +1082,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "info", label: "Store gallery", defaultVisible: true, alwaysVisible: true },
   { key: "image", label: "Image", defaultVisible: true },
   { key: "orderId", label: "Order ID", defaultVisible: true, alwaysVisible: true },
-  { key: "date", label: "Order date", defaultVisible: true },
+  { key: "date", label: "Date & time", defaultVisible: true },
   { key: "orderDateTime", label: "Order date & time", defaultVisible: false },
   { key: "customer", label: "Customer name", defaultVisible: true },
   { key: "phone", label: "Customer phone", defaultVisible: true },
@@ -1096,6 +1096,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "variant", label: "Size / color (combined)", defaultVisible: false },
   { key: "qty", label: "Quantity", defaultVisible: true },
   { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
+  { key: "city", label: "City", defaultVisible: false },
   { key: "storeLink", label: "Store link", defaultVisible: false },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
   { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
@@ -1757,6 +1758,21 @@ const isSelfShippingLine = (item) =>
   isNormalDeliveryLine(item) &&
   String(item?.shippingProvider || "").toUpperCase() === "SELF_SHIPPING";
 
+/** PROCESSING+ NORMAL line with no third-party manifest — treat as self-ship for label/invoice. */
+const isSelfShippingLineOrUnmanifested = (item) => {
+  if (isSelfShippingLine(item)) return true;
+  if (!isNormalDeliveryLine(item)) return false;
+  const st = String(item?.status || "").toUpperCase();
+  if (st === "CREATED" || st === "CONFIRMED") return false;
+  if (item?.shiprocket?.orderId || item?.delhivery?.waybill) return false;
+  return ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(st);
+};
+
+const isLikelyShiprocketShipmentId = (id) => {
+  const s = String(id ?? "").trim();
+  return /^\d+$/.test(s);
+};
+
 const SHIPPING_PROVIDER_OPTIONS = [
   { value: "SHIPROCKET", label: "Shiprocket" },
   { value: "DELHIVERY", label: "Delhivery" },
@@ -2233,6 +2249,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [lineConsistencyFilter, setLineConsistencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
   /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
@@ -2434,7 +2451,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const handleGetInvoiceClick = async (orderObj, itemObj) => {
     if (!orderObj || !itemObj) return;
 
-    if (isSelfShippingLine(itemObj)) {
+    if (isSelfShippingLineOrUnmanifested(itemObj)) {
       const { orderId, itemId } = resolveItemDocIds(orderObj, itemObj);
       if (!orderId || !itemId) {
         toast.error("Order or item ID missing for self-shipping invoice.");
@@ -2682,16 +2699,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     const forward = getLatestExchangeForwardOrder(item);
     const ids = [
       sr?.shipmentId,
-      sr?.shipmentGroupId,
       forward?.shipmentId,
       item?.shipmentId,
-      item?.shipmentGroupId,
       item?.shiprocket?.shipmentId,
-      item?.shiprocket?.shipmentGroupId,
       getLatestExchange(item)?.shiprocket?.forwardOrder?.shipmentId,
     ]
       .filter(Boolean)
-      .map(String);
+      .map(String)
+      .filter(isLikelyShiprocketShipmentId);
     return Array.from(new Set(ids));
   };
 
@@ -2702,7 +2717,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       return;
     }
 
-    if (isSelfShippingLine(item)) {
+    if (isSelfShippingLineOrUnmanifested(item)) {
       const orderCtx = orderObj || selectedOrder || { orderId: item?.orderId };
       const { orderId: oid, itemId } = resolveItemDocIds(orderCtx, item);
       if (!oid || !itemId) {
@@ -2857,6 +2872,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         paymentStatus,
         paymentMode,
         consistencyParam,
+        cityFilter.trim() || undefined,
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
@@ -2896,7 +2912,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, exchangeOnly]);
+  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly]);
 
   useEffect(() => {
     if (viewMode === VIEW_ORDER && !selectedOrder) {
@@ -2921,7 +2937,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         dateTo || undefined,
         deliveryTypeFilter || undefined,
         paymentStatus,
-        paymentMode
+        paymentMode,
+        cityFilter.trim() || undefined,
       );
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
@@ -2946,7 +2963,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, paymentFilter, exchangeOnly, dateFrom, dateTo]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -2965,6 +2982,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         deliveryType: deliveryTypeFilter || "",
         paymentStatus: paymentStatus || "",
         paymentMode: paymentMode || "",
+        city: cityFilter.trim() || "",
         itemStatusConsistency:
           viewMode === VIEW_ORDER ? lineConsistencyFilter || "" : "",
         exchangeOnly: !!exchangeOnly,
@@ -2990,6 +3008,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     dateTo,
     deliveryTypeFilter,
     paymentFilter,
+    cityFilter,
     lineConsistencyFilter,
     exchangeOnly,
   ]);
@@ -3009,6 +3028,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     statusFilter,
     dateFrom,
     dateTo,
+    cityFilter,
     sortBy,
     sortOrder,
     deliveryTypeFilter,
@@ -3025,6 +3045,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     itemStatusFilter,
     dateFrom,
     dateTo,
+    cityFilter,
     deliveryTypeFilter,
     paymentFilter,
     exchangeOnly,
@@ -3053,6 +3074,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         paymentMode,
         startDate: dateFrom || undefined,
         endDate: dateTo || undefined,
+        city: cityFilter.trim() || undefined,
         allPages: true,
         maxExportRows: 8000,
         ...(exchangeOnly ? { exchangeOnly: true } : {}),
@@ -4041,7 +4063,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         ...prev,
         items: prev.items.map((it) =>
           String(it.itemId || it._id) === stringItemId
-            ? { ...it, status: newStatus }
+            ? {
+                ...it,
+                status: newStatus,
+                ...(shippingProvider && newStatus === "PROCESSING"
+                  ? { shippingProvider }
+                  : {}),
+              }
             : it,
         ),
       };
@@ -4398,6 +4426,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           paymentFilter ||
           dateFrom ||
           dateTo ||
+          cityFilter ||
           statusFilter ||
           lineConsistencyFilter ||
           itemStatusFilter ||
@@ -4408,6 +4437,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       paymentFilter,
       dateFrom,
       dateTo,
+      cityFilter,
       statusFilter,
       lineConsistencyFilter,
       itemStatusFilter,
@@ -4636,13 +4666,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "date":
-        return order.createdAt
-          ? new Date(order.createdAt).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "2-digit",
-            })
-          : "—";
+        return formatManufacturingModalDate(order.createdAt);
       case "orderDateTime":
         return formatManufacturingModalDate(order.createdAt);
       case "email":
@@ -4854,6 +4878,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       }
       case "pincode":
         return row.address?.pincode || "—";
+      case "city":
+        return row.address?.city || "—";
       case "storeLink":
         return <TableStoreLink itemId={itemId} itemLike={item} />;
       case "orderDateTime":
@@ -4870,13 +4896,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           String(row.deliveryType || "—").replace(/_/g, " ")
         );
       case "date":
-        return row.orderCreatedAt
-          ? new Date(row.orderCreatedAt).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : "—";
+        return formatManufacturingModalDate(row.orderCreatedAt);
       case "shiprocket": {
         const line = lineItemFromOrderItemRow(row);
         if (hasActiveExchangeStatus(line)) {
@@ -5292,7 +5312,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       </button>
     );
 
-    if (isSelfShippingLine(item)) {
+    if (isSelfShippingLineOrUnmanifested(item)) {
       const ref = item?.trackingId || "—";
       return (
         <div className="min-w-[8.5rem] max-w-[11rem]">
@@ -5935,6 +5955,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
                     {(dateFrom ||
                       dateTo ||
+                      cityFilter ||
                       statusFilter ||
                       lineConsistencyFilter ||
                       paymentFilter ||
@@ -5944,6 +5965,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
+                          setCityFilter("");
                           setStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
                           setLineConsistencyFilter("");
                           setPaymentFilter("");
@@ -5967,7 +5989,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="flex flex-col gap-1">
                     <label htmlFor="order-filter-from" className="text-[10px] font-semibold text-gray-500">
                       From date
@@ -6050,6 +6072,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       <option value="createdAt-desc">Latest first</option>
                       <option value="createdAt-asc">Oldest first</option>
                     </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="order-filter-city" className="text-[10px] font-semibold text-gray-500">
+                      City
+                    </label>
+                    <input
+                      id="order-filter-city"
+                      type="text"
+                      value={cityFilter}
+                      placeholder="e.g. Mumbai"
+                      onChange={(e) => {
+                        setCityFilter(e.target.value);
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className={ui.inputCompact}
+                    />
                   </div>
                 </div>
               </div>
@@ -6289,12 +6327,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
-                    {(dateFrom || dateTo || itemStatusFilter || paymentFilter) && (
+                    {(dateFrom || dateTo || cityFilter || itemStatusFilter || paymentFilter) && (
                       <button
                         type="button"
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
+                          setCityFilter("");
                           setItemStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
                           setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
@@ -6318,7 +6357,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="flex flex-col gap-1">
                     <label htmlFor="item-filter-from" className="text-[10px] font-semibold text-stone-500">
                       From date
@@ -6349,7 +6388,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       className={ui.inputCompact}
                     />
                   </div>
-                  <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
+                  <div className="flex flex-col gap-1">
                     <label htmlFor="item-filter-status" className="text-[10px] font-semibold text-stone-500">
                       Line status
                     </label>
@@ -6377,10 +6416,26 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       ))}
                     </select>
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="item-filter-city" className="text-[10px] font-semibold text-stone-500">
+                      City
+                    </label>
+                    <input
+                      id="item-filter-city"
+                      type="text"
+                      value={cityFilter}
+                      placeholder="e.g. Mumbai"
+                      onChange={(e) => {
+                        setCityFilter(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className={ui.inputCompact}
+                    />
+                  </div>
                 </div>
                 <p className="border-t border-border px-3 py-2.5 text-[11px] text-stone-500 leading-snug">
                   The list is paginated for speed. <span className="font-medium">Mfg PDF</span>{" "}
-                  above exports <span className="font-medium">all</span> lines matching dates, delivery, payment, status, and
+                  above exports <span className="font-medium">all</span> lines matching dates, city, delivery, payment, status, and
                   search (not only this page).
                 </p>
               </div>
@@ -6643,15 +6698,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               <span>Size: {row.item.variant.size}</span>
                             )}
                             <span>
-                              {row.orderCreatedAt
-                                ? new Date(
-                                    row.orderCreatedAt,
-                                  ).toLocaleDateString("en-IN", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                  })
-                                : "—"}
+                              {formatManufacturingModalDate(row.orderCreatedAt)}
                             </span>
                           </div>
                           {String(row.deliveryType || "").toUpperCase() === "NORMAL" && (() => {

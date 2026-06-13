@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "") => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "") => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -46,6 +46,10 @@ const orderEndpoints = {
       url += `&itemStatusConsistency=${encodeURIComponent(itemStatusConsistency)}`;
     }
 
+    if (city) {
+      url += `&city=${encodeURIComponent(city)}`;
+    }
+
     return url;
   },
   GET_STATUS_ANALYTICS: ({
@@ -57,6 +61,7 @@ const orderEndpoints = {
     paymentStatus = "",
     paymentMode = "",
     itemStatusConsistency = "",
+    city = "",
     exchangeOnly = false,
   } = {}) => {
     const params = new URLSearchParams();
@@ -67,6 +72,7 @@ const orderEndpoints = {
     if (deliveryType) params.set("deliveryType", deliveryType);
     if (paymentStatus) params.set("paymentStatus", paymentStatus);
     if (paymentMode) params.set("paymentMode", paymentMode);
+    if (city) params.set("city", city);
     if (itemStatusConsistency) {
       params.set("itemStatusConsistency", itemStatusConsistency);
     }
@@ -77,7 +83,7 @@ const orderEndpoints = {
   `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
-  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "") => {
+  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "") => {
     let url = `/admin/orders/items?page=${page}&limit=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (orderStatus) url += `&orderStatus=${encodeURIComponent(orderStatus)}`;
@@ -87,6 +93,7 @@ const orderEndpoints = {
     if (deliveryType) url += `&deliveryType=${encodeURIComponent(deliveryType)}`;
     if (paymentStatus) url += `&paymentStatus=${encodeURIComponent(paymentStatus)}`;
     if (paymentMode) url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
+    if (city) url += `&city=${encodeURIComponent(city)}`;
     return url;
   },
 
@@ -231,10 +238,10 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "") => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city)
   );
 };
 
@@ -243,10 +250,10 @@ export const getOrderStatusAnalytics = (params = {}) => {
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode) => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city)
   );
 };
 
