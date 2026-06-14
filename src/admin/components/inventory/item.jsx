@@ -15,6 +15,7 @@ import {
   addWarehouseStockFromItem,
 } from "../../apis/Warehouseapi";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
+import ItemPricingHistoryModal from "./ItemPricingHistoryModal.jsx";
 
 function collectSkuListFromItem(item) {
   if (!item?.variants?.length) return [];
@@ -69,6 +70,8 @@ export default function Items() {
   const [whApplyLoading, setWhApplyLoading] = useState(false);
   const [whPresence, setWhPresence] = useState([]);
   const [whPresenceLoading, setWhPresenceLoading] = useState(false);
+
+  const [pricingHistoryItem, setPricingHistoryItem] = useState(null);
 
   console.log("[Items.jsx] Component mounted / re-rendered");
   console.log(
@@ -614,6 +617,7 @@ export default function Items() {
                 <th className="px-4 py-3 text-center font-medium">Size chart</th>
                 <th className="px-4 py-3 text-right font-medium">Price</th>
                 <th className="px-4 py-3 text-right font-medium">Discounted</th>
+                <th className="px-4 py-3 text-center font-medium">Pricing</th>
                 <th className="px-4 py-3 text-center font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -623,7 +627,7 @@ export default function Items() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     Loading products...
@@ -632,7 +636,7 @@ export default function Items() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     No products found
@@ -802,6 +806,25 @@ export default function Items() {
                           </button>
                         </div>
                       )}
+                    </td>
+
+                    <td className="px-4 py-3 align-middle text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("[pricing-history][item.jsx] History clicked", {
+                            _id: item._id,
+                            productId: item.productId,
+                            name: item.name,
+                          });
+                          setPricingHistoryItem(item);
+                        }}
+                        className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-full border border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-600 hover:text-white hover:border-amber-600 transition-colors whitespace-nowrap"
+                        title="View pricing history"
+                      >
+                        History
+                      </button>
                     </td>
 
                     <td className="px-4 py-3 align-middle text-center">
@@ -1108,6 +1131,14 @@ export default function Items() {
           </div>
         </div>
       ) : null}
+
+      <ItemPricingHistoryModal
+        open={Boolean(pricingHistoryItem)}
+        onClose={() => setPricingHistoryItem(null)}
+        itemId={pricingHistoryItem?._id || pricingHistoryItem?.productId}
+        itemName={pricingHistoryItem?.name || ""}
+        productId={pricingHistoryItem?.productId || ""}
+      />
     </div>
   );
 }

@@ -4,21 +4,22 @@ import { logout } from "../../redux/GlobalSlice";
 import { getLoginPathForPathname } from "../../utils/authRole";
 
 /**
- * Cresate axios instance
+ * Create axios instance
  */
-const apiBaseUrl = "https://api.khushpehno.com/api";
-// const apiBaseUrl = "https://apidev.khushpehno.com/api";
-// const apiBaseUrl = "https://apidev.khushpehno.com/api";
-// const apiBaseUrl ="http://localhost:5000/api";
-//   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-//   (import.meta.env.DEV
-//     ? "http://localhost:5000/api"
-//     : "https://api.khushpehno.com/api");
+const apiBaseUrl ="https://api.khushpehno.com/api"
+  // import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  // (import.meta.env.DEV
+  //   ? "http://localhost:5000/api"
+  //   : "https://api.khushpehno.com/api");
 
 const axiosInstance = axios.create({
   baseURL: apiBaseUrl,
   timeout: 60000,
 });
+
+if (import.meta.env.DEV) {
+  console.log("[pricing-history][api] baseURL =", apiBaseUrl);
+}
 
 /**
  * REQUEST INTERCEPTOR
@@ -30,6 +31,15 @@ axiosInstance.interceptors.request.use(
     const token = state?.global?.token ?? localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (import.meta.env.DEV && String(config.url || "").includes("pricing-history")) {
+      console.log("[pricing-history][api] request", {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        baseURL: config.baseURL,
+        full: `${config.baseURL || ""}${config.url || ""}`,
+        hasToken: Boolean(token),
+      });
     }
     return config;
   },
@@ -52,13 +62,31 @@ axiosInstance.interceptors.response.use(
       base.status = status;
     }
     if (typeof payload === "string" && payload.trim()) {
-      base.message = payload;
+      const cannotRoute = payload.match(/Cannot (GET|POST|PUT|PATCH|DELETE) ([^\s<]+)/i);
+      base.message = cannotRoute
+        ? `API route not found: ${cannotRoute[2]}. Deploy the latest backend or point VITE_API_BASE_URL to your local server.`
+        : payload.includes("<!DOCTYPE") || payload.includes("<html")
+          ? error?.message || "Request failed"
+          : payload;
     }
     if (!base.message) {
       base.message =
         (typeof payload === "object" && payload?.message) ||
         error?.message ||
         "Something went wrong";
+    }
+
+    if (import.meta.env.DEV && String(error?.config?.url || "").includes("pricing-history")) {
+      console.error("[pricing-history][api] response error", {
+        status,
+        url: error?.config?.url,
+        baseURL: error?.config?.baseURL,
+        message: base.message,
+        payloadPreview:
+          typeof payload === "string"
+            ? payload.slice(0, 200)
+            : payload,
+      });
     }
 
     if (status === 401 && typeof window !== "undefined") {

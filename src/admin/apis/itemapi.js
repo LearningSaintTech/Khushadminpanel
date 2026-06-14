@@ -268,6 +268,42 @@ export const bulkUploadItems = async (formData) => {
   }
 };
 
+/**
+ * Pricing change history for a catalog item
+ * GET /api/items/pricing-history/:itemId
+ */
+export const getItemPricingHistory = async (itemId, page = 1, limit = 50) => {
+  if (!itemId) throw { success: false, message: "Item ID is required" };
+  const url = `/items/pricing-history/${encodeURIComponent(String(itemId))}?page=${page}&limit=${limit}`;
+  console.log("[pricing-history][frontend] getItemPricingHistory", { itemId, page, limit, url });
+  try {
+    const res = await apiConnector("GET", url);
+    console.log("[pricing-history][frontend] getItemPricingHistory OK", {
+      itemId,
+      keys: res && typeof res === "object" ? Object.keys(res) : typeof res,
+      res,
+    });
+    return res;
+  } catch (err) {
+    console.error("[pricing-history][frontend] getItemPricingHistory FAIL", {
+      itemId,
+      url,
+      err,
+    });
+    throw err;
+  }
+};
+
+/**
+ * Pricing audit summary for a catalog item
+ * GET /api/items/pricing-audit/:itemId
+ */
+export const getItemPricingAudit = async (itemId) => {
+  if (!itemId) throw { success: false, message: "Item ID is required" };
+  const url = `/items/pricing-audit/${encodeURIComponent(String(itemId))}`;
+  return apiConnector("GET", url);
+};
+
 export default {
   searchItems,
   getItemsBySubcategory,
@@ -279,4 +315,6 @@ export default {
   getItemsForSelect,
   getItemsWithSkus,
   bulkUploadItems,
+  getItemPricingHistory,
+  getItemPricingAudit,
 };

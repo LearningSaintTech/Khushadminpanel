@@ -25,6 +25,7 @@ import {
   refId,
   unwrapData,
 } from "../supportShared";
+import { SupportChatMessageBubble, SupportMediaBlock } from "../SupportChatMessage";
 
 export default function SupportTicketDetail() {
   const { id } = useParams();
@@ -190,6 +191,7 @@ export default function SupportTicketDetail() {
             <p className="font-mono text-[10px] text-stone-500">{ticket.ticketNumber}</p>
             <h1 className="mt-1 text-base font-semibold text-stone-900">{ticket.subject}</h1>
             <p className="mt-2 text-[11px] text-stone-600">{ticket.description || "—"}</p>
+            <SupportMediaBlock images={ticket.images} videos={ticket.videos} className="mt-2" />
             <dl className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
               <div>
                 <dt className="text-stone-400">Issue type</dt>
@@ -280,29 +282,7 @@ export default function SupportTicketDetail() {
             {messages.length === 0 ? (
               <p className="text-center text-[11px] text-stone-400">No messages yet</p>
             ) : (
-              messages.map((msg) => {
-                const sender = String(msg.senderType || msg.senderRole || "").toUpperCase();
-                const isStaff = sender === "AGENT" || sender === "ADMIN";
-                return (
-                  <div
-                    key={msg._id}
-                    className={`flex ${isStaff ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-xl px-3 py-2 text-[11px] ${
-                        isStaff
-                          ? "bg-brand-600 text-white"
-                          : "bg-canvas-muted text-stone-800"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{msg.message || msg.text}</p>
-                      <p className={`mt-1 text-[9px] ${isStaff ? "text-brand-100" : "text-stone-400"}`}>
-                        {formatDt(msg.createdAt)} · {sender || "USER"}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
+              messages.map((msg) => <SupportChatMessageBubble key={msg._id} msg={msg} />)
             )}
             <div ref={chatEndRef} />
           </div>

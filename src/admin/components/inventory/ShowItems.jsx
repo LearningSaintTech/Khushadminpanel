@@ -34,6 +34,7 @@ import {
 } from "../../apis/subcategoryapis";
 import { bulkUploadItems } from "../../apis/itemapi";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
+import ItemPricingHistoryModal from "./ItemPricingHistoryModal.jsx";
 
 function itemRowKey(item) {
   return String(item?._id || item?.productId || "");
@@ -93,6 +94,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "warehouse", label: "Warehouse", defaultVisible: true },
   { key: "mrp", label: "MRP", defaultVisible: true },
   { key: "discount", label: "Discount", defaultVisible: true },
+  { key: "pricingHistory", label: "Pricing", defaultVisible: true },
   { key: "status", label: "Status", defaultVisible: true },
 ];
 
@@ -296,6 +298,8 @@ const ShowItems = () => {
   const [whApplyLoading, setWhApplyLoading] = useState(false);
   const [whPresence, setWhPresence] = useState([]);
   const [whPresenceLoading, setWhPresenceLoading] = useState(false);
+
+  const [pricingHistoryItem, setPricingHistoryItem] = useState(null);
 
   // Category dropdown states
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
@@ -1348,6 +1352,27 @@ const ShowItems = () => {
             )}
           </td>
         );
+      case "pricingHistory":
+        return (
+          <td className={`${tdClass} text-center`}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                console.log("[pricing-history][ShowItems] History clicked", {
+                  _id: item._id,
+                  productId: item.productId,
+                  name: item.name,
+                });
+                setPricingHistoryItem(item);
+              }}
+              className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-900 hover:bg-amber-600 hover:text-white hover:border-amber-600 transition-colors whitespace-nowrap"
+              title="View pricing history"
+            >
+              History
+            </button>
+          </td>
+        );
       case "status":
         return (
           <td className={`${tdClass} text-center`}>
@@ -1364,7 +1389,7 @@ const ShowItems = () => {
   };
 
   const thAlign = (key) => {
-    if (key === "sizeChart" || key === "status") return "text-center";
+    if (key === "sizeChart" || key === "status" || key === "pricingHistory") return "text-center";
     if (key === "mrp" || key === "discount") return "text-right";
     return "text-left";
   };
@@ -2228,6 +2253,14 @@ const ShowItems = () => {
         )}
       </div>
       </div>
+
+      <ItemPricingHistoryModal
+        open={Boolean(pricingHistoryItem)}
+        onClose={() => setPricingHistoryItem(null)}
+        itemId={pricingHistoryItem?._id || pricingHistoryItem?.productId}
+        itemName={pricingHistoryItem?.name || ""}
+        productId={pricingHistoryItem?.productId || ""}
+      />
     </div>
   );
 };
