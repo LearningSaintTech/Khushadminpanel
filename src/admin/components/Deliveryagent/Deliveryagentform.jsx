@@ -1,17 +1,28 @@
-// src/admin/components/Deliveryagent/Deliveryagentform.jsx
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { ArrowLeft, Loader2, Save, X } from "lucide-react";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
   createDeliveryAgent,
   getDeliveryAgentById,
   updateDeliveryAgent,
 } from "../../apis/Driverapi";
-import { toast } from "react-toastify";
+import {
+  alertDanger,
+  btnOutline,
+  btnPrimary,
+  Field,
+  fieldClass,
+  FormSection,
+  formPageWrap,
+  formStickyFooter,
+  formToolbar,
+  unwrapData,
+} from "./deliveryAgentShared";
 
-/** Extract backend error message from axios error, string (apiConnector reject), or any error. */
 function getBackendErrorMessage(err, fallback = "Something went wrong") {
   if (err == null) return fallback;
-  // apiConnector response interceptor rejects with a string message
   if (typeof err === "string" && err.trim()) return err.trim();
   const data = err?.response?.data;
   if (typeof data?.message === "string") return data.message;
@@ -22,12 +33,6 @@ function getBackendErrorMessage(err, fallback = "Something went wrong") {
   if (typeof data?.error === "string") return data.error;
   if (typeof err?.message === "string" && err.message) return err.message;
   return fallback;
-}
-
-/** Log backend error to console (everywhere). */
-function logBackendError(context, err) {
-  const msg = getBackendErrorMessage(err, "Unknown error");
-  console.error(`[DeliveryAgentForm] ${context}:`, msg, err?.response?.data ?? err);
 }
 
 const defaultForm = {
@@ -50,7 +55,15 @@ const defaultForm = {
 const DeliveryAgentForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
   const isEdit = !!id;
+
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(ap("driver"));
+  };
 
   const [formData, setFormData] = useState(defaultForm);
   const [licenseImageFile, setLicenseImageFile] = useState(null);
@@ -61,56 +74,58 @@ const DeliveryAgentForm = () => {
   const [profilePreviewUrl, setProfilePreviewUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (isEdit) {
-      const loadAgent = async () => {
-        try {
-          const res = await getDeliveryAgentById(id);
-          const raw = res?.data?.data || res?.data;
-          const agent = raw?.deliveryAgent || raw;
-          if (!agent) {
-            console.warn("[DeliveryAgentForm] Load agent: response OK but no agent data", { id, raw: res?.data });
-            toast.error("Agent not found");
-            navigate("/admin/driver");
-            return;
-          }
-          const formatDate = (val) => {
-            if (!val) return "";
-            const d = new Date(val);
-            return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
-          };
-          setFormData({
-            name: agent.name || "",
-            dob: formatDate(agent.dob),
-            countryCode: agent.countryCode || "+91",
-            phoneNumber: agent.phoneNumber || "",
-            email: agent.email || "",
-            address: agent.address || "",
-            city: agent.city || "",
-            pinCode: agent.pinCode !== undefined && agent.pinCode !== "" ? String(agent.pinCode) : "",
-            licenseNumber: agent.licenseNumber || "",
-            licenseExpiry: formatDate(agent.licenseExpiry),
-            bikeNumber: agent.bikeNumber || "",
-            bikeModel: agent.bikeModel || "",
-            bikeBrand: agent.bikeBrand || "",
-            isActive: agent.isActive !== false,
-          });
-          setExistingLicenseImageUrl(agent.licenseImage?.trim() || "");
-          setExistingProfileImageUrl(agent.profileImage?.trim() || "");
-        } catch (err) {
-          logBackendError("Load agent failed", err);
-          toast.error(getBackendErrorMessage(err, "Failed to load agent data"));
-          navigate("/admin/driver");
-        } finally {
-          setFetching(false);
+    if (!isEdit) return;
+    const loadAgent = async () => {
+      try {
+        const res = await getDeliveryAgentById(id);
+        const raw = unwrapData(res);
+        const agent = raw?.deliveryAgent || raw;
+        if (!agent || typeof agent !== "object") {
+          toast.error("Agent not found");
+          navigate(ap("driver"));
+          return;
         }
-      };
-      loadAgent();
-    }
-  }, [id, isEdit, navigate]);
+        const formatDate = (val) => {
+          if (!val) return "";
+          const d = new Date(val);
+          return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+        };
+        setFormData({
+          name: agent.name || "",
+          dob: formatDate(agent.dob),
+          countryCode: agent.countryCode || "+91",
+          phoneNumber: agent.phoneNumber || "",
+          email: agent.email || "",
+          address: agent.address || "",
+          city: agent.city || "",
+          pinCode:
+            agent.pinCode !== undefined && agent.pinCode !== ""
+              ? String(agent.pinCode)
+              : "",
+          licenseNumber: agent.licenseNumber || "",
+          licenseExpiry: formatDate(agent.licenseExpiry),
+          bikeNumber: agent.bikeNumber || "",
+          bikeModel: agent.bikeModel || "",
+          bikeBrand: agent.bikeBrand || "",
+          isActive: agent.isActive !== false,
+        });
+        setExistingLicenseImageUrl(agent.licenseImage?.trim() || "");
+        setExistingProfileImageUrl(agent.profileImage?.trim() || "");
+      } catch (err) {
+        const msg = getBackendErrorMessage(err, "Failed to load agent data");
+        setError(msg);
+        toast.error(msg);
+        navigate(ap("driver"));
+      } finally {
+        setFetching(false);
+      }
+    };
+    loadAgent();
+  }, [id, isEdit, navigate, ap]);
 
-  // Preview URLs for newly selected files; revoke on change/unmount
   useEffect(() => {
     if (licenseImageFile) {
       const url = URL.createObjectURL(licenseImageFile);
@@ -135,9 +150,9 @@ const DeliveryAgentForm = () => {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+    setError("");
   };
 
-  /** Build FormData so backend gets multipart and req.files is an array (avoids req.files.find on undefined). */
   const buildFormData = () => {
     const fd = new FormData();
     fd.append("name", formData.name?.trim() ?? "");
@@ -153,8 +168,9 @@ const DeliveryAgentForm = () => {
     if (formData.bikeModel?.trim()) fd.append("bikeModel", formData.bikeModel.trim());
     if (formData.bikeBrand?.trim()) fd.append("bikeBrand", formData.bikeBrand.trim());
     if (formData.dob) fd.append("dob", new Date(formData.dob).toISOString());
-    if (formData.licenseExpiry) fd.append("licenseExpiry", new Date(formData.licenseExpiry).toISOString());
-    // Backend expects req.files.find(f => f.fieldname === "licenseImage" / "profileImage") — always append so req.files exists
+    if (formData.licenseExpiry) {
+      fd.append("licenseExpiry", new Date(formData.licenseExpiry).toISOString());
+    }
     fd.append("licenseImage", licenseImageFile || new File([], "licenseImage"));
     fd.append("profileImage", profileImageFile || new File([], "profileImage"));
     return fd;
@@ -162,6 +178,8 @@ const DeliveryAgentForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+    setError("");
     setLoading(true);
     try {
       if (isEdit) {
@@ -180,18 +198,20 @@ const DeliveryAgentForm = () => {
           isActive: formData.isActive,
         };
         if (formData.dob) payload.dob = new Date(formData.dob).toISOString();
-        if (formData.licenseExpiry) payload.licenseExpiry = new Date(formData.licenseExpiry).toISOString();
+        if (formData.licenseExpiry) {
+          payload.licenseExpiry = new Date(formData.licenseExpiry).toISOString();
+        }
         await updateDeliveryAgent(id, payload);
         toast.success("Delivery agent updated successfully.");
-        setTimeout(() => navigate("/admin/driver"), 400);
       } else {
         await createDeliveryAgent(buildFormData());
-        toast.success("Delivery agent created successfully. OTP sent for verification.");
-        setTimeout(() => navigate("/admin/driver"), 400);
+        toast.success("Delivery agent created. OTP sent for verification.");
       }
+      navigate(ap("driver"));
     } catch (err) {
-      logBackendError(isEdit ? "Update agent failed" : "Create agent failed", err);
-      toast.error(getBackendErrorMessage(err, "Operation failed"));
+      const msg = getBackendErrorMessage(err, "Operation failed");
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -199,49 +219,67 @@ const DeliveryAgentForm = () => {
 
   if (fetching) {
     return (
-      <div className="p-10 text-center text-gray-600">
-        Loading agent data...
+      <div className={formPageWrap}>
+        <div className={formToolbar}>
+          <button type="button" onClick={goBack} className={btnOutline}>
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Back
+          </button>
+          <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+            Edit delivery agent
+          </h1>
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white py-12 text-[11px] text-stone-500 shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
+          Loading…
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="bg-white shadow-md rounded-xl p-8 border border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          {isEdit ? "Edit Delivery Agent" : "Create New Delivery Agent"}
-        </h2>
+    <div className={formPageWrap}>
+      <div className={formToolbar}>
+        <button type="button" onClick={goBack} className={btnOutline} title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Back
+        </button>
+        <h1 className="mr-auto min-w-0 text-base font-bold tracking-tight sm:text-lg">
+          {isEdit ? "Edit delivery agent" : "Create delivery agent"}
+        </h1>
+        <button type="button" onClick={() => navigate(ap("driver"))} className={btnOutline}>
+          <X className="h-3.5 w-3.5" aria-hidden />
+          Close
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {error ? <div className={alertDanger}>{error}</div> : null}
+
+        <FormSection title="Basic information" hint="Contact and personal details">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="Full name" required>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+            </Field>
+            <Field label="Date of birth">
               <input
                 type="date"
                 name="dob"
                 value={formData.dob}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
+            </Field>
           </div>
-
-          {/* Phone – driver login uses countryCode + phoneNumber */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Country Code *</label>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <Field label="Country code" required>
               <input
                 type="text"
                 name="countryCode"
@@ -249,219 +287,210 @@ const DeliveryAgentForm = () => {
                 onChange={handleChange}
                 placeholder="+91"
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+            </Field>
+            <Field label="Phone number" required>
               <input
                 type="tel"
                 name="phoneNumber"
                 value={formData.phoneNumber}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                disabled={isEdit}
+                className={fieldClass}
               />
-            </div>
+            </Field>
+            <Field label="Email">
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
           </div>
+        </FormSection>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-
-          {/* Address */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+        <FormSection title="Address">
+          <Field label="Street address">
             <input
               type="text"
               name="address"
               value={formData.address}
               onChange={handleChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              className={fieldClass}
             />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+          </Field>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="City">
               <input
                 type="text"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pin Code</label>
+            </Field>
+            <Field label="Pin code">
               <input
                 type="text"
                 name="pinCode"
                 value={formData.pinCode}
                 onChange={handleChange}
                 placeholder="e.g. 110001"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
+            </Field>
           </div>
+        </FormSection>
 
-          {/* License */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
+        <FormSection title="License & vehicle">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="License number">
               <input
                 type="text"
                 name="licenseNumber"
                 value={formData.licenseNumber}
                 onChange={handleChange}
                 placeholder="e.g. DL1234567890"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">License Expiry</label>
+            </Field>
+            <Field label="License expiry">
               <input
                 type="date"
                 name="licenseExpiry"
                 value={formData.licenseExpiry}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
+            </Field>
           </div>
-
-          {/* Bike */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bike / Vehicle Number</label>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <Field label="Vehicle number">
               <input
                 type="text"
                 name="bikeNumber"
                 value={formData.bikeNumber}
                 onChange={handleChange}
                 placeholder="e.g. DL01AB1234"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bike Brand</label>
+            </Field>
+            <Field label="Brand">
               <input
                 type="text"
                 name="bikeBrand"
                 value={formData.bikeBrand}
                 onChange={handleChange}
                 placeholder="e.g. Honda"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                className={fieldClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bike Model</label>
+            </Field>
+            <Field label="Model">
               <input
                 type="text"
                 name="bikeModel"
                 value={formData.bikeModel}
                 onChange={handleChange}
-                placeholder="e.g. Honda Activa"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="e.g. Activa"
+                className={fieldClass}
               />
-            </div>
+            </Field>
           </div>
+        </FormSection>
 
-          {/* License image & Profile image: create + edit; show existing in edit, preview when new file chosen */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">License Image</label>
+        <FormSection title="Documents" hint="Optional images for license and profile">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Field label="License image">
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setLicenseImageFile(e.target.files?.[0] || null)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-indigo-50 file:text-indigo-700 file:text-sm"
+                className={`${fieldClass} file:mr-2 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-[10px] file:font-semibold file:text-brand-700`}
               />
-              <p className="text-xs text-gray-500 mt-1">{isEdit ? "Choose a file to replace current image." : "Optional. Upload license image."}</p>
               {(licensePreviewUrl || (isEdit && existingLicenseImageUrl && !licenseImageFile)) && (
-                <div className="mt-3 relative inline-block">
+                <div className="relative mt-2 inline-block">
                   <img
                     src={licensePreviewUrl || existingLicenseImageUrl}
                     alt="License preview"
-                    className="h-32 w-auto max-w-full object-contain rounded-lg border border-gray-200 shadow-sm"
+                    className="h-28 max-w-full rounded-lg border border-border object-contain"
                   />
                   {licensePreviewUrl && (
                     <button
                       type="button"
                       onClick={() => setLicenseImageFile(null)}
-                      className="absolute top-1 right-1 bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600"
+                      className="absolute right-1 top-1 rounded bg-danger px-1.5 py-0.5 text-[10px] text-white"
                     >
                       Remove
                     </button>
                   )}
                 </div>
               )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Profile Image</label>
+            </Field>
+            <Field label="Profile image">
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-indigo-50 file:text-indigo-700 file:text-sm"
+                className={`${fieldClass} file:mr-2 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-[10px] file:font-semibold file:text-brand-700`}
               />
-              <p className="text-xs text-gray-500 mt-1">{isEdit ? "Choose a file to replace current image." : "Optional. Upload profile photo."}</p>
               {(profilePreviewUrl || (isEdit && existingProfileImageUrl && !profileImageFile)) && (
-                <div className="mt-3 relative inline-block">
+                <div className="relative mt-2 inline-block">
                   <img
                     src={profilePreviewUrl || existingProfileImageUrl}
                     alt="Profile preview"
-                    className="h-32 w-auto max-w-full object-contain rounded-lg border border-gray-200 shadow-sm"
+                    className="h-28 max-w-full rounded-lg border border-border object-contain"
                   />
                   {profilePreviewUrl && (
                     <button
                       type="button"
                       onClick={() => setProfileImageFile(null)}
-                      className="absolute top-1 right-1 bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600"
+                      className="absolute right-1 top-1 rounded bg-danger px-1.5 py-0.5 text-[10px] text-white"
                     >
                       Remove
                     </button>
                   )}
                 </div>
               )}
-            </div>
+            </Field>
           </div>
+        </FormSection>
 
-          <div className="flex items-center">
+        <FormSection title="Status">
+          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-stone-700">
             <input
               type="checkbox"
               name="isActive"
               checked={formData.isActive}
               onChange={handleChange}
-              className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              className="h-3.5 w-3.5 rounded border-border text-brand-600 focus:ring-brand-500"
             />
-            <label className="ml-2 block text-sm text-gray-700">Active / Available for deliveries</label>
-          </div>
+            Active — available for deliveries
+          </label>
+        </FormSection>
 
-          <div className="flex gap-4 pt-6">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition font-medium"
-            >
-              {loading ? "Saving..." : isEdit ? "Update Agent" : "Create Agent"}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/admin/driver")}
-              className="flex-1 border border-gray-300 py-3 px-6 rounded-lg hover:bg-gray-50 transition"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
+        <div className={formStickyFooter}>
+          <button type="button" onClick={() => navigate(ap("driver"))} className={btnOutline}>
+            Cancel
+          </button>
+          <button type="submit" disabled={loading} className={btnPrimary}>
+            {loading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Save className="h-3.5 w-3.5" aria-hidden />
+                {isEdit ? "Update agent" : "Create agent"}
+              </>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

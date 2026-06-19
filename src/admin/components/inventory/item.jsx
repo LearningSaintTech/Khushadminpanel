@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import toast from "react-hot-toast";
 import { X, Loader2 } from "lucide-react";
 import {
@@ -45,6 +46,9 @@ function normalizeWarehouseRows(res) {
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
   const navigate = useNavigate();
+  const basePath = useAdminPanelBasePath();
+  const ap = (suffix) =>
+    `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
 
   const [items, setItems] = useState([]);
   const [jsonFile, setJsonFile] = useState(null);
@@ -473,7 +477,14 @@ export default function Items() {
                 Products
               </h1>
               <p className="text-xs sm:text-sm text-stone-500">
-                Manage all items inside this subcategory
+                Manage all items inside this subcategory.{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate(ap("designer/inventory?syncCatalog=1"))}
+                  className="font-medium text-brand-600 hover:underline"
+                >
+                  Sync missing items to designer panel
+                </button>
               </p>
             </div>
           </div>

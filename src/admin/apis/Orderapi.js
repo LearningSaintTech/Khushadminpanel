@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "") => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false) => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -50,7 +50,20 @@ const orderEndpoints = {
       url += `&city=${encodeURIComponent(city)}`;
     }
 
+    if (exchangeOnly) {
+      url += "&exchangeOnly=true";
+    }
+
+    if (returnOnly) {
+      url += "&returnOnly=true";
+    }
+
     return url;
+  },
+  GET_SIDEBAR_COUNTS: ({ view = "item" } = {}) => {
+    const params = new URLSearchParams();
+    params.set("view", view || "item");
+    return `/admin/orders/analytics/sidebar-counts?${params.toString()}`;
   },
   GET_STATUS_ANALYTICS: ({
     view = "order",
@@ -63,6 +76,7 @@ const orderEndpoints = {
     itemStatusConsistency = "",
     city = "",
     exchangeOnly = false,
+    returnOnly = false,
   } = {}) => {
     const params = new URLSearchParams();
     params.set("view", view || "order");
@@ -77,13 +91,14 @@ const orderEndpoints = {
       params.set("itemStatusConsistency", itemStatusConsistency);
     }
     if (exchangeOnly) params.set("exchangeOnly", "true");
+    if (returnOnly) params.set("returnOnly", "true");
     return `/admin/orders/analytics/status-counts?${params.toString()}`;
   },
   GET_INVOICE: (orderId, itemId) =>
   `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
-  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "") => {
+  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "") => {
     let url = `/admin/orders/items?page=${page}&limit=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (orderStatus) url += `&orderStatus=${encodeURIComponent(orderStatus)}`;
@@ -94,6 +109,11 @@ const orderEndpoints = {
     if (paymentStatus) url += `&paymentStatus=${encodeURIComponent(paymentStatus)}`;
     if (paymentMode) url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
+    if (exchangeOnly) url += "&exchangeOnly=true";
+    if (returnOnly) url += "&returnOnly=true";
+    if (shippingProvider) {
+      url += `&shippingProvider=${encodeURIComponent(shippingProvider)}`;
+    }
     return url;
   },
 
@@ -142,6 +162,12 @@ const orderEndpoints = {
   EXCHANGE_DETAILS: (exchangeId) => `/exchangeUser/${exchangeId}`,
   APPROVE_EXCHANGE: (exchangeId) => `/exchangeUser/approve/${exchangeId}`,
   APPROVE_EXCHANGE_ALT: (exchangeId) => `/exchangeUser/${exchangeId}/approve`,
+  APPROVE_RETURN: (returnId) => `/return-user/admin/${returnId}/approve`,
+  BOOK_RETURN_PICKUP: (returnId) => `/return-user/admin/${returnId}/book-pickup`,
+  ASSIGN_RETURN_PICKUP: (returnId) => `/return-user/admin/${returnId}/assign-pickup`,
+
+  ASSIGN_EXCHANGE_PICKUP: (exchangeId) =>
+    `/exchangeUser/admin/${exchangeId}/assign-pickup`,
 
 
 // Shipping Label Download
@@ -150,12 +176,16 @@ DOWNLOAD_SHIPPING_LABEL: `/admin/orders/shipping-labels/download`,
 MANIFEST_DOWNLOAD: `/admin/orders/manifests/download`,
 
 SELF_SHIPPING_LABEL_DOWNLOAD: `/admin/orders/self-shipping-label/download`,
+SHADOWFAX_LABEL_DOWNLOAD: `/admin/orders/shadowfax-label/download`,
 SELF_SHIPPING_INVOICE_DOWNLOAD: `/admin/orders/self-shipping-invoice/download`,
 
 DOWNLOAD_DELHIVERY_PACKING_SLIP: `/admin/orders/delhivery-packing-slips/download`,
 
 FORWARD_SHIPMENT: (exchangeId) =>
   `/exchangeUser/forward-shipment/${exchangeId}`,
+
+ASSIGN_EXCHANGE_PICKUP: (exchangeId) =>
+  `/exchangeUser/admin/${exchangeId}/assign-pickup`,
 };
 // ✅ Download Shipping Label
 export const downloadShippingLabel = (shipmentIds) => {
@@ -174,6 +204,17 @@ export const downloadSelfShippingLabel = (orderId, itemId) => {
   return apiConnector(
     "POST",
     orderEndpoints.SELF_SHIPPING_LABEL_DOWNLOAD,
+    { orderId, itemId },
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
+export const downloadShadowfaxLabel = (orderId, itemId) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.SHADOWFAX_LABEL_DOWNLOAD,
     { orderId, itemId },
     {},
     {},
@@ -238,11 +279,16 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "") => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly)
   );
+};
+
+/** Live DB counts + status labels for analytics cards (admin-owned; same payload as Order Agent sidebar). */
+export const getAdminOrderSidebarCounts = ({ view = "item" } = {}) => {
+  return apiConnector("GET", orderEndpoints.GET_SIDEBAR_COUNTS({ view }));
 };
 
 export const getOrderStatusAnalytics = (params = {}) => {
@@ -250,10 +296,10 @@ export const getOrderStatusAnalytics = (params = {}) => {
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "") => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider)
   );
 };
 
@@ -432,4 +478,24 @@ export const approveExchange = (exchangeId) => {
       });
     });
   });
+};
+
+export const assignExchangePickup = (exchangeId, body = {}) => {
+  return apiConnector(
+    "PATCH",
+    orderEndpoints.ASSIGN_EXCHANGE_PICKUP(exchangeId),
+    body,
+  );
+};
+
+export const approveReturn = (returnId, body = {}) => {
+  return apiConnector("PATCH", orderEndpoints.APPROVE_RETURN(returnId), body);
+};
+
+export const bookReturnReversePickup = (returnId) => {
+  return apiConnector("PATCH", orderEndpoints.BOOK_RETURN_PICKUP(returnId), {});
+};
+
+export const assignReturnPickup = (returnId, body = {}) => {
+  return apiConnector("PATCH", orderEndpoints.ASSIGN_RETURN_PICKUP(returnId), body);
 };

@@ -3,6 +3,7 @@ import {
   clearAdminOtpSessionStorage,
   clearDesignerSessionStorage,
   clearSupportAgentSessionStorage,
+  clearOrderAgentSessionStorage,
 } from "../utils/authRole";
 
 const initialState = {
@@ -74,6 +75,7 @@ const globalSlice = createSlice({
       clearDesignerSessionStorage();
       clearAdminOtpSessionStorage();
       clearSupportAgentSessionStorage();
+      clearOrderAgentSessionStorage();
     },
   },
 });

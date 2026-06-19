@@ -33,6 +33,7 @@ import {
   summarizeMissingCatalogSkus,
 } from "../../utils/catalogDesignerSyncPreflight.js";
 import ListDesignerToCatalogModal from "./ListDesignerToCatalogModal.jsx";
+import SyncCatalogToDesignerModal from "./SyncCatalogToDesignerModal.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
 import {
@@ -45,6 +46,7 @@ import {
   alertDanger,
   btnIconEdit,
   btnOutline,
+  btnPrimary,
   inputClass,
   pageToolbar,
   tableHeadClass,
@@ -249,6 +251,7 @@ const DesignerInventory = () => {
   const ap = (suffix) =>
     `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/");
   const presetDesignerId = params.get("designerId") || "";
+  const openSyncFromUrl = params.get("syncCatalog") === "1";
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -271,6 +274,7 @@ const DesignerInventory = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemTab, setSelectedItemTab] = useState("overview"); // overview | details | production | variants | skus
   const [listModalDesigner, setListModalDesigner] = useState(null);
+  const [syncCatalogOpen, setSyncCatalogOpen] = useState(false);
   const [lightbox, setLightbox] = useState({ open: false, images: [], index: 0 });
   const [fullTextModal, setFullTextModal] = useState(null);
   const [catalogCategories, setCatalogCategories] = useState([]);
@@ -402,6 +406,10 @@ const DesignerInventory = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (openSyncFromUrl) setSyncCatalogOpen(true);
+  }, [openSyncFromUrl]);
 
   useEffect(() => {
     fetchRows();
@@ -926,6 +934,14 @@ const DesignerInventory = () => {
           <option value="">All catalog sync</option>
           <option value="pending">Pending sync</option>
         </select>
+        <button
+          type="button"
+          className={btnPrimary}
+          onClick={() => setSyncCatalogOpen(true)}
+          title="Import main catalog items missing on designer panel"
+        >
+          Sync from catalog
+        </button>
         <select
           className={`${inputClass} w-[108px] shrink-0`}
           value={limit}
@@ -2166,6 +2182,15 @@ const DesignerInventory = () => {
           console.log("[DesignerInventory] catalog published", updatedRow);
           setListModalDesigner(null);
           if (updatedRow?._id) mergeRowFromApi(updatedRow._id, updatedRow);
+          await fetchRows();
+        }}
+      />
+
+      <SyncCatalogToDesignerModal
+        open={syncCatalogOpen}
+        presetDesignerId={presetDesignerId}
+        onClose={() => setSyncCatalogOpen(false)}
+        onImported={async () => {
           await fetchRows();
         }}
       />

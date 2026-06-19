@@ -36,6 +36,8 @@ export function getLoginPathForRole(role) {
       return "/influencer/login";
     case "AGENT":
       return "/support-agent/login";
+    case "ORDER_AGENT":
+      return "/order-agent/login";
     default:
       return "/admin";
   }
@@ -55,6 +57,8 @@ export function getHomePathForRole(role) {
       return "/influencer/dashboard";
     case "AGENT":
       return "/support-agent/tickets";
+    case "ORDER_AGENT":
+      return "/order-agent/orders";
     default:
       return "/admin";
   }
@@ -66,6 +70,7 @@ export function getLoginPathForAllowedRoles(allowedRoles = []) {
   if (allowedRoles.includes("INFLUENCER")) return "/influencer/login";
   if (allowedRoles.includes("DRIVER")) return "/driver/login";
   if (allowedRoles.includes("AGENT")) return "/support-agent/login";
+  if (allowedRoles.includes("ORDER_AGENT")) return "/order-agent/login";
   if (allowedRoles.includes("SUBADMIN")) return "/subadmin/login";
   if (allowedRoles.includes("ADMIN")) return "/admin";
   return "/admin";
@@ -107,11 +112,21 @@ export function clearSupportAgentSessionStorage() {
   }
 }
 
+export function clearOrderAgentSessionStorage() {
+  try {
+    localStorage.removeItem("orderAgent_agentId");
+    localStorage.removeItem("orderAgent_phone");
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Drop tokens from other panels so refresh does not cross-login. */
 export function clearOtherPanelSessions(activeRole) {
   const role = normalizeRole(activeRole);
   if (role !== "DESIGNER") clearDesignerSessionStorage();
   if (role !== "AGENT") clearSupportAgentSessionStorage();
+  if (role !== "ORDER_AGENT") clearOrderAgentSessionStorage();
   if (role !== "ADMIN" && role !== "SUBADMIN") clearAdminOtpSessionStorage();
 }
 
@@ -123,6 +138,7 @@ export function getLoginPathForPathname(pathname = "") {
   if (p.startsWith("/influencer")) return "/influencer/login";
   if (p.startsWith("/driver")) return "/driver/login";
   if (p.startsWith("/support-agent")) return "/support-agent/login";
+  if (p.startsWith("/order-agent")) return "/order-agent/login";
   if (p.startsWith("/admin")) return "/admin";
   return "/admin";
 }

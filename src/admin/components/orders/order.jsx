@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOrders,
   getOrderItems,
-  getOrderStatusAnalytics,
+  getAdminOrderSidebarCounts,
   getSingleOrder,
   updateOrderItemStatus,
   updateWholeOrderStatus,
@@ -14,10 +14,15 @@ import {
   unassignOrder,
   listDeliveryAgents,
   approveExchange,
+  assignExchangePickup,
+  approveReturn,
+  bookReturnReversePickup,
+  assignReturnPickup,
   createForwardShipment,
   getInvoice,
   downloadShippingLabel,
   downloadSelfShippingLabel,
+  downloadShadowfaxLabel,
   downloadSelfShippingInvoice,
   downloadDelhiveryPackingSlip,
   downloadOrderInvoicePdf,
@@ -38,6 +43,16 @@ import {
   orderFormSelect,
   orderSectionTitle,
 } from "./orderform";
+import {
+  buildAdminAnalyticsCards,
+  buildAdminProviderAnalyticsCards,
+  getAdminAnalyticsSection,
+  getStaleAnalyticsFromPayload,
+  getStatusOptionsForSection,
+  normalizeStatusToken,
+  sectionTotalFromPayload,
+  unwrapApiData,
+} from "./orderAnalyticsShared";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -70,6 +85,7 @@ import {
   SlidersHorizontal,
   ListChecks,
   BarChart2,
+  RotateCcw,
 } from "lucide-react";
 
 const VIEW_ORDER = "order";
@@ -212,6 +228,18 @@ function getOrdersUiTokens() {
     detailSection: "rounded-lg border border-border bg-canvas-muted/25 p-2.5",
     detailSectionTitle:
       "mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500",
+    modalOverlay: "fixed inset-0 flex items-center justify-center bg-black/40 px-4",
+    modalOverlayDark: "fixed inset-0 flex items-center justify-center bg-black/50 p-4",
+    modalShell:
+      "flex max-h-[min(90vh,42rem)] w-full flex-col overflow-hidden rounded-none border border-gray-200 bg-white shadow-xl",
+    modalShellMd: "max-w-md",
+    modalShellLg: "max-w-lg",
+    modalShellWide: "max-w-4xl",
+    modalHeader: "shrink-0 border-b border-gray-100 px-5 py-4",
+    modalBody: "min-h-0 flex-1 overflow-y-auto px-5 py-4",
+    modalFooter: "shrink-0 flex justify-end gap-2 border-t border-gray-100 px-5 py-4",
+    modalPanelSimple:
+      "w-full max-w-md rounded-none border border-gray-200 bg-white p-6 shadow-xl",
   };
 }
 
@@ -328,17 +356,26 @@ function ListPaginationFooter({
   );
 }
 
-/** Maps UI tab → API query (pending Razorpay/Nimble, not COD) */
-const PAYMENT_FILTER_TABS = [
+/** Payment filter dropdown → API `paymentStatus` / `paymentMode` */
+const PAYMENT_FILTER_OPTIONS = [
   { value: "", label: "All payments" },
-  { value: "pending_online", label: "Pending online (not COD)" },
+  { value: "cod", label: "COD" },
+  { value: "prepaid", label: "Prepaid" },
+  { value: "prepaid_pending", label: "Prepaid pending" },
 ];
 
 const paymentFilterToQuery = (paymentFilter) => {
-  if (paymentFilter === "pending_online") {
-    return { paymentStatus: "PENDING", paymentMode: "ONLINE" };
+  switch (paymentFilter) {
+    case "cod":
+      return { paymentStatus: undefined, paymentMode: "COD" };
+    case "prepaid":
+      return { paymentStatus: "SUCCESS", paymentMode: "ONLINE" };
+    case "prepaid_pending":
+    case "pending_online":
+      return { paymentStatus: "PENDING", paymentMode: "ONLINE" };
+    default:
+      return { paymentStatus: undefined, paymentMode: undefined };
   }
-  return { paymentStatus: undefined, paymentMode: undefined };
 };
 
 /** apiConnector rejects with a string message; success body is { success, message, data } */
@@ -700,6 +737,8 @@ const collectItemStatusCandidates = (item) => {
       add(item?.delhivery?.status, {
         mappers: [mapDelhiveryStatusToItemStatus],
       });
+    } else if (provider === "SHADOWFAX") {
+      add(item?.shadowfax?.status);
     }
     // Self shipping: no third-party courier status to merge
   }
@@ -842,10 +881,27 @@ function firstOrderLineItem(order) {
   return items[0] || null;
 }
 
-function orderLineItems(order, { exchangeLinesOnly = false } = {}) {
+function orderLineItems(
+  order,
+  { exchangeLinesOnly = false, returnLinesOnly = false, standardLinesOnly = false } = {},
+) {
   const items = Array.isArray(order?.items) ? order.items : [];
-  if (!exchangeLinesOnly) return items;
-  return items.filter((item) => hasActiveExchangeStatus(item));
+  if (exchangeLinesOnly) return items.filter((item) => hasActiveExchangeStatus(item));
+  if (returnLinesOnly) {
+    return items.filter(
+      (item) => hasActiveReturnStatus(item) || getItemReturns(item).length > 0,
+    );
+  }
+  if (standardLinesOnly) {
+    return items.filter(
+      (item) =>
+        !hasActiveExchangeStatus(item) &&
+        !hasActiveReturnStatus(item) &&
+        getItemExchanges(item).length === 0 &&
+        getItemReturns(item).length === 0,
+    );
+  }
+  return items;
 }
 
 function orderListLineKey(item, idx) {
@@ -858,8 +914,14 @@ function OrderListLineStack({
   children,
   className = "flex flex-col gap-2 divide-y divide-gray-100",
   exchangeLinesOnly = false,
+  returnLinesOnly = false,
+  standardLinesOnly = false,
 }) {
-  const items = orderLineItems(order, { exchangeLinesOnly });
+  const items = orderLineItems(order, {
+    exchangeLinesOnly,
+    returnLinesOnly,
+    standardLinesOnly,
+  });
   if (!items.length) return <span className="text-xs text-gray-400">—</span>;
   if (items.length === 1) {
     return <div className="min-w-0">{children(items[0], 0)}</div>;
@@ -1523,6 +1585,44 @@ const formatExchangeDocumentStatusLabel = (status) => {
   return formatStatusTokenForUi(status);
 };
 
+const EXCHANGE_MANUAL_PICKUP_METHODS = new Set([
+  "DELHIVERY_MANUAL",
+  "SHADOWFAX_MANUAL",
+  "KHUSH_DRIVER",
+  "KHUSH_INTERNAL",
+]);
+
+const getExchangeReturnPickupAwb = (exchange, item = null) =>
+  exchange?.returnPickup?.manualTrackingId ||
+  exchange?.delhivery?.returnPickup?.waybill ||
+  exchange?.shadowfax?.returnPickup?.awb ||
+  item?.delhivery?.returnPickupWaybill ||
+  item?.shadowfax?.returnPickupAwb ||
+  null;
+
+const formatExchangePickupMethodLabel = (method) => {
+  const key = String(method || "").toUpperCase();
+  const map = {
+    DELHIVERY_MANUAL: "Delhivery manual",
+    SHADOWFAX_MANUAL: "Shadowfax manual",
+    KHUSH_DRIVER: "Khush driver",
+    KHUSH_INTERNAL: "Khush internal",
+    SHIPROCKET_AUTO: "Shiprocket auto",
+  };
+  return map[key] || method || "—";
+};
+
+const canAssignExchangePickup = (item, exchange) => {
+  const method = String(exchange?.returnPickupMethod || "").toUpperCase();
+  if (!EXCHANGE_MANUAL_PICKUP_METHODS.has(method)) return false;
+  const st = String(getDisplayItemStatus(item) || "").toUpperCase();
+  return [
+    "EXCHANGE_PICKUP_SCHEDULED",
+    "EXCHANGE_APPROVED",
+    "EXCHANGE_OUT_FOR_PICKUP",
+  ].includes(st);
+};
+
 const exchangeHasVisibleDetails = (exchange, item) => {
   if (isExchangeLineItem(item)) return true;
   if (!exchange || typeof exchange !== "object") return false;
@@ -1539,7 +1639,14 @@ const exchangeHasVisibleDetails = (exchange, item) => {
   );
 };
 
-function ExchangeDetailsPanel({ item, onZoomImage, embedded = false }) {
+function ExchangeDetailsPanel({
+  item,
+  onZoomImage,
+  embedded = false,
+  onOpenOrder,
+  onAssignPickup,
+  assignPickupLoading = false,
+}) {
   const latestExchange = getLatestExchange(item);
   if (!exchangeHasVisibleDetails(latestExchange, item)) return null;
 
@@ -1661,6 +1768,36 @@ function ExchangeDetailsPanel({ item, onZoomImage, embedded = false }) {
               {docStatus ? <span>Request: {docStatus}</span> : null}
             </p>
           ) : null}
+          {latestExchange?.replacementOrderId ? (
+            <p className="truncate text-[9px] text-stone-600">
+              Replacement:{" "}
+              <button
+                type="button"
+                onClick={() => onOpenOrder?.(latestExchange.replacementOrderId)}
+                className="font-medium text-brand-700 hover:underline"
+              >
+                #{latestExchange.replacementOrderId}
+              </button>
+            </p>
+          ) : null}
+          {latestExchange?.returnPickupMethod ? (
+            <p className="truncate text-[9px] text-stone-500">
+              Pickup: {formatExchangePickupMethodLabel(latestExchange.returnPickupMethod)}
+              {getExchangeReturnPickupAwb(latestExchange, item)
+                ? ` · AWB ${getExchangeReturnPickupAwb(latestExchange, item)}`
+                : ""}
+            </p>
+          ) : null}
+          {canAssignExchangePickup(item, latestExchange) ? (
+            <button
+              type="button"
+              disabled={assignPickupLoading}
+              onClick={() => onAssignPickup?.(latestExchange, item)}
+              className="mt-1 inline-flex items-center rounded border border-brand-200 bg-brand-50 px-2 py-0.5 text-[9px] font-semibold text-brand-800 hover:bg-brand-100 disabled:opacity-60"
+            >
+              {assignPickupLoading ? "Assigning…" : "Assign pickup"}
+            </button>
+          ) : null}
         </div>
       </div>
       {exchangeImageUrls.length > 0 ? (
@@ -1719,8 +1856,290 @@ const isExchangeOrderEntry = (order) => {
 const isExchangeListRow = (row) =>
   hasActiveExchangeStatus(row?.itemStatus ?? row?.item?.status ?? row?.status);
 
+const isExchangeReplacementOrderDoc = (doc, replacementOrderIds = null) => {
+  if ((doc?.orderType || "STANDARD") === "EXCHANGE") return true;
+  if (doc?.exchangeMeta?.originalOrderId) return true;
+  const orderId = doc?.orderId ? String(doc.orderId).trim() : "";
+  if (orderId && replacementOrderIds?.has(orderId)) return true;
+  const items = Array.isArray(doc?.items)
+    ? doc.items
+    : doc?.item
+      ? [doc.item]
+      : [];
+  for (const item of items) {
+    const payable = Number(item?.finalPayable ?? item?.itemSubtotal ?? NaN);
+    const st = String(item?.status ?? doc?.itemStatus ?? doc?.status ?? "").toUpperCase();
+    if (item?.exchangeId && payable === 0 && !st.startsWith("EXCHANGE_")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+function ExchangeReplacementOrderBadge({ compact = false }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-md bg-blue-50 font-semibold uppercase text-blue-700 ring-1 ring-blue-200 ${
+        compact ? "px-1.5 py-0.5 text-[9px] tracking-wide" : "px-2 py-0.5 text-[10px]"
+      }`}
+    >
+      Replacement order
+    </span>
+  );
+}
+
 /** Default status filter on the exchange orders list. */
 const EXCHANGE_DEFAULT_LIST_STATUS = "EXCHANGE_REQUESTED";
+
+/** Default status filter on the return orders list. */
+const RETURN_DEFAULT_LIST_STATUS = "RETURN_REQUESTED";
+
+const RETURN_LINE_STATUSES = new Set([
+  "RETURN_REQUESTED",
+  "RETURN_APPROVED",
+  "RETURN_PICKUP_SCHEDULED",
+  "RETURNED",
+  "REFUNDED",
+]);
+
+const isReturnStatus = (status) => RETURN_LINE_STATUSES.has(String(status || "").toUpperCase());
+
+const hasActiveReturnStatus = (itemOrStatus) => {
+  const st =
+    typeof itemOrStatus === "string"
+      ? itemOrStatus
+      : itemOrStatus?.status ?? itemOrStatus?.itemStatus;
+  return isReturnStatus(st);
+};
+
+/** Admin APIs attach returns on `item.returns`. */
+const getItemReturns = (item) => {
+  if (!item || typeof item !== "object") return [];
+  return Array.isArray(item.returns) ? item.returns : [];
+};
+
+const getLatestReturn = (item) => {
+  const returns = [...getItemReturns(item)];
+  if (!returns.length) return null;
+  returns.sort((a, b) => {
+    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+    return bTs - aTs;
+  });
+  return returns[0];
+};
+
+const formatReturnDocumentStatusLabel = (status) => {
+  const key = String(status || "").trim();
+  if (!key) return "";
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+};
+
+const getReturnPickupAwb = (ret, item) =>
+  ret?.returnPickup?.manualTrackingId ||
+  ret?.delhivery?.returnPickup?.waybill ||
+  ret?.shadowfax?.returnPickup?.awb ||
+  item?.shadowfax?.returnPickupAwb ||
+  item?.delhivery?.returnPickupWaybill ||
+  null;
+
+const isReturnOrderEntry = (order) => {
+  if (hasActiveReturnStatus(order?.status || order?.orderStatus)) return true;
+  return (
+    Array.isArray(order?.items) &&
+    order.items.some((item) => hasActiveReturnStatus(item) || getItemReturns(item).length > 0)
+  );
+};
+
+const isReturnListRow = (row) =>
+  hasActiveReturnStatus(row?.itemStatus ?? row?.item?.status ?? row?.status) ||
+  getItemReturns(row?.item || row).length > 0;
+
+const isStandardOrderEntry = (order) => {
+  if (hasActiveExchangeStatus(order?.status || order?.orderStatus)) return false;
+  if (hasActiveReturnStatus(order?.status || order?.orderStatus)) return false;
+  if (!Array.isArray(order?.items)) return true;
+  return !order.items.some(
+    (item) =>
+      hasActiveExchangeStatus(item) ||
+      hasActiveReturnStatus(item) ||
+      getItemExchanges(item).length > 0 ||
+      getItemReturns(item).length > 0,
+  );
+};
+
+const getLatestReturnId = (item) => {
+  const id = getLatestReturn(item)?._id;
+  return id != null && String(id).trim() ? String(id) : null;
+};
+
+const returnHasVisibleDetails = (ret, item) => {
+  if (hasActiveReturnStatus(item) || getItemReturns(item).length > 0) return true;
+  if (!ret || typeof ret !== "object") return false;
+  return Boolean(
+    ret.reason ||
+      ret.description ||
+      ret.status ||
+      ret.returnPickupMethod ||
+      getReturnPickupAwb(ret, item) ||
+      ret.refund?.amount,
+  );
+};
+
+function ReturnDetailsPanel({
+  item,
+  embedded = false,
+  onApproveReturn,
+  approveReturnLoading = false,
+  onBookReversePickup,
+  bookPickupLoading = false,
+}) {
+  const latestReturn = getLatestReturn(item);
+  if (!returnHasVisibleDetails(latestReturn, item)) return null;
+
+  const reason = latestReturn?.reason
+    ? String(latestReturn.reason).replace(/_/g, " ")
+    : "";
+  const docStatus =
+    formatReturnDocumentStatusLabel(latestReturn?.status) ||
+    formatStatusTokenForUi(item?.status || "");
+  const pickupAwb = getReturnPickupAwb(latestReturn, item);
+  const returnId = latestReturn?._id ? String(latestReturn._id) : null;
+  const forwardAwb =
+    getNormalDeliveryShadowfax(item)?.awb ||
+    getNormalDeliveryDelhivery(item)?.waybill ||
+    getLineShiprocket(item)?.awb ||
+    item?.trackingId ||
+    null;
+  const refundAmount = latestReturn?.refund?.amount;
+  const canApproveReturn =
+    latestReturn &&
+    !latestReturn.isApproved &&
+    String(latestReturn.status || "").toLowerCase() === "returnrequested";
+  const canBookReversePickup =
+    latestReturn?.isApproved &&
+    !pickupAwb &&
+    (latestReturn?.returnPickupMethod === "SHADOWFAX_MANUAL" ||
+      latestReturn?.originalShippingProvider === "SHADOWFAX" ||
+      Boolean(item?.shadowfax?.awb));
+
+  if (embedded) {
+    return (
+      <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug text-stone-600">
+        {reason ? (
+          <p className="line-clamp-1 text-stone-600" title={reason}>
+            {reason}
+          </p>
+        ) : docStatus ? (
+          <p className="line-clamp-1 text-stone-500">{docStatus}</p>
+        ) : null}
+        {returnId ? (
+          <p className="truncate text-stone-400" title={returnId}>
+            Return #{returnId.slice(-8)}
+          </p>
+        ) : null}
+        {pickupAwb ? (
+          <p className="truncate text-stone-500" title={pickupAwb}>
+            RVP {pickupAwb}
+          </p>
+        ) : forwardAwb ? (
+          <p className="truncate text-stone-400" title={forwardAwb}>
+            Fwd {forwardAwb}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-amber-200/80 bg-amber-50/40 px-2 py-1.5 text-[10px] leading-snug">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-800">
+          Return request
+        </p>
+        {docStatus ? (
+          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[8px] font-semibold text-amber-900">
+            {docStatus}
+          </span>
+        ) : null}
+      </div>
+      {returnId ? (
+        <p className="truncate font-mono text-[9px] text-stone-500" title={returnId}>
+          ID {returnId}
+        </p>
+      ) : null}
+      {reason ? <p className="text-stone-700">Reason: {reason}</p> : null}
+      {latestReturn?.description ? (
+        <p className="line-clamp-2 text-stone-600" title={latestReturn.description}>
+          {latestReturn.description}
+        </p>
+      ) : null}
+      {latestReturn?.unboxingVideo?.url ? (
+        <a
+          href={latestReturn.unboxingVideo.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[9px] font-medium text-brand-700 hover:underline"
+        >
+          View unboxing video
+        </a>
+      ) : null}
+      {latestReturn?.returnPickupMethod ? (
+        <p className="text-stone-500">
+          Pickup: {formatExchangePickupMethodLabel(latestReturn.returnPickupMethod)}
+        </p>
+      ) : null}
+      {forwardAwb ? (
+        <p className="text-stone-500">
+          Forward AWB: <span className="font-mono font-medium text-stone-800">{forwardAwb}</span>
+        </p>
+      ) : null}
+      {pickupAwb ? (
+        <p className="font-medium text-stone-800">
+          Reverse pickup AWB: <span className="font-mono">{pickupAwb}</span>
+        </p>
+      ) : null}
+      {refundAmount != null && Number(refundAmount) > 0 ? (
+        <p className="text-stone-600">
+          Refund: ₹{Number(refundAmount).toLocaleString("en-IN")}
+          {latestReturn?.refund?.status ? ` (${latestReturn.refund.status})` : ""}
+        </p>
+      ) : null}
+      {latestReturn?.adminRemark ? (
+        <p className="text-stone-500">Admin: {latestReturn.adminRemark}</p>
+      ) : null}
+      {!latestReturn && hasActiveReturnStatus(item) ? (
+        <p className="text-[9px] text-amber-800">
+          Line status is set but no return request document was found. Customer may not have
+          submitted a return from the storefront.
+        </p>
+      ) : null}
+      {canApproveReturn && onApproveReturn ? (
+        <button
+          type="button"
+          disabled={approveReturnLoading}
+          onClick={() => onApproveReturn(latestReturn, item)}
+          className="mt-0.5 inline-flex items-center rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-60"
+        >
+          {approveReturnLoading ? "Approving…" : "Approve return"}
+        </button>
+      ) : null}
+      {canBookReversePickup && onBookReversePickup ? (
+        <button
+          type="button"
+          disabled={bookPickupLoading}
+          onClick={() => onBookReversePickup(latestReturn, item)}
+          className="mt-0.5 inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-60"
+        >
+          {bookPickupLoading ? "Booking…" : "Book reverse pickup"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 /** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
 const ORDERS_DEBUG =
@@ -1747,24 +2166,30 @@ const isNormalDeliveryLine = (item, order = null) => {
 };
 
 const isLineManifestedOnCarrier = (item, order = null) => {
-  if (item?.shiprocket?.orderId || item?.delhivery?.waybill) return true;
+  if (item?.shiprocket?.orderId || item?.delhivery?.waybill || item?.shadowfax?.awb) return true;
   const gid = String(item?.shipmentGroupId || "");
   if (!gid || !Array.isArray(order?.shipments)) return false;
   const shipment = order.shipments.find((s) => String(s.shipmentGroupId) === gid);
-  return Boolean(shipment?.shiprocket?.orderId || shipment?.delhivery?.waybill);
+  return Boolean(
+    shipment?.shiprocket?.orderId ||
+      shipment?.delhivery?.waybill ||
+      shipment?.shadowfax?.awb,
+  );
 };
 
 const isSelfShippingLine = (item) =>
   isNormalDeliveryLine(item) &&
   String(item?.shippingProvider || "").toUpperCase() === "SELF_SHIPPING";
 
-/** PROCESSING+ NORMAL line with no third-party manifest — treat as self-ship for label/invoice. */
+/** PROCESSING+ NORMAL line with no third-party manifest — treat as internal self-ship for label/invoice. */
 const isSelfShippingLineOrUnmanifested = (item) => {
+  if (isInternalSelfShippingLine(item)) return true;
+  if (isExternalSelfShippingLine(item)) return false;
   if (isSelfShippingLine(item)) return true;
   if (!isNormalDeliveryLine(item)) return false;
   const st = String(item?.status || "").toUpperCase();
   if (st === "CREATED" || st === "CONFIRMED") return false;
-  if (item?.shiprocket?.orderId || item?.delhivery?.waybill) return false;
+  if (item?.shiprocket?.orderId || item?.delhivery?.waybill || item?.shadowfax?.awb) return false;
   return ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(st);
 };
 
@@ -1776,8 +2201,75 @@ const isLikelyShiprocketShipmentId = (id) => {
 const SHIPPING_PROVIDER_OPTIONS = [
   { value: "SHIPROCKET", label: "Shiprocket" },
   { value: "DELHIVERY", label: "Delhivery" },
+  { value: "SHADOWFAX", label: "Shadowfax" },
   { value: "SELF_SHIPPING", label: "Self Shipping" },
 ];
+
+const SELF_SHIPPING_MODE_OPTIONS = [
+  { value: "INTERNAL", label: "Internal (Khush in-house)" },
+  { value: "EXTERNAL", label: "External (manual / other carrier)" },
+];
+
+const isExternalSelfShippingLine = (item) =>
+  isSelfShippingLine(item) &&
+  String(item?.selfShipping?.mode || "INTERNAL").toUpperCase() === "EXTERNAL";
+
+const isInternalSelfShippingLine = (item) =>
+  isSelfShippingLine(item) && !isExternalSelfShippingLine(item);
+
+const needsExternalSelfShippingDetails = (item, newStatus) => {
+  if (!["SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(String(newStatus || "").toUpperCase())) {
+    return false;
+  }
+  if (!isExternalSelfShippingLine(item)) return false;
+  const hasCarrier = Boolean(item?.selfShipping?.carrierName || item?.courier);
+  const hasTracking = Boolean(item?.selfShipping?.trackingUrl || item?.trackingId);
+  return !hasCarrier || !hasTracking;
+};
+
+/** Open modal to manually enter / edit external self-shipping carrier fields. */
+const buildExternalSelfShipFormFromItem = (item) => ({
+  carrierName: item?.selfShipping?.carrierName || item?.courier || "",
+  trackingUrl: item?.selfShipping?.trackingUrl || "",
+  trackingId: item?.trackingId || "",
+  notes: item?.selfShipping?.notes || "",
+});
+
+const EMPTY_EXTERNAL_SELF_SHIP_FORM = {
+  carrierName: "",
+  trackingUrl: "",
+  trackingId: "",
+  notes: "",
+};
+
+const validateExternalSelfShipForm = (form, { requireAll = false } = {}) => {
+  const carrierName = String(form?.carrierName || "").trim();
+  const trackingUrl = String(form?.trackingUrl || "").trim();
+  const trackingId = String(form?.trackingId || "").trim();
+  if (!carrierName) {
+    return "Courier partner name is required for external self-shipping.";
+  }
+  if (!trackingUrl && !trackingId) {
+    return requireAll
+      ? "Tracking URL or AWB number is required."
+      : "Enter at least a tracking URL or AWB number.";
+  }
+  return null;
+};
+
+const appendExternalSelfShippingToPayload = (payload, form) => {
+  if (!form) return payload;
+  const carrierName = String(form.carrierName || "").trim();
+  const trackingUrl = String(form.trackingUrl || "").trim();
+  const trackingId = String(form.trackingId || "").trim();
+  const notes = String(form.notes || "").trim();
+  payload.selfShippingMode = "EXTERNAL";
+  if (carrierName) payload.selfShippingCarrier = carrierName;
+  if (trackingUrl) payload.selfShippingTrackingUrl = trackingUrl;
+  if (notes) payload.selfShippingNotes = notes;
+  if (trackingId) payload.trackingId = trackingId;
+  return payload;
+};
 
 const shippingProviderLabel = (value) =>
   SHIPPING_PROVIDER_OPTIONS.find(
@@ -1815,10 +2307,31 @@ const extractShippingFallbackEntries = (apiRes, extras = {}) => {
   return entries;
 };
 
+const extractManifestFailures = (apiRes, extras = {}) => {
+  const data = apiRes?.data ?? apiRes;
+  const failures = [];
+  const consider = (row) => {
+    if (row?.success === false) {
+      failures.push({
+        ...row,
+        orderId: row.orderId ?? extras.orderId ?? data?.orderId ?? null,
+        itemId: row.itemId ?? extras.itemId ?? data?.itemId ?? null,
+        sku: row.sku ?? extras.sku ?? null,
+      });
+    }
+  };
+  consider(data?.shippingResult);
+  if (Array.isArray(data?.shippingResults)) {
+    for (const row of data.shippingResults) consider(row);
+  }
+  return failures;
+};
+
 const getItemShippingProvider = (item) => {
   const p = String(item?.shippingProvider || "").toUpperCase();
-  if (p === "DELHIVERY" || p === "SHIPROCKET" || p === "SELF_SHIPPING") return p;
+  if (p === "DELHIVERY" || p === "SHIPROCKET" || p === "SHADOWFAX" || p === "SELF_SHIPPING") return p;
   if (item?.delhivery?.waybill) return "DELHIVERY";
+  if (item?.shadowfax?.awb) return "SHADOWFAX";
   if (
     item?.shiprocket?.orderId != null ||
     item?.shiprocket?.shipmentId != null ||
@@ -1831,6 +2344,49 @@ const getItemShippingProvider = (item) => {
 
 const isDelhiveryLine = (item) =>
   isNormalDeliveryLine(item) && getItemShippingProvider(item) === "DELHIVERY";
+
+const isShadowfaxLine = (item) =>
+  isNormalDeliveryLine(item) && getItemShippingProvider(item) === "SHADOWFAX";
+
+const getShadowfaxAwb = (item) => {
+  const awb = item?.shadowfax?.awb;
+  if (awb) return String(awb).trim();
+  if (getItemShippingProvider(item) === "SHADOWFAX" && item?.trackingId) {
+    return String(item.trackingId).trim();
+  }
+  return null;
+};
+
+const SHADOWFAX_TRACKING_URL_BASE = "https://tracker.shadowfax.in";
+
+const buildShadowfaxTrackingUrl = (awb) => {
+  if (!awb) return null;
+  return `${SHADOWFAX_TRACKING_URL_BASE}/${encodeURIComponent(String(awb).trim())}`;
+};
+
+const buildDelhiveryTrackingUrl = (waybill) => {
+  if (!waybill) return null;
+  return `https://www.delhivery.com/track/package/${encodeURIComponent(String(waybill).trim())}`;
+};
+
+const getNormalDeliveryShadowfax = (item) => {
+  if (!item || !isNormalDeliveryLine(item)) return null;
+  const sfx = item.shadowfax || {};
+  const awb = getShadowfaxAwb(item);
+  const hasAny =
+    awb ||
+    (sfx.status && String(sfx.status).trim()) ||
+    sfx.trackingUrl;
+  if (!hasAny) return null;
+  return {
+    provider: "SHADOWFAX",
+    awb,
+    trackingUrl: sfx.trackingUrl || buildShadowfaxTrackingUrl(awb),
+    status: sfx.status || null,
+    courier: item.courier || "Shadowfax",
+    orderRef: sfx.orderRef || null,
+  };
+};
 
 const getDelhiveryWaybill = (item) => {
   const wb = item?.delhivery?.waybill;
@@ -1853,7 +2409,7 @@ const getNormalDeliveryDelhivery = (item) => {
   return {
     provider: "DELHIVERY",
     awb: waybill,
-    trackingUrl: dl.trackingUrl || null,
+    trackingUrl: dl.trackingUrl || buildDelhiveryTrackingUrl(waybill),
     status: dl.status || null,
     courier: item.courier || "Delhivery",
     lrn: dl.lrn || waybill,
@@ -1880,7 +2436,13 @@ const orderHasItemsNeedingShippingProvider = (order, newStatus, itemIds = null) 
   });
 };
 
-const buildStatusPayload = (newStatus, item, shippingProvider) => {
+const buildStatusPayload = (
+  newStatus,
+  item,
+  shippingProvider,
+  selfShippingMode = null,
+  externalSelfShipping = null,
+) => {
   const payload = { status: newStatus };
   if (
     newStatus === "PROCESSING" &&
@@ -1888,6 +2450,13 @@ const buildStatusPayload = (newStatus, item, shippingProvider) => {
     isNormalDeliveryLine(item)
   ) {
     payload.shippingProvider = shippingProvider;
+    if (shippingProvider === "SELF_SHIPPING") {
+      const mode = selfShippingMode || "INTERNAL";
+      payload.selfShippingMode = mode;
+      if (mode === "EXTERNAL" && externalSelfShipping) {
+        appendExternalSelfShippingToPayload(payload, externalSelfShipping);
+      }
+    }
   }
   return payload;
 };
@@ -1933,8 +2502,13 @@ const openPdfBlob = (blob, filename, fallbackMsg) => {
 /** Shiprocket / tracking for a line item (NORMAL courier shipments). */
 const getNormalDeliveryShiprocket = (item) => {
   if (!item || !isNormalDeliveryLine(item)) return null;
+  const provider = getItemShippingProvider(item);
+  if (provider === "SHADOWFAX" || provider === "DELHIVERY") return null;
   const sr = item.shiprocket || {};
-  const awb = sr.awbCode || item.trackingId || null;
+  const awb =
+    sr.awbCode ||
+    (provider === "SHIPROCKET" && item.trackingId ? item.trackingId : null) ||
+    null;
   const hasAny =
     awb ||
     sr.orderId != null ||
@@ -1998,6 +2572,32 @@ const getLineShiprocket = (item) => {
   return getNormalDeliveryShiprocket(item);
 };
 
+const getLineCarrierTracking = (item) => {
+  if (!item) return null;
+  if (isExchangeStatus(item?.status)) {
+    const forward = getExchangeForwardShiprocket(item);
+    if (forward) return { kind: "shiprocket", data: forward };
+  }
+  const provider = getItemShippingProvider(item);
+  if (provider === "DELHIVERY") {
+    const dl = getNormalDeliveryDelhivery(item);
+    return dl ? { kind: "delhivery", data: dl } : null;
+  }
+  if (provider === "SHADOWFAX") {
+    const sfx = getNormalDeliveryShadowfax(item);
+    return sfx ? { kind: "shadowfax", data: sfx } : null;
+  }
+  const sr = getLineShiprocket(item);
+  return sr ? { kind: "shiprocket", data: sr } : null;
+};
+
+const getOrderCarrierPreview = (order) => {
+  const items = order?.items || [];
+  const rows = items.map((it) => getLineCarrierTracking(it)).filter(Boolean);
+  if (rows.length === 0) return null;
+  return { primary: rows[0], count: rows.length };
+};
+
 const getOrderNormalShiprocketPreview = (order) => {
   const items = order?.items || [];
   const rows = items.map((it) => getNormalDeliveryShiprocket(it)).filter(Boolean);
@@ -2051,8 +2651,10 @@ const labelItemKey = (orderId, itemId) =>
 
 const isLineLabelEligible = (item) => {
   if (!isNormalDeliveryLine(item)) return false;
+  if (isInternalSelfShippingLine(item)) return true;
   if (isSelfShippingLineOrUnmanifested(item)) return true;
   if (isDelhiveryLine(item) && getDelhiveryWaybill(item)) return true;
+  if (isShadowfaxLine(item) && getShadowfaxAwb(item)) return true;
   if (getLatestExchangeForwardOrder(item)?.labelUrl) return true;
   const ids = [
     getLineShiprocket(item)?.shipmentId,
@@ -2172,6 +2774,80 @@ function DelhiveryDetails({ dl, compact }) {
   );
 }
 
+function ShadowfaxDetails({ sfx, compact }) {
+  if (!sfx) return <span className="text-gray-400">—</span>;
+  if (compact) {
+    const meta = [sfx.status, sfx.courier].filter(Boolean).join(" · ");
+    return (
+      <div className="min-w-0 leading-tight">
+        {sfx.trackingUrl ? (
+          <a
+            href={sfx.trackingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-orange-700 hover:underline"
+            title={sfx.awb || "Track"}
+          >
+            <ExternalLink size={9} className="shrink-0" aria-hidden />
+            <span className="truncate">{sfx.awb || "Track"}</span>
+          </a>
+        ) : (
+          <span
+            className="block truncate font-mono text-[9px] text-gray-800"
+            title={sfx.awb || undefined}
+          >
+            {sfx.awb || "—"}
+          </span>
+        )}
+        {meta ? (
+          <p className="truncate text-[9px] text-stone-500" title={meta}>
+            {meta}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5 text-sm text-gray-800">
+      {sfx.awb && (
+        <p className="font-mono text-xs">
+          AWB:{" "}
+          {sfx.trackingUrl ? (
+            <a
+              href={sfx.trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-orange-700 hover:underline"
+            >
+              {sfx.awb}
+              <ExternalLink size={12} />
+            </a>
+          ) : (
+            sfx.awb
+          )}
+        </p>
+      )}
+      {sfx.courier && <p className="text-xs text-gray-600">Courier: {sfx.courier}</p>}
+      {sfx.status && (
+        <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-900">
+          {sfx.status}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CarrierTrackingDetails({ tracking, compact }) {
+  if (!tracking) return <span className="text-gray-400">—</span>;
+  if (tracking.kind === "delhivery") {
+    return <DelhiveryDetails dl={tracking.data} compact={compact} />;
+  }
+  if (tracking.kind === "shadowfax") {
+    return <ShadowfaxDetails sfx={tracking.data} compact={compact} />;
+  }
+  return <ShiprocketDetails sr={tracking.data} compact={compact} />;
+}
+
 function ShiprocketDetails({ sr, compact }) {
   if (!sr) return <span className="text-gray-400">—</span>;
   if (compact) {
@@ -2257,12 +2933,24 @@ function ShiprocketDetails({ sr, compact }) {
   );
 }
 
-const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle = null }) => {
+const Orders = ({
+  exchangeOnly = false,
+  returnOnly = false,
+  defaultViewMode = VIEW_ORDER,
+  pageTitle = null,
+}) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const basePath = useAdminPanelBasePath();
   const ui = useMemo(() => getOrdersUiTokens(), []);
-  const listPageTitle = pageTitle || (exchangeOnly ? "Exchange orders" : "Orders");
+  const listPageTitle =
+    pageTitle ||
+    (returnOnly ? "Return orders" : exchangeOnly ? "Exchange orders" : "Orders");
+  const lineStackFilterProps = {
+    exchangeLinesOnly: exchangeOnly,
+    returnLinesOnly: returnOnly,
+    standardLinesOnly: !exchangeOnly && !returnOnly,
+  };
   const ap = useMemo(
     () => (suffix) =>
       `${basePath}/${String(suffix || "").replace(/^\/+/, "")}`.replace(/\/+/g, "/"),
@@ -2291,7 +2979,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [sortOrder, setSortOrder] = useState("desc");
   /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
   const [deliveryTypeFilter, setDeliveryTypeFilter] = useState("");
-  /** Pending online (Razorpay/Nimble) — excludes COD */
+  /** COD / prepaid / prepaid pending — shared by By order and By item lists */
   const [paymentFilter, setPaymentFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -2305,6 +2993,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   });
   const [itemSearch, setItemSearch] = useState("");
   const [itemStatusFilter, setItemStatusFilter] = useState("");
+  const [shippingProviderFilter, setShippingProviderFilter] = useState("");
   const [itemLoading, setItemLoading] = useState(false);
   const [itemError, setItemError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -2341,6 +3030,17 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [rejectionNote, setRejectionNote] = useState("");
   const [rejectionSubmitting, setRejectionSubmitting] = useState(false);
   const [rejectionError, setRejectionError] = useState(null);
+  const [exchangePickupModal, setExchangePickupModal] = useState(null);
+  const [exchangePickupForm, setExchangePickupForm] = useState({
+    manualTrackingId: "",
+    notes: "",
+    scheduledAt: "",
+    bookDelhivery: false,
+    bookShadowfax: false,
+  });
+  const [exchangePickupLoading, setExchangePickupLoading] = useState(false);
+  const [returnApproveLoading, setReturnApproveLoading] = useState(false);
+  const [returnBookPickupLoading, setReturnBookPickupLoading] = useState(false);
   // When true, assignment modal only assigns driver (no status update) - used after exchange status change
   const [assignmentAssignOnly, setAssignmentAssignOnly] = useState(false);
   // When set, we opened from "By item" view: show only this item's details (item-based flow), not full order
@@ -2410,13 +3110,76 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const [delhiveryModalItemIds, setDelhiveryModalItemIds] = useState([]);
   const [shippingProviderModalOpen, setShippingProviderModalOpen] = useState(false);
   const [selectedShippingProvider, setSelectedShippingProvider] = useState("SHIPROCKET");
+  const [selectedSelfShippingMode, setSelectedSelfShippingMode] = useState("INTERNAL");
+  const [externalSelfShipModal, setExternalSelfShipModal] = useState(null);
+  const [externalSelfShipForm, setExternalSelfShipForm] = useState(EMPTY_EXTERNAL_SELF_SHIP_FORM);
+  const [externalSelfShipSubmitting, setExternalSelfShipSubmitting] = useState(false);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState(null);
   const [shippingProviderSubmitting, setShippingProviderSubmitting] = useState(false);
   const [shippingFallbackModal, setShippingFallbackModal] = useState(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsData, setAnalyticsData] = useState({ counts: [], total: 0, view: "order" });
+  const [sidebarCounts, setSidebarCounts] = useState(null);
   const [analyticsError, setAnalyticsError] = useState(null);
+
+  const openShippingProviderModal = (pending, { provider = null } = {}) => {
+    if (provider) setSelectedShippingProvider(provider);
+    setSelectedSelfShippingMode("INTERNAL");
+    setExternalSelfShipForm(EMPTY_EXTERNAL_SELF_SHIP_FORM);
+    setPendingStatusUpdate(pending);
+    setShippingProviderModalOpen(true);
+  };
+
+  const openExternalSelfShippingModalForItem = (orderId, itemId, item, options = {}) => {
+    const { newStatus = null, detailsOnly = !newStatus } = options;
+    setExternalSelfShipForm(buildExternalSelfShipFormFromItem(item));
+    setExternalSelfShipModal({
+      orderId,
+      itemId: String(itemId),
+      newStatus: newStatus || null,
+      detailsOnly,
+      currentStatus: item?.status || null,
+    });
+  };
+
+  const submitExternalSelfShippingModal = async () => {
+    if (!externalSelfShipModal) return;
+    const { orderId, itemId, newStatus, detailsOnly, currentStatus } = externalSelfShipModal;
+    const validationError = validateExternalSelfShipForm(externalSelfShipForm, {
+      requireAll: !detailsOnly,
+    });
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setExternalSelfShipSubmitting(true);
+    try {
+      if (detailsOnly) {
+        await updateOrderItemStatus(orderId, itemId, {
+          status: currentStatus,
+          ...appendExternalSelfShippingToPayload({ status: currentStatus }, externalSelfShipForm),
+        });
+        toast.success("External shipping details saved.");
+        setExternalSelfShipModal(null);
+        if (selectedOrder?.orderId === orderId) {
+          await fetchSingleOrder(orderId);
+        }
+        fetchOrderItems();
+        return;
+      }
+
+      await handleUpdateItemStatus(orderId, itemId, newStatus, {
+        skipProviderPrompt: true,
+        externalSelfShipping: externalSelfShipForm,
+      });
+      setExternalSelfShipModal(null);
+    } catch (err) {
+      toast.error(apiErrMessage(err, "Failed to save external shipping details"));
+    } finally {
+      setExternalSelfShipSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!exchangeOnly) return;
@@ -2424,6 +3187,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     setStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
     setItemStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
   }, [exchangeOnly]);
+
+  useEffect(() => {
+    if (!returnOnly) return;
+    setViewMode(VIEW_ORDER);
+    setStatusFilter((prev) => (prev === "" ? RETURN_DEFAULT_LIST_STATUS : prev));
+    setItemStatusFilter((prev) => (prev === "" ? RETURN_DEFAULT_LIST_STATUS : prev));
+  }, [returnOnly]);
 
   const resolveDocUrl = (res) => {
     if (!res) return null;
@@ -2861,6 +3631,38 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       return;
     }
 
+    if (isShadowfaxLine(item)) {
+      const awb = getShadowfaxAwb(item);
+      if (!awb) {
+        toast.error("Shadowfax AWB not available yet for this item.");
+        return;
+      }
+      const orderCtx = orderObj || selectedOrder || { orderId: item?.orderId };
+      const { orderId: oid, itemId } = resolveItemDocIds(orderCtx, item);
+      if (!oid || !itemId) {
+        toast.error("Order or item ID missing for Shadowfax label.");
+        return;
+      }
+      setDocActionType("label");
+      setDocDownloadLoading(true);
+      try {
+        const blob = await downloadShadowfaxLabel(oid, itemId);
+        openPdfBlob(
+          blob,
+          `shadowfax-label_${awb}.pdf`,
+          "Failed to download Shadowfax label",
+        );
+        markLabelDownloadedLocally(oid, itemId);
+        await docRefreshRef.current.refreshAfterLabel(oid);
+      } catch (err) {
+        toast.error(apiErrMessage(err, "Failed to download Shadowfax label"));
+      } finally {
+        setDocDownloadLoading(false);
+        setDocActionType(null);
+      }
+      return;
+    }
+
     if (isDelhiveryLine(item)) {
       const waybill = getDelhiveryWaybill(item);
       if (!waybill) {
@@ -3006,6 +3808,130 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     }
   };
 
+  const openOrderById = useCallback(
+    (orderId) => {
+      if (!orderId) return;
+      navigate(ap(`orders?open=${encodeURIComponent(orderId)}`));
+    },
+    [navigate, ap],
+  );
+
+  const handleOpenAssignExchangePickup = (exchange, item) => {
+    const exchangeId = getExchangeRecordId(exchange);
+    if (!exchangeId) {
+      toast.error("Exchange ID not found.");
+      return;
+    }
+    setExchangePickupForm({
+      manualTrackingId:
+        exchange?.returnPickup?.manualTrackingId ||
+        exchange?.delhivery?.returnPickup?.waybill ||
+        exchange?.shadowfax?.returnPickup?.awb ||
+        "",
+      notes: exchange?.returnPickup?.notes || "",
+      scheduledAt: "",
+      bookDelhivery:
+        String(exchange?.returnPickupMethod || "").toUpperCase() === "DELHIVERY_MANUAL" &&
+        !exchange?.returnPickup?.manualTrackingId &&
+        !exchange?.delhivery?.returnPickup?.waybill &&
+        !exchange?.shadowfax?.returnPickup?.awb,
+      bookShadowfax:
+        String(exchange?.returnPickupMethod || "").toUpperCase() === "SHADOWFAX_MANUAL" &&
+        !exchange?.returnPickup?.manualTrackingId &&
+        !exchange?.shadowfax?.returnPickup?.awb &&
+        !exchange?.delhivery?.returnPickup?.waybill,
+    });
+    setExchangePickupModal({
+      exchangeId,
+      orderId: item?.orderId || selectedOrder?.orderId || null,
+      item,
+      returnPickupMethod: exchange?.returnPickupMethod || null,
+    });
+  };
+
+  const handleApproveReturn = async (returnDoc, item) => {
+    const returnId = returnDoc?._id ? String(returnDoc._id) : getLatestReturnId(item);
+    if (!returnId) {
+      toast.error("Return request ID not found.");
+      return;
+    }
+    const orderId = item?.orderId || selectedOrder?.orderId;
+    setReturnApproveLoading(true);
+    try {
+      const res = await approveReturn(returnId);
+      const payload = res?.data ?? res;
+      const pickup = payload?.pickupResult;
+      if (pickup?.scheduled) {
+        toast.success(pickup.message || "Return approved and reverse pickup booked.");
+      } else if (pickup?.error) {
+        toast.error(`Return approved but pickup failed: ${pickup.error}`);
+      } else if (pickup?.message) {
+        toast.success(`Return approved. ${pickup.message}`);
+      } else {
+        toast.success("Return approved.");
+      }
+      if (orderId) await fetchSingleOrder(orderId);
+    } catch (err) {
+      console.error("Approve return failed:", err);
+      showBackendErrorsAsToasts(err, "Failed to approve return.");
+    } finally {
+      setReturnApproveLoading(false);
+    }
+  };
+
+  const handleBookReturnReversePickup = async (returnDoc, item) => {
+    const returnId = returnDoc?._id ? String(returnDoc._id) : getLatestReturnId(item);
+    if (!returnId) {
+      toast.error("Return request ID not found.");
+      return;
+    }
+    const orderId = item?.orderId || selectedOrder?.orderId;
+    setReturnBookPickupLoading(true);
+    try {
+      const res = await bookReturnReversePickup(returnId);
+      const payload = res?.data ?? res;
+      const pickup = payload?.pickupResult;
+      if (pickup?.scheduled) {
+        toast.success(pickup.message || "Reverse pickup booked.");
+      } else if (pickup?.error) {
+        toast.error(pickup.error);
+      } else {
+        toast.success(payload?.message || "Reverse pickup booking attempted.");
+      }
+      if (orderId) await fetchSingleOrder(orderId);
+    } catch (err) {
+      console.error("Book return pickup failed:", err);
+      showBackendErrorsAsToasts(err, "Failed to book reverse pickup.");
+    } finally {
+      setReturnBookPickupLoading(false);
+    }
+  };
+
+  const handleSubmitExchangePickup = async () => {
+    if (!exchangePickupModal?.exchangeId) return;
+    setExchangePickupLoading(true);
+    try {
+      const body = {
+        manualTrackingId: exchangePickupForm.manualTrackingId.trim() || undefined,
+        notes: exchangePickupForm.notes.trim() || undefined,
+        scheduledAt: exchangePickupForm.scheduledAt || undefined,
+        bookDelhivery: exchangePickupForm.bookDelhivery || undefined,
+        bookShadowfax: exchangePickupForm.bookShadowfax || undefined,
+      };
+      await assignExchangePickup(exchangePickupModal.exchangeId, body);
+      toast.success("Exchange pickup assigned.");
+      setExchangePickupModal(null);
+      const refreshOrderId =
+        exchangePickupModal.orderId || selectedOrder?.orderId || null;
+      if (refreshOrderId) await fetchSingleOrder(refreshOrderId);
+      else await fetchOrders();
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to assign exchange pickup.");
+    } finally {
+      setExchangePickupLoading(false);
+    }
+  };
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -3019,7 +3945,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         limit: pagination.limit,
       });
       const effectiveOrderStatus =
-        exchangeOnly && !statusFilter ? EXCHANGE_DEFAULT_LIST_STATUS : statusFilter;
+        exchangeOnly && !statusFilter
+          ? EXCHANGE_DEFAULT_LIST_STATUS
+          : returnOnly && !statusFilter
+            ? RETURN_DEFAULT_LIST_STATUS
+            : statusFilter;
       const res = await getOrders(
         pagination.page,
         pagination.limit,
@@ -3034,6 +3964,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         paymentMode,
         consistencyParam,
         cityFilter.trim() || undefined,
+        !!exchangeOnly,
+        !!returnOnly,
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
@@ -3048,7 +3980,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         ? (Array.isArray(rawList)
             ? rawList.filter((row) => isExchangeOrderEntry(row))
             : [])
-        : rawList;
+        : returnOnly
+          ? (Array.isArray(rawList)
+              ? rawList.filter((row) => isReturnOrderEntry(row))
+              : [])
+          : (Array.isArray(rawList)
+              ? rawList.filter((row) => isStandardOrderEntry(row))
+              : rawList);
       dbgOrdersVerbose("getOrders:payload", payload);
       dbgOrders("getOrders:summary", {
         rowCount: Array.isArray(list) ? list.length : 0,
@@ -3073,7 +4011,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly]);
+  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly]);
 
   useEffect(() => {
     if (viewMode === VIEW_ORDER && !selectedOrder) {
@@ -3087,7 +4025,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setItemError(null);
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const effectiveItemStatus =
-        exchangeOnly && !itemStatusFilter ? EXCHANGE_DEFAULT_LIST_STATUS : itemStatusFilter;
+        exchangeOnly && !itemStatusFilter
+          ? EXCHANGE_DEFAULT_LIST_STATUS
+          : returnOnly && !itemStatusFilter
+            ? RETURN_DEFAULT_LIST_STATUS
+            : itemStatusFilter;
       const res = await getOrderItems(
         itemPagination.page,
         itemPagination.limit,
@@ -3100,6 +4042,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         paymentStatus,
         paymentMode,
         cityFilter.trim() || undefined,
+        !!exchangeOnly,
+        !!returnOnly,
+        shippingProviderFilter || undefined,
       );
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
@@ -3111,7 +4056,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       const rawItems = Array.isArray(payload.items) ? payload.items : [];
       const list = exchangeOnly
         ? rawItems.filter((row) => isExchangeListRow(row))
-        : rawItems;
+        : returnOnly
+          ? rawItems.filter((row) => isReturnListRow(row))
+          : rawItems.filter(
+              (row) => !isExchangeListRow(row) && !isReturnListRow(row),
+            );
       setOrderItems(list);
       setItemPagination((prev) => ({
         ...prev,
@@ -3124,7 +4073,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, dateFrom, dateTo]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, shippingProviderFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -3174,45 +4123,18 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     try {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
-      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
-      const res = await getOrderStatusAnalytics({
+      const res = await getAdminOrderSidebarCounts({
         view: viewMode === VIEW_ITEM ? "item" : "order",
-        search: (viewMode === VIEW_ORDER ? search : itemSearch)?.trim() || "",
-        startDate: dateFrom || "",
-        endDate: dateTo || "",
-        deliveryType: deliveryTypeFilter || "",
-        paymentStatus: paymentStatus || "",
-        paymentMode: paymentMode || "",
-        city: cityFilter.trim() || "",
-        itemStatusConsistency:
-          viewMode === VIEW_ORDER ? lineConsistencyFilter || "" : "",
-        exchangeOnly: !!exchangeOnly,
       });
-      const payload = res?.data ?? res ?? {};
-      setAnalyticsData({
-        counts: Array.isArray(payload.counts) ? payload.counts : [],
-        total: payload.total ?? 0,
-        view: payload.view || (viewMode === VIEW_ITEM ? "item" : "order"),
-      });
+      setSidebarCounts(unwrapApiData(res));
     } catch (err) {
       console.error("Failed to fetch status analytics:", err);
       setAnalyticsError(apiErrMessage(err, "Failed to load analytics."));
-      setAnalyticsData({ counts: [], total: 0, view: viewMode === VIEW_ITEM ? "item" : "order" });
+      setSidebarCounts(null);
     } finally {
       setAnalyticsLoading(false);
     }
-  }, [
-    viewMode,
-    search,
-    itemSearch,
-    dateFrom,
-    dateTo,
-    deliveryTypeFilter,
-    paymentFilter,
-    cityFilter,
-    lineConsistencyFilter,
-    exchangeOnly,
-  ]);
+  }, [viewMode]);
 
   useEffect(() => {
     if (!analyticsOpen || selectedOrder) return;
@@ -3235,6 +4157,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     deliveryTypeFilter,
     paymentFilter,
     exchangeOnly,
+    returnOnly,
   ]);
 
   useEffect(() => {
@@ -3244,12 +4167,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     itemPagination.page,
     itemSearch,
     itemStatusFilter,
+    shippingProviderFilter,
     dateFrom,
     dateTo,
     cityFilter,
     deliveryTypeFilter,
     paymentFilter,
     exchangeOnly,
+    returnOnly,
   ]);
 
   const handleDownloadManufacturingPdf = async () => {
@@ -3279,6 +4204,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         allPages: true,
         maxExportRows: 8000,
         ...(exchangeOnly ? { exchangeOnly: true } : {}),
+        ...(returnOnly ? { returnOnly: true } : {}),
       };
       const blob = await downloadManufacturingSheetPdf(body);
       if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
@@ -3390,6 +4316,20 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       if (exchangeOnly && singlePayload?.items) {
         const filteredItems = singlePayload.items.filter((it) =>
           hasActiveExchangeStatus(it),
+        );
+        setSelectedOrder({ ...singlePayload, items: filteredItems });
+      } else if (returnOnly && singlePayload?.items) {
+        const filteredItems = singlePayload.items.filter(
+          (it) => hasActiveReturnStatus(it) || getItemReturns(it).length > 0,
+        );
+        setSelectedOrder({ ...singlePayload, items: filteredItems });
+      } else if (!exchangeOnly && !returnOnly && singlePayload?.items) {
+        const filteredItems = singlePayload.items.filter(
+          (it) =>
+            !hasActiveExchangeStatus(it) &&
+            !hasActiveReturnStatus(it) &&
+            getItemExchanges(it).length === 0 &&
+            getItemReturns(it).length === 0,
         );
         setSelectedOrder({ ...singlePayload, items: filteredItems });
       } else {
@@ -3836,7 +4776,22 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     return entries;
   };
 
-  const runWholeOrderStatusUpdate = async (newStatus, shippingProvider = null) => {
+  const showManifestFailuresIfNeeded = (apiRes, extras = {}) => {
+    const failures = extractManifestFailures(apiRes, extras);
+    for (const row of failures) {
+      toast.error(
+        `Carrier manifest failed${row.sku ? ` (${row.sku})` : ""}: ${row.error || "Unknown error"}. Item reverted to CONFIRMED.`,
+      );
+    }
+    return failures;
+  };
+
+  const runWholeOrderStatusUpdate = async (
+    newStatus,
+    shippingProvider = null,
+    selfShippingMode = null,
+    externalSelfShipping = null,
+  ) => {
     if (!selectedOrder?.orderId || !newStatus) return;
     setUpdatingWholeOrder(true);
     setOrderError(null);
@@ -3854,13 +4809,40 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           await approveExchange(exchangeId);
         }
       }
+      if (newStatus === "RETURN_APPROVED") {
+        const targetItems = selectedOrder?.items ?? [];
+        for (const item of targetItems) {
+          const returnId = getLatestReturnId(item);
+          if (!returnId) continue;
+          dbgOrders("approveReturn:wholeOrder", {
+            orderId: selectedOrder?.orderId,
+            itemId: item?.itemId || item?._id,
+            returnId,
+          });
+          await approveReturn(returnId);
+        }
+        toast.success("Return(s) approved.");
+        setWholeOrderNewStatus("");
+        await fetchSingleOrder(selectedOrder.orderId);
+        setUpdatingWholeOrder(false);
+        return;
+      }
       const body = { status: newStatus };
       if (newStatus === "PROCESSING" && shippingProvider) {
         body.shippingProvider = shippingProvider;
+        if (shippingProvider === "SELF_SHIPPING") {
+          body.selfShippingMode = selfShippingMode || "INTERNAL";
+          if (selfShippingMode === "EXTERNAL" && externalSelfShipping) {
+            appendExternalSelfShippingToPayload(body, externalSelfShipping);
+          }
+        }
       }
       const res = await updateWholeOrderStatus(selectedOrder.orderId, body);
       showShippingFallbackModalIfNeeded(res);
-      toast.success(`Order items updated to ${newStatus}.`);
+      const manifestFailures = showManifestFailuresIfNeeded(res);
+      if (!manifestFailures.length) {
+        toast.success(`Order items updated to ${newStatus}.`);
+      }
       setWholeOrderNewStatus("");
       await fetchSingleOrder(selectedOrder.orderId);
     } catch (err) {
@@ -3919,8 +4901,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         itemNeedsShippingProviderOnProcessing(item, wholeOrderNewStatus, selectedOrder),
       );
       setSelectedShippingProvider(defaultShippingProviderForItem(firstNeedingProvider));
-      setPendingStatusUpdate({ kind: "whole", newStatus: wholeOrderNewStatus });
-      setShippingProviderModalOpen(true);
+      openShippingProviderModal({ kind: "whole", newStatus: wholeOrderNewStatus });
       return;
     }
 
@@ -3956,7 +4937,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     });
   };
 
-  const runBulkStatusUpdate = async (bulkStatusValue, shippingProvider = null) => {
+  const runBulkStatusUpdate = async (
+    bulkStatusValue,
+    shippingProvider = null,
+    selfShippingMode = null,
+    externalSelfShipping = null,
+  ) => {
     if (!selectedOrder?.orderId || selectedItemIds.length === 0 || !bulkStatusValue) {
       return;
     }
@@ -3982,10 +4968,28 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           });
           await approveExchange(exchangeId);
         }
+        if (bulkStatusValue === "RETURN_APPROVED") {
+          const returnId = getLatestReturnId(currentItem);
+          if (returnId) {
+            dbgOrders("approveReturn:bulk", {
+              orderId: selectedOrder?.orderId,
+              itemId,
+              returnId,
+            });
+            await approveReturn(returnId);
+            continue;
+          }
+        }
         const res = await updateOrderItemStatus(
           selectedOrder.orderId,
           itemId,
-          buildStatusPayload(bulkStatusValue, currentItem, shippingProvider),
+          buildStatusPayload(
+            bulkStatusValue,
+            currentItem,
+            shippingProvider,
+            selfShippingMode,
+            externalSelfShipping,
+          ),
         );
         bulkFallbackEntries.push(
           ...extractShippingFallbackEntries(res, {
@@ -3995,6 +4999,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             deliveryPincode: selectedOrder?.address?.pincode,
           }),
         );
+        showManifestFailuresIfNeeded(res, {
+          orderId: selectedOrder.orderId,
+          itemId: String(itemId),
+          sku: currentItem?.sku,
+        });
       }
       if (bulkFallbackEntries.length) {
         setShippingFallbackModal(bulkFallbackEntries);
@@ -4097,8 +5106,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           itemNeedsShippingProviderOnProcessing(item, bulkStatus, selectedOrder),
         );
       setSelectedShippingProvider(defaultShippingProviderForItem(firstNeedingProvider));
-      setPendingStatusUpdate({ kind: "bulk", newStatus: bulkStatus });
-      setShippingProviderModalOpen(true);
+      openShippingProviderModal({ kind: "bulk", newStatus: bulkStatus });
       return;
     }
 
@@ -4115,6 +5123,19 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const executePendingStatusUpdate = async () => {
     const pending = pendingStatusUpdate;
     if (!pending) return;
+
+    const externalDetails =
+      selectedShippingProvider === "SELF_SHIPPING" && selectedSelfShippingMode === "EXTERNAL"
+        ? externalSelfShipForm
+        : null;
+    if (externalDetails) {
+      const validationError = validateExternalSelfShipForm(externalDetails, { requireAll: true });
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+    }
+
     setShippingProviderSubmitting(true);
     try {
       if (pending.kind === "single") {
@@ -4124,27 +5145,44 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           pending.newStatus,
           {
             shippingProvider: selectedShippingProvider,
+            selfShippingMode:
+              selectedShippingProvider === "SELF_SHIPPING" ? selectedSelfShippingMode : null,
+            externalSelfShipping: externalDetails,
             skipProviderPrompt: true,
           },
         );
       } else if (pending.kind === "bulk") {
-        await runBulkStatusUpdate(pending.newStatus, selectedShippingProvider);
+        await runBulkStatusUpdate(
+          pending.newStatus,
+          selectedShippingProvider,
+          selectedShippingProvider === "SELF_SHIPPING" ? selectedSelfShippingMode : null,
+          externalDetails,
+        );
       } else if (pending.kind === "whole") {
         await runWholeOrderStatusUpdate(
           pending.newStatus,
           selectedShippingProvider,
+          selectedShippingProvider === "SELF_SHIPPING" ? selectedSelfShippingMode : null,
+          externalDetails,
         );
       } else if (pending.kind === "listOrders") {
         const ids = pending.orderIds || [];
         setListBulkProcessing(true);
         try {
           const results = await Promise.allSettled(
-            ids.map((orderId) =>
-              updateWholeOrderStatus(orderId, {
+            ids.map((orderId) => {
+              const body = {
                 status: "PROCESSING",
                 shippingProvider: selectedShippingProvider,
-              }),
-            ),
+              };
+              if (selectedShippingProvider === "SELF_SHIPPING") {
+                body.selfShippingMode = selectedSelfShippingMode || "INTERNAL";
+                if (selectedSelfShippingMode === "EXTERNAL" && externalDetails) {
+                  appendExternalSelfShippingToPayload(body, externalDetails);
+                }
+              }
+              return updateWholeOrderStatus(orderId, body);
+            }),
           );
           const failed = results.filter((r) => r.status === "rejected");
           const listFallbackEntries = results
@@ -4167,12 +5205,19 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         setListBulkProcessing(true);
         try {
           const results = await Promise.allSettled(
-            targets.map((t) =>
-              updateOrderItemStatus(t.orderId, t.itemId, {
+            targets.map((t) => {
+              const body = {
                 status: "PROCESSING",
                 shippingProvider: selectedShippingProvider,
-              }),
-            ),
+              };
+              if (selectedShippingProvider === "SELF_SHIPPING") {
+                body.selfShippingMode = selectedSelfShippingMode || "INTERNAL";
+                if (selectedSelfShippingMode === "EXTERNAL" && externalDetails) {
+                  appendExternalSelfShippingToPayload(body, externalDetails);
+                }
+              }
+              return updateOrderItemStatus(t.orderId, t.itemId, body);
+            }),
           );
           const failed = results.filter((r) => r.status === "rejected");
           const listItemFallbackEntries = results
@@ -4208,7 +5253,12 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
   const handleUpdateItemStatus = async (orderId, itemId, newStatus, options = {}) => {
     if (!orderId || !itemId || !newStatus) return;
     const stringItemId = String(itemId);
-    const { shippingProvider = null, skipProviderPrompt = false } = options;
+    const {
+      shippingProvider = null,
+      selfShippingMode = null,
+      skipProviderPrompt = false,
+      externalSelfShipping = null,
+    } = options;
 
     // Exchange rejected: open modal to collect rejection note (required by backend)
     if (newStatus === "EXCHANGE_REJECTED") {
@@ -4228,13 +5278,24 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       itemNeedsShippingProviderOnProcessing(prevItem, newStatus, selectedOrder)
     ) {
       setSelectedShippingProvider(defaultShippingProviderForItem(prevItem));
-      setPendingStatusUpdate({
+      openShippingProviderModal({
         kind: "single",
         orderId,
         itemId: stringItemId,
         newStatus,
       });
-      setShippingProviderModalOpen(true);
+      return;
+    }
+
+    if (
+      !skipProviderPrompt &&
+      !externalSelfShipping &&
+      needsExternalSelfShippingDetails(prevItem, newStatus)
+    ) {
+      openExternalSelfShippingModalForItem(orderId, stringItemId, prevItem, {
+        newStatus,
+        detailsOnly: false,
+      });
       return;
     }
 
@@ -4298,14 +5359,41 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         dbgOrders("approveExchange:single", { orderId, itemId, exchangeId });
         await approveExchange(exchangeId);
       }
-      const payload = buildStatusPayload(newStatus, prevItem, shippingProvider);
+      if (newStatus === "RETURN_APPROVED") {
+        const returnId = getLatestReturnId(prevItem);
+        if (returnId) {
+          dbgOrders("approveReturn:single", { orderId, itemId, returnId });
+          await approveReturn(returnId);
+          toast.success(`Return approved for item ${stringItemId}.`);
+          await fetchSingleOrder(orderId);
+          setUpdatingItemId(null);
+          return;
+        }
+      }
+      const payload = buildStatusPayload(
+        newStatus,
+        prevItem,
+        shippingProvider,
+        selfShippingMode,
+        externalSelfShipping,
+      );
+      if (externalSelfShipping && !payload.selfShippingMode) {
+        appendExternalSelfShippingToPayload(payload, externalSelfShipping);
+      }
       const res = await updateOrderItemStatus(orderId, itemId, payload);
       showShippingFallbackModalIfNeeded(res, {
         orderId,
         itemId: stringItemId,
         sku: prevItem?.sku,
       });
-      toast.success(`Item ${stringItemId} updated to ${newStatus}.`);
+      const manifestFailures = showManifestFailuresIfNeeded(res, {
+        orderId,
+        itemId: stringItemId,
+        sku: prevItem?.sku,
+      });
+      if (!manifestFailures.length) {
+        toast.success(`Item ${stringItemId} updated to ${newStatus}.`);
+      }
       await fetchSingleOrder(orderId);
       // After setting exchange pickup/delivery status, open assignment modal to assign driver
       if (EXCHANGE_STATUSES_REQUIRE_DRIVER.includes(newStatus)) {
@@ -4544,6 +5632,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         title={titleParts.join(" · ")}
       >
         {getStatusBadge(effective)}
+        {item?.shippingManifestError ? (
+          <p
+            className="mt-0.5 truncate text-[9px] leading-tight text-red-600"
+            title={item.shippingManifestError}
+          >
+            Manifest: {item.shippingManifestError}
+          </p>
+        ) : null}
         {sr?.courier ? (
           <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">
             {sr.courier}
@@ -4575,52 +5671,79 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
     { value: "EXCHANGE_OUT_FOR_DELIVERY", label: "Exchange out for delivery" },
     { value: "EXCHANGE_DELIVERED", label: "Exchange delivered" },
     { value: "EXCHANGE_COMPLETED", label: "Exchange completed" },
+    { value: "RETURN_REQUESTED", label: "Return requested" },
+    { value: "RETURN_APPROVED", label: "Return approved" },
+    { value: "RETURN_PICKUP_SCHEDULED", label: "Return pickup scheduled" },
+    { value: "RETURNED", label: "Returned" },
+    { value: "REFUNDED", label: "Refunded" },
   ];
-  const filteredStatusOptions = exchangeOnly
-    ? statusOptions.filter(
+
+  const analyticsSection = useMemo(
+    () => getAdminAnalyticsSection({ exchangeOnly, returnOnly }),
+    [exchangeOnly, returnOnly],
+  );
+
+  const isOrderAnalyticsView = viewMode === VIEW_ORDER;
+
+  const filteredStatusOptions = useMemo(() => {
+    const fromBackend = getStatusOptionsForSection(sidebarCounts, analyticsSection);
+    if (fromBackend.length) {
+      return fromBackend.map((opt) => ({
+        value: opt.value,
+        label: opt.label || formatStatusTokenForUi(opt.value),
+      }));
+    }
+    if (exchangeOnly) {
+      return statusOptions.filter(
         (opt) =>
           isExchangeStatus(opt.value) && opt.value !== EXCHANGE_DEFAULT_LIST_STATUS,
-      )
-    : statusOptions;
-
-  const analyticsCountByStatus = useMemo(() => {
-    const map = new Map();
-    for (const row of analyticsData.counts || []) {
-      if (row?.status) map.set(String(row.status).toUpperCase(), row.count ?? 0);
+      );
     }
-    return map;
-  }, [analyticsData.counts]);
-
-  const analyticsStatusCards = useMemo(() => {
-    const seen = new Set();
-    const cards = [];
-    for (const opt of filteredStatusOptions) {
-      const key = String(opt.value).toUpperCase();
-      const count = analyticsCountByStatus.get(key) ?? 0;
-      if (count > 0) {
-        cards.push({ status: opt.value, label: opt.label, count });
-        seen.add(key);
-      }
+    if (returnOnly) {
+      return statusOptions.filter(
+        (opt) =>
+          isReturnStatus(opt.value) && opt.value !== RETURN_DEFAULT_LIST_STATUS,
+      );
     }
-    for (const row of analyticsData.counts || []) {
-      const key = String(row.status || "").toUpperCase();
-      if (!key || seen.has(key)) continue;
-      const count = row.count ?? 0;
-      if (count > 0) {
-        cards.push({
-          status: key,
-          label: formatStatusTokenForUi(key),
-          count,
-        });
-      }
-    }
-    return cards.sort((a, b) => b.count - a.count);
-  }, [analyticsData.counts, analyticsCountByStatus, filteredStatusOptions]);
+    return statusOptions.filter(
+      (opt) => !isExchangeStatus(opt.value) && !isReturnStatus(opt.value),
+    );
+  }, [sidebarCounts, analyticsSection, exchangeOnly, returnOnly]);
 
-  const activeAnalyticsStatus =
-    viewMode === VIEW_ORDER ? statusFilter : itemStatusFilter;
+  const analyticsStatusCards = useMemo(
+    () =>
+      buildAdminAnalyticsCards(analyticsSection, sidebarCounts, {
+        isOrderView: isOrderAnalyticsView,
+      }),
+    [sidebarCounts, analyticsSection, isOrderAnalyticsView],
+  );
+
+  const analyticsTotal = useMemo(() => {
+    const section = sidebarCounts?.[analyticsSection];
+    if (!section) return 0;
+    return sectionTotalFromPayload(section, { isOrderView: isOrderAnalyticsView });
+  }, [sidebarCounts, analyticsSection, isOrderAnalyticsView]);
+
+  const analyticsProviderCards = useMemo(
+    () => buildAdminProviderAnalyticsCards(sidebarCounts),
+    [sidebarCounts],
+  );
+
+  const staleAnalytics = useMemo(
+    () => getStaleAnalyticsFromPayload(sidebarCounts),
+    [sidebarCounts],
+  );
+
+  const showOpsCarrierCards = !exchangeOnly && !returnOnly;
+
+  const activeAnalyticsStatus = normalizeStatusToken(
+    viewMode === VIEW_ORDER ? statusFilter : itemStatusFilter,
+  );
+
+  const activeAnalyticsProvider = String(shippingProviderFilter || "").toUpperCase();
 
   const applyAnalyticsStatus = (status) => {
+    setShippingProviderFilter("");
     const next = status || "";
     if (viewMode === VIEW_ORDER) {
       setStatusFilter(next);
@@ -4629,6 +5752,24 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       setItemStatusFilter(next);
       setItemPagination((p) => ({ ...p, page: 1 }));
     }
+  };
+
+  const applyAnalyticsProvider = (provider) => {
+    const next = String(provider || "").toUpperCase();
+    setShippingProviderFilter(next);
+    setStatusFilter("");
+    setItemStatusFilter("");
+    setViewMode(VIEW_ITEM);
+    setItemPagination((p) => ({ ...p, page: 1 }));
+  };
+
+  const applyAnalyticsClearAll = () => {
+    setShippingProviderFilter("");
+    applyAnalyticsStatus("");
+  };
+
+  const applyAnalyticsStale = () => {
+    navigate(ap("orders/stale"));
   };
 
   const listBulkSelectedCount =
@@ -4645,6 +5786,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           statusFilter ||
           lineConsistencyFilter ||
           itemStatusFilter ||
+          shippingProviderFilter ||
           sortOrder !== "desc",
       ),
     [
@@ -4656,12 +5798,28 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
       statusFilter,
       lineConsistencyFilter,
       itemStatusFilter,
+      shippingProviderFilter,
       sortOrder,
     ],
   );
 
+  const replacementOrderIds = useMemo(() => {
+    const ids = new Set();
+    for (const order of orders) {
+      for (const item of order?.items || []) {
+        const rid = item?.exchangeReplacementOrderId;
+        if (rid) ids.add(String(rid).trim());
+      }
+    }
+    for (const row of orderItems) {
+      const rid = row?.item?.exchangeReplacementOrderId;
+      if (rid) ids.add(String(rid).trim());
+    }
+    return ids;
+  }, [orders, orderItems]);
+
   const ListLineStack = (props) => (
-    <OrderListLineStack exchangeLinesOnly={exchangeOnly} {...props} />
+    <OrderListLineStack {...lineStackFilterProps} {...props} />
   );
 
   const renderOrderListCell = (key, order) => {
@@ -4702,12 +5860,29 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       case "orderId":
         return (
-          <span
-            className={`block truncate text-xs font-medium text-brand-700`}
-            title={order.orderId || order._id}
-          >
-            {order.orderId || order._id?.slice(-8).toUpperCase() || "—"}
-          </span>
+          <div className="min-w-0 space-y-1">
+            <span
+              className="block truncate text-xs font-medium text-brand-700"
+              title={order.orderId || order._id}
+            >
+              {order.orderId || order._id?.slice(-8).toUpperCase() || "—"}
+            </span>
+            {isExchangeReplacementOrderDoc(order, replacementOrderIds) ? (
+              <>
+                <ExchangeReplacementOrderBadge compact />
+                {order.exchangeMeta?.originalOrderId ? (
+                  <button
+                    type="button"
+                    onClick={() => openOrderById(order.exchangeMeta.originalOrderId)}
+                    className="block truncate text-left text-[10px] font-semibold text-brand-700 hover:underline"
+                    title={`Open original order ${order.exchangeMeta.originalOrderId}`}
+                  >
+                    Original #{order.exchangeMeta.originalOrderId}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         );
       case "customer":
         return (
@@ -4754,7 +5929,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "qty": {
-        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
+        const items = orderLineItems(order, lineStackFilterProps);
         if (items.length <= 1) {
           return (
             <span className="tabular-nums">
@@ -4779,6 +5954,16 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "total":
+        if (isExchangeReplacementOrderDoc(order, replacementOrderIds)) {
+          return (
+            <div className="flex flex-col gap-0.5">
+              <ExchangeReplacementOrderBadge compact />
+              <span className="text-[10px] font-medium uppercase text-stone-500">
+                No charge
+              </span>
+            </div>
+          );
+        }
         return formatInr(
           order.totalAmount ??
             order.pricing?.finalPayableBeforeWallet ??
@@ -4790,7 +5975,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         return walletUsed > 0 ? formatInr(walletUsed) : "—";
       }
       case "status": {
-        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
+        const items = orderLineItems(order, lineStackFilterProps);
         const orderLevelStatus = order?.status || order?.orderStatus || "";
         if (lineConsistencyFilter === "mixed" && isOrderMixedLines(order, statusFilter)) {
           const summary = getOrderLineStatusSummary(order);
@@ -4829,7 +6014,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       }
       case "courier": {
-        const items = orderLineItems(order, { exchangeLinesOnly: exchangeOnly });
+        const items = orderLineItems(order, lineStackFilterProps);
         const docButtons = hasNormalDeliveryInOrder(order) ? (
           <div className="mt-1 flex flex-col gap-0.5 border-t border-gray-100 pt-1">
             <DocLabelButton
@@ -4852,7 +6037,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           </div>
         ) : null;
         if (items.length <= 1) {
-          const prev = getOrderShiprocketPreview(order);
+          const prev = getOrderCarrierPreview(order);
           if (!prev) {
             return (
               <div className="space-y-1">
@@ -4863,7 +6048,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           }
           return (
             <div className="space-y-0.5">
-              <ShiprocketDetails sr={prev.primary} compact />
+              <CarrierTrackingDetails tracking={prev.primary} compact />
               {docButtons}
             </div>
           );
@@ -4872,9 +6057,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
           <div className="min-w-0 space-y-1">
             <ListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
               {(item) => {
-                const sr = getLineShiprocket(item);
-                if (!sr) return <span className="text-xs text-gray-400">—</span>;
-                return <ShiprocketDetails sr={sr} compact />;
+                const tracking = getLineCarrierTracking(item);
+                if (!tracking) return <span className="text-xs text-gray-400">—</span>;
+                return <CarrierTrackingDetails tracking={tracking} compact />;
               }}
             </ListLineStack>
             {docButtons}
@@ -5056,9 +6241,26 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         );
       case "orderId":
         return (
-          <span className="font-medium text-brand-600 truncate block" title={row.orderId}>
-            {row.orderId || "—"}
-          </span>
+          <div className="min-w-0 space-y-1">
+            <span className="font-medium text-brand-600 truncate block" title={row.orderId}>
+              {row.orderId || "—"}
+            </span>
+            {isExchangeReplacementOrderDoc(row, replacementOrderIds) ? (
+              <>
+                <ExchangeReplacementOrderBadge compact />
+                {row.exchangeMeta?.originalOrderId ? (
+                  <button
+                    type="button"
+                    onClick={() => openOrderById(row.exchangeMeta.originalOrderId)}
+                    className="block truncate text-left text-[10px] font-semibold text-brand-700 hover:underline"
+                    title={`Open original order ${row.exchangeMeta.originalOrderId}`}
+                  >
+                    Original #{row.exchangeMeta.originalOrderId}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
         );
       case "customer":
         return row.user?.name || row.address?.name || "—";
@@ -5165,6 +6367,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             <DelhiveryDetails dl={dl} compact />
           ) : (
             <span className="text-xs text-amber-700">DL pending</span>
+          );
+        }
+        if (provider === "SHADOWFAX") {
+          const sfx = getNormalDeliveryShadowfax(line);
+          return sfx ? (
+            <ShadowfaxDetails sfx={sfx} compact />
+          ) : (
+            <span className="text-xs text-amber-700">SFX pending</span>
           );
         }
         const sr = getLineShiprocket(line);
@@ -5416,11 +6626,21 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             </div>
             {(() => {
               const exIds = getItemExchangeIds(item);
-              if (exIds.length === 0) return null;
+              const retId = getLatestReturnId(item);
+              if (exIds.length === 0 && !retId) return null;
               return (
-                <p className="break-all text-[10px] text-gray-500">
-                  Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
-                </p>
+                <div className="space-y-0.5">
+                  {exIds.length > 0 ? (
+                    <p className="break-all text-[10px] text-gray-500">
+                      Exchange ID{exIds.length > 1 ? "s" : ""}: {exIds.join(", ")}
+                    </p>
+                  ) : null}
+                  {retId ? (
+                    <p className="break-all text-[10px] text-amber-800" title={retId}>
+                      Return ID: {retId}
+                    </p>
+                  ) : null}
+                </div>
               );
             })()}
           </div>
@@ -5560,6 +6780,25 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
               <DelhiveryDetails dl={dl} compact />
             ) : (
               <span className="text-[9px] leading-tight text-amber-800">DL pending</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-0.5">
+            {invoiceBtn}
+            {labelBtn}
+          </div>
+        </div>
+      );
+    }
+
+    if (isShadowfaxLine(item)) {
+      const sfx = getNormalDeliveryShadowfax(item);
+      return (
+        <div className="min-w-[8.5rem] max-w-[11rem]">
+          <div className="mb-0.5 min-w-0">
+            {sfx ? (
+              <ShadowfaxDetails sfx={sfx} compact />
+            ) : (
+              <span className="text-[9px] leading-tight text-amber-800">SFX pending</span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-0.5">
@@ -6023,8 +7262,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   </span>
                 </p>
                 <p className="text-[10px] text-stone-500">
-                  Uses current search, dates, delivery & payment filters. Click a card to
-                  filter the table.
+                  Live counts from the database. Click a card to filter the table.
                 </p>
               </div>
               <button
@@ -6044,15 +7282,17 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             {analyticsError ? (
               <p className="mb-2 text-[11px] text-danger">{analyticsError}</p>
             ) : null}
-            {analyticsLoading && !analyticsStatusCards.length ? (
+            {analyticsLoading &&
+            !analyticsStatusCards.length &&
+            !(showOpsCarrierCards && (staleAnalytics || analyticsProviderCards.length)) ? (
               <p className="py-4 text-center text-[11px] text-stone-500">Loading counts…</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => applyAnalyticsStatus("")}
+                  onClick={applyAnalyticsClearAll}
                   className={`${ui.analyticsCard} ${
-                    !activeAnalyticsStatus
+                    !activeAnalyticsStatus && !activeAnalyticsProvider
                       ? ui.analyticsCardActive
                       : ui.analyticsCardIdle
                   }`}
@@ -6061,7 +7301,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     All
                   </span>
                   <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
-                    {analyticsData.total ?? 0}
+                    {analyticsTotal}
                   </span>
                 </button>
                 {analyticsStatusCards.map(({ status, label, count }) => (
@@ -6070,7 +7310,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     type="button"
                     onClick={() => applyAnalyticsStatus(status)}
                     className={`${ui.analyticsCard} ${
-                      activeAnalyticsStatus === status
+                      !activeAnalyticsProvider &&
+                      normalizeStatusToken(status) === activeAnalyticsStatus
                         ? ui.analyticsCardActive
                         : ui.analyticsCardIdle
                     }`}
@@ -6086,12 +7327,59 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 ))}
                 {!analyticsLoading && analyticsStatusCards.length === 0 ? (
                   <p className="py-2 text-[11px] text-stone-500">
-                    No matching {viewMode === VIEW_ORDER ? "orders" : "items"} for current
-                    filters.
+                    No {viewMode === VIEW_ORDER ? "orders" : "items"} with status counts
+                    in this section.
                   </p>
                 ) : null}
               </div>
             )}
+            {showOpsCarrierCards &&
+            (analyticsLoading || staleAnalytics || analyticsProviderCards.length) ? (
+              <>
+                <p className="mb-1.5 mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                  Ops &amp; carriers
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {staleAnalytics ? (
+                    <button
+                      type="button"
+                      onClick={applyAnalyticsStale}
+                      className={`${ui.analyticsCard} border-amber-200 bg-amber-50/80 hover:border-amber-300 hover:bg-amber-50`}
+                      title={`CONFIRMED lines older than ${staleAnalytics.thresholdHours}h — open stale report`}
+                    >
+                      <span className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-amber-800">
+                        <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                        Stale orders
+                      </span>
+                      <span className="mt-0.5 text-lg font-bold tabular-nums text-amber-900">
+                        {analyticsLoading ? "…" : staleAnalytics.count}
+                      </span>
+                    </button>
+                  ) : null}
+                  {analyticsProviderCards.map(({ provider, label, count }) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      onClick={() => applyAnalyticsProvider(provider)}
+                      className={`${ui.analyticsCard} ${
+                        activeAnalyticsProvider === String(provider).toUpperCase()
+                          ? ui.analyticsCardActive
+                          : ui.analyticsCardIdle
+                      }`}
+                      title={`Show ${label} lines (switches to By item)`}
+                    >
+                      <span className="inline-flex items-center gap-1 max-w-[7rem] truncate text-[9px] font-semibold uppercase tracking-wide text-stone-600">
+                        <Truck className="h-3 w-3 shrink-0" aria-hidden />
+                        {label}
+                      </span>
+                      <span className="mt-0.5 text-lg font-bold tabular-nums text-stone-900">
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
 
@@ -6125,26 +7413,29 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 className="hidden h-4 w-px shrink-0 bg-border sm:block"
                 aria-hidden
               />
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-500">
-                Payment
-              </span>
-              <div className="flex flex-wrap items-center gap-1">
-                {PAYMENT_FILTER_TABS.map((tab) => (
-                  <button
-                    key={tab.value || "all-payments"}
-                    type="button"
-                    onClick={() => {
-                      setPaymentFilter(tab.value);
-                      setPagination((p) => ({ ...p, page: 1 }));
-                      setItemPagination((p) => ({ ...p, page: 1 }));
-                    }}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      paymentFilter === tab.value ? ui.paymentTabActive : ui.paymentTabInactive
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              <div className="flex min-w-[9rem] flex-col gap-0.5 sm:min-w-[10.5rem]">
+                <label
+                  htmlFor="orders-payment-filter"
+                  className="text-[10px] font-semibold uppercase tracking-wide text-stone-500"
+                >
+                  Payment
+                </label>
+                <select
+                  id="orders-payment-filter"
+                  value={paymentFilter}
+                  onChange={(e) => {
+                    setPaymentFilter(e.target.value);
+                    setPagination((p) => ({ ...p, page: 1 }));
+                    setItemPagination((p) => ({ ...p, page: 1 }));
+                  }}
+                  className={`${ui.inputCompact} min-w-[10.5rem]`}
+                >
+                  {PAYMENT_FILTER_OPTIONS.map((opt) => (
+                    <option key={opt.value || "all-payments"} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -6185,7 +7476,13 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                           setDateFrom("");
                           setDateTo("");
                           setCityFilter("");
-                          setStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
+                          setStatusFilter(
+                            exchangeOnly
+                              ? EXCHANGE_DEFAULT_LIST_STATUS
+                              : returnOnly
+                                ? RETURN_DEFAULT_LIST_STATUS
+                                : "",
+                          );
                           setLineConsistencyFilter("");
                           setPaymentFilter("");
                           setSortBy("createdAt");
@@ -6261,6 +7558,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         <>
                           <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
                           <option value="EXCHANGE">All exchange statuses</option>
+                        </>
+                      ) : returnOnly ? (
+                        <>
+                          <option value={RETURN_DEFAULT_LIST_STATUS}>Return requested</option>
+                          <option value="RETURN">All return statuses</option>
                         </>
                       ) : (
                         <option value="">All statuses</option>
@@ -6375,8 +7677,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       const ids = listSelectedOrderIds.map(String).filter(Boolean);
                       if (ids.length === 0) return;
                       setSelectedShippingProvider("SHIPROCKET");
-                      setPendingStatusUpdate({ kind: "listOrders", orderIds: ids });
-                      setShippingProviderModalOpen(true);
+                      openShippingProviderModal({ kind: "listOrders", orderIds: ids });
                     }}
                     className={`${ui.btnOutline} text-[11px] py-1`}
                     title="Mark selected orders as PROCESSING."
@@ -6461,7 +7762,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                       <tr
                         key={order._id}
                         className={`border-t border-border/80 transition-colors ${ui.rowHover} ${
-                          orderLineItems(order, { exchangeLinesOnly: exchangeOnly }).length > 1
+                          orderLineItems(order, lineStackFilterProps).length > 1
                             ? "[&>td]:align-top"
                             : ""
                         }`}
@@ -6546,14 +7847,21 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
-                    {(dateFrom || dateTo || cityFilter || itemStatusFilter || paymentFilter) && (
+                    {(dateFrom || dateTo || cityFilter || itemStatusFilter || paymentFilter || shippingProviderFilter) && (
                       <button
                         type="button"
                         onClick={() => {
                           setDateFrom("");
                           setDateTo("");
                           setCityFilter("");
-                          setItemStatusFilter(exchangeOnly ? EXCHANGE_DEFAULT_LIST_STATUS : "");
+                          setShippingProviderFilter("");
+                          setItemStatusFilter(
+                            exchangeOnly
+                              ? EXCHANGE_DEFAULT_LIST_STATUS
+                              : returnOnly
+                                ? RETURN_DEFAULT_LIST_STATUS
+                                : "",
+                          );
                           setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
@@ -6624,6 +7932,11 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         <>
                           <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
                           <option value="EXCHANGE">All exchange statuses</option>
+                        </>
+                      ) : returnOnly ? (
+                        <>
+                          <option value={RETURN_DEFAULT_LIST_STATUS}>Return requested</option>
+                          <option value="RETURN">All return statuses</option>
                         </>
                       ) : (
                         <option value="">All statuses</option>
@@ -6748,8 +8061,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               .filter((t) => t.orderId && t.itemId);
                             if (targets.length === 0) return;
                             setSelectedShippingProvider("SHIPROCKET");
-                            setPendingStatusUpdate({ kind: "listItems", targets });
-                            setShippingProviderModalOpen(true);
+                            openShippingProviderModal({ kind: "listItems", targets });
                           }}
                           className={`${ui.btnOutline} text-[11px] py-1`}
                         >
@@ -6885,6 +8197,10 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                             <span className="inline-flex items-center rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
                               Order #{row.orderId}
                             </span>
+                            {row.orderType === "EXCHANGE" ||
+                            isExchangeReplacementOrderDoc(row, replacementOrderIds) ? (
+                              <ExchangeReplacementOrderBadge />
+                            ) : null}
                             {row.deliveryType ? (
                               <span className="inline-flex items-center rounded-md bg-canvas-muted px-2 py-0.5 text-xs font-medium text-stone-700">
                                 {DELIVERY_TYPE_TABS.find((t) => t.value === row.deliveryType)?.label ??
@@ -6922,39 +8238,94 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                             const borderTone =
                               provider === "DELHIVERY"
                                 ? "border-emerald-200 bg-emerald-50/80"
+                                : provider === "SHADOWFAX"
+                                  ? "border-orange-200 bg-orange-50/80"
                                 : provider === "SELF_SHIPPING"
                                   ? "border-violet-200 bg-violet-50/80"
                                   : "border-sky-200 bg-sky-50/80";
                             const titleTone =
                               provider === "DELHIVERY"
                                 ? "text-emerald-900"
+                                : provider === "SHADOWFAX"
+                                  ? "text-orange-900"
                                 : provider === "SELF_SHIPPING"
                                   ? "text-violet-900"
                                   : "text-sky-900";
                             const providerLabel =
                               provider === "DELHIVERY"
                                 ? "Delhivery"
+                                : provider === "SHADOWFAX"
+                                  ? "Shadowfax"
                                 : provider === "SELF_SHIPPING"
                                   ? "Self Shipping"
                                   : "Shiprocket";
                             const showManifest =
-                              provider !== "DELHIVERY" && provider !== "SELF_SHIPPING";
+                              provider !== "DELHIVERY" &&
+                              provider !== "SHADOWFAX" &&
+                              provider !== "SELF_SHIPPING";
                             return (
                               <div className={`rounded-lg border px-3 py-2 mt-1 ${borderTone}`}>
                                 <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${titleTone}`}>
                                   {providerLabel}
                                 </p>
                                 {provider === "SELF_SHIPPING" ? (
-                                  <p className="text-xs text-stone-700">
-                                    {rowItem?.trackingId ? (
-                                      <>
-                                        Ref:{" "}
-                                        <span className="font-mono font-semibold">{rowItem.trackingId}</span>
-                                      </>
-                                    ) : (
-                                      "In-house — add reference when marking Shipped."
-                                    )}
-                                  </p>
+                                  isExternalSelfShippingLine(rowItem) ? (
+                                    <div className="text-xs text-stone-700 space-y-1">
+                                      <p>
+                                        <span className="font-semibold text-violet-900">External</span>
+                                        {rowItem?.selfShipping?.carrierName
+                                          ? ` · ${rowItem.selfShipping.carrierName}`
+                                          : ""}
+                                      </p>
+                                      {rowItem?.selfShipping?.trackingUrl ? (
+                                        <a
+                                          href={rowItem.selfShipping.trackingUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-indigo-600 hover:underline break-all"
+                                        >
+                                          {rowItem.selfShipping.trackingUrl}
+                                        </a>
+                                      ) : rowItem?.trackingId ? (
+                                        <p className="font-mono">AWB: {rowItem.trackingId}</p>
+                                      ) : (
+                                        <p className="text-amber-800">No tracking added yet.</p>
+                                      )}
+                                      {rowItem?.trackingId && rowItem?.selfShipping?.trackingUrl ? (
+                                        <p className="font-mono">AWB: {rowItem.trackingId}</p>
+                                      ) : null}
+                                      {rowItem?.selfShipping?.notes ? (
+                                        <p className="text-stone-500">{rowItem.selfShipping.notes}</p>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openExternalSelfShippingModalForItem(
+                                            row.orderId,
+                                            rowItem.itemId || row.itemId,
+                                            rowItem,
+                                            { detailsOnly: true },
+                                          )
+                                        }
+                                        className="mt-1 inline-flex items-center rounded-md border border-violet-300 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-50"
+                                      >
+                                        {rowItem?.selfShipping?.carrierName
+                                          ? "Edit carrier details"
+                                          : "Enter carrier details"}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-stone-700">
+                                      {rowItem?.trackingId ? (
+                                        <>
+                                          Internal · Ref:{" "}
+                                          <span className="font-mono font-semibold">{rowItem.trackingId}</span>
+                                        </>
+                                      ) : (
+                                        "Internal — use Khush label or add reference when marking Shipped."
+                                      )}
+                                    </p>
+                                  )
                                 ) : provider === "DELHIVERY" ? (
                                   (() => {
                                     const dl = getNormalDeliveryDelhivery(rowItem);
@@ -6962,6 +8333,15 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                       <DelhiveryDetails dl={dl} />
                                     ) : (
                                       <p className="text-xs text-amber-800">No Delhivery waybill yet.</p>
+                                    );
+                                  })()
+                                ) : provider === "SHADOWFAX" ? (
+                                  (() => {
+                                    const sfx = getNormalDeliveryShadowfax(rowItem);
+                                    return sfx ? (
+                                      <ShadowfaxDetails sfx={sfx} />
+                                    ) : (
+                                      <p className="text-xs text-amber-800">No Shadowfax AWB yet.</p>
                                     );
                                   })()
                                 ) : (() => {
@@ -7086,9 +8466,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             return (
               <div className={ui.detailShell}>
                 {paymentOverrideOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                    <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
-                      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+                  <div className={`${ui.modalOverlay} z-50`}>
+                    <div className={`${ui.modalShell} ${ui.modalShellLg}`}>
+                      <div className={`${ui.modalHeader} flex items-start justify-between gap-4`}>
                         <div>
                           <h3 className="text-base font-semibold text-gray-900">
                             Mark payment SUCCESS + confirm order
@@ -7107,7 +8487,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                           Close
                         </button>
                       </div>
-                      <div className="px-5 py-4 space-y-4">
+                      <div className={`${ui.modalBody} space-y-4`}>
                         <div>
                           <label className="block text-xs font-semibold text-gray-600 mb-1">
                             Payment ID (required)
@@ -7140,7 +8520,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                           Send “order confirmed” notification
                         </label>
                       </div>
-                      <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
+                      <div className={ui.modalFooter}>
                         <button
                           type="button"
                           onClick={closePaymentOverrideModal}
@@ -7170,8 +8550,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 )}
 
                 {shiprocketModalOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                    <div className="flex max-h-[min(90vh,32rem)] w-full max-w-lg flex-col rounded-xl border border-border bg-white shadow-xl">
+                  <div className={`${ui.modalOverlay} z-50`}>
+                    <div className={`${ui.modalShell} ${ui.modalShellLg} border-border`}>
                       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
                         <div className="min-w-0">
                           <h3 className="text-sm font-semibold text-stone-900">
@@ -7293,8 +8673,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                 )}
 
                 {delhiveryModalOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                    <div className="flex max-h-[min(90vh,32rem)] w-full max-w-lg flex-col rounded-xl border border-border bg-white shadow-xl">
+                  <div className={`${ui.modalOverlay} z-50`}>
+                    <div className={`${ui.modalShell} ${ui.modalShellLg} border-border`}>
                       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
                         <div className="min-w-0">
                           <h3 className="text-sm font-semibold text-stone-900">
@@ -7435,13 +8815,42 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">Order #{selectedOrder?.orderId}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
+                          Order #{selectedOrder?.orderId}
+                          {selectedOrder?.orderType === "EXCHANGE" ||
+                          isExchangeReplacementOrderDoc(selectedOrder, replacementOrderIds) ? (
+                            <ExchangeReplacementOrderBadge compact />
+                          ) : null}
+                        </p>
+                        {(selectedOrder?.orderType === "EXCHANGE" ||
+                          isExchangeReplacementOrderDoc(selectedOrder, replacementOrderIds)) &&
+                        selectedOrder?.exchangeMeta?.originalOrderId ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openOrderById(selectedOrder.exchangeMeta.originalOrderId)
+                            }
+                            className="mt-1 text-[10px] font-semibold text-brand-700 hover:underline"
+                          >
+                            Original order #{selectedOrder.exchangeMeta.originalOrderId}
+                          </button>
+                        ) : null}
                         <p className="mt-1 text-xs text-gray-500 break-all">
                           Item ID: {String(focusedItem.itemId || focusedItem._id || "—")}
                         </p>
                         <ExchangeDetailsPanel
                           item={focusedItem}
                           onZoomImage={setZoomImageUrl}
+                          onOpenOrder={openOrderById}
+                          onAssignPickup={handleOpenAssignExchangePickup}
+                          assignPickupLoading={exchangePickupLoading}
+                        />
+                        <ReturnDetailsPanel
+                          item={focusedItem}
+                          onApproveReturn={handleApproveReturn}
+                          approveReturnLoading={returnApproveLoading}
+                          onBookReversePickup={handleBookReturnReversePickup}
+                          bookPickupLoading={returnBookPickupLoading}
                         />
                         <h3 className="mt-1 text-sm font-semibold text-stone-900">
                           {getLineProductDisplayName(focusedItem) ||
@@ -7516,25 +8925,34 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     const borderTone =
                       provider === "DELHIVERY"
                         ? "border-emerald-200 bg-emerald-50/90"
+                        : provider === "SHADOWFAX"
+                          ? "border-orange-200 bg-orange-50/90"
                         : provider === "SELF_SHIPPING"
                           ? "border-violet-200 bg-violet-50/90"
                           : "border-sky-200 bg-sky-50/90";
                     const titleTone =
                       provider === "DELHIVERY"
                         ? "text-emerald-900"
+                        : provider === "SHADOWFAX"
+                          ? "text-orange-900"
                         : provider === "SELF_SHIPPING"
                           ? "text-violet-900"
                           : "text-sky-900";
                     const providerLabel =
                       provider === "DELHIVERY"
                         ? "Delhivery"
+                        : provider === "SHADOWFAX"
+                          ? "Shadowfax"
                         : provider === "SELF_SHIPPING"
                           ? "Self Shipping"
                           : "Shiprocket";
                     const sr = getLineShiprocket(focusedItem);
                     const dl = getNormalDeliveryDelhivery(focusedItem);
+                    const sfx = getNormalDeliveryShadowfax(focusedItem);
                     const showManifest =
-                      provider !== "DELHIVERY" && provider !== "SELF_SHIPPING";
+                      provider !== "DELHIVERY" &&
+                      provider !== "SHADOWFAX" &&
+                      provider !== "SELF_SHIPPING";
                     return (
                       <div className={`rounded-xl border p-3 ${borderTone}`}>
                         <h4 className={`mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide ${titleTone}`}>
@@ -7543,22 +8961,77 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                         </h4>
                         <div className="space-y-2">
                           {provider === "SELF_SHIPPING" ? (
-                            <p className="text-sm text-stone-700">
-                              {focusedItem.trackingId ? (
-                                <>
-                                  Reference:{" "}
-                                  <span className="font-mono font-semibold">{focusedItem.trackingId}</span>
-                                </>
-                              ) : (
-                                "In-house shipment — add tracking reference when marking Shipped."
-                              )}
-                            </p>
+                            isExternalSelfShippingLine(focusedItem) ? (
+                              <div className="text-sm text-stone-700 space-y-1">
+                                <p>
+                                  <span className="font-semibold text-violet-900">External</span>
+                                  {focusedItem?.selfShipping?.carrierName
+                                    ? ` · ${focusedItem.selfShipping.carrierName}`
+                                    : ""}
+                                </p>
+                                {focusedItem?.selfShipping?.trackingUrl ? (
+                                  <a
+                                    href={focusedItem.selfShipping.trackingUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-600 hover:underline break-all"
+                                  >
+                                    {focusedItem.selfShipping.trackingUrl}
+                                  </a>
+                                ) : focusedItem?.trackingId ? (
+                                  <p className="font-mono text-xs">AWB: {focusedItem.trackingId}</p>
+                                ) : (
+                                  <p className="text-amber-800 text-xs">No tracking added yet.</p>
+                                )}
+                                {focusedItem?.trackingId && focusedItem?.selfShipping?.trackingUrl ? (
+                                  <p className="font-mono text-xs">AWB: {focusedItem.trackingId}</p>
+                                ) : null}
+                                {focusedItem?.selfShipping?.notes ? (
+                                  <p className="text-xs text-stone-500">{focusedItem.selfShipping.notes}</p>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openExternalSelfShippingModalForItem(
+                                      selectedOrder?.orderId,
+                                      focusedItem.itemId,
+                                      focusedItem,
+                                      { detailsOnly: true },
+                                    )
+                                  }
+                                  className="inline-flex items-center rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-800 hover:bg-violet-50"
+                                >
+                                  {focusedItem?.selfShipping?.carrierName
+                                    ? "Edit carrier details"
+                                    : "Enter carrier details"}
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-stone-700">
+                                {focusedItem.trackingId ? (
+                                  <>
+                                    Internal · Ref:{" "}
+                                    <span className="font-mono font-semibold">{focusedItem.trackingId}</span>
+                                  </>
+                                ) : (
+                                  "Internal shipment — use Khush label or add reference when marking Shipped."
+                                )}
+                              </p>
+                            )
                           ) : provider === "DELHIVERY" ? (
                             dl ? (
                               <DelhiveryDetails dl={dl} />
                             ) : (
                               <p className="text-sm text-amber-800">
                                 No Delhivery waybill yet. Move to Processing with Delhivery to manifest.
+                              </p>
+                            )
+                          ) : provider === "SHADOWFAX" ? (
+                            sfx ? (
+                              <ShadowfaxDetails sfx={sfx} />
+                            ) : (
+                              <p className="text-sm text-amber-800">
+                                No Shadowfax AWB yet. Move to Processing with Shadowfax to manifest.
                               </p>
                             )
                           ) : sr ? (
@@ -7723,6 +9196,23 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   <span className="font-mono text-xs font-semibold text-stone-900">
                     {selectedOrder?.orderId || "—"}
                   </span>
+                  {selectedOrder?.orderType === "EXCHANGE" ||
+                  isExchangeReplacementOrderDoc(selectedOrder, replacementOrderIds) ? (
+                    <ExchangeReplacementOrderBadge compact />
+                  ) : null}
+                  {(selectedOrder?.orderType === "EXCHANGE" ||
+                    isExchangeReplacementOrderDoc(selectedOrder, replacementOrderIds)) &&
+                  selectedOrder?.exchangeMeta?.originalOrderId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openOrderById(selectedOrder.exchangeMeta.originalOrderId)
+                      }
+                      className="text-[10px] font-semibold text-brand-700 hover:underline"
+                    >
+                      Original #{selectedOrder.exchangeMeta.originalOrderId}
+                    </button>
+                  ) : null}
                   <span className="text-stone-300" aria-hidden>
                     ·
                   </span>
@@ -8125,6 +9615,40 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                                 key={String(item.itemId || item._id)}
                                 item={item}
                                 onZoomImage={setZoomImageUrl}
+                                onOpenOrder={openOrderById}
+                                onAssignPickup={handleOpenAssignExchangePickup}
+                                assignPickupLoading={exchangePickupLoading}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const returnItems = (selectedOrder?.items || []).filter((it) =>
+                        returnHasVisibleDetails(getLatestReturn(it), it),
+                      );
+                      if (!returnItems.length) return null;
+                      return (
+                        <div className="mb-2 overflow-hidden rounded-xl border border-amber-200/80 bg-white shadow-sm">
+                          <div className="flex items-center gap-1.5 border-b border-amber-100 bg-amber-50/60 px-2.5 py-1">
+                            <RotateCcw
+                              className="h-3 w-3 shrink-0 text-amber-700"
+                              aria-hidden
+                            />
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                              Returns ({returnItems.length})
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1 p-1.5">
+                            {returnItems.map((item) => (
+                              <ReturnDetailsPanel
+                                key={String(item.itemId || item._id)}
+                                item={item}
+                                onApproveReturn={handleApproveReturn}
+                                approveReturnLoading={returnApproveLoading}
+                                onBookReversePickup={handleBookReturnReversePickup}
+                                bookPickupLoading={returnBookPickupLoading}
                               />
                             ))}
                           </div>
@@ -8302,6 +9826,14 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                               ))}
                               <td className="min-w-0 px-1.5 py-1.5 align-middle">
                                 {renderItemStatusBreakdown(item, { tableRow: true })}
+                                <ReturnDetailsPanel
+                                  item={item}
+                                  embedded
+                                  onApproveReturn={handleApproveReturn}
+                                  approveReturnLoading={returnApproveLoading}
+                                  onBookReversePickup={handleBookReturnReversePickup}
+                                  bookPickupLoading={returnBookPickupLoading}
+                                />
                               </td>
                               <td className="min-w-0 px-1.5 py-1.5 align-middle">
                                 {renderOrderDetailShipDocsCell(item)}
@@ -8407,8 +9939,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
         {/* Assignment Modal */}
         {assignmentModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className={`${ui.modalOverlayDark} z-50`}>
+            <div className={ui.modalPanelSimple}>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 {reassignAssignmentId
                   ? "Reassign driver"
@@ -8491,8 +10023,8 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
 
         {/* Exchange rejection note modal */}
         {rejectionModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div className={`${ui.modalOverlayDark} z-50`}>
+            <div className={ui.modalPanelSimple}>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Reject exchange request
               </h3>
@@ -8562,7 +10094,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             role="presentation"
           >
             <div
-              className="mx-auto flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
+              className={`mx-auto flex max-h-[90vh] w-full flex-col overflow-hidden rounded-none bg-white shadow-2xl ring-1 ring-gray-200/80 ${ui.modalShellLg}`}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -8662,7 +10194,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
             role="presentation"
           >
             <div
-              className="mx-auto max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-200/80"
+              className={`mx-auto max-h-[90vh] w-full overflow-hidden rounded-none bg-white shadow-2xl ring-1 ring-gray-200/80 ${ui.modalShellWide}`}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -8708,9 +10240,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         )}
 
         {shippingFallbackModal?.length > 0 && (
-          <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-amber-200">
-              <div className="px-5 py-4 border-b border-amber-100 bg-amber-50 rounded-t-xl">
+          <div className={`${ui.modalOverlay} z-[95]`}>
+            <div className={`${ui.modalShell} ${ui.modalShellLg} border-amber-200`}>
+              <div className={`${ui.modalHeader} border-amber-100 bg-amber-50`}>
                 <h3 className="text-base font-semibold text-amber-950">
                   Switched to Self Shipping
                 </h3>
@@ -8719,7 +10251,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   These line(s) were updated to <strong>Self Shipping</strong> instead.
                 </p>
               </div>
-              <div className="px-5 py-4 space-y-3 max-h-[50vh] overflow-y-auto">
+              <div className={`${ui.modalBody} space-y-3`}>
                 {shippingFallbackModal.map((entry, idx) => (
                   <div
                     key={`${entry.orderId || "order"}-${entry.itemId || idx}-${idx}`}
@@ -8743,7 +10275,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   </div>
                 ))}
               </div>
-              <div className="px-5 py-4 border-t border-gray-100 flex justify-end">
+              <div className={ui.modalFooter}>
                 <button
                   type="button"
                   onClick={() => setShippingFallbackModal(null)}
@@ -8757,9 +10289,9 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
         )}
 
         {shippingProviderModalOpen && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-gray-200">
-              <div className="px-5 py-4 border-b border-gray-100">
+          <div className={`${ui.modalOverlay} z-[90]`}>
+            <div className={`${ui.modalShell} ${ui.modalShellMd}`}>
+              <div className={ui.modalHeader}>
                 <h3 className="text-base font-semibold text-gray-900">
                   Choose shipping carrier
                 </h3>
@@ -8768,7 +10300,7 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   Self shipping skips third-party APIs — add tracking when marking Shipped.
                 </p>
               </div>
-              <div className="px-5 py-4 space-y-3">
+              <div className={`${ui.modalBody} space-y-3`}>
                 {SHIPPING_PROVIDER_OPTIONS.map((opt) => (
                   <label
                     key={opt.value}
@@ -8792,8 +10324,109 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                     <span className="text-sm font-medium text-gray-900">{opt.label}</span>
                   </label>
                 ))}
+                {selectedShippingProvider === "SELF_SHIPPING" && (
+                  <div className="rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 space-y-3">
+                    <p className="text-xs font-semibold text-violet-900 uppercase tracking-wide">
+                      Self shipping type
+                    </p>
+                    {SELF_SHIPPING_MODE_OPTIONS.map((opt) => (
+                      <label
+                        key={opt.value}
+                        className="flex cursor-pointer items-center gap-2 text-sm text-gray-800"
+                      >
+                        <input
+                          type="radio"
+                          name="selfShippingMode"
+                          value={opt.value}
+                          checked={selectedSelfShippingMode === opt.value}
+                          onChange={() => {
+                            setSelectedSelfShippingMode(opt.value);
+                            if (opt.value === "INTERNAL") {
+                              setExternalSelfShipForm(EMPTY_EXTERNAL_SELF_SHIP_FORM);
+                            }
+                          }}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                    {selectedSelfShippingMode === "EXTERNAL" ? (
+                      <div className="mt-2 space-y-3 rounded-lg border border-violet-300 bg-white px-3 py-3">
+                        <p className="text-xs font-medium text-violet-900">
+                          External courier details
+                        </p>
+                        <label className="block text-xs font-medium text-gray-700">
+                          Courier partner *
+                          <input
+                            type="text"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            value={externalSelfShipForm.carrierName}
+                            onChange={(e) =>
+                              setExternalSelfShipForm((prev) => ({
+                                ...prev,
+                                carrierName: e.target.value,
+                              }))
+                            }
+                            placeholder="e.g. BlueDart, DTDC, India Post"
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-gray-700">
+                          AWB / tracking number *
+                          <input
+                            type="text"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            value={externalSelfShipForm.trackingId}
+                            onChange={(e) =>
+                              setExternalSelfShipForm((prev) => ({
+                                ...prev,
+                                trackingId: e.target.value,
+                              }))
+                            }
+                            placeholder="AWB or reference number"
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-gray-700">
+                          Tracking URL
+                          <input
+                            type="url"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            value={externalSelfShipForm.trackingUrl}
+                            onChange={(e) =>
+                              setExternalSelfShipForm((prev) => ({
+                                ...prev,
+                                trackingUrl: e.target.value,
+                              }))
+                            }
+                            placeholder="https://... (optional if AWB entered)"
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-gray-700">
+                          Notes
+                          <textarea
+                            rows={2}
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            value={externalSelfShipForm.notes}
+                            onChange={(e) =>
+                              setExternalSelfShipForm((prev) => ({
+                                ...prev,
+                                notes: e.target.value,
+                              }))
+                            }
+                            placeholder="Internal notes (optional)"
+                          />
+                        </label>
+                        <p className="text-[11px] text-violet-800">
+                          Courier partner and AWB or tracking URL are required. Details are saved when you confirm.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-violet-800">
+                        Internal uses Khush labels and in-house logistics.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <div className={ui.modalFooter}>
                 <button
                   type="button"
                   disabled={shippingProviderSubmitting}
@@ -8819,6 +10452,249 @@ const Orders = ({ exchangeOnly = false, defaultViewMode = VIEW_ORDER, pageTitle 
                   ) : (
                     "Confirm & update"
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {externalSelfShipModal && (
+          <div className={`${ui.modalOverlay} z-[91]`}>
+            <div className={`${ui.modalShell} ${ui.modalShellMd}`}>
+              <div className={ui.modalHeader}>
+                <h3 className="text-base font-semibold text-gray-900">
+                  {externalSelfShipModal.detailsOnly
+                    ? "External carrier details"
+                    : "External self-shipping details"}
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {externalSelfShipModal.detailsOnly
+                    ? "Shipment was booked manually on another carrier or portal. Save tracking info for ops and customer notifications."
+                    : "Enter carrier and tracking before updating the item status."}
+                </p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3`}>
+                <label className="block text-xs font-medium text-gray-700">
+                  Courier partner{externalSelfShipModal.detailsOnly ? "" : " *"}
+                  <input
+                    type="text"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    value={externalSelfShipForm.carrierName}
+                    onChange={(e) =>
+                      setExternalSelfShipForm((prev) => ({
+                        ...prev,
+                        carrierName: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. BlueDart, DTDC, India Post"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-700">
+                  AWB / tracking number{externalSelfShipModal.detailsOnly ? "" : " *"}
+                  <input
+                    type="text"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    value={externalSelfShipForm.trackingId}
+                    onChange={(e) =>
+                      setExternalSelfShipForm((prev) => ({
+                        ...prev,
+                        trackingId: e.target.value,
+                      }))
+                    }
+                    placeholder="AWB or reference number"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-700">
+                  Tracking URL
+                  <input
+                    type="url"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    value={externalSelfShipForm.trackingUrl}
+                    onChange={(e) =>
+                      setExternalSelfShipForm((prev) => ({
+                        ...prev,
+                        trackingUrl: e.target.value,
+                      }))
+                    }
+                    placeholder="https://... (optional if AWB entered)"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-gray-700">
+                  Notes
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    value={externalSelfShipForm.notes}
+                    onChange={(e) =>
+                      setExternalSelfShipForm((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    placeholder="Internal notes about this shipment"
+                  />
+                </label>
+              </div>
+              <div className={ui.modalFooter}>
+                <button
+                  type="button"
+                  disabled={externalSelfShipSubmitting}
+                  onClick={() => setExternalSelfShipModal(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={externalSelfShipSubmitting}
+                  onClick={submitExternalSelfShippingModal}
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-60"
+                >
+                  {externalSelfShipSubmitting
+                    ? "Saving…"
+                    : externalSelfShipModal.detailsOnly
+                      ? "Save details"
+                      : "Save & update status"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {exchangePickupModal && (
+          <div
+            className={`${ui.modalOverlayDark} z-[84]`}
+            onClick={() => !exchangePickupLoading && setExchangePickupModal(null)}
+          >
+            <div
+              className={`${ui.modalShell} ${ui.modalShellMd} border-border`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`${ui.modalHeader} py-3`}>
+                <h3 className="text-sm font-semibold text-stone-900">
+                  Assign exchange pickup
+                </h3>
+                <p className="mt-1 text-[11px] text-stone-600">
+                  For Delhivery / Shadowfax manual or Khush driver exchanges. Book reverse pickup via carrier API or enter return AWB manually.
+                </p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3 py-3`}>
+                {String(exchangePickupModal?.returnPickupMethod || "").toUpperCase() ===
+                "DELHIVERY_MANUAL" ? (
+                  <label className="flex items-start gap-2 text-[11px] text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(exchangePickupForm.bookDelhivery)}
+                      onChange={(e) =>
+                        setExchangePickupForm((prev) => ({
+                          ...prev,
+                          bookDelhivery: e.target.checked,
+                          bookShadowfax: e.target.checked ? false : prev.bookShadowfax,
+                        }))
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Book reverse pickup with Delhivery API
+                      <span className="block text-[10px] text-stone-500">
+                        Creates RVP waybill automatically (payment_mode Pickup). Leave AWB empty when checked.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+                {String(exchangePickupModal?.returnPickupMethod || "").toUpperCase() ===
+                "SHADOWFAX_MANUAL" ? (
+                  <label className="flex items-start gap-2 text-[11px] text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(exchangePickupForm.bookShadowfax)}
+                      onChange={(e) =>
+                        setExchangePickupForm((prev) => ({
+                          ...prev,
+                          bookShadowfax: e.target.checked,
+                          bookDelhivery: e.target.checked ? false : prev.bookDelhivery,
+                        }))
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Book reverse pickup with Shadowfax API
+                      <span className="block text-[10px] text-stone-500">
+                        Creates customer pickup AWB automatically. Leave AWB empty when checked.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Return AWB / tracking ID
+                  <input
+                    type="text"
+                    value={exchangePickupForm.manualTrackingId}
+                    onChange={(e) =>
+                      setExchangePickupForm((prev) => ({
+                        ...prev,
+                        manualTrackingId: e.target.value,
+                      }))
+                    }
+                    disabled={
+                      exchangePickupForm.bookDelhivery || exchangePickupForm.bookShadowfax
+                    }
+                    className={`${ui.inputCompact} mt-1 w-full disabled:bg-stone-50`}
+                    placeholder={
+                      exchangePickupForm.bookDelhivery
+                        ? "AWB will be assigned by Delhivery"
+                        : exchangePickupForm.bookShadowfax
+                          ? "AWB will be assigned by Shadowfax"
+                          : "Carrier AWB for return pickup"
+                    }
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Notes
+                  <textarea
+                    value={exchangePickupForm.notes}
+                    onChange={(e) =>
+                      setExchangePickupForm((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className={`${ui.inputCompact} mt-1 w-full resize-y`}
+                    placeholder="Pickup instructions (optional)"
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Scheduled at
+                  <input
+                    type="datetime-local"
+                    value={exchangePickupForm.scheduledAt}
+                    onChange={(e) =>
+                      setExchangePickupForm((prev) => ({
+                        ...prev,
+                        scheduledAt: e.target.value,
+                      }))
+                    }
+                    className={`${ui.inputCompact} mt-1 w-full`}
+                  />
+                </label>
+              </div>
+              <div className={ui.modalFooter}>
+                <button
+                  type="button"
+                  disabled={exchangePickupLoading}
+                  onClick={() => setExchangePickupModal(null)}
+                  className={ui.btnOutline}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={exchangePickupLoading}
+                  onClick={handleSubmitExchangePickup}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {exchangePickupLoading ? "Saving…" : "Save pickup"}
                 </button>
               </div>
             </div>

@@ -6,7 +6,8 @@ import { getLoginPathForPathname } from "../../utils/authRole";
 /**
  * Create axios instance
  */
-const apiBaseUrl ="https://api.khushpehno.com/api"
+const apiBaseUrl ="https://apidev.khushpehno.com/api"
+// const apiBaseUrl= "http://localhost:5000/api"
   // import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
   // (import.meta.env.DEV
   //   ? "http://localhost:5000/api"

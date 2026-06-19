@@ -124,3 +124,28 @@ export const changeDesignerItemStatus = (id, status) =>
 export const regenerateDesignerSku = (id) =>
   apiConnector("PATCH", `${DESIGNER_INVENTORY_BASE}/${id}/generate-sku`);
 
+/** Catalog items in main inventory not linked to designer panel */
+export const getCatalogUnlinkedForDesigner = ({
+  page = 1,
+  limit = 20,
+  search = "",
+  categoryId = "",
+  subcategoryId = "",
+} = {}) => {
+  const q = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    ...(search ? { search: String(search) } : {}),
+    ...(categoryId ? { categoryId: String(categoryId) } : {}),
+    ...(subcategoryId ? { subcategoryId: String(subcategoryId) } : {}),
+  });
+  return apiConnector("GET", `${ADMIN_BASE}/inventory/catalog-unlinked?${q.toString()}`);
+};
+
+/** Import catalog item(s) into designer inventory and link as listed */
+export const importCatalogToDesigner = ({ designerId, catalogItemIds }) =>
+  apiConnector("POST", `${ADMIN_BASE}/inventory/import-from-catalog`, {
+    designerId: String(designerId),
+    catalogItemIds: Array.isArray(catalogItemIds) ? catalogItemIds.map(String) : [],
+  });
+

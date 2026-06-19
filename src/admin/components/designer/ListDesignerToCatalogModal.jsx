@@ -14,7 +14,7 @@ import {
   parseCatalogCategoriesResponse,
   parseCatalogSubcategoriesResponse,
 } from "../../utils/catalogCategoryDisplay";
-import { publishDesignerToCatalog } from "../../utils/publishDesignerToCatalog";
+import { publishDesignerToCatalog, findExistingCatalogItemForDesigner } from "../../utils/publishDesignerToCatalog";
 import {
   SIZE_CHART_PRESETS,
   garmentPresetCategoryLabel,
@@ -504,6 +504,8 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
   const [sizeChartCategory, setSizeChartCategory] = useState("upper");
   const [subsByCategory, setSubsByCategory] = useState({});
   const [categoryLabelsLoading, setCategoryLabelsLoading] = useState(false);
+  const [existingCatalog, setExistingCatalog] = useState(null);
+  const [checkingCatalog, setCheckingCatalog] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -541,6 +543,13 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
           setForm(designerInventoryToItemFormState(doc));
           if (doc.categoryId) setCategoryId(String(doc.categoryId));
           if (doc.subcategoryId) setSubcategoryId(String(doc.subcategoryId));
+          if (doc.catalogItemId && !doc.isListed) {
+            setExistingCatalog({
+              _id: String(doc.catalogItemId),
+              productId: doc.StyleNumber || doc.skuCodeInputs?.styleNu || "",
+              name: doc.styleName || doc.StyleNumber,
+            });
+          }
         } else {
           setLoadErr(invRes?.message || "Could not load designer inventory.");
         }
@@ -551,6 +560,32 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
       }
     })();
   }, [open, designerRow?._id]);
+
+  useEffect(() => {
+    if (!open || !sourceDesigner || !form?.productId?.trim()) {
+      setExistingCatalog(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setCheckingCatalog(true);
+      try {
+        const hit = await findExistingCatalogItemForDesigner({
+          productId: form.productId,
+          designerRow: sourceDesigner,
+        });
+        if (!cancelled) setExistingCatalog(hit);
+      } catch {
+        if (!cancelled) setExistingCatalog(null);
+      } finally {
+        if (!cancelled) setCheckingCatalog(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, sourceDesigner, form?.productId]);
 
   useEffect(() => {
     if (!open || !sourceDesigner) {
@@ -633,11 +668,15 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
     return "";
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, { linkOnly = false } = {}) => {
     e.preventDefault();
     const err = validate();
-    if (err) {
+    if (err && !linkOnly) {
       toast.error(err);
+      return;
+    }
+    if (linkOnly && !existingCatalog) {
+      toast.error("No matching catalog item found for this Product ID.");
       return;
     }
     setSaving(true);
@@ -648,19 +687,27 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
         categoryId,
         subcategoryId,
         productId: formForSubmit.productId,
+        linkOnly,
+        existingCatalogId: existingCatalog?._id,
       });
       const result = await publishDesignerToCatalog({
         designerInventoryId: designerRow._id,
-        designerRow,
+        designerRow: sourceDesigner,
         form: formForSubmit,
         categoryId,
         subcategoryId,
+        linkOnly: linkOnly || Boolean(existingCatalog),
       });
       console.log("[ListDesignerToCatalogModal] publish complete", {
+        mode: result.mode,
         catalogItemId: result.catalogItemId,
         updatedDesigner: result.updatedDesigner,
       });
-      toast.success("Catalog item saved and designer row marked as listed.");
+      toast.success(
+        result.mode === "link"
+          ? `Linked to existing catalog item (${result.catalogItem?.productId || result.catalogItemId}).`
+          : "Catalog item created and designer row marked as listed."
+      );
       onPublished?.(result.updatedDesigner);
       onClose?.();
     } catch (raw) {
@@ -711,10 +758,23 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                   Main inventory (catalog) — edit & submit
                 </h3>
                 <p className="mb-3 text-[11px] text-gray-600">
-                  Primary category and subcategory below are sent to main inventory. All primary and
-                  secondary categories from the designer row are included in the create payload
-                  automatically.
+                  Primary category and subcategory below are sent to main inventory when creating a
+                  new item. If a catalog item with the same Product ID (or SKU) already exists, we
+                  link to it instead of creating a duplicate.
                 </p>
+                {checkingCatalog ? (
+                  <p className="mb-3 text-[11px] text-stone-500">Checking main inventory…</p>
+                ) : null}
+                {existingCatalog ? (
+                  <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-950">
+                    <p className="font-semibold">Catalog item already exists — link only</p>
+                    <p className="mt-1">
+                      Found <span className="font-mono">{existingCatalog.productId}</span>
+                      {existingCatalog.name ? ` · ${existingCatalog.name}` : ""}. Submit will link
+                      this designer row (no new catalog create).
+                    </p>
+                  </div>
+                ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className="mb-0.5 block text-xs font-medium text-gray-700">
@@ -1144,7 +1204,13 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                   Cancel
                 </button>
                 <button type="submit" disabled={saving} className={btnPrimary}>
-                  {saving ? "Creating…" : "Create catalog item & mark listed"}
+                  {saving
+                    ? existingCatalog
+                      ? "Linking…"
+                      : "Creating…"
+                    : existingCatalog
+                      ? "Link to existing catalog & mark listed"
+                      : "Create catalog item & mark listed"}
                 </button>
               </div>
             </form>

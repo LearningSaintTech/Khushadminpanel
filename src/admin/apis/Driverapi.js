@@ -22,19 +22,22 @@ export const createDeliveryAgent = (data) => {
 
 
 
-// ✅ Get Delivery Agent List (pagination + search + active filter)
+// ✅ Get Delivery Agent List (pagination + search + optional active filter)
 export const getDeliveryAgents = (
   page = 1,
   limit = 10,
   search = "",
-  isActive = true
+  isActive = undefined
 ) => {
   const queryParams = new URLSearchParams({
-    page,
-    limit,
-    search,
-    isActive,
+    page: String(page),
+    limit: String(limit),
+    search: search || "",
   });
+
+  if (isActive !== undefined && isActive !== null && isActive !== "") {
+    queryParams.append("isActive", String(isActive));
+  }
 
   return apiConnector(
     "GET",
@@ -80,5 +83,17 @@ export const toggleDeliveryAgentStatus = (id) => {
   return apiConnector(
     "PUT",
     `${deliveryAgentEndpoints.TOGGLE_STATUS}/${id}/toggle-status`
+  );
+};
+
+// ✅ Delivered orders history for a driver (admin)
+export const getDeliveryAgentDeliveryHistory = (id, page = 1, limit = 20) => {
+  const queryParams = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
+  return apiConnector(
+    "GET",
+    `${deliveryAgentEndpoints.GET_DELIVERY_AGENT_BY_ID}/${id}/delivery-history?${queryParams.toString()}`
   );
 };

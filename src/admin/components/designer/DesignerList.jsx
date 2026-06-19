@@ -136,6 +136,14 @@ const DesignerList = () => {
           <Plus className="h-3.5 w-3.5" aria-hidden />
           Create
         </button>
+        <button
+          type="button"
+          onClick={() => navigate(ap("designer/inventory?syncCatalog=1"))}
+          className={btnOutline}
+          title="Import catalog items not yet on designer panel"
+        >
+          Sync catalog
+        </button>
       </form>
 
       {error ? <div className={alertDanger}>{error}</div> : null}

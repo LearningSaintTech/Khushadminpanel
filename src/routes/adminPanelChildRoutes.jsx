@@ -36,6 +36,7 @@ import Influencer from "../admin/components/influencer/influencer";
 import InfluencerForm from "../admin/components/influencer/influuencerform";
 import Deliveryagent from "../admin/components/Deliveryagent/Deliveryagent";
 import DeliveryAgentForm from "../admin/components/Deliveryagent/Deliveryagentform";
+import DeliveryAgentDeliveries from "../admin/components/Deliveryagent/DeliveryAgentDeliveries";
 import Warehouse from "../admin/components/Warehouse/Warehouse";
 import WarehouseForm from "../admin/components/Warehouse/WarehouseForm";
 import Showsubcategory from "../admin/components/inventory/showsubcategory";
@@ -52,6 +53,7 @@ import StatusPage from "../admin/components/Status/Statusform";
 import Orders from "../admin/components/orders/order";
 import StaleOrdersPage from "../admin/components/orders/StaleOrdersPage";
 import ExchangeOrders from "../admin/components/orders/ExchangeOrders";
+import ReturnOrders from "../admin/components/orders/ReturnOrders";
 import Reviews from "../admin/components/Review/Reviews";
 import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
@@ -66,6 +68,8 @@ import AdminNotificationTestPage from "../admin/components/notifications/AdminNo
 import ContactUs from "../admin/components/ContactUs/ContactUs";
 import SupportAgentList from "../admin/components/support/agents/SupportAgentList";
 import SupportAgentForm from "../admin/components/support/agents/SupportAgentForm";
+import OrderAgentList from "../admin/components/orderAgent/OrderAgentList";
+import OrderAgentForm from "../admin/components/orderAgent/OrderAgentForm";
 import SupportTicketList from "../admin/components/support/tickets/SupportTicketList";
 import SupportTicketDetail from "../admin/components/support/tickets/SupportTicketDetail";
 import AuditLogsPage from "../admin/components/audit/AuditLogsPage";
@@ -181,6 +185,7 @@ export const adminPanelChildRoutes = [
   <Route key="orders" path="orders" element={<Orders />} />,
   <Route key="orders-stale" path="orders/stale" element={<StaleOrdersPage />} />,
   <Route key="exchange-orders" path="exchange-orders" element={<ExchangeOrders />} />,
+  <Route key="return-orders" path="return-orders" element={<ReturnOrders />} />,
   <Route key="subadm" path="subadmin" element={<SubAdmin />} />,
   <Route key="subadm-cr" path="subadmin/create" element={<SubAdminForm />} />,
   <Route key="subadm-ed" path="subadmin/edit/:id" element={<SubAdminForm />} />,
@@ -195,6 +200,7 @@ export const adminPanelChildRoutes = [
   <Route key="drv" path="driver" element={<Deliveryagent />} />,
   <Route key="drv-cr" path="driver/create" element={<DeliveryAgentForm />} />,
   <Route key="drv-ed" path="driver/edit/:id" element={<DeliveryAgentForm />} />,
+  <Route key="drv-del" path="driver/:id/deliveries" element={<DeliveryAgentDeliveries />} />,
   <Route key="des" path="designer" element={<DesignerList />} />,
   <Route key="des-cr" path="designer/create" element={<DesignerForm />} />,
   <Route key="des-ed" path="designer/edit/:id" element={<DesignerForm />} />,
@@ -231,6 +237,9 @@ export const adminPanelChildRoutes = [
   <Route key="sup-ag" path="support-agents" element={<SupportAgentList />} />,
   <Route key="sup-ag-cr" path="support-agents/create" element={<SupportAgentForm />} />,
   <Route key="sup-ag-ed" path="support-agents/edit/:id" element={<SupportAgentForm />} />,
+  <Route key="oa-list" path="order-agents" element={<OrderAgentList />} />,
+  <Route key="oa-cr" path="order-agents/create" element={<OrderAgentForm />} />,
+  <Route key="oa-ed" path="order-agents/edit/:id" element={<OrderAgentForm />} />,
   <Route key="notif" path="notifications" element={<AdminNotificationsPage />} />,
   <Route key="notif-sent" path="notifications/sent" element={<AdminNotificationHistoryPage />} />,
   <Route key="notif-hist" path="notifications/history" element={<AdminNotificationHistoryPage />} />,

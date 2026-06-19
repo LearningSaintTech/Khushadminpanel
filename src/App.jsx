@@ -4,6 +4,7 @@ import AdminRoutes from "./routes/adminroutes";
 import InfluencerRoutes from "./routes/influencerroutes";
 import DriverRoutes from "./routes/driverroutes";
 import SupportAgentRoutes from "./routes/supportAgentRoutes";
+import OrderAgentRoutes from "./routes/orderAgentRoutes";
 import SubAdminRoutes from "./routes/subadminroutes";
 import DesignerRoutes from "./routes/designerroutes";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -35,6 +36,9 @@ function App() {
 
       {/* Support Agent Routes */}
       <Route path="/support-agent/*" element={<SupportAgentRoutes />} />
+
+      {/* Order Agent Routes */}
+      <Route path="/order-agent/*" element={<OrderAgentRoutes />} />
       
       {/* SubAdmin Routes */}
       <Route path="/subadmin/*" element={<SubAdminRoutes />} />

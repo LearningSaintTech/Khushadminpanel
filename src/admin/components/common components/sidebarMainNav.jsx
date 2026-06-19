@@ -731,7 +731,7 @@ export default function SidebarMainNav({
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            showChildren && isOrdersOpen ? "max-h-32 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isOrdersOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1 space-y-0.5">
@@ -739,7 +739,8 @@ export default function SidebarMainNav({
               to={ap("orders")}
               className={subLinkClass(
                 isActive(ap("orders")) &&
-                  !location.pathname.startsWith(ap("exchange-orders")),
+                  !location.pathname.startsWith(ap("exchange-orders")) &&
+                  !location.pathname.startsWith(ap("return-orders")),
               )}
             >
               Orders
@@ -749,6 +750,12 @@ export default function SidebarMainNav({
               className={subLinkClass(isActive(ap("exchange-orders")))}
             >
               Exchange orders
+            </Link>
+            <Link
+              to={ap("return-orders")}
+              className={subLinkClass(isActive(ap("return-orders")))}
+            >
+              Return orders
             </Link>
           </div>
         </div>

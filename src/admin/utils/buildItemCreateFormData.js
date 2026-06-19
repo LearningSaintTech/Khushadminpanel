@@ -450,7 +450,9 @@ export function designerInventoryToItemFormState(designer) {
     price: mrp !== undefined && mrp !== null && mrp !== "" ? String(mrp) : "",
     discountedPrice:
       disc !== undefined && disc !== null && disc !== "" ? String(disc) : "",
-    productId: "",
+    productId: String(
+      designer.StyleNumber || designer.skuCodeInputs?.styleNu || ""
+    ).trim(),
     skuCodeInputs: {
       styleNu: designer.StyleNumber || designer.skuCodeInputs?.styleNu || "",
       gender: designer.gender || designer.skuCodeInputs?.gender || "",

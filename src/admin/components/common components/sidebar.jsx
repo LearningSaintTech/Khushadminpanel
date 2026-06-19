@@ -18,6 +18,7 @@ import {
   UserPlus,
   Truck,
   Headphones,
+  Package,
   ShieldCheck,
   Search,
   X,
@@ -126,7 +127,8 @@ const Sidebar = ({
 
   const isOrdersSectionActive = () =>
     location.pathname.startsWith(ap("orders")) ||
-    location.pathname.startsWith(ap("exchange-orders"));
+    location.pathname.startsWith(ap("exchange-orders")) ||
+    location.pathname.startsWith(ap("return-orders"));
 
   const isReferralsActive = () =>
     location.pathname.startsWith(ap("referral")) ||
@@ -707,6 +709,19 @@ const Sidebar = ({
                 >
                   <Headphones size={16} className={panelIconClass} />
                   {!collapsed && <span className="truncate">Support Agents</span>}
+                </Link>
+              </SidebarTooltip>
+
+              <SidebarTooltip label="Order Agents" show={collapsed} lightMode={!isDark}>
+                <Link
+                  to={ap("order-agents")}
+                  className={`group ${panelItemClass(
+                    isActive(ap("order-agents")) ||
+                      location.pathname.startsWith(`${ap("order-agents")}/`),
+                  )}`}
+                >
+                  <Package size={16} className={panelIconClass} />
+                  {!collapsed && <span className="truncate">Order Agents</span>}
                 </Link>
               </SidebarTooltip>
 
