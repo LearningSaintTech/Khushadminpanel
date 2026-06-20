@@ -1,6 +1,14 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2, Save, Search } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Search, X } from "lucide-react";
+import BindOfferFormSection from "./BindOfferFormSection";
+import {
+  bindOfferFromSection,
+  buildBindOfferApiPayload,
+  defaultBindOfferFormState,
+  formatBindOfferPreview,
+  validateBindOfferForm,
+} from "../../utils/bindOffer.util";
 import {
   createSection,
   getOneSection,
@@ -229,11 +237,12 @@ function buildProductsPayload(productIds, formData) {
   });
 }
 
-function buildSectionSubmitPayload(formData, productIds, categoryIds) {
+function buildSectionSubmitPayload(formData, productIds, categoryIds, bindOfferForm, { isEdit = false } = {}) {
   const discountConsented = isDiscountConsented(formData);
   const productsPayload = buildProductsPayload(productIds, formData);
   const appOrder = Number(formData.apporder) || 0;
   const webOrder = Number(formData.weborder) || 0;
+  const bindOfferPayload = buildBindOfferApiPayload(bindOfferForm);
 
   const data = new FormData();
   data.append("title", formData.title.trim());
@@ -246,6 +255,12 @@ function buildSectionSubmitPayload(formData, productIds, categoryIds) {
   if (discountConsented) {
     data.append("discount.type", formData.discountType);
     data.append("discount.value", String(formData.discountValue));
+  }
+
+  if (bindOfferPayload) {
+    data.append("bindOffer", JSON.stringify(bindOfferPayload));
+  } else if (isEdit) {
+    data.append("bindOffer", JSON.stringify(null));
   }
 
   data.append("navigation.externalLink", formData.externalLink || "");
@@ -279,6 +294,9 @@ function buildSectionSubmitPayload(formData, productIds, categoryIds) {
 
   const overview = {
     discountConsented,
+    bindOfferSummary: formatBindOfferPreview(bindOfferForm),
+    bindOfferWillBeSent: Boolean(bindOfferPayload),
+    bindOfferPayload,
     discountSummary: discountConsented
       ? `${formData.discountType} — ${formData.discountValue}${
           formData.discountType === "PERCENT" ? "%" : " ₹"
@@ -361,6 +379,28 @@ function SubmitPreviewModal({ open, mode, sectionId, overview, loading, onClose,
             {!overview.discountConsented && (
               <p className="mt-1 text-[10px] opacity-90">
                 No discount.type, discount.value, or per-product discount in products JSON.
+              </p>
+            )}
+          </div>
+
+          <div
+            className={`rounded-lg border px-3 py-2 ${
+              overview.bindOfferWillBeSent
+                ? "border-violet-200 bg-violet-50 text-violet-900"
+                : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wide">Bind offer</p>
+            <p className="mt-1 font-medium">{overview.bindOfferSummary}</p>
+            {overview.bindOfferPayload ? (
+              <pre className="mt-2 max-h-32 overflow-auto rounded border border-violet-200/60 bg-white/60 p-2 text-[10px]">
+                {JSON.stringify(overview.bindOfferPayload, null, 2)}
+              </pre>
+            ) : (
+              <p className="mt-1 text-[10px] opacity-90">
+                {mode === "UPDATE"
+                  ? "bindOffer will be cleared on the server (null)."
+                  : "bindOffer omitted from create payload."}
               </p>
             )}
           </div>
@@ -555,6 +595,7 @@ const SectionForm = () => {
 
   const [showSubmitPreview, setShowSubmitPreview] = useState(false);
   const [submitOverview, setSubmitOverview] = useState(null);
+  const [bindOfferForm, setBindOfferForm] = useState(defaultBindOfferFormState());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedCategorySearch(categorySearch), 400);
@@ -801,6 +842,8 @@ const SectionForm = () => {
   showBadge: section.showBadge ?? false,
         });
 
+    setBindOfferForm(bindOfferFromSection(section));
+
     sectionLog("LOAD applied to form fields", {
       enableDiscountCheckbox:
         section.discount != null && Number(section.discount?.value) > 0,
@@ -917,12 +960,28 @@ const SectionForm = () => {
         note: "discount.type, discount.value, and per-product discount will NOT be in submit payload",
       });
     }
+    if (name === "enableDiscount" && nextVal) {
+      setBindOfferForm((prev) => ({ ...prev, enableBindOffer: false }));
+    }
     setFormError("");
     setSubmitError("");
     setFormData((prev) => ({
       ...prev,
       [name]: nextVal,
     }));
+  };
+
+  const handleBindOfferChange = (next) => {
+    if (next.enableBindOffer && isDiscountConsented(formData)) {
+      setFormData((prev) => ({
+        ...prev,
+        enableDiscount: false,
+        discountValue: "",
+      }));
+    }
+    setFormError("");
+    setSubmitError("");
+    setBindOfferForm(next);
   };
 
   const validate = () => {
@@ -932,11 +991,18 @@ const SectionForm = () => {
       err = "Select at least one category for a CATEGORY section.";
     } else if (formData.type === "MANUAL" && productIds.length === 0) {
       err = "Select at least one product for a MANUAL section.";
+    } else if (isDiscountConsented(formData) && bindOfferForm.enableBindOffer) {
+      err = "Turn off either section discount or bind offer — only one is allowed.";
     } else if (formData.enableDiscount) {
       const v = Number(formData.discountValue);
       if (formData.discountValue === "" || Number.isNaN(v) || v <= 0) {
         err = "Enter a discount value greater than 0, or turn off “Add discount”.";
       }
+    } else {
+      const bindErr = validateBindOfferForm(bindOfferForm, {
+        hasLegacyDiscount: isDiscountConsented(formData),
+      });
+      if (bindErr) err = bindErr;
     }
     if (err) {
       setFormError(err);
@@ -969,7 +1035,9 @@ const SectionForm = () => {
     });
     if (!validate()) return;
 
-    const built = buildSectionSubmitPayload(formData, productIds, categoryIds);
+    const built = buildSectionSubmitPayload(formData, productIds, categoryIds, bindOfferForm, {
+      isEdit,
+    });
     setSubmitOverview(built.overview);
     setShowSubmitPreview(true);
 
@@ -992,7 +1060,9 @@ const SectionForm = () => {
       return;
     }
 
-    const built = buildSectionSubmitPayload(formData, productIds, categoryIds);
+    const built = buildSectionSubmitPayload(formData, productIds, categoryIds, bindOfferForm, {
+      isEdit,
+    });
     const { data, overview, discountConsented, productsPayload, apiFields } = built;
 
     sectionLog("SUBMIT confirmed — sending to API", {
@@ -1181,17 +1251,23 @@ const SectionForm = () => {
           </Field>
         </FormSection>
 
-        <FormSection title="Discount" hint="Optional section-level discount.">
+        <FormSection title="Discount" hint="Legacy flat/percent discount. Mutually exclusive with bind offer.">
           <label className="inline-flex items-center gap-2 text-[11px] font-medium text-stone-700">
             <input
               type="checkbox"
               name="enableDiscount"
               checked={formData.enableDiscount}
               onChange={handleChange}
-              className="h-3.5 w-3.5 rounded border-border accent-brand-600"
+              disabled={bindOfferForm.enableBindOffer}
+              className="h-3.5 w-3.5 rounded border-border accent-brand-600 disabled:opacity-50"
             />
             Add discount to this section
           </label>
+          {bindOfferForm.enableBindOffer ? (
+            <p className="text-[10px] text-stone-500">
+              Disabled while bind offer is enabled.
+            </p>
+          ) : null}
           {formData.enableDiscount ? (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <Field label="Discount type">
@@ -1220,6 +1296,13 @@ const SectionForm = () => {
             </div>
           ) : null}
         </FormSection>
+
+        <BindOfferFormSection
+          bindOfferForm={bindOfferForm}
+          onChange={handleBindOfferChange}
+          legacyDiscountActive={isDiscountConsented(formData)}
+          disabled={loading}
+        />
 
         <FormSection title="Navigation & schedule">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

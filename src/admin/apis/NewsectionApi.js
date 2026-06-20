@@ -15,6 +15,8 @@ export const sectionEndpoints = {
 // ======================================================
 // ✅ CREATE SECTION
 // multipart/form-data
+// Optional JSON fields: products, categoryId, subcategoryId, discount, bindOffer, webinfo
+// bindOffer example: {"offerType":"BUY_X_GET_Y_FREE","bogoRules":{"buyQuantity":2,"freeQuantity":1}}
 // ======================================================
 //
 
@@ -140,6 +142,7 @@ export const getOneSection = (
 // ======================================================
 // ✅ UPDATE SECTION
 // multipart/form-data
+// Send bindOffer as JSON string, or JSON null to remove an existing bind offer
 // ======================================================
 //
 

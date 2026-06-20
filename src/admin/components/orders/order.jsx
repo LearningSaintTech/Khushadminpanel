@@ -9338,6 +9338,33 @@ const Orders = ({
                       <OrderDetailRow label="Subtotal">
                         {formatInr(selectedOrder?.pricing?.subTotal || 0)}
                       </OrderDetailRow>
+                      {(selectedOrder?.pricing?.bindOffers?.totalDiscount > 0 ||
+                        selectedOrder?.pricing?.bindOffers?.totalBindOfferDiscount > 0 ||
+                        (selectedOrder?.items || []).some((it) => it?.bindOffer?.lineDiscount > 0)) ? (
+                        <OrderDetailRow label="Bind offer">
+                          <span className="text-violet-700">
+                            −
+                            {formatInr(
+                              selectedOrder?.pricing?.bindOffers?.totalDiscount ||
+                                selectedOrder?.pricing?.bindOffers?.totalBindOfferDiscount ||
+                                (selectedOrder?.items || []).reduce(
+                                  (sum, it) => sum + (Number(it?.bindOffer?.lineDiscount) || 0),
+                                  0,
+                                ),
+                            )}
+                          </span>
+                        </OrderDetailRow>
+                      ) : null}
+                      {selectedOrder?.pricing?.coupon?.discountAmount > 0 ? (
+                        <OrderDetailRow label="Coupon">
+                          <span className="text-emerald-700">
+                            −{formatInr(selectedOrder.pricing.coupon.discountAmount)}
+                            {selectedOrder.pricing.coupon.code
+                              ? ` (${selectedOrder.pricing.coupon.code})`
+                              : ""}
+                          </span>
+                        </OrderDetailRow>
+                      ) : null}
                       <OrderDetailRow label="Delivery">
                         {formatInr(selectedOrder?.pricing?.delivery?.totalCharge || 0)}
                       </OrderDetailRow>

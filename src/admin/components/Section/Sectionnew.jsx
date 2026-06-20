@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiEdit2,
@@ -13,7 +13,7 @@ import {
   toggleSectionStatus,
 } from "../../apis/NewsectionApi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
-import { getSectionDisplayOrders } from "../../utils/sectionDisplay";
+import { getSectionDisplayOrders, formatSectionOffer } from "../../utils/sectionDisplay";
 import {
   btnIconDelete,
   btnIconEdit,
@@ -94,6 +94,8 @@ function snapshotListRow(section) {
     title: section.title,
     type: section.type,
     discount: section.discount ?? null,
+    bindOffer: section.bindOffer ?? null,
+    hasBindOffer: Boolean(section.bindOffer?.offerType),
     hasActiveDiscount,
     discountWillBeSentOnListActions: false,
     note: "List view does not send discount — only SectionForm submit sends discount when user consents",
@@ -109,11 +111,7 @@ function snapshotListRow(section) {
 }
 
 function formatSectionDiscount(section) {
-  const d = section?.discount;
-  if (!d || d.value == null || d.value === "" || Number(d.value) <= 0) {
-    return "None";
-  }
-  return d.type === "PERCENT" ? `${d.value}%` : `₹${d.value}`;
+  return formatSectionOffer(section) || "None";
 }
 
 function buildStatusToggleOverview(section) {
@@ -583,7 +581,7 @@ const Section = () => {
               <th className={thClass}>Section</th>
               <th className={thClass}>Type</th>
               <th className={thClass}>Products</th>
-              <th className={thClass}>Discount</th>
+              <th className={thClass}>Offer</th>
               <th className={thClass}>Order</th>
               <th className={thClass}>Platforms</th>
               <th className={thClass}>Status</th>
@@ -712,13 +710,15 @@ const Section = () => {
                         </td>
                         <td className="px-2 py-1.5">
                           <span
-                            className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            className={`inline-flex max-w-[160px] rounded px-1.5 py-0.5 text-[10px] font-medium ${
                               formatSectionDiscount(section) === "None"
                                 ? "bg-canvas-muted text-stone-600"
-                                : "bg-amber-50 text-amber-800 ring-1 ring-amber-200/60"
+                                : section.bindOffer?.offerType
+                                  ? "bg-violet-50 text-violet-800 ring-1 ring-violet-200/60"
+                                  : "bg-amber-50 text-amber-800 ring-1 ring-amber-200/60"
                             }`}
                           >
-                            {formatSectionDiscount(section)}
+                            <span className="line-clamp-2">{formatSectionDiscount(section)}</span>
                           </span>
                         </td>
                         <td className="px-2 py-1.5 text-[11px] text-stone-600 tabular-nums">
