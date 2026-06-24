@@ -1,3 +1,5 @@
+import "./utils/configureConsole.js";
+import { warnIfProductionApiUrlMissing } from "./utils/apiConfig";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -8,6 +10,9 @@ import { Toaster } from "react-hot-toast";
 import App from "./App";
 import "./index.css";
 import appStore, { persistor } from "./redux/Appstore";
+import { AuthSessionProvider } from "./context/AuthSessionContext";
+
+warnIfProductionApiUrlMissing();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -20,21 +25,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         }
         persistor={persistor}
       >
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
-          <App />
-          {/* <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: { maxWidth: 440 },
+        <AuthSessionProvider>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
             }}
-          /> */}
-        </BrowserRouter>
+          >
+            <App />
+          </BrowserRouter>
+        </AuthSessionProvider>
       </PersistGate>
     </Provider>
   </React.StrictMode>

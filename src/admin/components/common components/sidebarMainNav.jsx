@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SidebarTooltip from "./SidebarTooltip";
 import {
@@ -21,6 +21,8 @@ import {
   HandCoins,
   Wallet,
   Coins,
+  Truck,
+  Palette,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -68,6 +70,14 @@ export default function SidebarMainNav({
   lightMode = false,
 }) {
   const showChildren = !compact;
+  const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
+  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
+
+  const isInfluencerSectionActive = () =>
+    location.pathname.startsWith(ap("influencer"));
+  const isDesignerSectionActive = () =>
+    location.pathname.startsWith(ap("designer"));
+
   const linkClass = (active) => {
     if (lightMode) {
       return `flex items-center px-3 py-2 text-xs font-medium rounded-xl transition-colors duration-150 group ${
@@ -143,7 +153,7 @@ export default function SidebarMainNav({
     push(
       "Gift cards",
       ["gift", "card", "cards"],
-      canUse(["gift"]),
+      canUse(["gift-card"]),
       <Link
         key="gift"
         to={ap("gift")}
@@ -157,7 +167,7 @@ export default function SidebarMainNav({
     push(
       "Marque Text",
       ["marque", "text", "ticker"],
-      canUse(["marque"]),
+      canUse(["marque-headings"]),
       <Link
         key="marque"
         to={ap("marque")}
@@ -171,7 +181,7 @@ export default function SidebarMainNav({
     push(
       "Analytics",
       ["analytics", "workspace", "events", "coupon"],
-      canUse(["admin"]) || canUse(["coupons"]),
+      canUse(["analytics"]) || canUse(["coupons"]),
       <div key="analytics">
         <button
           type="button"
@@ -211,7 +221,7 @@ export default function SidebarMainNav({
     push(
       "App Popups",
       ["popup", "app"],
-      canUse(["banner"]),
+      canUse(["app-popup"]),
       <Link
         key="app-popup"
         to={ap("app-popup")}
@@ -332,7 +342,7 @@ export default function SidebarMainNav({
     push(
       "Dashboard",
       ["dashboard", "home"],
-      canUse(["admin"]),
+      canUse(["dashboard"]),
       <Link
         key="dashboard"
         to={ap("dashboard")}
@@ -360,7 +370,7 @@ export default function SidebarMainNav({
     push(
       "Exchange Orders",
       ["exchange", "order"],
-      canUse(["admin"]),
+      canUse(["order", "exchangeUser"]),
       <Link
         key="exchange-orders"
         to={ap("exchange-orders")}
@@ -368,6 +378,60 @@ export default function SidebarMainNav({
       >
         <Receipt size={ICON} className={iconClass} />
         <span className="truncate">Exchange Orders</span>
+      </Link>,
+    );
+
+    push(
+      "Designer",
+      ["designer", "inventory"],
+      canUse(["designer"]),
+      <div key="designer">
+        <button
+          type="button"
+          onClick={() => setIsDesignerOpen(!isDesignerOpen)}
+          className={groupBtnClass(isDesignerSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <Palette size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Designer"}</span>
+          </div>
+          {!compact && (isDesignerOpen ? (
+            <ChevronDown size={14} className={chevronClass} />
+          ) : (
+            <ChevronRight size={14} className={chevronClass} />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isDesignerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            <Link to={ap("designer")} className={subLinkClass(isActive(ap("designer")))}>
+              Management
+            </Link>
+            <Link
+              to={ap("designer/inventory")}
+              className={subLinkClass(isActive(ap("designer/inventory")))}
+            >
+              Inventory
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Driver",
+      ["driver", "delivery agent"],
+      canUse(["delivery-agent"]),
+      <Link
+        key="driver"
+        to={ap("driver")}
+        className={linkClass(isActive(ap("driver")))}
+      >
+        <Truck size={ICON} className={iconClass} />
+        <span className="truncate">Driver</span>
       </Link>,
     );
 
@@ -400,6 +464,20 @@ export default function SidebarMainNav({
     );
 
     push(
+      "Feedback",
+      ["feedback", "suggestion"],
+      canUse(["suggestions"]),
+      <Link
+        key="feedback"
+        to={ap("feedback")}
+        className={linkClass(isActive(ap("feedback")))}
+      >
+        <Mail size={ICON} className={iconClass} />
+        <span className="truncate">Feedback</span>
+      </Link>,
+    );
+
+    push(
       "Home banners",
       ["home", "banner", "splash"],
       canUse(["banner"]),
@@ -413,49 +491,98 @@ export default function SidebarMainNav({
       </Link>,
     );
 
+    push(
+      "Influencer",
+      ["influencer", "coupon"],
+      canUse(["influencer", "coupons"]),
+      <div key="influencer">
+        <button
+          type="button"
+          onClick={() => setIsInfluencerOpen(!isInfluencerOpen)}
+          className={groupBtnClass(isInfluencerSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <Users size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Influencer"}</span>
+          </div>
+          {!compact && (isInfluencerOpen ? (
+            <ChevronDown size={14} className={chevronClass} />
+          ) : (
+            <ChevronRight size={14} className={chevronClass} />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isInfluencerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            <Link to={ap("influencer")} className={subLinkClass(isActive(ap("influencer")))}>
+              Influencer List
+            </Link>
+            <Link
+              to={ap("influencer/coupons")}
+              className={subLinkClass(isActive(ap("influencer/coupons")))}
+            >
+              Influencer Coupons
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
     const inventoryLinks = [
       {
         label: "Categories",
         to: ap("inventory/categories"),
         active: location.pathname.includes(ap("inventory/categories")),
         keywords: ["category"],
+        visible: canUse(["categories"]),
       },
-      {
+      isFullAdminUser && {
         label: "Central Stock management",
         to: ap("inventory/central"),
         active: location.pathname.includes(ap("inventory/central")),
         keywords: ["central", "stock"],
+        visible: true,
       },
       {
         label: "Inventory codes",
         to: ap("inventory-codes"),
         active: location.pathname.includes(ap("inventory-codes")),
         keywords: ["code"],
+        visible: canUse(["inventory-codes"]),
       },
       {
         label: "Items",
         to: ap("items"),
         active: location.pathname.includes(ap("items")),
         keywords: ["item", "product"],
+        visible: canUse(["items"]),
       },
-      {
+      isFullAdminUser && {
         label: "Stock management",
         to: ap("stocks"),
         active: location.pathname.includes(ap("stocks")),
         keywords: ["stock"],
+        visible: true,
       },
       {
         label: "SubCategories",
         to: ap("subcategoriess"),
         active: location.pathname.includes(ap("subcategoriess")),
         keywords: ["subcategory"],
+        visible: canUse(["subcategories"]),
       },
-    ].sort((a, b) => a.label.localeCompare(b.label));
+    ]
+      .filter(Boolean)
+      .filter((item) => item.visible)
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     push(
       "Inventory",
       ["inventory", "stock", "category", "items", ...inventoryLinks.map((l) => l.label)],
-      canUse(["categories", "subcategories", "items", "warehouse"]),
+      canUse(["categories", "subcategories", "items", "warehouse", "inventory-codes"]),
       <div key="inventory">
         <button
           type="button"
@@ -493,7 +620,7 @@ export default function SidebarMainNav({
     );
 
     const moneyFeatureLinks = [
-      (isFullAdminUser || canUse(["admin"])) && {
+      (isFullAdminUser || canUse(["admin-wallet", "wallet"])) && {
         label: "Cash wallet",
         to: ap("money-features/cash-wallet"),
         active:
@@ -502,7 +629,7 @@ export default function SidebarMainNav({
         keywords: ["cash", "wallet"],
         icon: Wallet,
       },
-      canUse(["coupons"]) && {
+      canUse(["gift-card"]) && {
         label: "Gift card",
         to: ap("money-features/gift-card"),
         active:
@@ -511,7 +638,8 @@ export default function SidebarMainNav({
         keywords: ["gift"],
         icon: Gift,
       },
-      (isFullAdminUser || canUse(["admin"])) && {
+      (isFullAdminUser ||
+        canUse(["referral", "gift-card", "admin-wallet", "reward-wallet", "reward-rules"])) && {
         label: "Overview",
         to: ap("money-features"),
         active:
@@ -520,7 +648,7 @@ export default function SidebarMainNav({
         keywords: ["money", "overview"],
         icon: HandCoins,
       },
-      (isFullAdminUser || canUse(["rewards", "admin"])) && {
+      (isFullAdminUser || canUse(["reward-wallet", "reward-rules"])) && {
         label: "Points wallet",
         to: ap("money-features/points-wallet"),
         active:
@@ -610,7 +738,7 @@ export default function SidebarMainNav({
         "test",
         "sent",
       ],
-      canUse(["admin"]),
+      canUse(["notification"]),
       <div key="notifications">
         <button
           type="button"
@@ -711,7 +839,7 @@ export default function SidebarMainNav({
     push(
       "Orders",
       ["order", "orders", "exchange"],
-      canUse(["admin"]),
+      canUse(["order"]),
       <div key="orders">
         <button
           type="button"
@@ -782,17 +910,16 @@ export default function SidebarMainNav({
         to: ap("exchange"),
         active: location.pathname.includes(ap("exchange")),
       },
-      canUse(["admin"]) && {
+      canUse(["cancel-order", "policies"]) && {
         label: "Cancellation Policy",
         to: ap("cancellation"),
         active: location.pathname.includes(ap("cancellation")),
       },
-
-      canUse(["admin"]) && {
-  label: "US Policy",
-  to: ap("usp"),
-  active: location.pathname.includes(ap("uspolicy")),
-},
+      canUse(["policies"]) && {
+        label: "US Policy",
+        to: ap("usp"),
+        active: location.pathname.includes(ap("usp")),
+      },
     ]
       .filter(Boolean)
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -800,7 +927,7 @@ export default function SidebarMainNav({
     push(
       "Policy",
       ["policy", "exchange", "cancellation", ...policyChildren.map((c) => c.label)],
-      canUse(["exchange", "admin"]),
+      canUse(["exchange", "cancel-order", "policies"]),
       <div key="policy">
         <button
           type="button"
@@ -873,7 +1000,7 @@ export default function SidebarMainNav({
     push(
       "Rewards",
       ["rewards", "points", "coins", "wallet", "redeem"],
-      isFullAdminUser || canUse(["rewards", "admin"]),
+      isFullAdminUser || canUse(["reward-rules", "reward-wallet", "admin-wallet"]),
       <Link
         key="rewards-nav"
         to={ap("wallet")}
@@ -891,19 +1018,38 @@ export default function SidebarMainNav({
     push(
       "Sections",
       ["section", "sections"],
-      canUse(["section"]),
+      canUse(["sections"]),
       <Link
         key="sections"
         to={ap("section")}
-        className={linkClass(isActive(ap("sections")))}
+        className={linkClass(
+          isActive(ap("section")) || location.pathname.startsWith(ap("sections")),
+        )}
       >
         <ShoppingCart size={ICON} className={iconClass} />
         <span className="truncate">Sections</span>
       </Link>,
     );
 
+    push(
+      "Support Agents",
+      ["support", "agent"],
+      canUse(["support-agents"]),
+      <Link
+        key="support-agents"
+        to={ap("support-agents")}
+        className={linkClass(
+          isActive(ap("support-agents")) ||
+            location.pathname.startsWith(`${ap("support-agents")}/`),
+        )}
+      >
+        <Headphones size={ICON} className={iconClass} />
+        <span className="truncate">Support Agents</span>
+      </Link>,
+    );
+
     const userLinks = [
-      {
+      isFullAdminUser && {
         label: "Fake Users",
         to: ap("users/fake"),
         active: location.pathname.includes(ap("users/fake")),
@@ -917,12 +1063,14 @@ export default function SidebarMainNav({
           location.pathname.includes(ap("active-users")),
         keywords: ["real", "active"],
       },
-    ].sort((a, b) => a.label.localeCompare(b.label));
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     push(
       "Users",
       ["users", "fake", "real", "active"],
-      canUse(["admin"]),
+      canUse(["user"]) || isFullAdminUser,
       <div key="users">
         <button
           type="button"
@@ -1004,9 +1152,16 @@ export default function SidebarMainNav({
     isMoneyFeaturesSectionActive,
     isOrdersOpen,
     isOrdersSectionActive,
+    isInfluencerOpen,
+    isDesignerOpen,
     showMoneyFeatures,
     isFullAdminUser,
   ]);
+
+  useEffect(() => {
+    if (isInfluencerSectionActive()) setIsInfluencerOpen(true);
+    if (isDesignerSectionActive()) setIsDesignerOpen(true);
+  }, [location.pathname]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -1030,6 +1185,8 @@ export default function SidebarMainNav({
     if (matchesQuery("Rewards", ["rewards", "points", "coins"], q))
       setIsMoneyFeaturesOpen(true);
     if (matchesQuery("Orders", ["order", "exchange"], q)) setIsOrdersOpen(true);
+    if (matchesQuery("Influencer", ["influencer", "coupon"], q)) setIsInfluencerOpen(true);
+    if (matchesQuery("Designer", ["designer"], q)) setIsDesignerOpen(true);
   }, [searchQuery]);
 
   if (entries.length === 0 && searchQuery.trim()) {

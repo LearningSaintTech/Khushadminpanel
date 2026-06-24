@@ -4,6 +4,10 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../../../redux/GlobalSlice";
 import { selectToken } from "../../../redux/GlobalSelector";
+import { logoutInfluencer } from "../../influencerapis/authapi";
+import logger from "../../../utils/logger.js";
+
+const influencerLog = logger.child("influencer");
 import {
   LayoutDashboard,
   Ticket,
@@ -22,21 +26,17 @@ export default function InfluencerLayout() {
   const [isCouponsOpen, setIsCouponsOpen] = useState(false);
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const token = useSelector(selectToken) ?? (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  const token = useSelector(selectToken);
 
   const toggleCoupons = () => setIsCouponsOpen((prev) => !prev);
 
   const handleLogout = async () => {
     try {
-      await fetch(`${import.meta.env.VITE_BASE_URL}/api/influencer/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      if (token) {
+        await logoutInfluencer();
+      }
     } catch (error) {
-      console.error("Logout error:", error);
+      influencerLog.warn("logout failed", { message: error?.message || String(error) });
     } finally {
       dispatch(logout());
       navigate("/influencer/login");

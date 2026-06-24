@@ -1,4 +1,6 @@
 import { formatDt } from "./supportShared";
+import SafeExternalLink from "../../../components/SafeExternalLink.jsx";
+import { getSafeHttpHref } from "../../../utils/safeUrl.util.js";
 
 export function mediaFileUrl(item) {
   if (!item) return null;
@@ -58,7 +60,7 @@ export function SupportMediaBlock({ images = [], videos = [], className = "" }) 
   return (
     <div className={`space-y-1.5 ${className || "mt-1.5"}`.trim()}>
       {items.map(({ item, i, kind }) => {
-        const url = mediaFileUrl(item);
+        const url = getSafeHttpHref(mediaFileUrl(item));
         if (!url) return null;
         if (kind === "video") {
           return (
@@ -72,7 +74,7 @@ export function SupportMediaBlock({ images = [], videos = [], className = "" }) 
           );
         }
         return (
-          <a key={`image-${i}-${url}`} href={url} target="_blank" rel="noopener noreferrer">
+          <SafeExternalLink key={`image-${i}-${url}`} href={url}>
             <img
               src={url}
               alt=""
@@ -82,7 +84,7 @@ export function SupportMediaBlock({ images = [], videos = [], className = "" }) 
                 e.currentTarget.style.display = "none";
               }}
             />
-          </a>
+          </SafeExternalLink>
         );
       })}
     </div>

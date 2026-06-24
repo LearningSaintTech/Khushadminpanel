@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { decodeTokenRole, normalizeRole } from "../utils/authRole";
+import { getValidTokenRole, normalizeRole } from "../utils/authRole";
 
 /**
  * Subadmin / super_subadmin should use /subadmin/* URLs. Many screens still call
@@ -13,11 +13,7 @@ export default function SubadminPreferredPathRedirect() {
   const reduxRole = useSelector((s) => s.global?.role);
   const token = useSelector((s) => s.global?.token);
   const role = normalizeRole(
-    reduxRole ||
-      decodeTokenRole(token) ||
-      decodeTokenRole(
-        typeof window !== "undefined" ? localStorage.getItem("token") : null,
-      ),
+    reduxRole || getValidTokenRole(token),
   );
 
   useEffect(() => {

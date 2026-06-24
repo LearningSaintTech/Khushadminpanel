@@ -14,10 +14,7 @@ import {
   Settings,
   LogOut,
   Menu,
-  Users,
   UserPlus,
-  Truck,
-  Headphones,
   Package,
   ShieldCheck,
   Search,
@@ -34,6 +31,10 @@ import { logoutUser } from "../../apis/Authapi";
 import { logout } from "../../../redux/GlobalSlice";
 import { subadminApi } from "../../../subadmin/apis/subadminApi";
 import { useTheme } from "../../../context/ThemeContext";
+import { useModuleAccess } from "../../../context/ModuleAccessContext";
+import logger from "../../../utils/logger.js";
+
+const sidebarLog = logger.child("sidebar");
 
 const Sidebar = ({
   basePath = "/admin",
@@ -55,8 +56,6 @@ const Sidebar = ({
   const [isCouponOpen, setIsCouponOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
-  const [isInfluencerOpen, setIsInfluencerOpen] = useState(false);
-  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [isMoneyFeaturesOpen, setIsMoneyFeaturesOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
@@ -69,8 +68,9 @@ const Sidebar = ({
   const [scrollHints, setScrollHints] = useState({ top: false, bottom: false });
 
   const rawRole = useSelector((s) => s.global?.role);
-  const isFullAdminUser = String(rawRole || "").toUpperCase() === "ADMIN";
-  const [allowedModules, setAllowedModules] = useState(null);
+  const { canUse, isFullAdmin: isFullAdminFromContext } = useModuleAccess();
+  const isFullAdminUser =
+    isFullAdminFromContext || String(rawRole || "").toUpperCase() === "ADMIN";
 
   const {
     unreadCount,
@@ -83,37 +83,8 @@ const Sidebar = ({
 
   const { toggleTheme, isDark } = useTheme();
 
-  useEffect(() => {
-    if (!filterByModules || isFullAdminUser) {
-      setAllowedModules(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await subadminApi.getMyModuleAccess();
-        const list = res?.data?.allowedModules ?? [];
-        if (!cancelled)
-          setAllowedModules(new Set(Array.isArray(list) ? list : []));
-      } catch {
-        if (!cancelled) setAllowedModules(new Set());
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [filterByModules, isFullAdminUser]);
-
-  const canUse = (keys) => {
-    if (!filterByModules || isFullAdminUser) return true;
-    if (!keys?.length) return true;
-    if (allowedModules === null) return false;
-    return keys.some((k) => allowedModules.has(k));
-  };
-
   const isActive = (path) => location.pathname === path || location.pathname.replace(/\/+/g, "/") === path;
   const isNotificationSectionActive = () => location.pathname.startsWith(ap("notifications"));
-  const isDesignerSectionActive = () => location.pathname.startsWith(ap("designer"));
   const isUsersSectionActive = () =>
     location.pathname.startsWith(ap("users")) ||
     location.pathname.startsWith(ap("active-users"));
@@ -141,7 +112,20 @@ const Sidebar = ({
     location.pathname.includes("/money-features/redeem-coins");
 
   const showReferralsTab = isFullAdminUser || canUse(["referral"]);
-  const showRewardsTab = isFullAdminUser || canUse(["rewards"]);
+  const showRewardsTab =
+    isFullAdminUser ||
+    canUse(["reward-rules", "reward-wallet", "admin-wallet"]);
+
+  const showMoneyFeatures =
+    isFullAdminUser ||
+    canUse([
+      "coupons",
+      "referral",
+      "gift-card",
+      "admin-wallet",
+      "reward-wallet",
+      "reward-rules",
+    ]);
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -164,12 +148,6 @@ const Sidebar = ({
     ) {
       setIsNotificationOpen(true);
       setIsTemplatesOpen(true);
-    }
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (isDesignerSectionActive()) {
-      setIsDesignerOpen(true);
     }
   }, [location.pathname]);
 
@@ -235,15 +213,10 @@ const Sidebar = ({
     isCouponOpen,
     isAnalyticsOpen,
     isPolicyOpen,
-    isInfluencerOpen,
-    isDesignerOpen,
     isUsersOpen,
     isMoneyFeaturesOpen,
     isOrdersOpen,
   ]);
-
-  const showMoneyFeatures =
-    isFullAdminUser || canUse(["coupons", "referral", "rewards"]);
 
   const panelItemClass = (active) => {
     const base = collapsed
@@ -266,16 +239,13 @@ const Sidebar = ({
     : "text-stone-400 group-hover:text-stone-700 shrink-0";
 
   const handleLogout = async () => {
-    console.log("ðŸšª Logout button clicked");
-
     if (isLoggingOut) {
-      console.log("âš ï¸ Logout already in progress");
       return;
     }
 
     try {
       setIsLoggingOut(true);
-      console.log("ðŸ“¡ Calling logout API...");
+      sidebarLog.debug("logout started", { basePath });
 
       if (basePath === "/subadmin") {
         try {
@@ -289,18 +259,15 @@ const Sidebar = ({
       dispatch(logout());
       navigate(basePath === "/subadmin" ? "/subadmin/login" : "/admin");
     } catch (error) {
-      console.error("âŒ Logout error:", error);
-      console.error("âŒ Error details:", {
-        message: error?.response?.data?.message || error,
+      sidebarLog.warn("logout failed", {
+        message: error?.response?.data?.message || error?.message || String(error),
         status: error?.response?.status,
-        data: error?.response?.data,
       });
 
       dispatch(logout());
       navigate(basePath === "/subadmin" ? "/subadmin/login" : "/admin");
     } finally {
       setIsLoggingOut(false);
-      console.log("ðŸ Logout process finished");
     }
   };
 
@@ -377,7 +344,7 @@ const Sidebar = ({
             {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           </button>
           </SidebarTooltip>
-          {canUse(["admin"]) && (
+          {canUse(["notification"]) && (
             <div className={`relative shrink-0 ${collapsed ? "hidden" : ""}`} ref={bellRef}>
               <button
                 type="button"
@@ -588,8 +555,8 @@ const Sidebar = ({
               compact={collapsed}
             />
 
-            {/* Panel Management */}
-            {canUse(["admin"]) && (
+            {/* Panel Management — full admin only */}
+            {isFullAdminUser && (
             <div className={`mt-3 space-y-0.5 border-t pt-3 ${isDark ? "border-brand-800/60" : "border-border"}`}>
               {!collapsed && (
               <div className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
@@ -631,87 +598,6 @@ const Sidebar = ({
                 </SidebarTooltip>
               )}
 
-              {collapsed ? (
-                <SidebarTooltip label="Influencer" show={collapsed} lightMode={!isDark}>
-                  <Link
-                    to={ap("influencer")}
-                    className={`group ${panelItemClass(location.pathname.startsWith(ap("influencer")))}`}
-                  >
-                    <Users size={16} className={panelIconClass} />
-                  </Link>
-                </SidebarTooltip>
-              ) : (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setIsInfluencerOpen(!isInfluencerOpen)}
-                  className={`group w-full ${panelItemClass(location.pathname.startsWith(ap("influencer")))} justify-between`}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Users size={16} className={panelIconClass} />
-                    <span className="truncate">Influencer</span>
-                  </div>
-                  {isInfluencerOpen ? (
-                    <ChevronDown size={14} className={isDark ? "text-stone-400" : "text-stone-400"} />
-                  ) : (
-                    <ChevronRight size={14} className={isDark ? "text-stone-400" : "text-stone-400"} />
-                  )}
-                </button>
-
-                <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    isInfluencerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <div className="space-y-0.5 py-1 pl-7 pr-2">
-                    <Link
-                      to={ap("influencer")}
-                      className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                        isActive(ap("influencer"))
-                          ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
-                          : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
-                      }`}
-                    >
-                      Influencer List
-                    </Link>
-                    <Link
-                      to={ap("influencer/coupons")}
-                      className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                        isActive(ap("influencer/coupons"))
-                          ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
-                          : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
-                      }`}
-                    >
-                      Influencer Coupons
-                    </Link>
-                  </div>
-                </div>
-              </div>
-              )}
-
-              <SidebarTooltip label="Driver" show={collapsed} lightMode={!isDark}>
-                <Link
-                  to={ap("driver")}
-                  className={`group ${panelItemClass(isActive(ap("driver")))}`}
-                >
-                  <Truck size={16} className={panelIconClass} />
-                  {!collapsed && <span className="truncate">Driver</span>}
-                </Link>
-              </SidebarTooltip>
-
-              <SidebarTooltip label="Support Agents" show={collapsed} lightMode={!isDark}>
-                <Link
-                  to={ap("support-agents")}
-                  className={`group ${panelItemClass(
-                    isActive(ap("support-agents")) ||
-                      location.pathname.startsWith(`${ap("support-agents")}/`),
-                  )}`}
-                >
-                  <Headphones size={16} className={panelIconClass} />
-                  {!collapsed && <span className="truncate">Support Agents</span>}
-                </Link>
-              </SidebarTooltip>
-
               <SidebarTooltip label="Order Agents" show={collapsed} lightMode={!isDark}>
                 <Link
                   to={ap("order-agents")}
@@ -724,64 +610,6 @@ const Sidebar = ({
                   {!collapsed && <span className="truncate">Order Agents</span>}
                 </Link>
               </SidebarTooltip>
-
-              {collapsed ? (
-                <SidebarTooltip label="Designer" show={collapsed} lightMode={!isDark}>
-                  <Link
-                    to={ap("designer")}
-                    className={`group ${panelItemClass(isDesignerSectionActive())}`}
-                  >
-                    <Users size={16} className={panelIconClass} />
-                  </Link>
-                </SidebarTooltip>
-              ) : (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setIsDesignerOpen(!isDesignerOpen)}
-                    className={`group w-full ${panelItemClass(isDesignerSectionActive())} justify-between`}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Users size={16} className={panelIconClass} />
-                      <span className="truncate">Designer</span>
-                    </div>
-                    {isDesignerOpen ? (
-                      <ChevronDown size={14} className={isDark ? "text-stone-400 shrink-0" : "text-stone-400 shrink-0"} />
-                    ) : (
-                      <ChevronRight size={14} className={isDark ? "text-stone-400 shrink-0" : "text-stone-400 shrink-0"} />
-                    )}
-                  </button>
-
-                  <div
-                    className={`overflow-hidden transition-all duration-300 ${
-                      isDesignerOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
-                    }`}
-                  >
-                    <div className="space-y-0.5 py-1 pl-7 pr-2">
-                      <Link
-                        to={ap("designer")}
-                        className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                          isActive(ap("designer"))
-                            ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
-                            : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
-                        }`}
-                      >
-                        Management
-                      </Link>
-                      <Link
-                        to={ap("designer/inventory")}
-                        className={`block rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                          isActive(ap("designer/inventory"))
-                            ? isDark ? "bg-white/10 text-white" : "bg-brand-50 text-brand-700"
-                            : isDark ? "text-stone-400 hover:bg-white/10 hover:text-white" : "text-stone-500 hover:bg-canvas-muted"
-                        }`}
-                      >
-                        Inventory
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
             )}
             </div>

@@ -1,6 +1,6 @@
 /**
  * Driver (delivery agent) API – auth, profile, toggle online, deliveries, assignment actions.
- * Uses shared apiConnector; token from localStorage ("token").
+ * Uses shared apiConnector; access token from Redux memory (httpOnly refresh cookie on API).
  */
 import { apiConnector } from "../../admin/services/Apiconnector";
 

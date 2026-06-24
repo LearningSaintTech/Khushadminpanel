@@ -1,9 +1,12 @@
+import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { selectToken } from "../redux/GlobalSelector";
-import { logout, setRole } from "../redux/GlobalSlice";
+import { setRole } from "../redux/GlobalSlice";
+import { useAuthSession } from "../context/AuthSessionContext";
+import { performLogout } from "./sessionLogout";
 import {
-  decodeTokenRole,
+  getValidTokenRole,
   getHomePathForRole,
   getLoginPathForAllowedRoles,
   roleAllowed,
@@ -24,16 +27,39 @@ const ProtectedRoute = ({
 }) => {
   const location = useLocation();
   const dispatch = useDispatch();
+  const { sessionReady } = useAuthSession();
   const reduxToken = useSelector(selectToken);
   const rehydrated = useSelector((state) => state._persist?.rehydrated);
-  const token =
-    reduxToken ??
-    (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  const token = reduxToken;
 
   const resolvedLoginPath =
     loginPath || redirectTo || getLoginPathForAllowedRoles(allowedRoles);
+  const userRole = token ? getValidTokenRole(token) : "";
+  const roleMismatch =
+    Boolean(userRole) &&
+    allowedRoles.length > 0 &&
+    !roleAllowed(userRole, allowedRoles);
 
-  if (rehydrated !== true) {
+  useEffect(() => {
+    if (rehydrated !== true || !sessionReady) return;
+
+    if (token && !userRole) {
+      performLogout({ server: false });
+      return;
+    }
+
+    if (!userRole) return;
+
+    dispatch(setRole(userRole));
+    clearOtherPanelSessions(userRole);
+  }, [rehydrated, sessionReady, token, userRole, dispatch]);
+
+  useEffect(() => {
+    if (!roleMismatch || wrongRolePolicy !== "login") return;
+    performLogout({ server: true });
+  }, [roleMismatch, wrongRolePolicy]);
+
+  if (rehydrated !== true || !sessionReady) {
     return null;
   }
 
@@ -43,18 +69,12 @@ const ProtectedRoute = ({
     );
   }
 
-  const userRole = decodeTokenRole(token);
   if (!userRole) {
-    dispatch(logout());
     return <Navigate to={resolvedLoginPath} replace />;
   }
 
-  dispatch(setRole(userRole));
-  clearOtherPanelSessions(userRole);
-
-  if (allowedRoles.length > 0 && !roleAllowed(userRole, allowedRoles)) {
+  if (roleMismatch) {
     if (wrongRolePolicy === "login") {
-      dispatch(logout());
       return <Navigate to={resolvedLoginPath} replace />;
     }
     return <Navigate to={getHomePathForRole(userRole)} replace />;

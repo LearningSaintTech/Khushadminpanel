@@ -1,23 +1,22 @@
 import { Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectToken } from "../redux/GlobalSelector";
-import { decodeTokenRole, getHomePathForRole, getLoginPathForRole } from "../utils/authRole";
+import { useAuthSession } from "../context/AuthSessionContext";
+import { getValidTokenRole, getHomePathForRole, getLoginPathForRole } from "../utils/authRole";
 
-/** Sends `/` to the correct panel home or login from persisted JWT role. */
+/** Sends `/` to the correct panel home or login from JWT role. */
 export default function RootRoleRedirect() {
+  const { sessionReady } = useAuthSession();
   const rehydrated = useSelector((state) => state._persist?.rehydrated);
-  const reduxToken = useSelector(selectToken);
-  const token =
-    reduxToken ??
-    (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  const token = useSelector(selectToken);
 
-  if (rehydrated !== true) return null;
+  if (rehydrated !== true || !sessionReady) return null;
 
   if (!token) {
     return <Navigate to="/admin" replace />;
   }
 
-  const role = decodeTokenRole(token);
+  const role = getValidTokenRole(token);
   if (!role) {
     return <Navigate to="/admin" replace />;
   }

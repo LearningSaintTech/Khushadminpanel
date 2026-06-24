@@ -17,14 +17,11 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Form submitted:", phoneNumber);
 
     const cleaned = phoneNumber.replace(/\D/g, "");
-    console.log("Cleaned phone number:", cleaned);
 
     if (cleaned.length !== 10) {
       setIsValid(false);
-      console.log("Invalid phone number");
       return;
     }
 
@@ -33,37 +30,27 @@ export default function Login() {
     dispatch(setLoading(true));
 
     try {
-      console.log("Sending OTP...");
-
-      // ✅ Call loginUser instead of registerUser
       const res = await loginUser({
         countryCode: "+91",
         phoneNumber: cleaned,
       });
 
-      console.log("Backend response:", res);
-
       if (res?.success) {
-        localStorage.setItem("admin_userId", res.data.userId);
-  localStorage.setItem("admin_phone", cleaned);
-        console.log("OTP received:", res.data.otp);
-        // Navigate to OTP page with userId & OTP
+        sessionStorage.setItem("admin_userId", res.data.userId);
+        sessionStorage.setItem("admin_phone", cleaned);
         navigate("/admin/otp", {
           state: {
             phone: cleaned,
             userId: res.data.userId,
-            OTP: res.data.otp,
           },
         });
       }
     } catch (err) {
-      console.error("Error sending OTP:", err);
       dispatch(
-        setError(err?.response?.data?.message || "Something went wrong"),
+        setError(err?.response?.data?.message || err?.message || "Something went wrong"),
       );
     } finally {
       dispatch(setLoading(false));
-      console.log("Loading finished");
     }
   };
 
@@ -101,7 +88,6 @@ export default function Login() {
                       setPhoneNumber(e.target.value);
                       setIsValid(true);
                       dispatch(clearError());
-                      console.log("Phone input:", e.target.value);
                     }}
                     placeholder="XXXXXXXXXX"
                     className={`w-full pl-16 pr-5 py-4 bg-white border ${isValid ? "border-gray-300" : "border-red-500"} rounded-xl focus:outline-none transition-all`}

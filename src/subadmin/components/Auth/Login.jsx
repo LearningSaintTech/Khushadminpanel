@@ -20,21 +20,12 @@ export default function SubadminLogin() {
     setError("");
     setLoading(true);
     try {
-      console.log("[SUBADMIN_LOGIN][REQ]", {
-        countryCode: COUNTRY_CODE,
-        phoneNumber: trimmed,
-      });
       const res = await subadminApi.login({
         countryCode: COUNTRY_CODE,
         phoneNumber: trimmed,
       });
       const payload = res?.data ?? res;
       const userId = payload?.userId;
-      console.log("[SUBADMIN_LOGIN][RES]", {
-        hasData: !!payload,
-        userId: userId ? String(userId) : null,
-        message: payload?.message,
-      });
       if (!userId) throw new Error("Could not send OTP. Please try again.");
 
       sessionStorage.setItem("subadminUserId", String(userId));
@@ -42,7 +33,6 @@ export default function SubadminLogin() {
       navigate("/subadmin/verify-otp", { state: { userId: String(userId), phone: trimmed } });
     } catch (err) {
       const msg = typeof err === "string" ? err : err?.message || "Something went wrong";
-      console.log("[SUBADMIN_LOGIN][ERR]", err);
       setError(msg);
     } finally {
       setLoading(false);

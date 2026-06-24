@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { decodeTokenRole } from "../../../utils/authRole";
+import { getValidTokenRole } from "../../../utils/authRole";
 import { designerApi } from "../../apis/designerApi";
 import { Smartphone } from "lucide-react";
 
@@ -15,10 +15,7 @@ export default function DesignerLogin() {
 
   useEffect(() => {
     if (rehydrated !== true) return;
-    const token =
-      reduxToken ??
-      (typeof window !== "undefined" ? localStorage.getItem("token") : null);
-    if (decodeTokenRole(token) === "DESIGNER") {
+    if (getValidTokenRole(reduxToken) === "DESIGNER") {
       navigate("/designer/dashboard", { replace: true });
     }
   }, [rehydrated, reduxToken, navigate]);

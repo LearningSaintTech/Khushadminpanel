@@ -31,9 +31,9 @@ export default function OrderAgentOtp() {
   const error = useSelector(selectError);
 
   const phone =
-    location.state?.phone || localStorage.getItem(STORAGE_PHONE) || "XXXXXXXXXX";
+    location.state?.phone || sessionStorage.getItem(STORAGE_PHONE) || "XXXXXXXXXX";
   const agentId =
-    location.state?.agentId || localStorage.getItem(STORAGE_AGENT_ID) || null;
+    location.state?.agentId || sessionStorage.getItem(STORAGE_AGENT_ID) || null;
 
   useEffect(() => {
     inputs.current[0]?.focus();
@@ -93,10 +93,6 @@ export default function OrderAgentOtp() {
       const res = await orderAgentVerifyOtp({ agentId, otp: code });
       if (res?.success && res.data?.accessToken) {
         const token = res.data.accessToken;
-        localStorage.setItem("token", token);
-        if (res.data.refreshToken) {
-          localStorage.setItem("refreshToken", res.data.refreshToken);
-        }
         const role = jwtDecode(token)?.role || "order_agent";
         dispatch(setToken(token));
         dispatch(setRole(String(role).toUpperCase()));

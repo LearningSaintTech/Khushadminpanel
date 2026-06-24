@@ -13,6 +13,8 @@ import {
   getCodPaymentQr,
   markDelivered,
 } from "../../apis/driverApi";
+import { getGoogleMapsEmbedKey } from "../../../utils/apiConfig.js";
+import { getSafeMapsHref, getSafeTelHref } from "../../../utils/safeUrl.util.js";
 
 // Full exchange flow (matches timeline: Requested → Approved → … → Completed).
 // Driver assignments exist for EXCHANGE_PICKUP_SCHEDULED (pickup) and EXCHANGE_SHIPPED (delivery).
@@ -261,9 +263,11 @@ export default function AssignmentDetails() {
   ].filter(Boolean);
   const deliveryAddressString = deliveryAddressParts.join(", ") || "";
 
-  const mapsDirectionUrl = deliveryAddressString
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddressString)}`
-    : "https://www.google.com/maps";
+  const mapsDirectionUrl = getSafeMapsHref(
+    deliveryAddressString
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddressString)}`
+      : "https://www.google.com/maps",
+  );
 
   const orderId = order?.orderId ?? assignment?._id?.slice(-8) ?? "—";
 
@@ -411,17 +415,17 @@ export default function AssignmentDetails() {
               ) : (
                 <p className="text-sm text-gray-500">—</p>
               )}
-              {address?.phone && (
+              {address?.phone && getSafeTelHref(address.phone) ? (
                 <a
-                  href={`tel:${address.phone}`}
+                  href={getSafeTelHref(address.phone)}
                   className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
                 >
                   <Phone size={14} />
                   {address.phone}
                 </a>
-              )}
+              ) : null}
             </div>
-            {import.meta.env.VITE_GOOGLE_MAPS_EMBED_KEY && deliveryAddressString && (
+            {getGoogleMapsEmbedKey() && deliveryAddressString && (
               <div className="px-4 pb-4">
                 <div className="w-full aspect-video rounded-xl overflow-hidden border border-gray-200">
                   <iframe
@@ -431,11 +435,12 @@ export default function AssignmentDetails() {
                     style={{ border: 0 }}
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps/embed/v1/place?key=${import.meta.env.VITE_GOOGLE_MAPS_EMBED_KEY}&q=${encodeURIComponent(deliveryAddressString)}`}
+                    src={`https://www.google.com/maps/embed/v1/place?key=${getGoogleMapsEmbedKey()}&q=${encodeURIComponent(deliveryAddressString)}`}
                   />
                 </div>
               </div>
             )}
+            {mapsDirectionUrl ? (
             <div className="px-4 pb-4">
               <a
                 href={mapsDirectionUrl}
@@ -447,6 +452,7 @@ export default function AssignmentDetails() {
                 <Send size={16} />
               </a>
             </div>
+            ) : null}
           </div>
 
           {/* Payment summary card */}

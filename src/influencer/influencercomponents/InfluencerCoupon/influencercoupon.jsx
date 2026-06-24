@@ -45,7 +45,6 @@ export default function InfluencerCoupons() {
       setTotalPages(res.meta?.totalPages || 1);
       setTotalItems(res.meta?.total || raw.length);
     } catch (err) {
-      console.error("Coupons fetch failed:", err);
       setError(err.message || "Failed to load your coupons");
     } finally {
       setLoading(false);
@@ -73,7 +72,6 @@ export default function InfluencerCoupons() {
         isActive: !!c.isActive,
       });
     } catch (err) {
-      console.error("Detail fetch failed:", err);
       setError("Could not load coupon details");
     } finally {
       setDetailLoading(false);

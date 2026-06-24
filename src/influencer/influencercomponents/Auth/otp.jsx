@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { jwtDecode } from "jwt-decode";
 
 import Khush from "../../../assets/images/khushh.svg";
-import { verifyOtp, resendOtp } from "../../influencerapis/authapi";
+import { verifyOtp, resendOtp, getInfluencerUserId } from "../../influencerapis/authapi";
 import { setToken, setRole, setUser } from "../../../redux/GlobalSlice";
 
 export default function Otp() {
@@ -96,7 +96,7 @@ export default function Otp() {
     setError("");
 
     try {
-      const userId = localStorage.getItem("userId");
+      const userId = getInfluencerUserId();
       if (!userId) throw new Error("User ID not found");
 
       const res = await verifyOtp(userId, code);
@@ -134,7 +134,7 @@ export default function Otp() {
     setError("");
 
     try {
-      const userId = localStorage.getItem("userId");
+      const userId = getInfluencerUserId();
       await resendOtp(userId);
       // You can show success toast here if you have one
     } catch (err) {

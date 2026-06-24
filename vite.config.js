@@ -1,12 +1,95 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig, loadEnv } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+
+function resolveOriginFromUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  try {
+    const url = new URL(value.replace(/\/api\/?$/, "") || value);
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function securityHeadersPlugin({ apiOrigin, cdnOrigin }) {
+  return {
+    name: "khush-security-headers",
+    transformIndexHtml(html) {
+      if (process.env.NODE_ENV !== "production") return html;
+
+      const connectOrigins = ["'self'", "ws:", "wss:"];
+      if (apiOrigin) connectOrigins.push(apiOrigin);
+      if (cdnOrigin && cdnOrigin !== apiOrigin) connectOrigins.push(cdnOrigin);
+
+      const imgOrigins = ["'self'", "data:", "blob:", "https:"];
+      if (cdnOrigin) imgOrigins.push(cdnOrigin);
+
+      const connectSrc = [
+        ...connectOrigins,
+        "https://maps.googleapis.com",
+      ];
+      const frameSrc = [
+        "https://www.google.com",
+        "https://maps.google.com",
+        "https://maps.googleapis.com",
+      ];
+      const csp = [
+        "default-src 'self'",
+        "script-src 'self' https://maps.googleapis.com",
+        "style-src 'self' 'unsafe-inline'",
+        `img-src ${imgOrigins.join(" ")}`,
+        "font-src 'self' data:",
+        `connect-src ${connectSrc.join(" ")}`,
+        `frame-src ${frameSrc.join(" ")}`,
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+      ].join("; ");
+
+      return html.replace(
+        "<head>",
+        `<head>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />\n    <meta name="referrer" content="strict-origin-when-cross-origin" />`
+      );
+    },
+  };
+}
+
+function resolveBuildAppEnv(env, mode) {
+  const v = String(env.VITE_APP_ENV ?? "").toLowerCase().trim();
+  if (v === "dev" || v === "development") return "dev";
+  if (v === "prod" || v === "production") return "prod";
+  return mode === "development" ? "dev" : "prod";
+}
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  server: {
-    host: true, // listen on 0.0.0.0 so the app is accessible via your machine's IP (e.g. http://192.168.x.x:5173)
-    port: 5173,
-  },
-})
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiOrigin = resolveOriginFromUrl(env.VITE_API_BASE_URL || "");
+  const cdnOrigin = resolveOriginFromUrl(env.VITE_CDN_BASE_URL || "");
+  const exposeDevServerOnLan = env.VITE_DEV_LAN === "true";
+  const isProdApp = resolveBuildAppEnv(env, mode) === "prod";
+
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      securityHeadersPlugin({ apiOrigin, cdnOrigin }),
+    ],
+    esbuild: {
+      drop: isProdApp ? ["console", "debugger"] : [],
+    },
+    server: {
+      host: exposeDevServerOnLan ? true : "localhost",
+      port: 5173,
+      strictPort: true,
+    },
+    preview: {
+      host: exposeDevServerOnLan ? true : "localhost",
+      port: 5173,
+      strictPort: true,
+    },
+  };
+});

@@ -5,6 +5,8 @@ import { getAllCategories } from "../../apis/categoryapi";
 import { getSubcategoriesByCategory } from "../../apis/subcategoryapis";
 import { getDesignerInventoryById } from "../../apis/Designerapi";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
+import SafeExternalLink from "../../../components/SafeExternalLink.jsx";
+import { getSafeHttpHref } from "../../../utils/safeUrl.util.js";
 import { designerInventoryToItemFormState } from "../../utils/buildItemCreateFormData";
 import {
   catalogCategoryLabel,
@@ -424,28 +426,30 @@ function DesignerSourceDetails({ d }) {
                   <div className="mt-2">
                     <p className="mb-1 text-xs font-medium text-gray-600">Media ({withMedia.length})</p>
                     <div className="flex flex-wrap gap-2">
-                      {withMedia.map(({ im, src }, i) => (
-                        <a
-                          key={`${src}-${i}`}
-                          href={src}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                      {withMedia.map(({ im, src }, i) => {
+                        const safeSrc = getSafeHttpHref(src);
+                        if (!safeSrc) return null;
+                        return (
+                        <SafeExternalLink
+                          key={`${safeSrc}-${i}`}
+                          href={safeSrc}
                           className="block h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-gray-200"
-                          title={src}
+                          title={safeSrc}
                         >
                           {isVariantVideoMedia(im) ? (
                             <video
-                              src={src}
+                              src={safeSrc}
                               className="h-20 w-20 object-cover"
                               muted
                               playsInline
                               preload="metadata"
                             />
                           ) : (
-                            <img src={src} alt="" className="h-20 w-20 object-cover" loading="lazy" />
+                            <img src={safeSrc} alt="" className="h-20 w-20 object-cover" loading="lazy" />
                           )}
-                        </a>
-                      ))}
+                        </SafeExternalLink>
+                        );
+                      })}
                     </div>
                     <p className="mt-1 break-all text-[11px] text-gray-500">
                       {withMedia.map((x) => x.src).join(" · ")}

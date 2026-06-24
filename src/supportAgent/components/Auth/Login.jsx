@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { decodeTokenRole } from "../../../utils/authRole";
+import { getValidTokenRole } from "../../../utils/authRole";
 import { setLoading, setError, clearError } from "../../../redux/GlobalSlice";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
 import { supportAgentLogin } from "../../apis/supportAgentApi";
@@ -21,10 +21,7 @@ export default function SupportAgentLogin() {
 
   useEffect(() => {
     if (rehydrated !== true) return;
-    const token =
-      reduxToken ??
-      (typeof window !== "undefined" ? localStorage.getItem("token") : null);
-    if (decodeTokenRole(token) === "AGENT") {
+    if (getValidTokenRole(reduxToken) === "AGENT") {
       navigate("/support-agent/tickets", { replace: true });
     }
   }, [rehydrated, reduxToken, navigate]);
@@ -51,13 +48,12 @@ export default function SupportAgentLogin() {
           dispatch(setError("Could not send OTP. Please try again."));
           return;
         }
-        localStorage.setItem(STORAGE_AGENT_ID, String(agentId));
-        localStorage.setItem(STORAGE_PHONE, cleaned);
+        sessionStorage.setItem(STORAGE_AGENT_ID, String(agentId));
+        sessionStorage.setItem(STORAGE_PHONE, cleaned);
         navigate("/support-agent/otp", {
           state: {
             phone: cleaned,
             agentId: String(agentId),
-            OTP: res.data?.otp,
           },
         });
       } else {

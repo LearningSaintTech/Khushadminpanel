@@ -3,6 +3,7 @@ import ProtectedRoute from "../utils/ProtectedRoute";
 import OrderAgentLogin from "../orderAgent/components/Auth/Login";
 import OrderAgentOtp from "../orderAgent/components/Auth/Otp";
 import OrderAgentLayout from "../orderAgent/components/common/OrderAgentLayout";
+import OrderAgentWorkspaceGate from "../orderAgent/components/OrderAgentWorkspaceGate";
 import OrderAgentListPage from "../orderAgent/list/OrderAgentListPage";
 import StaleOrdersPage from "../orderAgent/components/stale/StaleOrdersPage";
 import AnalyticsPage from "../orderAgent/components/analytics/AnalyticsPage";
@@ -23,7 +24,13 @@ export default function OrderAgentRoutes() {
           />
         }
       >
-        <Route element={<OrderAgentLayout />}>
+        <Route
+          element={
+            <OrderAgentWorkspaceGate>
+              <OrderAgentLayout />
+            </OrderAgentWorkspaceGate>
+          }
+        >
           <Route
             path="orders"
             element={<OrderAgentListPage section="orders" showProviderFilter />}

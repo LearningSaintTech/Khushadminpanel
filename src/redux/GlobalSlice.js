@@ -5,12 +5,12 @@ import {
   clearSupportAgentSessionStorage,
   clearOrderAgentSessionStorage,
 } from "../utils/authRole";
+import { clearLegacyAuthStorage } from "../utils/apiConfig";
 
 const initialState = {
   loading: false,
   error: null,
   token: null,
-  refreshToken: null,
   role: null,
   user: null,
 };
@@ -35,24 +35,11 @@ const globalSlice = createSlice({
       const payload = action.payload;
       const accessToken =
         typeof payload === "string" ? payload : payload?.accessToken ?? null;
-      const refreshToken =
-        typeof payload === "object" && payload?.refreshToken
-          ? payload.refreshToken
-          : null;
       state.token = accessToken;
-      state.refreshToken = refreshToken || state.refreshToken;
-      if (accessToken) {
-        localStorage.setItem("token", accessToken);
-        if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
-      }
     },
 
     setRole: (state, action) => {
       state.role = action.payload;
-      if (action.payload) {
-        localStorage.setItem("role", action.payload);
-        localStorage.setItem("userRole", action.payload);
-      }
     },
 
     setUser: (state, action) => {
@@ -61,15 +48,10 @@ const globalSlice = createSlice({
 
     logout: (state) => {
       state.token = null;
-      state.refreshToken = null;
       state.role = null;
       state.user = null;
-      localStorage.removeItem("token");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("role");
-      localStorage.removeItem("userRole");
-      localStorage.removeItem("admin_userId");
-      localStorage.removeItem("admin_phone");
+      clearLegacyAuthStorage();
+      sessionStorage.removeItem("influencer_userId");
       localStorage.removeItem("userId");
       localStorage.removeItem("influencer");
       clearDesignerSessionStorage();

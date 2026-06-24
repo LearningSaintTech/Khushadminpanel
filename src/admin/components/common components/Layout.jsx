@@ -6,6 +6,8 @@ import Sidebar from "../common components/sidebar";
 import { useNotification } from "../../../context/NotificationContext";
 import { AdminPanelBasePathProvider, useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { ThemeProvider } from "../../../context/ThemeContext";
+import { ModuleAccessProvider } from "../../../context/ModuleAccessContext";
+import SubadminModuleGate from "../../../components/SubadminModuleGate";
 import { getAdminPageTitle } from "../../utils/adminPageTitle";
 
 function NotificationBadge({ count }) {
@@ -56,7 +58,9 @@ function LayoutInner({ filterSidebar }) {
           </header> */}
 
           <main className="min-h-0 flex-1 overflow-auto rounded-2xl border border-border bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
-            <Outlet />
+            <SubadminModuleGate>
+              <Outlet />
+            </SubadminModuleGate>
           </main>
         </div>
       </div>
@@ -69,7 +73,9 @@ const Layout = ({ basePath = "/admin", filterSidebar = false }) => {
   return (
     <ThemeProvider>
       <AdminPanelBasePathProvider basePath={basePath}>
-        <LayoutInner filterSidebar={filterSidebar} />
+        <ModuleAccessProvider basePath={basePath} filterByModules={filterSidebar}>
+          <LayoutInner filterSidebar={filterSidebar} />
+        </ModuleAccessProvider>
       </AdminPanelBasePathProvider>
     </ThemeProvider>
   );

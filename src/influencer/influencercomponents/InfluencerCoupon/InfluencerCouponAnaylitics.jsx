@@ -34,9 +34,6 @@ export default function InfluencerCouponAnalytics() {
 
       const res = await getCouponAnalytics();
 
-      console.log("ANALYTICS RESPONSE:", res);
-
-      // Normalize breakdown to ensure usage & revenue are always numbers
       const normalizedBreakdown = (res.couponBreakdown || []).map((c) => ({
         couponId: c._id || c.couponId || c.id || "",
         code: c.code || c.couponCode || "—",
@@ -52,7 +49,6 @@ export default function InfluencerCouponAnalytics() {
         couponBreakdown: normalizedBreakdown,
       });
     } catch (err) {
-      console.error(err);
       setError(err.message);
     } finally {
       setLoadingOverall(false);
@@ -108,8 +104,6 @@ export default function InfluencerCouponAnalytics() {
     // ✅ Correct API call
     const res = await getCouponHistory(1, 10);
 
-    console.log("HISTORY RAW:", res);
-
     if (!res || res.success === false) {
       throw new Error(res?.message || "Failed to fetch history");
     }
@@ -136,7 +130,7 @@ export default function InfluencerCouponAnalytics() {
     );
 
   } catch (err) {
-    console.error("History fetch error:", err);
+    setHistory([]);
   } finally {
     setLoadingHistory(false);
   }

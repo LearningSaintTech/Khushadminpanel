@@ -32,9 +32,9 @@ export default function SupportAgentOtp() {
   const error = useSelector(selectError);
 
   const phone =
-    location.state?.phone || localStorage.getItem(STORAGE_PHONE) || "XXXXXXXXXX";
+    location.state?.phone || sessionStorage.getItem(STORAGE_PHONE) || "XXXXXXXXXX";
   const agentId =
-    location.state?.agentId || localStorage.getItem(STORAGE_AGENT_ID) || null;
+    location.state?.agentId || sessionStorage.getItem(STORAGE_AGENT_ID) || null;
 
   useEffect(() => {
     inputs.current[0]?.focus();
@@ -123,11 +123,9 @@ export default function SupportAgentOtp() {
 
       if (res?.success) {
         const accessToken = res.data?.accessToken;
-        const refreshToken = res.data?.refreshToken ?? res.data?.refereshToken;
-
         if (!accessToken) throw new Error("Verification failed");
 
-        dispatch(setToken({ accessToken, refreshToken }));
+        dispatch(setToken(accessToken));
 
         const decoded = jwtDecode(accessToken);
         const role = String(decoded?.role || "").toUpperCase();

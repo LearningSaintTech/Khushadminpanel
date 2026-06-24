@@ -68,7 +68,6 @@ export default function SubadminOtp() {
     setError("");
     setLoading(true);
     try {
-      console.log("[SUBADMIN_VERIFY][REQ]", { userId, otpLength: code.length });
       const res = await subadminApi.verifyOtp({ userId, otp: code });
       const payload = res?.data ?? res;
       const token = payload?.accessToken;
@@ -78,17 +77,11 @@ export default function SubadminOtp() {
       if (!role) {
         try {
           const decoded = jwtDecode(token);
-          console.log("[SUBADMIN_VERIFY][DECODED_TOKEN]", decoded);
           role = String(decoded?.role || decoded?.userRole || "").toUpperCase();
         } catch {
           // Ignore decode failures; role validation below will handle it.
         }
       }
-      console.log("[SUBADMIN_VERIFY][RES]", {
-        hasToken: !!token,
-        payloadRole: String(payload?.role || payload?.user?.role || "").toUpperCase() || null,
-        finalRole: role || null,
-      });
       if (role !== "SUBADMIN" && role !== "SUPER_SUBADMIN") {
         throw new Error("This account is not allowed on subadmin login.");
       }
@@ -97,7 +90,6 @@ export default function SubadminOtp() {
       dispatch(setRole(role));
       navigate("/subadmin/dashboard", { replace: true });
     } catch (err) {
-      console.log("[SUBADMIN_VERIFY][ERR]", err);
       const msg = typeof err === "string" ? err : err?.message || "Invalid OTP";
       setError(msg);
     } finally {

@@ -20,15 +20,11 @@ export default function Login() {
       setLoading(true);
       setError("");
 
-      const response = await loginInfluencer("+91", phoneNumber);
+      await loginInfluencer("+91", phoneNumber);
 
-      console.log("Login Success:", response);
-
-      // navigate to verify page
       navigate("/influencer/verify-otp");
 
     } catch (err) {
-      console.error("Login Failed:", err.message);
       setError(err.message);
     } finally {
       setLoading(false);

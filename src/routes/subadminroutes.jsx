@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../utils/ProtectedRoute";
+import { STAFF_PANEL_ROLES } from "../utils/authRole";
 import Layout from "../admin/components/common components/Layout";
 import SubadminLogin from "../subadmin/components/Auth/Login";
 import SubadminOtp from "../subadmin/components/Auth/Otp";
@@ -14,7 +15,7 @@ const SubAdminRoutes = () => {
       <Route
         element={
           <ProtectedRoute
-            allowedRoles={["SUBADMIN"]}
+            allowedRoles={STAFF_PANEL_ROLES}
             loginPath="/subadmin/login"
             wrongRolePolicy="home"
           >

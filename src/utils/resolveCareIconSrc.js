@@ -2,22 +2,20 @@ import doNotBleachIcon from "../assets/images/Do Not Bleach icon.svg";
 import doNotTumbleDryIcon from "../assets/images/Do Not Tumble Dry icon.svg";
 import doNotWashIcon from "../assets/images/Do Not Wash icon.svg";
 import maximumTempIcon from "../assets/images/maximum icon.svg";
+import { getCdnBaseUrl } from "./apiConfig.js";
 
-/** Public asset base for storage keys (same bucket as designer inventory uploads). Override with VITE_CDN_BASE_URL. */
+/** Public asset URL from a storage key — requires VITE_CDN_BASE_URL in .env. */
 export function cdnUrlFromStorageKey(keyOrPath) {
   const raw = String(keyOrPath || "").trim();
   if (!raw) return "";
   if (/^https?:\/\//i.test(raw)) return raw;
-  const envBase =
-    typeof import.meta !== "undefined" && import.meta.env?.VITE_CDN_BASE_URL
-      ? String(import.meta.env.VITE_CDN_BASE_URL).trim().replace(/\/$/, "")
-      : "";
-  const base = envBase || "https://d3bi5d5em13bi2.cloudfront.net";
+  const base = getCdnBaseUrl();
+  if (!base) return "";
   return `${base}/${raw.replace(/^\//, "")}`;
 }
 
 /**
- * Image `src` for a care instruction: full URL, data URL, preset reference, or CloudFront URL from `iconKey`.
+ * Image `src` for a care instruction: full URL, data URL, preset reference, or CDN URL from `iconKey`.
  */
 export function resolveCareIconSrc(inst) {
   const iconUrl = String(inst?.iconUrl || "").trim();

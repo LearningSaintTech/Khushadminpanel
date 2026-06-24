@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { MapPin, Send, Package, IndianRupee, Phone } from "lucide-react";
 import { MdArrowBackIos } from "react-icons/md";
+import { getSafeMapsHref, getSafeTelHref } from "../../../utils/safeUrl.util.js";
 
 const EXCHANGE_ITEM_STATUSES = [
   "EXCHANGE_PICKUP_SCHEDULED",
@@ -108,9 +109,11 @@ export default function OrderDetailPage() {
     address?.pincode ? String(address.pincode).trim() : null,
   ].filter(Boolean);
   const deliveryAddressString = deliveryAddressParts.join(", ") || "";
-  const mapsDirectionUrl = deliveryAddressString
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddressString)}`
-    : "https://www.google.com/maps";
+  const mapsDirectionUrl = getSafeMapsHref(
+    deliveryAddressString
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(deliveryAddressString)}`
+      : "https://www.google.com/maps",
+  );
 
   const orderId = order?.orderId ?? assignment?._id?.slice(-8) ?? "—";
   const deliveredAt = assignment?.deliveredAt;
@@ -227,17 +230,17 @@ export default function OrderDetailPage() {
             ) : (
               <p className="text-sm text-gray-500">—</p>
             )}
-            {address?.phone && (
+            {address?.phone && getSafeTelHref(address.phone) ? (
               <a
-                href={`tel:${address.phone}`}
+                href={getSafeTelHref(address.phone)}
                 className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
               >
                 <Phone size={14} />
                 {address.phone}
               </a>
-            )}
+            ) : null}
           </div>
-          {deliveryAddressString && (
+          {deliveryAddressString && mapsDirectionUrl ? (
             <div className="px-4 pb-4">
               <a
                 href={mapsDirectionUrl}
@@ -249,7 +252,7 @@ export default function OrderDetailPage() {
                 <Send size={16} />
               </a>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Payment summary */}

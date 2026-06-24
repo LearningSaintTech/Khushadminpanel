@@ -1,8 +1,9 @@
 import { Navigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectToken } from "../redux/GlobalSelector";
+import { useAuthSession } from "../context/AuthSessionContext";
 import {
-  decodeTokenRole,
+  getValidTokenRole,
   getHomePathForRole,
   roleAllowed,
 } from "../utils/authRole";
@@ -15,19 +16,17 @@ export default function PanelEntryRedirect({
   loginPath,
   homePath,
 }) {
+  const { sessionReady } = useAuthSession();
   const rehydrated = useSelector((state) => state._persist?.rehydrated);
-  const reduxToken = useSelector(selectToken);
-  const token =
-    reduxToken ??
-    (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  const token = useSelector(selectToken);
 
-  if (rehydrated !== true) return null;
+  if (rehydrated !== true || !sessionReady) return null;
 
   if (!token) {
     return <Navigate to={loginPath} replace />;
   }
 
-  const role = decodeTokenRole(token);
+  const role = getValidTokenRole(token);
   if (role && roleAllowed(role, allowedRoles)) {
     return <Navigate to={homePath || getHomePathForRole(role)} replace />;
   }

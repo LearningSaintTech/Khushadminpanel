@@ -21,7 +21,7 @@
 | markOutForDelivery | POST .../deliveries/:id/out-for-delivery | AssignmentDetails.jsx | OK |
 | markDelivered | POST .../deliveries/:id/delivered | AssignmentDetails.jsx | OK |
 
-All endpoints match the backend. Token is read from `localStorage.getItem("token")` via the shared apiConnector.
+All endpoints match the backend. Token is read from Redux memory via the shared `apiConnector` (`Authorization` header + httpOnly refresh cookie).
 
 ---
 

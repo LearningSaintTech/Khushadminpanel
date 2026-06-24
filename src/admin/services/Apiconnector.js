@@ -1,40 +1,96 @@
 import axios from "axios";
 import appStore from "../../redux/Appstore";
-import { logout } from "../../redux/GlobalSlice";
-import { getLoginPathForPathname } from "../../utils/authRole";
+import { setToken, setRole } from "../../redux/GlobalSlice";
+import { decodeTokenRole, getLoginPathForPathname, normalizeRole } from "../../utils/authRole";
+import { getApiBaseUrl, getOrCreateDeviceId } from "../../utils/apiConfig";
+import {
+  refreshAccessTokenWithFallback,
+  resolveRefreshRole,
+} from "../../utils/authSession";
+import { performLogout } from "../../utils/sessionLogout";
+import {
+  isRateLimitedStatus,
+  normalizeRateLimitMessage,
+  RATE_LIMIT_MESSAGE,
+} from "../../utils/apiErrors";
+import logger from "../../utils/logger.js";
+import { redactForLog } from "../../utils/logRedact.util.js";
+import toast from "react-hot-toast";
 
-/**
- * Create axios instance
- */
-const apiBaseUrl ="https://api.khushpehno.com/api"
-// const apiBaseUrl= "http://localhost:5000/api"
-  // import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  // (import.meta.env.DEV
-  //   ? "http://localhost:5000/api"
-  //   : "https://api.khushpehno.com/api");
+const apiLog = logger.child("api");
+
+const apiBaseUrl = getApiBaseUrl();
 
 const axiosInstance = axios.create({
   baseURL: apiBaseUrl,
   timeout: 60000,
+  withCredentials: true,
 });
 
-if (import.meta.env.DEV) {
-  console.log("[pricing-history][api] baseURL =", apiBaseUrl);
+let refreshPromise = null;
+
+function isAuthRequestUrl(url = "") {
+  return (
+    /\/login$/i.test(url) ||
+    /\/verify-otp$/i.test(url) ||
+    /\/resend-otp$/i.test(url) ||
+    /\/otp$/i.test(url) ||
+    /newAccessToken/i.test(url)
+  );
 }
 
-/**
- * REQUEST INTERCEPTOR
- * Add token from Redux (persisted) or fallback localStorage
- */
+function isAuthPagePath() {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname || "";
+  return (
+    /\/login$|\/verify-otp$|\/otp$|^\/admin\/?$/.test(path) ||
+    path.endsWith("/admin")
+  );
+}
+
+function getStoredToken() {
+  return appStore.getState()?.global?.token ?? null;
+}
+
+async function runTokenRefresh() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const state = appStore.getState().global;
+    const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+    const role = resolveRefreshRole({
+      token: state?.token,
+      role: state?.role,
+      pathname,
+    });
+    if (!role || normalizeRole(role) === "ORDER_AGENT") return null;
+
+    const token = await refreshAccessTokenWithFallback(role, pathname);
+    if (token) {
+      appStore.dispatch(setRole(decodeTokenRole(token)));
+    }
+    return token;
+  })();
+
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
 axiosInstance.interceptors.request.use(
   (config) => {
-    const state = appStore.getState();
-    const token = state?.global?.token ?? localStorage.getItem("token");
+    const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const deviceId = getOrCreateDeviceId();
+    if (deviceId) {
+      config.headers["x-device-id"] = deviceId;
+    }
     if (import.meta.env.DEV && String(config.url || "").includes("pricing-history")) {
-      console.log("[pricing-history][api] request", {
+      apiLog.debug("pricing-history request", {
         method: config.method?.toUpperCase(),
         url: config.url,
         baseURL: config.baseURL,
@@ -47,14 +103,13 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-/**
- * RESPONSE INTERCEPTOR
- */
 axiosInstance.interceptors.response.use(
   (response) => response.data,
-  (error) => {
+  async (error) => {
     const payload = error?.response?.data;
     const status = error?.response?.status;
+    const originalConfig = error?.config;
+
     const base =
       typeof payload === "object" && payload !== null && !Array.isArray(payload)
         ? { ...payload }
@@ -77,30 +132,68 @@ axiosInstance.interceptors.response.use(
         "Something went wrong";
     }
 
-    if (import.meta.env.DEV && String(error?.config?.url || "").includes("pricing-history")) {
-      console.error("[pricing-history][api] response error", {
+    if (isRateLimitedStatus(status)) {
+      base.message = RATE_LIMIT_MESSAGE;
+      if (typeof window !== "undefined" && isAuthRequestUrl(originalConfig?.url)) {
+        toast.error(RATE_LIMIT_MESSAGE, { id: "api-rate-limited" });
+      }
+    } else {
+      base.message = normalizeRateLimitMessage(base.message, status);
+    }
+
+    if (import.meta.env.DEV && String(originalConfig?.url || "").includes("pricing-history")) {
+      apiLog.error("pricing-history response error", {
         status,
-        url: error?.config?.url,
-        baseURL: error?.config?.baseURL,
+        url: originalConfig?.url,
+        baseURL: originalConfig?.baseURL,
         message: base.message,
-        payloadPreview:
+        payloadPreview: redactForLog(
           typeof payload === "string"
             ? payload.slice(0, 200)
-            : payload,
+            : payload
+        ),
       });
     }
 
-    if (status === 401 && typeof window !== "undefined") {
-      const path = window.location.pathname || "";
-      const isAuthPage =
-        /\/login$|\/verify-otp$|\/otp$|^\/admin\/?$/.test(path) ||
-        path.endsWith("/admin");
-      if (!isAuthPage) {
-        appStore.dispatch(logout());
-        const loginPath = getLoginPathForPathname(path);
-        if (window.location.pathname !== loginPath) {
-          window.location.replace(loginPath);
+    const canRetry =
+      status === 401 &&
+      originalConfig &&
+      !originalConfig._authRetry &&
+      !isAuthRequestUrl(originalConfig.url) &&
+      typeof window !== "undefined";
+
+    if (canRetry) {
+      try {
+        const newToken = await runTokenRefresh();
+        if (newToken) {
+          appStore.dispatch(setToken(newToken));
+          originalConfig._authRetry = true;
+          originalConfig.headers = originalConfig.headers || {};
+          originalConfig.headers.Authorization = `Bearer ${newToken}`;
+          return axiosInstance(originalConfig);
         }
+      } catch {
+        /* fall through to logout */
+      }
+    }
+
+    if (status === 401 && typeof window !== "undefined" && !isAuthPagePath()) {
+      await performLogout({ server: true });
+      const loginPath = getLoginPathForPathname(window.location.pathname);
+      if (window.location.pathname !== loginPath) {
+        window.location.replace(loginPath);
+      }
+    }
+
+    if (
+      status === 403 &&
+      typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/subadmin") ||
+        String(originalConfig?.url || "").includes("/subadmin/"))
+    ) {
+      const role = normalizeRole(appStore.getState()?.global?.role);
+      if (role === "SUBADMIN") {
+        toast.error("Module access denied", { id: "subadmin-module-denied" });
       }
     }
 
@@ -108,15 +201,6 @@ axiosInstance.interceptors.response.use(
   }
 );
 
-/**
- * API CONNECTOR
- * Handles both JSON and multipart/form-data automatically
- * @param {string} method - GET, POST, PUT, PATCH, DELETE
- * @param {string} url
- * @param {object | FormData} bodyData
- * @param {object} headers
- * @param {object} params
- */
 function isFormDataPayload(bodyData) {
   if (!bodyData || typeof bodyData !== "object") return false;
   if (typeof FormData !== "undefined" && bodyData instanceof FormData) return true;
@@ -133,8 +217,6 @@ export const apiConnector = (
 ) => {
   const finalHeaders = { ...headers };
 
-  // Automatically detect FormData - DON'T set Content-Type (browser needs to set boundary)
-  // For FormData, let axios/browser set Content-Type automatically with boundary
   if (
     bodyData &&
     !isFormDataPayload(bodyData) &&
@@ -153,3 +235,5 @@ export const apiConnector = (
     ...requestConfig,
   });
 };
+
+export { apiBaseUrl };

@@ -1,4 +1,6 @@
 /** CDN icon/image URL from API fields (iconUrl, iconKey, legacy icon). */
+import { cdnUrlFromStorageKey } from "../../utils/resolveCareIconSrc.js";
+
 export function resolveSubcategoryIconUrl(sub) {
   if (!sub) return "";
 
@@ -22,7 +24,8 @@ export function resolveSubcategoryIconUrl(sub) {
       const origin = ref.match(/^(https?:\/\/[^/]+)/)?.[1];
       if (origin) return `${origin}/${key.replace(/^\//, "")}`;
     }
-    return `https://d3bi5d5em13bi2.cloudfront.net/${key.replace(/^\//, "")}`;
+    const fromCdn = cdnUrlFromStorageKey(key);
+    if (fromCdn) return fromCdn;
   }
 
   return "";

@@ -11,6 +11,7 @@ import {
   FormSection,
   formPageWrap,
 } from "./subadminShared";
+import { ModuleAccessCheckboxGroups } from "./ModuleAccessCheckboxGroups";
 
 const moduleAccessToolbar =
   "mb-2 flex flex-nowrap items-center gap-2 overflow-x-auto rounded-xl border border-border bg-white p-1.5 shadow-sm [-webkit-overflow-scrolling:touch]";
@@ -33,6 +34,7 @@ export default function ModuleAccessPage() {
 
   const [role, setRole] = useState("subadmin");
   const [availableModules, setAvailableModules] = useState([]);
+  const [panelGroups, setPanelGroups] = useState(null);
   const [selectedModules, setSelectedModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,10 +56,12 @@ export default function ModuleAccessPage() {
         moduleAccessApi.getRoleAccess(targetRole),
       ]);
       setAvailableModules(meta?.availableModules || []);
+      setPanelGroups(meta?.panelGroups || null);
       setSelectedModules(roleAccess?.allowedModules || []);
     } catch (e) {
       setError(e?.message || "Failed to load module access");
       setAvailableModules([]);
+      setPanelGroups(null);
       setSelectedModules([]);
     } finally {
       setLoading(false);
@@ -171,22 +175,12 @@ export default function ModuleAccessPage() {
         ) : availableModules.length === 0 ? (
           <p className="py-6 text-center text-[11px] text-stone-500">No modules available.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {availableModules.map((moduleKey) => (
-              <label
-                key={moduleKey}
-                className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-canvas-muted/30 px-2.5 py-2 transition hover:bg-white"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedModules.includes(moduleKey)}
-                  onChange={() => toggleModule(moduleKey)}
-                  className="h-3.5 w-3.5 rounded border-border accent-brand-600"
-                />
-                <span className="text-[11px] font-medium text-stone-800">{moduleKey}</span>
-              </label>
-            ))}
-          </div>
+          <ModuleAccessCheckboxGroups
+            panelGroups={panelGroups}
+            availableModules={availableModules}
+            selectedModules={selectedModules}
+            onToggle={toggleModule}
+          />
         )}
       </FormSection>
     </div>

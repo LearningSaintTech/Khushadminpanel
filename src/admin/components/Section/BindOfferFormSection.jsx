@@ -3,6 +3,8 @@ import { Field, fieldClass, FormSection } from "./sectionShared";
 import {
   BIND_OFFER_TYPE_LABELS,
   BIND_OFFER_TYPES,
+  BOGO_FREE_APPLIES_TO,
+  BOGO_FREE_APPLIES_TO_LABELS,
   BOGO_PRESETS,
   bogoMarketingToApi,
   describeBogoDeal,
@@ -52,6 +54,7 @@ export default function BindOfferFormSection({
   const bogoApi = bogoMarketingToApi(
     bindOfferForm.bogoPaidQuantity,
     bindOfferForm.bogoFreeQuantity,
+    bindOfferForm.bogoFreeAppliesTo,
   );
 
   return (
@@ -164,6 +167,24 @@ export default function BindOfferFormSection({
                 ))}
               </div>
 
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <Field label="Free item applies to" required>
+                  <select
+                    name="bogoFreeAppliesTo"
+                    value={bindOfferForm.bogoFreeAppliesTo || BOGO_FREE_APPLIES_TO.SAME_SKU}
+                    onChange={handleFieldChange}
+                    disabled={disabled}
+                    className={fieldClass}
+                  >
+                    {Object.entries(BOGO_FREE_APPLIES_TO_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                 <Field
                   label="Customer pays for"
@@ -212,6 +233,7 @@ export default function BindOfferFormSection({
                     {describeBogoDeal(
                       bindOfferForm.bogoPaidQuantity,
                       bindOfferForm.bogoFreeQuantity,
+                      bindOfferForm.bogoFreeAppliesTo,
                     )}
                   </p>
                   <p className="mt-1 text-[10px] text-violet-700/80">

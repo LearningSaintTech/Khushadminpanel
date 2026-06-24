@@ -1,58 +1,60 @@
 import { formatStatusDisplayLabel, normalizeStatusToken } from "./list/statusDisplayLabels";
+import { getOriginalConsole } from "../utils/configureConsole.js";
+import logger from "../utils/logger.js";
 
 export const inputClass =
   "rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
 
-/** Sidebar / analytics console logs — VITE_DEBUG_ORDER_AGENT=true or Vite dev mode. */
-export const isOrderAgentDebugEnabled =
-  import.meta.env.DEV ||
-  String(import.meta.env.VITE_DEBUG_ORDER_AGENT ?? "").toLowerCase() === "true";
+/** Sidebar / analytics verbose logs — non-prod only. */
+export const isOrderAgentDebugEnabled = logger.isDebugOrderAgent();
 
 export function logOrderAgentDebug(event, payload) {
   if (!isOrderAgentDebugEnabled) return;
-  console.log(`[order-agent][sidebar-analytics] ${event}`);
+
+  const out = getOriginalConsole();
+  out.log(`[order-agent][sidebar-analytics] ${event}`);
 
   if (payload?.data?.orders?.counts) {
     const { view, data } = payload;
-    console.log(`  view: ${view ?? payload.countsView ?? "—"}`);
+    out.log(`  view: ${view ?? payload.countsView ?? "—"}`);
     const sections = [
       ["ORDERS", data.orders],
       ["EXCHANGE", data.exchange],
       ["RETURNS", data.returns],
     ];
     for (const [name, section] of sections) {
-      console.log(`  ── ${name} (total ${section?.total ?? 0}) ──`);
-      console.table(
+      out.log(`  ── ${name} (total ${section?.total ?? 0}) ──`);
+      out.table(
         [...(section?.counts || [])].sort((a, b) => (b.count ?? 0) - (a.count ?? 0)),
       );
     }
     if (data.shippingProviders?.counts?.length) {
-      console.log("  ── SHIPPING PROVIDERS ──");
-      console.table(data.shippingProviders.counts);
+      out.log("  ── SHIPPING PROVIDERS ──");
+      out.table(data.shippingProviders.counts);
     }
     if (data.stale) {
-      console.log(`  stale: ${data.stale.count} (>${data.stale.thresholdHours}h)`);
+      out.log(`  stale: ${data.stale.count} (>${data.stale.thresholdHours}h)`);
     }
     return;
   }
 
   if (payload?.statusCounts) {
-    console.log(`  view: ${payload.view}, countsView: ${payload.countsView}`);
+    out.log(`  view: ${payload.view}, countsView: ${payload.countsView}`);
     for (const section of ["orders", "exchange", "returns"]) {
       const rows = Object.entries(payload.statusCounts[section] || {}).map(([status, count]) => ({
         status,
         count,
       }));
       if (!rows.length) continue;
-      console.log(`  ── ${section.toUpperCase()} ──`);
-      console.table(rows.sort((a, b) => b.count - a.count));
+      out.log(`  ── ${section.toUpperCase()} ──`);
+      out.table(rows.sort((a, b) => b.count - a.count));
     }
-    console.log("  sectionTotals:", payload.sectionTotals);
-    console.log("  staleCount:", payload.staleCount);
+    out.log("  sectionTotals:", payload.sectionTotals);
+    out.log("  staleCount:", payload.staleCount);
     return;
   }
 
-  console.log(payload);
+  out.log(payload);
 }
 
 export const btnSecondary =

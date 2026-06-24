@@ -1,4 +1,4 @@
-﻿// src/pages/ItemInventory.jsx   (or wherever your centralstock.jsx is located)
+// src/pages/ItemInventory.jsx   (or wherever your centralstock.jsx is located)
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -20,6 +20,9 @@ import {
   AlertTriangle,
   Layers,
 } from 'lucide-react';
+import logger from '../../../utils/logger.js';
+
+const stockLog = logger.child('CentralStock');
 
 const inputClass =
   'w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-brand-500/15 transition disabled:opacity-50 disabled:cursor-not-allowed';
@@ -192,7 +195,7 @@ const ItemInventory = () => {
   }, [pageWideEverySku]);
 
   const fetchItems = useCallback(async () => {
-    console.log("[CentralStock] fetchItems start", {
+    stockLog.debug("[CentralStock] fetchItems start", {
       page: pagination.page,
       itemsPerPage,
       search: debouncedSearch,
@@ -254,7 +257,7 @@ const ItemInventory = () => {
           total: total || allItems.length,
           totalPages: 1,
         });
-        console.log("[CentralStock] fetchItems (all pages)", {
+        stockLog.debug("[CentralStock] fetchItems (all pages)", {
           itemCount: allItems.length,
           catalogTotal: total,
         });
@@ -267,11 +270,11 @@ const ItemInventory = () => {
           debouncedSearch
         );
 
-        console.log("API Response:", res);
+        stockLog.debug("API Response:", res);
 
         if (res?.success && Array.isArray(res?.data?.items)) {
           const pg = res.data.pagination || {};
-          console.log("[CentralStock] fetchItems success", {
+          stockLog.debug("[CentralStock] fetchItems success", {
             itemCount: res?.data?.items?.length ?? 0,
             pagination: pg,
           });
@@ -283,7 +286,7 @@ const ItemInventory = () => {
             totalPages: pg.totalPages ?? 1,
           });
         } else {
-          console.warn("[CentralStock] fetchItems unexpected response", {
+          stockLog.warn("[CentralStock] fetchItems unexpected response", {
             success: res?.success,
             message: res?.message,
             hasItemsArray: Array.isArray(res?.data?.items),
@@ -293,7 +296,7 @@ const ItemInventory = () => {
         }
       }
     } catch (err) {
-      console.error('Fetch error:', err);
+      stockLog.error('Fetch error:', err);
       const msg =
         (err && typeof err === 'object' && err.message) ||
         (typeof err === 'string' ? err : null);
@@ -343,12 +346,12 @@ const ItemInventory = () => {
   };
 
   const saveStock = async (itemId, sku) => {
-    console.log("[CentralStock] saveStock submit", {
+    stockLog.debug("[CentralStock] saveStock submit", {
       itemId,
       sku,
     });
     if (!itemId || !sku?.sku) {
-      console.warn("[CentralStock] saveStock invalid item/sku", { itemId, sku });
+      stockLog.warn("[CentralStock] saveStock invalid item/sku", { itemId, sku });
       toast.error('Invalid item or SKU');
       return;
     }
@@ -361,14 +364,14 @@ const ItemInventory = () => {
     }
     const key = `${id}-${skuCode}`;
     const newStock = Number(editingStock[key]);
-    console.log("[CentralStock] saveStock parsed stock", {
+    stockLog.debug("[CentralStock] saveStock parsed stock", {
       key,
       raw: editingStock[key],
       parsed: newStock,
     });
 
     if (isNaN(newStock) || newStock < 0) {
-      console.warn("[CentralStock] saveStock validation failed", {
+      stockLog.warn("[CentralStock] saveStock validation failed", {
         key,
         newStock,
       });
@@ -383,10 +386,10 @@ const ItemInventory = () => {
           stock: newStock
         }]
       };
-      console.log("[CentralStock] updateItem request", { itemId, payload });
+      stockLog.debug("[CentralStock] updateItem request", { itemId, payload });
 
       const res = await updateItem(itemId, payload);
-      console.log('Update response:', res);
+      stockLog.debug('Update response:', res);
 
       if (isUpdateItemResponseOk(res)) {
         toast.success('Stock updated');
@@ -414,7 +417,7 @@ const ItemInventory = () => {
         toast.error(res?.message || 'Update failed');
       }
     } catch (err) {
-      console.error('Update error:', err);
+      stockLog.error('Update error:', err);
       toast.error(
         (err && typeof err === 'object' && err.message) || 'Failed to save stock',
       );
@@ -487,7 +490,7 @@ const ItemInventory = () => {
         );
         setBulkAllStockValue((prev) => ({ ...prev, [idKey]: "" }));
         fetchItems().catch((e) => {
-          console.error("[CentralStock] refresh after bulk SKU update", e);
+          stockLog.error("[CentralStock] refresh after bulk SKU update", e);
           toast.error(
             (e && typeof e === "object" && e.message) ||
               "Stock saved but refreshing the list failed — try Search or reload"
@@ -497,7 +500,7 @@ const ItemInventory = () => {
         toast.error(res?.message || "Bulk update failed");
       }
     } catch (err) {
-      console.error("[CentralStock] applyStockToAllLoadedSkus", err);
+      stockLog.error("[CentralStock] applyStockToAllLoadedSkus", err);
       toast.error(
         (err && typeof err === "object" && err.message) ||
           "Failed to update all SKUs"
@@ -571,7 +574,7 @@ const ItemInventory = () => {
             const full = inner.item ?? inner;
             skuIds = collectSkuListFromItem(full);
           } catch (e) {
-            console.error("[CentralStock] getSingleItem for page-wide", itemId, e);
+            stockLog.error("[CentralStock] getSingleItem for page-wide", itemId, e);
             failed += 1;
             continue;
           }
@@ -613,7 +616,7 @@ const ItemInventory = () => {
       }
       setPageWideBulkValue("");
       fetchItems().catch((e) => {
-        console.error("[CentralStock] refresh after page-wide stock", e);
+        stockLog.error("[CentralStock] refresh after page-wide stock", e);
         toast.error(
           (e && typeof e === "object" && e.message) ||
             "Saved but list refresh failed — reload the page"
@@ -656,7 +659,7 @@ const ItemInventory = () => {
         );
         setFastCatalogValue("");
         fetchItems().catch((e) => {
-          console.error("[CentralStock] refresh after fast catalog stock", e);
+          stockLog.error("[CentralStock] refresh after fast catalog stock", e);
           toast.error(
             (e && typeof e === "object" && e.message) ||
               "Saved but list refresh failed — reload the page"
@@ -666,7 +669,7 @@ const ItemInventory = () => {
         toast.error(res?.message || "Fast catalog update failed");
       }
     } catch (err) {
-      console.error("[CentralStock] runFastCatalogCentralStock", err);
+      stockLog.error("[CentralStock] runFastCatalogCentralStock", err);
       const status = err && typeof err === "object" ? err.status : undefined;
       const msg = String(
         (err && typeof err === "object" && err.message) || err || ""
@@ -714,7 +717,7 @@ const ItemInventory = () => {
         toast.error(res?.message || 'Bulk upload failed');
       }
     } catch (err) {
-      console.error('[CentralStock] bulk upload', err);
+      stockLog.error('[CentralStock] bulk upload', err);
       toast.error(typeof err === 'string' ? err : err?.message || 'Bulk upload failed');
     } finally {
       setBulkSubmitting(false);
@@ -723,17 +726,6 @@ const ItemInventory = () => {
 
   return (
     <div className="min-h-screen bg-slate-50/80">
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-@keyframes centralStockIndeterminateMove {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(350%); }
-}
-`,
-        }}
-      />
-
       <div className="mx-auto max-w-[1600px]">
             <div className="mb-3 grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:max-w-3xl lg:grid-cols-4 lg:ml-auto">
               <label className="block min-w-0">

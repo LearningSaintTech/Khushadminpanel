@@ -1,11 +1,10 @@
 import { ExternalLink } from "lucide-react";
+import SafeExternalLink from "../../components/SafeExternalLink.jsx";
+import { getPublicStoreUrl } from "../../utils/apiConfig.js";
 import { StatusBadge, formatDt } from "../orderAgentShared";
 import { carrierMetaLine, extractLineCarrier, getItemShippingProvider } from "./carrierExtract";
 
-const STORE_URL =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_PUBLIC_STORE_URL
-    ? String(import.meta.env.VITE_PUBLIC_STORE_URL).trim().replace(/\/$/, "")
-    : "";
+const STORE_URL = getPublicStoreUrl();
 
 export function formatInr(amount) {
   const n = Number(amount);
@@ -80,15 +79,13 @@ function CourierCell({ item, compact = true }) {
         {carrier.awb ? (
           <p className="font-mono text-[10px]">
             {carrier.trackingUrl ? (
-              <a
+              <SafeExternalLink
                 href={carrier.trackingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className={`inline-flex items-center gap-1 hover:underline ${toneClass}`}
               >
                 {carrier.awb}
                 <ExternalLink size={11} />
-              </a>
+              </SafeExternalLink>
             ) : (
               carrier.awb
             )}
@@ -107,16 +104,14 @@ function CourierCell({ item, compact = true }) {
     <div className="min-w-0 leading-tight">
       <span className="text-[9px] font-semibold uppercase text-stone-500">{carrier.label}</span>
       {carrier.awb && carrier.trackingUrl ? (
-        <a
+        <SafeExternalLink
           href={carrier.trackingUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           className={`inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] hover:underline ${toneClass}`}
           title={carrier.awb}
         >
           <ExternalLink size={9} className="shrink-0" aria-hidden />
           <span className="truncate">{carrier.awb}</span>
-        </a>
+        </SafeExternalLink>
       ) : carrier.awb ? (
         <p className="truncate font-mono text-[9px] text-stone-700" title={carrier.awb}>
           {carrier.awb}
@@ -216,15 +211,13 @@ export function renderItemListCell(key, row) {
       const url = storefrontUrl(itemId, item);
       if (!url) return "—";
       return (
-        <a
+        <SafeExternalLink
           href={url}
-          target="_blank"
-          rel="noopener noreferrer"
           className="inline-flex items-center gap-0.5 text-brand-700 hover:text-brand-900"
         >
           <ExternalLink size={12} />
           Store
-        </a>
+        </SafeExternalLink>
       );
     }
     case "orderAmount":

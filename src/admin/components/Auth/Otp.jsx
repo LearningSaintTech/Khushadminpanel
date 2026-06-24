@@ -10,6 +10,7 @@ import {
   clearError,
   setToken,
   setRole,
+  logout,
 } from "../../../redux/GlobalSlice";
 import { clearOtherPanelSessions } from "../../../utils/authRole";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
@@ -29,8 +30,8 @@ export default function OTP() {
   const loading = useSelector(selectLoading);
   const error = useSelector(selectError);
 
-  const phone = location.state?.phone || "XXXXXXXXXX";
-  const userId = location.state?.userId || null;
+  const phone = location.state?.phone || sessionStorage.getItem("admin_phone") || "XXXXXXXXXX";
+  const userId = location.state?.userId || sessionStorage.getItem("admin_userId") || null;
 
   // Auto-focus first input on mount
   useEffect(() => {
@@ -44,13 +45,9 @@ export default function OTP() {
       return;
     }
 
-    console.log("[TIMER] Starting countdown from:", resendTimer);
-
     const interval = setInterval(() => {
       setResendTimer((prev) => {
         const next = prev - 1;
-        console.log("[TIMER] Tick:", next);
-
         if (next <= 0) {
           setCanResend(true);
           return 0;
@@ -59,11 +56,8 @@ export default function OTP() {
       });
     }, 1000);
 
-    return () => {
-      console.log("[TIMER] Cleaning up interval");
-      clearInterval(interval);
-    };
-  }, [canResend]); // Important: depend mainly on canResend
+    return () => clearInterval(interval);
+  }, [canResend, resendTimer]);
 
   const handleChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
@@ -122,9 +116,8 @@ export default function OTP() {
 
       if (res.success) {
         const accessToken = res.data.accessToken;
-        const refreshToken = res.data.refereshToken;
 
-        dispatch(setToken({ accessToken, refreshToken }));
+        dispatch(setToken(accessToken));
 
         const decoded = jwtDecode(accessToken);
         const role = decoded?.role?.toUpperCase();
@@ -151,15 +144,17 @@ export default function OTP() {
           case "DRIVER":
             navigate("/driver/dashboard", { replace: true });
             break;
-          default:
-            navigate("/admin", { replace: true });
+          default: {
+            dispatch(logout());
+            dispatch(setError("This account is not allowed on admin login."));
+            break;
+          }
         }
       } else {
         setIsValid(false);
         dispatch(setError(res.message || "Invalid OTP"));
       }
     } catch (err) {
-      console.error("OTP verification failed:", err);
       setIsValid(false);
       dispatch(setError(err.message || "Verification failed"));
     } finally {
@@ -182,22 +177,14 @@ export default function OTP() {
       const res = await resendOtp({ userId });
 
       if (res.success) {
-        console.log("[RESEND] Success → resetting UI state");
-
-        // Reset OTP inputs
         setOtp(["", "", "", "", "", ""]);
         inputs.current[0]?.focus();
-
-        // Restart timer — this will trigger the useEffect
         setResendTimer(30);
         setCanResend(false);
-
-        console.log("[RESEND] Timer reset to 30s, canResend = false");
       } else {
         dispatch(setError(res.message || "Failed to resend OTP"));
       }
     } catch (err) {
-      console.error("[RESEND] Error:", err);
       dispatch(setError(err.message || "Failed to resend OTP"));
     } finally {
       dispatch(setLoading(false));

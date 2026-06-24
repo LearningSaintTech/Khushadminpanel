@@ -1,4 +1,4 @@
-﻿// src/pages/admin/Orders.jsx
+// src/pages/admin/Orders.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -34,6 +34,9 @@ import {
   createDelhiveryForOrderShipments,
 } from "../../apis/Orderapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { isDebugOrders } from "../../../utils/logLevel.js";
+import { getPublicStoreUrl } from "../../../utils/apiConfig.js";
+import logger from "../../../utils/logger.js";
 import {
   btnDocSmInvoice,
   DocLabelButton,
@@ -53,6 +56,14 @@ import {
   sectionTotalFromPayload,
   unwrapApiData,
 } from "./orderAnalyticsShared";
+import {
+  describeBindOfferApplicationRow,
+  getBindOfferAppliedRows,
+  getBindOfferBillLabel,
+  getLineBindOfferNote,
+  orderHasBindOfferDiscount,
+  resolveOrderBindOfferDiscount,
+} from "../../utils/bindOffer.util";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -87,6 +98,8 @@ import {
   BarChart2,
   RotateCcw,
 } from "lucide-react";
+import SafeExternalLink from "../../../components/SafeExternalLink.jsx";
+import { getSafeHttpHref, openSafeExternalUrl } from "../../../utils/safeUrl.util.js";
 
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
@@ -816,11 +829,6 @@ const lineItemFromOrderItemRow = (row) => {
   };
 };
 
-const STORE_PUBLIC_ORIGIN =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_PUBLIC_STORE_URL
-    ? String(import.meta.env.VITE_PUBLIC_STORE_URL).trim().replace(/\/$/, "")
-    : "https://khushpehno.com";
-
 function slugifyForStoreProduct(name) {
   if (!name) return "";
   return String(name)
@@ -833,12 +841,13 @@ function slugifyForStoreProduct(name) {
 }
 
 function getStorefrontProductUrl(itemId, itemLike) {
+  const storeOrigin = getPublicStoreUrl();
   const idStr = itemId != null ? String(itemId) : "";
-  if (!idStr) return STORE_PUBLIC_ORIGIN;
+  if (!idStr) return storeOrigin;
   const label = itemLike?.name || itemLike?.sku || "";
   const slug = slugifyForStoreProduct(label);
   const path = slug ? `/product/${slug}/${idStr}` : `/product/${idStr}`;
-  return `${STORE_PUBLIC_ORIGIN}${path}`;
+  return storeOrigin ? `${storeOrigin}${path}` : path;
 }
 
 function collectItemLikeImageUrls(itemLike) {
@@ -988,17 +997,15 @@ function TableStoreLink({ itemId, itemLike }) {
   const url = getStorefrontProductUrl(itemId, itemLike);
   if (!itemId) return <span className="text-xs text-gray-400">—</span>;
   return (
-    <a
+    <SafeExternalLink
       href={url}
-      target="_blank"
-      rel="noopener noreferrer"
       className="inline-flex items-center gap-0.5 text-xs font-medium text-brand-700 hover:text-brand-900"
       title={url}
       onClick={(e) => e.stopPropagation()}
     >
       <ExternalLink size={12} className="shrink-0" />
       Store
-    </a>
+    </SafeExternalLink>
   );
 }
 
@@ -1104,6 +1111,64 @@ function getOrderWalletUsedAmount(order) {
 
 function formatInr(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
+}
+
+function OrderLineBindOfferNote({ bindOffer, className = "" }) {
+  const note = getLineBindOfferNote(bindOffer);
+  if (!note) return null;
+  return (
+    <p
+      className={`mt-0.5 text-[9px] font-medium leading-tight text-violet-700 ${className}`.trim()}
+      title={note}
+    >
+      {note}
+    </p>
+  );
+}
+
+function OrderBindOfferAppliedSummary({ bindOffers }) {
+  const rows = getBindOfferAppliedRows(bindOffers);
+  if (!rows.length) return null;
+  return (
+    <div className="mt-2 space-y-1 rounded-lg border border-violet-100 bg-violet-50/60 px-2.5 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+        Offers applied
+      </p>
+      {rows.map((row, index) => {
+        const text = describeBindOfferApplicationRow(row);
+        if (!text) return null;
+        return (
+          <p key={`${row.sectionId || row.label || "offer"}-${index}`} className="text-[11px] text-violet-900">
+            {text}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function renderOrderLinePriceCell(item) {
+  const qty = Number(item.quantity) || 1;
+  const unit = Number(item.unitPrice) || 0;
+  const gross = unit * qty;
+  const net = Number(item.itemSubtotal ?? gross);
+  const lineDiscount = Number(item?.bindOffer?.lineDiscount) || 0;
+  const hasOfferApplied = lineDiscount > 0 && net < gross - 0.009;
+
+  return (
+    <div className="text-right">
+      <div className="text-[10px] tabular-nums text-gray-500">@ {formatInr(unit)}</div>
+      <div className="text-xs font-medium tabular-nums text-gray-900">
+        {hasOfferApplied ? (
+          <span className="mr-1 text-[10px] font-normal text-gray-400 line-through">
+            {formatInr(gross)}
+          </span>
+        ) : null}
+        {formatInr(net)}
+      </div>
+      <OrderLineBindOfferNote bindOffer={item?.bindOffer} />
+    </div>
+  );
 }
 
 const ORDER_LIST_COLUMNS_STORAGE_KEY = "khush_admin_order_list_visible_columns";
@@ -1472,15 +1537,13 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
               Store link
             </dt>
             <dd className="mt-1">
-              <a
+              <SafeExternalLink
                 href={u}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="inline-flex items-start gap-1 break-all text-xs font-medium text-brand-700 hover:text-brand-900"
               >
                 <span className="min-w-0 flex-1">{u}</span>
                 <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              </a>
+              </SafeExternalLink>
             </dd>
           </div>
         </dl>
@@ -2078,14 +2141,12 @@ function ReturnDetailsPanel({
         </p>
       ) : null}
       {latestReturn?.unboxingVideo?.url ? (
-        <a
+        <SafeExternalLink
           href={latestReturn.unboxingVideo.url}
-          target="_blank"
-          rel="noreferrer"
           className="text-[9px] font-medium text-brand-700 hover:underline"
         >
           View unboxing video
-        </a>
+        </SafeExternalLink>
       ) : null}
       {latestReturn?.returnPickupMethod ? (
         <p className="text-stone-500">
@@ -2141,19 +2202,12 @@ function ReturnDetailsPanel({
   );
 }
 
-/** Logs in dev, or when `VITE_DEBUG_ORDERS=true` in `.env` (then rebuild). */
-const ORDERS_DEBUG =
-  import.meta.env.DEV || String(import.meta.env.VITE_DEBUG_ORDERS ?? "") === "true";
-
 const dbgOrders = (label, ...rest) => {
-  if (!ORDERS_DEBUG) return;
-  if (rest.length === 0) console.log(`[Orders] ${label}`);
-  else console.log(`[Orders] ${label}`, ...rest);
+  logger.debugWhen(isDebugOrders(), "Orders", label, ...rest);
 };
 
 const dbgOrdersVerbose = (label, ...rest) => {
-  if (!ORDERS_DEBUG) return;
-  console.debug(`[Orders] ${label}`, ...rest);
+  logger.debugWhen(isDebugOrders(), "Orders", label, ...rest);
 };
 
 const isNormalDeliveryLine = (item, order = null) => {
@@ -2715,16 +2769,14 @@ function DelhiveryDetails({ dl, compact }) {
     return (
       <div className="min-w-0 leading-tight">
         {dl.trackingUrl ? (
-          <a
+          <SafeExternalLink
             href={dl.trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-emerald-700 hover:underline"
             title={dl.awb || "Track"}
           >
             <ExternalLink size={9} className="shrink-0" aria-hidden />
             <span className="truncate">{dl.awb || "Track"}</span>
-          </a>
+          </SafeExternalLink>
         ) : (
           <span
             className="block truncate font-mono text-[9px] text-gray-800"
@@ -2755,15 +2807,13 @@ function DelhiveryDetails({ dl, compact }) {
         <p className="font-mono text-xs">
           Waybill:{" "}
           {dl.trackingUrl ? (
-            <a
+            <SafeExternalLink
               href={dl.trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
             >
               {dl.awb}
               <ExternalLink size={12} />
-            </a>
+            </SafeExternalLink>
           ) : (
             dl.awb
           )}
@@ -2781,16 +2831,14 @@ function ShadowfaxDetails({ sfx, compact }) {
     return (
       <div className="min-w-0 leading-tight">
         {sfx.trackingUrl ? (
-          <a
+          <SafeExternalLink
             href={sfx.trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-orange-700 hover:underline"
             title={sfx.awb || "Track"}
           >
             <ExternalLink size={9} className="shrink-0" aria-hidden />
             <span className="truncate">{sfx.awb || "Track"}</span>
-          </a>
+          </SafeExternalLink>
         ) : (
           <span
             className="block truncate font-mono text-[9px] text-gray-800"
@@ -2813,15 +2861,13 @@ function ShadowfaxDetails({ sfx, compact }) {
         <p className="font-mono text-xs">
           AWB:{" "}
           {sfx.trackingUrl ? (
-            <a
+            <SafeExternalLink
               href={sfx.trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-orange-700 hover:underline"
             >
               {sfx.awb}
               <ExternalLink size={12} />
-            </a>
+            </SafeExternalLink>
           ) : (
             sfx.awb
           )}
@@ -2855,16 +2901,14 @@ function ShiprocketDetails({ sr, compact }) {
     return (
       <div className="min-w-0 leading-tight">
         {sr.trackingUrl ? (
-          <a
+          <SafeExternalLink
             href={sr.trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex max-w-full items-center gap-0.5 truncate font-mono text-[9px] text-brand-600 hover:underline"
             title={sr.awb || "Track"}
           >
             <ExternalLink size={9} className="shrink-0" aria-hidden />
             <span className="truncate">{sr.awb || "Track"}</span>
-          </a>
+          </SafeExternalLink>
         ) : (
           <span
             className="block truncate font-mono text-[9px] text-gray-800"
@@ -2893,15 +2937,13 @@ function ShiprocketDetails({ sr, compact }) {
         <p className="font-mono text-xs">
           AWB:{" "}
           {sr.trackingUrl ? (
-            <a
+            <SafeExternalLink
               href={sr.trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-brand-600 hover:underline"
             >
               {sr.awb}
               <ExternalLink size={12} />
-            </a>
+            </SafeExternalLink>
           ) : (
             sr.awb
           )}
@@ -3247,15 +3289,15 @@ const Orders = ({
     const normalizedUrl =
       typeof url === "string" && url.startsWith("/")
         ? new URL(url, window.location.origin).href
-        : url;
-    // Use a temporary anchor click to let the browser decide (download vs open).
-    const a = document.createElement("a");
-    a.href = normalizedUrl;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+        : getSafeHttpHref(url);
+    if (!normalizedUrl) {
+      toast.error(fallbackMsg);
+      return;
+    }
+    if (!openSafeExternalUrl(normalizedUrl)) {
+      toast.error(fallbackMsg);
+      return;
+    }
   };
 
   const handleGetInvoiceClick = async (orderObj, itemObj) => {
@@ -3971,7 +4013,7 @@ const Orders = ({
       dbgOrders("getOrders:response", res);
       if (consistencyParam && !res?.data?.appliedFilters?.itemStatusConsistency) {
         console.warn(
-          "[Orders] itemStatusConsistency filter was not applied by API — use local backend (VITE_API_BASE_URL=http://localhost:5000/api) or deploy KhushBackend.",
+          "[Orders] itemStatusConsistency filter was not applied by API — set VITE_API_BASE_URL in .env to your local backend or deploy KhushBackend.",
         );
       }
       const payload = res?.data ?? {};
@@ -4343,7 +4385,7 @@ const Orders = ({
         dbgOrdersVerbose("getAssignmentView:data", assignData);
         setOrderAssignments(assignData || null);
       } catch (e) {
-        if (ORDERS_DEBUG) console.warn("[Orders] getAssignmentView failed:", e);
+        if (isDebugOrders()) logger.warn("Orders", "getAssignmentView failed:", e);
         setOrderAssignments(null);
       }
     } catch (err) {
@@ -4694,7 +4736,7 @@ const Orders = ({
         setDeliveryAgentsList(Array.isArray(list) ? list : []);
       })
       .catch((e) => {
-        if (ORDERS_DEBUG) console.warn("[Orders] listDeliveryAgents failed:", e);
+        if (isDebugOrders()) logger.warn("Orders", "listDeliveryAgents failed:", e);
         setDeliveryAgentsList([]);
       });
   };
@@ -6094,6 +6136,7 @@ const Orders = ({
                       {swap}
                     </span>
                   ) : null}
+                  <OrderLineBindOfferNote bindOffer={item?.bindOffer} />
                 </div>
               );
             }}
@@ -6270,12 +6313,15 @@ const Orders = ({
         const line = lineItemFromOrderItemRow(row) || item;
         const label = getLineProductDisplayName(line);
         return (
-          <span
-            className="block max-w-[240px] truncate text-xs font-medium text-stone-900"
-            title={label}
-          >
-            {label || "—"}
-          </span>
+          <div className="max-w-[240px]">
+            <span
+              className="block truncate text-xs font-medium text-stone-900"
+              title={label}
+            >
+              {label || "—"}
+            </span>
+            <OrderLineBindOfferNote bindOffer={line?.bindOffer} />
+          </div>
         );
       }
       case "productId":
@@ -6603,12 +6649,15 @@ const Orders = ({
       case "productName": {
         const label = getLineProductDisplayName(item);
         return (
-          <span
-            className="block truncate text-[11px] font-medium leading-snug text-gray-900"
-            title={label}
-          >
-            {label || "—"}
-          </span>
+          <div className="min-w-0">
+            <span
+              className="block truncate text-[11px] font-medium leading-snug text-gray-900"
+              title={label}
+            >
+              {label || "—"}
+            </span>
+            <OrderLineBindOfferNote bindOffer={item?.bindOffer} />
+          </div>
         );
       }
       case "productId":
@@ -6658,11 +6707,7 @@ const Orders = ({
       case "qty":
         return <span className="tabular-nums text-xs">{item.quantity ?? "—"}</span>;
       case "price":
-        return (
-          <span className="text-xs font-medium tabular-nums text-gray-900">
-            ₹{(item.unitPrice || 0).toLocaleString("en-IN")}
-          </span>
-        );
+        return renderOrderLinePriceCell(item);
       case "pincode":
         return order?.address?.pincode || "—";
       case "payment":
@@ -8278,14 +8323,12 @@ const Orders = ({
                                           : ""}
                                       </p>
                                       {rowItem?.selfShipping?.trackingUrl ? (
-                                        <a
+                                        <SafeExternalLink
                                           href={rowItem.selfShipping.trackingUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
                                           className="text-indigo-600 hover:underline break-all"
                                         >
                                           {rowItem.selfShipping.trackingUrl}
-                                        </a>
+                                        </SafeExternalLink>
                                       ) : rowItem?.trackingId ? (
                                         <p className="font-mono">AWB: {rowItem.trackingId}</p>
                                       ) : (
@@ -8970,14 +9013,12 @@ const Orders = ({
                                     : ""}
                                 </p>
                                 {focusedItem?.selfShipping?.trackingUrl ? (
-                                  <a
+                                  <SafeExternalLink
                                     href={focusedItem.selfShipping.trackingUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="text-indigo-600 hover:underline break-all"
                                   >
                                     {focusedItem.selfShipping.trackingUrl}
-                                  </a>
+                                  </SafeExternalLink>
                                 ) : focusedItem?.trackingId ? (
                                   <p className="font-mono text-xs">AWB: {focusedItem.trackingId}</p>
                                 ) : (
@@ -9338,20 +9379,10 @@ const Orders = ({
                       <OrderDetailRow label="Subtotal">
                         {formatInr(selectedOrder?.pricing?.subTotal || 0)}
                       </OrderDetailRow>
-                      {(selectedOrder?.pricing?.bindOffers?.totalDiscount > 0 ||
-                        selectedOrder?.pricing?.bindOffers?.totalBindOfferDiscount > 0 ||
-                        (selectedOrder?.items || []).some((it) => it?.bindOffer?.lineDiscount > 0)) ? (
-                        <OrderDetailRow label="Bind offer">
+                      {orderHasBindOfferDiscount(selectedOrder) ? (
+                        <OrderDetailRow label={getBindOfferBillLabel(selectedOrder?.pricing?.bindOffers)}>
                           <span className="text-violet-700">
-                            −
-                            {formatInr(
-                              selectedOrder?.pricing?.bindOffers?.totalDiscount ||
-                                selectedOrder?.pricing?.bindOffers?.totalBindOfferDiscount ||
-                                (selectedOrder?.items || []).reduce(
-                                  (sum, it) => sum + (Number(it?.bindOffer?.lineDiscount) || 0),
-                                  0,
-                                ),
-                            )}
+                            −{formatInr(resolveOrderBindOfferDiscount(selectedOrder))}
                           </span>
                         </OrderDetailRow>
                       ) : null}
@@ -9384,6 +9415,7 @@ const Orders = ({
                         </span>
                       </OrderDetailRow>
                     </OrderDetailDenseGrid>
+                    <OrderBindOfferAppliedSummary bindOffers={selectedOrder?.pricing?.bindOffers} />
                   </div>
                 </div>
 
@@ -9600,14 +9632,12 @@ const Orders = ({
                         <span className="text-sky-800">
                           Created ·{" "}
                           {forwardPreview.trackingUrl ? (
-                            <a
+                            <SafeExternalLink
                               href={forwardPreview.trackingUrl}
-                              target="_blank"
-                              rel="noreferrer"
                               className="underline"
                             >
                               Track
-                            </a>
+                            </SafeExternalLink>
                           ) : (
                             <span className="text-stone-600">No tracking URL</span>
                           )}
@@ -9924,6 +9954,22 @@ const Orders = ({
                                   {formatInr(selectedOrder?.pricing?.subTotal)}
                                 </span>
                               </span>
+                              {orderHasBindOfferDiscount(selectedOrder) ? (
+                                <span className="text-violet-700">
+                                  {getBindOfferBillLabel(selectedOrder?.pricing?.bindOffers)}{" "}
+                                  <span className="font-medium tabular-nums">
+                                    −{formatInr(resolveOrderBindOfferDiscount(selectedOrder))}
+                                  </span>
+                                </span>
+                              ) : null}
+                              {selectedOrder?.pricing?.coupon?.discountAmount > 0 ? (
+                                <span className="text-emerald-700">
+                                  Coupon{" "}
+                                  <span className="font-medium tabular-nums">
+                                    −{formatInr(selectedOrder.pricing.coupon.discountAmount)}
+                                  </span>
+                                </span>
+                              ) : null}
                               {getOrderWalletUsedAmount(selectedOrder) > 0 && (
                                 <span className="text-emerald-700">
                                   Wallet{" "}

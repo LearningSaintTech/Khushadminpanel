@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { decodeTokenRole } from "../../../utils/authRole";
+import { decodeTokenRole, getValidTokenRole } from "../../../utils/authRole";
 import { setLoading, setError, clearError } from "../../../redux/GlobalSlice";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
 import { orderAgentLogin } from "../../apis/orderAgentApi";
@@ -21,10 +21,7 @@ export default function OrderAgentLogin() {
 
   useEffect(() => {
     if (rehydrated !== true) return;
-    const token =
-      reduxToken ??
-      (typeof window !== "undefined" ? localStorage.getItem("token") : null);
-    if (decodeTokenRole(token) === "ORDER_AGENT") {
+    if (getValidTokenRole(reduxToken) === "ORDER_AGENT") {
       navigate("/order-agent/orders", { replace: true });
     }
   }, [rehydrated, reduxToken, navigate]);
@@ -49,10 +46,10 @@ export default function OrderAgentLogin() {
           dispatch(setError("Could not send OTP. Please try again."));
           return;
         }
-        localStorage.setItem(STORAGE_AGENT_ID, String(agentId));
-        localStorage.setItem(STORAGE_PHONE, cleaned);
+        sessionStorage.setItem(STORAGE_AGENT_ID, String(agentId));
+        sessionStorage.setItem(STORAGE_PHONE, cleaned);
         navigate("/order-agent/otp", {
-          state: { phone: cleaned, agentId: String(agentId), OTP: res.data?.otp },
+          state: { phone: cleaned, agentId: String(agentId) },
         });
       } else {
         dispatch(setError(res?.message || "Could not send OTP."));

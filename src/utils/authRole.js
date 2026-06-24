@@ -12,6 +12,17 @@ export function normalizeRole(role) {
   return ROLE_ALIASES[raw] || raw;
 }
 
+export function isTokenExpired(token) {
+  if (!token) return true;
+  try {
+    const decoded = jwtDecode(token);
+    if (!decoded?.exp) return true;
+    return decoded.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
 export function decodeTokenRole(token) {
   if (!token) return "";
   try {
@@ -20,6 +31,44 @@ export function decodeTokenRole(token) {
   } catch {
     return "";
   }
+}
+
+/** Role from JWT only when the token is still valid. */
+export function getValidTokenRole(token) {
+  if (!token || isTokenExpired(token)) return "";
+  return decodeTokenRole(token);
+}
+
+/** Raw JWT role (not normalized) — for display labels e.g. super_subadmin */
+export function getRawRoleFromToken(token) {
+  if (!token) return "";
+  try {
+    const decoded = jwtDecode(token);
+    return String(decoded.role || decoded.userRole || "").trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function getRoleDisplayLabel(role) {
+  const raw = String(role || "").toLowerCase();
+  if (raw === "super_subadmin") return "Super subadmin";
+  if (raw === "subadmin") return "Subadmin";
+  if (raw === "admin") return "Admin";
+  return raw ? raw.replace(/_/g, " ") : "User";
+}
+
+/** Infer panel role from URL prefix (used when JWT is absent on boot). */
+export function getRoleFromPathname(pathname = "") {
+  const p = String(pathname || "");
+  if (p.startsWith("/subadmin")) return "SUBADMIN";
+  if (p.startsWith("/designer")) return "DESIGNER";
+  if (p.startsWith("/driver")) return "DRIVER";
+  if (p.startsWith("/influencer")) return "INFLUENCER";
+  if (p.startsWith("/support-agent")) return "AGENT";
+  if (p.startsWith("/order-agent")) return "ORDER_AGENT";
+  if (p.startsWith("/admin")) return "ADMIN";
+  return "";
 }
 
 export function getLoginPathForRole(role) {
@@ -101,10 +150,12 @@ export function clearAdminOtpSessionStorage() {
   }
 }
 
+export const STAFF_PANEL_ROLES = ["SUBADMIN", "SUPER_SUBADMIN"];
+
 export function clearSupportAgentSessionStorage() {
   try {
-    sessionStorage.removeItem("supportAgentId");
-    sessionStorage.removeItem("supportAgentPhone");
+    sessionStorage.removeItem("supportAgent_agentId");
+    sessionStorage.removeItem("supportAgent_phone");
     localStorage.removeItem("supportAgent_agentId");
     localStorage.removeItem("supportAgent_phone");
   } catch {
@@ -114,6 +165,8 @@ export function clearSupportAgentSessionStorage() {
 
 export function clearOrderAgentSessionStorage() {
   try {
+    sessionStorage.removeItem("orderAgent_agentId");
+    sessionStorage.removeItem("orderAgent_phone");
     localStorage.removeItem("orderAgent_agentId");
     localStorage.removeItem("orderAgent_phone");
   } catch {

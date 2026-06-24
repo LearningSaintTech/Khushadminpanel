@@ -10,6 +10,16 @@ export const BIND_OFFER_TYPE_LABELS = {
   CART_THRESHOLD_DISCOUNT: "Cart threshold discount",
 };
 
+export const BOGO_FREE_APPLIES_TO = {
+  SAME_SKU: "SAME_SKU",
+  MIX_MATCH_IN_SCOPE: "MIX_MATCH_IN_SCOPE",
+};
+
+export const BOGO_FREE_APPLIES_TO_LABELS = {
+  SAME_SKU: "Same product (per SKU)",
+  MIX_MATCH_IN_SCOPE: "Mix & match (any eligible items in section)",
+};
+
 /** Quick presets — { paidQuantity, freeQuantity } */
 export const BOGO_PRESETS = [
   { id: "b1g1", label: "Buy 1 Get 1 Free", paidQuantity: 1, freeQuantity: 1 },
@@ -18,13 +28,13 @@ export const BOGO_PRESETS = [
 ];
 
 /** API buyQuantity = paid + free per deal cycle */
-export function bogoMarketingToApi(paidQuantity, freeQuantity) {
+export function bogoMarketingToApi(paidQuantity, freeQuantity, freeAppliesTo = BOGO_FREE_APPLIES_TO.SAME_SKU) {
   const paid = Number(paidQuantity) || 0;
   const free = Number(freeQuantity) || 0;
   return {
     buyQuantity: paid + free,
     freeQuantity: free,
-    freeAppliesTo: "SAME_SKU",
+    freeAppliesTo: freeAppliesTo || BOGO_FREE_APPLIES_TO.SAME_SKU,
   };
 }
 
@@ -46,11 +56,14 @@ export function formatBogoMarketingText(paidQuantity, freeQuantity) {
   return `Buy ${paid} Get ${free} Free`;
 }
 
-export function describeBogoDeal(paidQuantity, freeQuantity) {
+export function describeBogoDeal(paidQuantity, freeQuantity, freeAppliesTo = BOGO_FREE_APPLIES_TO.SAME_SKU) {
   const paid = Number(paidQuantity) || 0;
   const free = Number(freeQuantity) || 0;
   if (paid < 1 || free < 1) return "";
   const minCart = paid + free;
+  if (freeAppliesTo === BOGO_FREE_APPLIES_TO.MIX_MATCH_IN_SCOPE) {
+    return `Customer needs ${minCart} eligible items in cart (any mix) — ${free} cheapest free. Prices come from Inventory.`;
+  }
   return `Customer needs ${minCart} items in cart (${paid} paid + ${free} free). Prices come from Inventory — no separate offer price.`;
 }
 
@@ -64,6 +77,7 @@ export function defaultBindOfferFormState() {
     priority: 0,
     bogoPaidQuantity: 1,
     bogoFreeQuantity: 1,
+    bogoFreeAppliesTo: BOGO_FREE_APPLIES_TO.SAME_SKU,
     maxFreeUnitsPerLine: "",
     minQuantity: 2,
     qtyApplyScope: "PER_LINE",
@@ -96,6 +110,8 @@ export function bindOfferFromSection(section) {
     const { paidQuantity, freeQuantity } = bogoApiToMarketing(bo.bogoRules);
     state.bogoPaidQuantity = paidQuantity;
     state.bogoFreeQuantity = freeQuantity;
+    state.bogoFreeAppliesTo =
+      bo.bogoRules.freeAppliesTo || BOGO_FREE_APPLIES_TO.SAME_SKU;
     state.maxFreeUnitsPerLine =
       bo.bogoRules.maxFreeUnitsPerLine != null && bo.bogoRules.maxFreeUnitsPerLine !== ""
         ? bo.bogoRules.maxFreeUnitsPerLine
@@ -163,6 +179,7 @@ export function buildBindOfferApiPayload(formState) {
     const bogoRules = bogoMarketingToApi(
       formState.bogoPaidQuantity,
       formState.bogoFreeQuantity,
+      formState.bogoFreeAppliesTo,
     );
     const maxFree = parseOptionalPositiveNumber(formState.maxFreeUnitsPerLine);
     if (maxFree != null) bogoRules.maxFreeUnitsPerLine = maxFree;
@@ -268,7 +285,11 @@ export function formatBindOfferSummary(bindOffer) {
   if (bindOffer.offerType === "BUY_X_GET_Y_FREE" && bindOffer.bogoRules) {
     const { paidQuantity, freeQuantity } = bogoApiToMarketing(bindOffer.bogoRules);
     const text = formatBogoMarketingText(paidQuantity, freeQuantity);
-    return label ? `${text} (${label})` : text;
+    const mix =
+      bindOffer.bogoRules.freeAppliesTo === BOGO_FREE_APPLIES_TO.MIX_MATCH_IN_SCOPE
+        ? " (mix & match)"
+        : "";
+    return label ? `${text}${mix} (${label})` : `${text}${mix}`;
   }
 
   if (bindOffer.offerType === "BUY_N_GET_DISCOUNT" && bindOffer.qtyDiscountRules) {
@@ -294,10 +315,118 @@ export function formatBindOfferPreview(formState) {
   if (!formState?.enableBindOffer) return "Not enabled";
   if (formState.offerType === "BUY_X_GET_Y_FREE") {
     const text = formatBogoMarketingText(formState.bogoPaidQuantity, formState.bogoFreeQuantity);
-    const api = bogoMarketingToApi(formState.bogoPaidQuantity, formState.bogoFreeQuantity);
+    const api = bogoMarketingToApi(formState.bogoPaidQuantity, formState.bogoFreeQuantity, formState.bogoFreeAppliesTo);
     return `${text || "BOGO"} → API: buy ${api.buyQuantity}, free ${api.freeQuantity}`;
   }
   const payload = buildBindOfferApiPayload(formState);
   if (!payload) return "Not enabled";
   return formatBindOfferSummary(payload) || BIND_OFFER_TYPE_LABELS[payload.offerType];
+}
+
+/** Snapshot on order line items / pricing.bindOffers (API may use `applied` or `applications`). */
+export function getBindOfferAppliedRows(bindOffers) {
+  if (!bindOffers) return [];
+  if (Array.isArray(bindOffers.applied) && bindOffers.applied.length) {
+    return bindOffers.applied;
+  }
+  if (Array.isArray(bindOffers.applications) && bindOffers.applications.length) {
+    return bindOffers.applications;
+  }
+  return [];
+}
+
+export function getTotalBindOfferDiscount(bindOffers) {
+  if (!bindOffers) return 0;
+  const direct = Number(
+    bindOffers.totalBindOfferDiscount ?? bindOffers.totalDiscount ?? 0,
+  );
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  return getBindOfferAppliedRows(bindOffers).reduce(
+    (sum, row) => sum + (Number(row.discountAmount) || 0),
+    0,
+  );
+}
+
+export function getBindOfferBillLabel(bindOffers) {
+  if (!bindOffers) return "Offer discount";
+  const first = getBindOfferAppliedRows(bindOffers)[0];
+  if (first?.label || first?.sectionTitle) {
+    return first.label || first.sectionTitle;
+  }
+  return "Offer discount";
+}
+
+export function formatBindOfferSnapshotLabel(bindOffer) {
+  if (!bindOffer?.offerType) return null;
+  if (bindOffer.label) return bindOffer.label;
+
+  const rules = bindOffer.rulesSnapshot || bindOffer.bogoRules;
+  if (bindOffer.offerType === "BUY_X_GET_Y_FREE" && rules) {
+    const { paidQuantity, freeQuantity } = bogoApiToMarketing(rules);
+    const text = formatBogoMarketingText(paidQuantity, freeQuantity);
+    if (!text) return null;
+    if (rules.freeAppliesTo === BOGO_FREE_APPLIES_TO.MIX_MATCH_IN_SCOPE) {
+      return `${text} (mix & match)`;
+    }
+    return text;
+  }
+
+  return BIND_OFFER_TYPE_LABELS[bindOffer.offerType] || bindOffer.offerType;
+}
+
+/** Per order line — free qty, discount, or offer label. */
+export function getLineBindOfferNote(bindOffer) {
+  if (!bindOffer?.offerType) return null;
+
+  const parts = [];
+  if (Number(bindOffer.freeQuantity) > 0) {
+    parts.push(`${bindOffer.freeQuantity} free`);
+  }
+  if (Number(bindOffer.lineDiscount) > 0) {
+    parts.push(`−₹${Number(bindOffer.lineDiscount).toLocaleString("en-IN")}`);
+  }
+
+  if (parts.length) {
+    const label = formatBindOfferSnapshotLabel(bindOffer);
+    return label ? `${label} · ${parts.join(" · ")}` : parts.join(" · ");
+  }
+
+  if (bindOffer.applied === false) {
+    return formatBindOfferSnapshotLabel(bindOffer);
+  }
+
+  return formatBindOfferSnapshotLabel(bindOffer);
+}
+
+export function orderHasBindOfferDiscount(order) {
+  if (getTotalBindOfferDiscount(order?.pricing?.bindOffers) > 0) return true;
+  return (order?.items || []).some((it) => Number(it?.bindOffer?.lineDiscount) > 0);
+}
+
+export function resolveOrderBindOfferDiscount(order) {
+  const fromSummary = getTotalBindOfferDiscount(order?.pricing?.bindOffers);
+  if (fromSummary > 0) return fromSummary;
+  return (order?.items || []).reduce(
+    (sum, it) => sum + (Number(it?.bindOffer?.lineDiscount) || 0),
+    0,
+  );
+}
+
+export function describeBindOfferApplicationRow(row) {
+  if (!row) return null;
+  const label = row.label || row.sectionTitle || "Offer";
+  const amount = Number(row.discountAmount) || 0;
+  const lineCount = Array.isArray(row.lines) ? row.lines.length : 0;
+  const isMixBogo =
+    row.offerType === "BUY_X_GET_Y_FREE" &&
+    lineCount > 1 &&
+    row.lines?.some((ln) => Number(ln.freeQuantity) > 0);
+
+  if (isMixBogo) {
+    return `${label} · mix across ${lineCount} lines · −₹${amount.toLocaleString("en-IN")}`;
+  }
+  if (amount > 0) {
+    return `${label} · −₹${amount.toLocaleString("en-IN")}`;
+  }
+  return label;
 }

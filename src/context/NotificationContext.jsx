@@ -7,12 +7,13 @@ const NotificationContext = createContext(null);
 const LIST_PAGE_SIZE = 20;
 const DROPDOWN_LIMIT = 5;
 
+import { getSocketUrl } from "../utils/apiConfig";
+import logger from "../utils/logger.js";
+
+const socketLog = logger.child("socket");
+
 // Same host as API, no /api path (backend attaches Socket.IO to same server).
-// Match API base: env or fallback to localhost so socket connects to same backend as Apiconnector.
-const API_BASE = typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL
-  : "http://localhost:5000/api";
-const SOCKET_URL = API_BASE.replace(/\/api\/?$/, "");
+const SOCKET_URL = getSocketUrl();
 
 export function NotificationProvider({ children }) {
   const [list, setList] = useState([]);
@@ -132,7 +133,7 @@ export function useNotificationSocket(token) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      if (import.meta.env?.DEV) console.log("[Admin] Notification socket connected");
+      socketLog.debug("notification socket connected");
       refreshList(1, LIST_PAGE_SIZE).catch(() => {});
       refreshUnreadCount().catch(() => {});
     });
@@ -142,7 +143,9 @@ export function useNotificationSocket(token) {
     });
 
     socket.on("connect_error", (err) => {
-      if (import.meta.env?.DEV) console.warn("[Admin] Notification socket connect_error", err?.message || err);
+      socketLog.debug("notification socket connect_error", {
+        message: err?.message || String(err),
+      });
       refreshList(1, LIST_PAGE_SIZE).catch(() => {});
       refreshUnreadCount().catch(() => {});
     });

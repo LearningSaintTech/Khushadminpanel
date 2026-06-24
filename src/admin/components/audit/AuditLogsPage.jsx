@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditLogApi } from "../../apis/AuditLogapi";
+import { moduleAccessApi } from "../../apis/ModuleAccessapi";
 import { Shield, Search, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   alertDanger,
@@ -16,11 +17,32 @@ const LIMIT_OPTIONS = [20, 50, 100, 200];
 const EMPTY_FILTERS = {
   role: "",
   moduleKey: "",
+  userName: "",
   operation: "",
   statusCode: "",
   from: "",
   to: "",
 };
+
+function formatRoleLabel(role) {
+  const r = String(role || "").toLowerCase();
+  if (r === "super_subadmin") return "Super subadmin";
+  if (r === "subadmin") return "Subadmin";
+  if (r === "admin") return "Admin";
+  return role || "—";
+}
+
+function displayActor(row) {
+  if (row?.userName) return row.userName;
+  if (row?.userId) return String(row.userId).slice(-8);
+  return "—";
+}
+
+function displayModule(row) {
+  if (row?.moduleName) return row.moduleName;
+  if (row?.moduleKey) return row.moduleKey;
+  return "—";
+}
 
 function formatDate(val) {
   if (!val) return "—";
@@ -46,6 +68,13 @@ function prettyJson(val) {
 }
 
 function describeTask(row) {
+  const stored = row?.action;
+  if (stored === "CREATE" || stored === "UPDATE" || stored === "DELETE") {
+    const moduleKey = row?.moduleKey || "unknown-module";
+    const id = row?.entityId ? ` #${row.entityId}` : "";
+    return `${stored}${id} (${moduleKey})`;
+  }
+
   const moduleKey = row?.moduleKey || "unknown-module";
   const method = (row?.method || "").toUpperCase();
   const routeLower = String(row?.routePath || row?.path || "").toLowerCase();
@@ -62,14 +91,7 @@ function describeTask(row) {
   if (routeLower.includes("read-all") || routeLower.includes("read/")) action = "Mark as read";
   if (routeLower.includes("webhook")) action = "Webhook";
 
-  const specific =
-    action === "Manage module access" ||
-    action === "Toggle status" ||
-    action === "Mark as read" ||
-    action === "Webhook" ||
-    action === "View";
-
-  return specific ? `${action} (${moduleKey})` : `${action} (${moduleKey})`;
+  return `${action} (${moduleKey})`;
 }
 
 function displayTask(row) {
@@ -90,6 +112,21 @@ export default function AuditLogsPage() {
   const [selectedDetailsTab, setSelectedDetailsTab] = useState("summary");
   const [draftFilters, setDraftFilters] = useState(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
+  const [panelOptions, setPanelOptions] = useState([]);
+
+  useEffect(() => {
+    moduleAccessApi
+      .getMeta()
+      .then((meta) => {
+        const panels = meta?.panels || [];
+        setPanelOptions(
+          panels
+            .map((p) => ({ value: p.key, label: p.name || p.key }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        );
+      })
+      .catch(() => setPanelOptions([]));
+  }, []);
 
   const roleOptions = useMemo(
     () => [
@@ -103,11 +140,11 @@ export default function AuditLogsPage() {
 
   const crudOptions = useMemo(
     () => [
-      { value: "", label: "All operations" },
-      { value: "read", label: "Read" },
+      { value: "", label: "Mutations only" },
       { value: "create", label: "Create" },
       { value: "update", label: "Update" },
       { value: "delete", label: "Delete" },
+      { value: "read", label: "Read (legacy)" },
     ],
     [],
   );
@@ -119,6 +156,7 @@ export default function AuditLogsPage() {
       const params = { page: pageNum, limit };
       if (appliedFilters.role) params.role = appliedFilters.role;
       if (appliedFilters.moduleKey) params.moduleKey = appliedFilters.moduleKey;
+      if (appliedFilters.userName) params.userName = appliedFilters.userName;
       if (appliedFilters.operation) params.operation = appliedFilters.operation;
       if (appliedFilters.statusCode) params.statusCode = appliedFilters.statusCode;
       if (appliedFilters.from) params.from = appliedFilters.from;
@@ -210,13 +248,27 @@ export default function AuditLogsPage() {
             aria-hidden
           />
           <input
-            value={draftFilters.moduleKey}
-            onChange={(e) => setDraftFilters((f) => ({ ...f, moduleKey: e.target.value }))}
-            placeholder="Module"
+            value={draftFilters.userName}
+            onChange={(e) => setDraftFilters((f) => ({ ...f, userName: e.target.value }))}
+            placeholder="User name"
             className="w-full rounded-lg border border-border bg-white py-1.5 pl-7 pr-2 text-[11px] outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            title="Module"
+            title="User name"
           />
         </div>
+        <select
+          value={draftFilters.moduleKey}
+          onChange={(e) => setDraftFilters((f) => ({ ...f, moduleKey: e.target.value }))}
+          className={`${inputClass} w-[148px]`}
+          title="Panel / module"
+          aria-label="Panel module"
+        >
+          <option value="">All panels</option>
+          {panelOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         <select
           value={draftFilters.operation}
           onChange={(e) => setDraftFilters((f) => ({ ...f, operation: e.target.value }))}
@@ -279,12 +331,14 @@ export default function AuditLogsPage() {
       {error ? <div className={`${alertDanger} mb-2`}>{error}</div> : null}
 
       <div className={tableScrollShell}>
-        <table className="min-w-[920px] w-full text-[11px]">
+        <table className="min-w-[1020px] w-full text-[11px]">
           <thead className={tableHeadClass}>
             <tr>
               <th className={thClass}>Date</th>
+              <th className={thClass}>User</th>
               <th className={thClass}>Role</th>
-              <th className={thClass}>Module</th>
+              <th className={thClass}>Action</th>
+              <th className={thClass}>Panel</th>
               <th className={thClass}>Method</th>
               <th className={thClass}>Task</th>
               <th className={thClass}>Status</th>
@@ -294,7 +348,7 @@ export default function AuditLogsPage() {
           <tbody className="divide-y divide-border/60">
             {loading && list.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-stone-500">
+                <td colSpan={9} className="py-12 text-center text-stone-500">
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-brand-600" aria-hidden />
                     Loading…
@@ -303,7 +357,7 @@ export default function AuditLogsPage() {
               </tr>
             ) : list.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-stone-500">
+                <td colSpan={9} className="py-10 text-center text-stone-500">
                   No audit logs found.
                 </td>
               </tr>
@@ -328,8 +382,14 @@ export default function AuditLogsPage() {
                   <td className="whitespace-nowrap px-2 py-2 text-stone-500">
                     {formatDate(row.createdAt)}
                   </td>
-                  <td className="px-2 py-2 font-medium text-stone-900">{row.role || "—"}</td>
-                  <td className="px-2 py-2 text-stone-700">{row.moduleKey || "—"}</td>
+                  <td className="max-w-[140px] truncate px-2 py-2 font-medium text-stone-900" title={displayActor(row)}>
+                    {displayActor(row)}
+                  </td>
+                  <td className="px-2 py-2 font-medium text-stone-900">{formatRoleLabel(row.role)}</td>
+                  <td className="px-2 py-2 font-medium text-stone-900">{row.action || "—"}</td>
+                  <td className="max-w-[140px] truncate px-2 py-2 text-stone-700" title={displayModule(row)}>
+                    {displayModule(row)}
+                  </td>
                   <td className="whitespace-nowrap px-2 py-2 text-stone-700">{row.method || "—"}</td>
                   <td
                     className="max-w-[360px] truncate px-2 py-2 text-stone-700"
@@ -417,6 +477,8 @@ export default function AuditLogsPage() {
               <div className="mt-2 inline-flex rounded-lg border border-border bg-canvas-muted/50 p-0.5">
                 {[
                   { key: "summary", label: "Summary" },
+                  { key: "changes", label: "Changes" },
+                  { key: "response", label: "Response" },
                   { key: "meta", label: "Meta" },
                   { key: "request", label: "Request" },
                 ].map((t) => (
@@ -453,14 +515,48 @@ export default function AuditLogsPage() {
                     <p className="text-[10px] font-semibold uppercase text-stone-500">Task</p>
                     <p className="font-medium text-stone-900">{displayTask(selectedLog)}</p>
                   </div>
+                  {selectedLog.entityId ? (
+                    <div className="rounded-lg border border-border bg-white px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase text-stone-500">Entity ID</p>
+                      <p className="font-mono text-[10px] font-medium text-stone-900">
+                        {selectedLog.entityId}
+                      </p>
+                    </div>
+                  ) : null}
                 </>
+              ) : null}
+
+              {selectedDetailsTab === "changes" ? (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
+                    Structured changes (request + response)
+                  </p>
+                  <pre className="max-h-[50vh] overflow-auto rounded-lg border border-border bg-canvas-muted p-2 font-mono text-[10px]">
+                    {prettyJson(selectedLog.changes ?? selectedLog.requestBody)}
+                  </pre>
+                </div>
+              ) : null}
+
+              {selectedDetailsTab === "response" ? (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase text-stone-500">
+                    Response body
+                  </p>
+                  <pre className="max-h-[50vh] overflow-auto rounded-lg border border-border bg-canvas-muted p-2 font-mono text-[10px]">
+                    {prettyJson(selectedLog.responseBody ?? selectedLog.changes?.response)}
+                  </pre>
+                </div>
               ) : null}
 
               {selectedDetailsTab === "meta" ? (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {[
-                    { label: "Role", value: selectedLog.role || "—" },
-                    { label: "Module", value: selectedLog.moduleKey || "—" },
+                    { label: "User", value: displayActor(selectedLog) },
+                    { label: "Action", value: selectedLog.action || "—" },
+                    { label: "Role", value: formatRoleLabel(selectedLog.role) },
+                    { label: "Panel", value: displayModule(selectedLog) },
+                    { label: "Module key", value: selectedLog.moduleKey || "—" },
+                    { label: "Entity ID", value: selectedLog.entityId || "—" },
                     { label: "Method", value: selectedLog.method || "—" },
                     { label: "Status", value: selectedLog.statusCode ?? "—" },
                     { label: "IP", value: selectedLog.ip || "—" },

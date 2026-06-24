@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@keyframes centralStockIndeterminateMove {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+
 /* Khush Midnight Plum — see docs/KHUSH_ADMIN_DESIGN_SYSTEM.md */
 @theme {
   --color-brand-50: #f6f4fa;
