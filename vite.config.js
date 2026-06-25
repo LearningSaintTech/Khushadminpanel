@@ -13,6 +13,13 @@ function resolveOriginFromUrl(raw) {
   }
 }
 
+function resolveBasePath(env) {
+  const raw = String(env.VITE_BASE_PATH ?? "").trim();
+  if (!raw || raw === "/") return "/";
+  const withLeading = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
+}
+
 function securityHeadersPlugin({ apiOrigin, cdnOrigin }) {
   return {
     name: "khush-security-headers",
@@ -35,6 +42,7 @@ function securityHeadersPlugin({ apiOrigin, cdnOrigin }) {
         "https://maps.google.com",
         "https://maps.googleapis.com",
       ];
+      // frame-ancestors is ignored in <meta> CSP — set via nginx/CDN (see deploy/nginx-spa.conf).
       const csp = [
         "default-src 'self'",
         "script-src 'self' https://maps.googleapis.com",
@@ -46,7 +54,6 @@ function securityHeadersPlugin({ apiOrigin, cdnOrigin }) {
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
-        "frame-ancestors 'none'",
       ].join("; ");
 
       return html.replace(
@@ -71,6 +78,7 @@ export default defineConfig(({ mode }) => {
   const cdnOrigin = resolveOriginFromUrl(env.VITE_CDN_BASE_URL || "");
   const exposeDevServerOnLan = env.VITE_DEV_LAN === "true";
   const isProdApp = resolveBuildAppEnv(env, mode) === "prod";
+  const base = resolveBasePath(env);
 
   const devProxy = apiOrigin
     ? {
@@ -93,6 +101,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    base,
     plugins: [
       react(),
       tailwindcss(),
