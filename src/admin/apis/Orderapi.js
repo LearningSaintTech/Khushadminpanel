@@ -3,11 +3,15 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false) => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false) => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
       url += `&search=${encodeURIComponent(search)}`;
+    }
+
+    if (searchExact) {
+      url += "&searchExact=true";
     }
 
     if (status) {
@@ -98,9 +102,10 @@ const orderEndpoints = {
   `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
-  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "") => {
+  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false) => {
     let url = `/admin/orders/items?page=${page}&limit=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (searchExact) url += "&searchExact=true";
     if (orderStatus) url += `&orderStatus=${encodeURIComponent(orderStatus)}`;
     if (itemStatus) url += `&itemStatus=${encodeURIComponent(itemStatus)}`;
     if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
@@ -279,10 +284,10 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false) => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly, searchExact)
   );
 };
 
@@ -296,10 +301,10 @@ export const getOrderStatusAnalytics = (params = {}) => {
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "") => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider, searchExact)
   );
 };
 

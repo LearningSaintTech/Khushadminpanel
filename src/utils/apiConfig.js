@@ -1,4 +1,4 @@
-/** All environment-backed configuration — set in `.env` at project root. */
+/** All environment-backed configuration — set in `.env` at project root (see .env.example). */
 
 function envTrim(key) {
   const raw =
@@ -8,20 +8,44 @@ function envTrim(key) {
   return raw;
 }
 
+/**
+ * Local Express runs HTTP; `https://localhost` causes ERR_SSL_PROTOCOL_ERROR.
+ * In dev, coerce https → http for loopback only.
+ */
+function normalizeDevApiOrigin(url) {
+  if (!url || typeof url !== "string") return "";
+  const t = url.trim().replace(/\/$/, "").replace(/\/api\/?$/, "");
+  if (!import.meta.env?.DEV) return t;
+  if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(t)) {
+    return t.replace(/^https:/i, "http:");
+  }
+  return t;
+}
+
 export function getApiBaseUrl() {
-  const fromEnv = envTrim("VITE_API_BASE_URL").replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
+  const fromBase = envTrim("VITE_API_BASE_URL").replace(/\/$/, "");
+  if (fromBase) return fromBase;
+  const fromOrigin = normalizeDevApiOrigin(envTrim("VITE_API_URL"));
+  if (fromOrigin) return `${fromOrigin}/api`;
   if (import.meta.env?.DEV) {
     console.warn(
-      "[Khushadminpanel] VITE_API_BASE_URL is not set. Add it to .env."
+      "[Khushadminpanel] VITE_API_BASE_URL is not set. Add it to .env.",
     );
   }
   return "";
 }
 
+/** API host without /api suffix (Socket.IO, CSP). */
+export function getApiOrigin() {
+  const fromBase = getApiBaseUrl().replace(/\/api\/?$/, "");
+  if (fromBase) return normalizeDevApiOrigin(fromBase);
+  const fromUrl = normalizeDevApiOrigin(envTrim("VITE_API_URL"));
+  return fromUrl;
+}
+
 /** Socket host (no /api suffix). */
 export function getSocketUrl() {
-  return getApiBaseUrl().replace(/\/api\/?$/, "");
+  return getApiOrigin();
 }
 
 /** Public CDN base for storage keys (care icons, uploads). */
@@ -42,9 +66,9 @@ export function getGoogleMapsEmbedKey() {
 /** Call once at app boot — warns when production build has no explicit API URL. */
 export function warnIfProductionApiUrlMissing() {
   if (typeof import.meta === "undefined" || !import.meta.env?.PROD) return;
-  if (!envTrim("VITE_API_BASE_URL")) {
+  if (!envTrim("VITE_API_BASE_URL") && !envTrim("VITE_API_URL")) {
     console.warn(
-      "[Khushadminpanel] VITE_API_BASE_URL is not set for this production build. Set it in .env or CI."
+      "[Khushadminpanel] VITE_API_BASE_URL is not set for this production build. Set it in .env or CI.",
     );
   }
 }

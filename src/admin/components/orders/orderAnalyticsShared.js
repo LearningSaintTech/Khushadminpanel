@@ -1,6 +1,6 @@
 /**
- * Admin orders analytics — same shape as Order Agent sidebar-counts API.
- * Kept under admin/ so Order Agent can be removed without coupling.
+ * Admin orders analytics — live DB status counts from sidebar-counts API.
+ * Cards and dropdown options use actual items.status / order.status values, not ORDER_STATUS_ENUM.
  */
 
 export function unwrapApiData(response) {
@@ -153,6 +153,13 @@ export function getStaleAnalyticsFromPayload(sidebarPayload) {
     count: stale.count ?? 0,
     thresholdHours: stale.thresholdHours ?? 24,
   };
+}
+
+/** True when sidebar-counts payload matches the active list view (order vs item). */
+export function isSidebarCountsViewReady(sidebarPayload, { viewMode = "order" } = {}) {
+  const expected = String(viewMode).trim().toLowerCase() === "item" ? "item" : "order";
+  const actual = String(sidebarPayload?.view || "").trim().toLowerCase();
+  return Boolean(sidebarPayload) && actual === expected;
 }
 
 export { normalizeStatusToken };

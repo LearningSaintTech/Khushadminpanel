@@ -12,9 +12,6 @@ import logger from "../utils/logger.js";
 
 const socketLog = logger.child("socket");
 
-// Same host as API, no /api path (backend attaches Socket.IO to same server).
-const SOCKET_URL = getSocketUrl();
-
 export function NotificationProvider({ children }) {
   const [list, setList] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -124,9 +121,10 @@ export function useNotificationSocket(token) {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    if (!token || !SOCKET_URL) return;
+    const socketUrl = getSocketUrl();
+    if (!token || !socketUrl) return;
 
-    const socket = io(SOCKET_URL, {
+    const socket = io(socketUrl, {
       auth: { token },
       transports: ["websocket", "polling"],
     });

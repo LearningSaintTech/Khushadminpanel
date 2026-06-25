@@ -52,6 +52,7 @@ import {
   getAdminAnalyticsSection,
   getStaleAnalyticsFromPayload,
   getStatusOptionsForSection,
+  isSidebarCountsViewReady,
   normalizeStatusToken,
   sectionTotalFromPayload,
   unwrapApiData,
@@ -1951,12 +1952,6 @@ function ExchangeReplacementOrderBadge({ compact = false }) {
   );
 }
 
-/** Default status filter on the exchange orders list. */
-const EXCHANGE_DEFAULT_LIST_STATUS = "EXCHANGE_REQUESTED";
-
-/** Default status filter on the return orders list. */
-const RETURN_DEFAULT_LIST_STATUS = "RETURN_REQUESTED";
-
 const RETURN_LINE_STATUSES = new Set([
   "RETURN_REQUESTED",
   "RETURN_APPROVED",
@@ -2991,7 +2986,7 @@ const Orders = ({
   const lineStackFilterProps = {
     exchangeLinesOnly: exchangeOnly,
     returnLinesOnly: returnOnly,
-    standardLinesOnly: !exchangeOnly && !returnOnly,
+    standardLinesOnly: false,
   };
   const ap = useMemo(
     () => (suffix) =>
@@ -3011,6 +3006,7 @@ const Orders = ({
     totalPages: 1,
   });
   const [search, setSearch] = useState("");
+  const [searchExact, setSearchExact] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   /** By order only: "" | "mixed" | "uniform" */
   const [lineConsistencyFilter, setLineConsistencyFilter] = useState("");
@@ -3226,15 +3222,15 @@ const Orders = ({
   useEffect(() => {
     if (!exchangeOnly) return;
     setViewMode(VIEW_ORDER);
-    setStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
-    setItemStatusFilter((prev) => (prev === "" ? EXCHANGE_DEFAULT_LIST_STATUS : prev));
+    setStatusFilter("");
+    setItemStatusFilter("");
   }, [exchangeOnly]);
 
   useEffect(() => {
     if (!returnOnly) return;
     setViewMode(VIEW_ORDER);
-    setStatusFilter((prev) => (prev === "" ? RETURN_DEFAULT_LIST_STATUS : prev));
-    setItemStatusFilter((prev) => (prev === "" ? RETURN_DEFAULT_LIST_STATUS : prev));
+    setStatusFilter("");
+    setItemStatusFilter("");
   }, [returnOnly]);
 
   const resolveDocUrl = (res) => {
@@ -3986,12 +3982,7 @@ const Orders = ({
         page: pagination.page,
         limit: pagination.limit,
       });
-      const effectiveOrderStatus =
-        exchangeOnly && !statusFilter
-          ? EXCHANGE_DEFAULT_LIST_STATUS
-          : returnOnly && !statusFilter
-            ? RETURN_DEFAULT_LIST_STATUS
-            : statusFilter;
+      const effectiveOrderStatus = statusFilter;
       const res = await getOrders(
         pagination.page,
         pagination.limit,
@@ -4008,6 +3999,7 @@ const Orders = ({
         cityFilter.trim() || undefined,
         !!exchangeOnly,
         !!returnOnly,
+        searchExact,
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
@@ -4026,9 +4018,9 @@ const Orders = ({
           ? (Array.isArray(rawList)
               ? rawList.filter((row) => isReturnOrderEntry(row))
               : [])
-          : (Array.isArray(rawList)
-              ? rawList.filter((row) => isStandardOrderEntry(row))
-              : rawList);
+          : Array.isArray(rawList)
+            ? rawList
+            : [];
       dbgOrdersVerbose("getOrders:payload", payload);
       dbgOrders("getOrders:summary", {
         rowCount: Array.isArray(list) ? list.length : 0,
@@ -4053,7 +4045,7 @@ const Orders = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly]);
+  }, [pagination.page, pagination.limit, search, searchExact, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly]);
 
   useEffect(() => {
     if (viewMode === VIEW_ORDER && !selectedOrder) {
@@ -4066,12 +4058,7 @@ const Orders = ({
       setItemLoading(true);
       setItemError(null);
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
-      const effectiveItemStatus =
-        exchangeOnly && !itemStatusFilter
-          ? EXCHANGE_DEFAULT_LIST_STATUS
-          : returnOnly && !itemStatusFilter
-            ? RETURN_DEFAULT_LIST_STATUS
-            : itemStatusFilter;
+      const effectiveItemStatus = itemStatusFilter;
       const res = await getOrderItems(
         itemPagination.page,
         itemPagination.limit,
@@ -4087,6 +4074,7 @@ const Orders = ({
         !!exchangeOnly,
         !!returnOnly,
         shippingProviderFilter || undefined,
+        searchExact,
       );
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
@@ -4100,9 +4088,7 @@ const Orders = ({
         ? rawItems.filter((row) => isExchangeListRow(row))
         : returnOnly
           ? rawItems.filter((row) => isReturnListRow(row))
-          : rawItems.filter(
-              (row) => !isExchangeListRow(row) && !isReturnListRow(row),
-            );
+          : rawItems;
       setOrderItems(list);
       setItemPagination((prev) => ({
         ...prev,
@@ -4115,7 +4101,7 @@ const Orders = ({
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, itemStatusFilter, shippingProviderFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, searchExact, itemStatusFilter, shippingProviderFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -4165,6 +4151,7 @@ const Orders = ({
     try {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
+      setSidebarCounts(null);
       const res = await getAdminOrderSidebarCounts({
         view: viewMode === VIEW_ITEM ? "item" : "order",
       });
@@ -4229,6 +4216,7 @@ const Orders = ({
       const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
       const body = {
         search: searchVal,
+        searchExact: searchExact || undefined,
         itemStatus:
           viewMode === VIEW_ITEM ? itemStatusFilter || undefined : undefined,
         orderStatus:
@@ -4363,15 +4351,6 @@ const Orders = ({
       } else if (returnOnly && singlePayload?.items) {
         const filteredItems = singlePayload.items.filter(
           (it) => hasActiveReturnStatus(it) || getItemReturns(it).length > 0,
-        );
-        setSelectedOrder({ ...singlePayload, items: filteredItems });
-      } else if (!exchangeOnly && !returnOnly && singlePayload?.items) {
-        const filteredItems = singlePayload.items.filter(
-          (it) =>
-            !hasActiveExchangeStatus(it) &&
-            !hasActiveReturnStatus(it) &&
-            getItemExchanges(it).length === 0 &&
-            getItemReturns(it).length === 0,
         );
         setSelectedOrder({ ...singlePayload, items: filteredItems });
       } else {
@@ -5727,6 +5706,23 @@ const Orders = ({
 
   const isOrderAnalyticsView = viewMode === VIEW_ORDER;
 
+  const analyticsViewReady = useMemo(
+    () => isSidebarCountsViewReady(sidebarCounts, { viewMode }),
+    [sidebarCounts, viewMode],
+  );
+
+  const statusChangeOptions = useMemo(() => {
+    if (exchangeOnly) {
+      return statusOptions.filter((opt) => isExchangeStatus(opt.value));
+    }
+    if (returnOnly) {
+      return statusOptions.filter((opt) => isReturnStatus(opt.value));
+    }
+    return statusOptions.filter(
+      (opt) => !isExchangeStatus(opt.value) && !isReturnStatus(opt.value),
+    );
+  }, [exchangeOnly, returnOnly]);
+
   const filteredStatusOptions = useMemo(() => {
     const fromBackend = getStatusOptionsForSection(sidebarCounts, analyticsSection);
     if (fromBackend.length) {
@@ -5735,46 +5731,32 @@ const Orders = ({
         label: opt.label || formatStatusTokenForUi(opt.value),
       }));
     }
-    if (exchangeOnly) {
-      return statusOptions.filter(
-        (opt) =>
-          isExchangeStatus(opt.value) && opt.value !== EXCHANGE_DEFAULT_LIST_STATUS,
-      );
-    }
-    if (returnOnly) {
-      return statusOptions.filter(
-        (opt) =>
-          isReturnStatus(opt.value) && opt.value !== RETURN_DEFAULT_LIST_STATUS,
-      );
-    }
-    return statusOptions.filter(
-      (opt) => !isExchangeStatus(opt.value) && !isReturnStatus(opt.value),
-    );
-  }, [sidebarCounts, analyticsSection, exchangeOnly, returnOnly]);
+    return statusChangeOptions;
+  }, [sidebarCounts, analyticsSection, statusChangeOptions]);
 
-  const analyticsStatusCards = useMemo(
-    () =>
-      buildAdminAnalyticsCards(analyticsSection, sidebarCounts, {
-        isOrderView: isOrderAnalyticsView,
-      }),
-    [sidebarCounts, analyticsSection, isOrderAnalyticsView],
-  );
+  const analyticsStatusCards = useMemo(() => {
+    if (!analyticsViewReady) return [];
+    return buildAdminAnalyticsCards(analyticsSection, sidebarCounts, {
+      isOrderView: isOrderAnalyticsView,
+    });
+  }, [sidebarCounts, analyticsSection, isOrderAnalyticsView, analyticsViewReady]);
 
   const analyticsTotal = useMemo(() => {
+    if (!analyticsViewReady) return 0;
     const section = sidebarCounts?.[analyticsSection];
     if (!section) return 0;
     return sectionTotalFromPayload(section, { isOrderView: isOrderAnalyticsView });
-  }, [sidebarCounts, analyticsSection, isOrderAnalyticsView]);
+  }, [sidebarCounts, analyticsSection, isOrderAnalyticsView, analyticsViewReady]);
 
-  const analyticsProviderCards = useMemo(
-    () => buildAdminProviderAnalyticsCards(sidebarCounts),
-    [sidebarCounts],
-  );
+  const analyticsProviderCards = useMemo(() => {
+    if (!analyticsViewReady) return [];
+    return buildAdminProviderAnalyticsCards(sidebarCounts);
+  }, [sidebarCounts, analyticsViewReady]);
 
-  const staleAnalytics = useMemo(
-    () => getStaleAnalyticsFromPayload(sidebarCounts),
-    [sidebarCounts],
-  );
+  const staleAnalytics = useMemo(() => {
+    if (!analyticsViewReady) return null;
+    return getStaleAnalyticsFromPayload(sidebarCounts);
+  }, [sidebarCounts, analyticsViewReady]);
 
   const showOpsCarrierCards = !exchangeOnly && !returnOnly;
 
@@ -6953,34 +6935,59 @@ const Orders = ({
                 </h1>
               ) : null}
               <div
-                className={`relative shrink ${
+                className={`relative flex shrink items-center gap-1 ${
                   selectedOrder
-                    ? "min-w-[88px] max-w-[150px]"
-                    : "min-w-[100px] max-w-[180px] flex-1"
+                    ? "min-w-[88px] max-w-[200px]"
+                    : "min-w-[100px] max-w-[220px] flex-1"
                 }`}
               >
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
-                />
-                <input
-                  type="text"
-                  placeholder={
-                    viewMode === VIEW_ORDER
-                      ? "Search order ID, customer, product name…"
-                      : "Search order ID, product name, SKU…"
-                  }
-                  value={viewMode === VIEW_ORDER ? search : itemSearch}
-                  onChange={(e) => {
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder={
+                      searchExact
+                        ? viewMode === VIEW_ORDER
+                          ? "Exact order ID, name, or phone…"
+                          : "Exact order ID, name, or phone…"
+                        : viewMode === VIEW_ORDER
+                          ? "Search order ID, customer, product name…"
+                          : "Search order ID, product name, SKU…"
+                    }
+                    value={viewMode === VIEW_ORDER ? search : itemSearch}
+                    onChange={(e) => {
+                      if (viewMode === VIEW_ORDER) {
+                        setSearch(e.target.value);
+                        setPagination((p) => ({ ...p, page: 1 }));
+                      } else {
+                        setItemSearch(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }
+                    }}
+                    className={`${ui.inputCompact} w-full min-w-0 pl-8 py-1.5 text-[11px]`}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchExact((prev) => !prev);
                     if (viewMode === VIEW_ORDER) {
-                      setSearch(e.target.value);
                       setPagination((p) => ({ ...p, page: 1 }));
                     } else {
-                      setItemSearch(e.target.value);
                       setItemPagination((p) => ({ ...p, page: 1 }));
                     }
                   }}
-                  className={`${ui.inputCompact} w-full min-w-0 pl-8 py-1.5 text-[11px]`}
-                />
+                  className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition ${
+                    searchExact
+                      ? "border-brand-500 bg-brand-50 text-brand-800"
+                      : "border-border bg-white text-stone-600 hover:border-brand-300 hover:bg-brand-50/40"
+                  }`}
+                  title="Match order ID, customer name, or phone exactly (not partial / product search)"
+                >
+                  Exact
+                </button>
               </div>
 
               {selectedOrder ? (
@@ -7068,7 +7075,7 @@ const Orders = ({
                         aria-label="Status for all items"
                       >
                         <option value="">Status…</option>
-                        {filteredStatusOptions.map((opt) => (
+                        {statusChangeOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
@@ -7327,9 +7334,7 @@ const Orders = ({
             {analyticsError ? (
               <p className="mb-2 text-[11px] text-danger">{analyticsError}</p>
             ) : null}
-            {analyticsLoading &&
-            !analyticsStatusCards.length &&
-            !(showOpsCarrierCards && (staleAnalytics || analyticsProviderCards.length)) ? (
+            {analyticsLoading || !analyticsViewReady ? (
               <p className="py-4 text-center text-[11px] text-stone-500">Loading counts…</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -7521,13 +7526,7 @@ const Orders = ({
                           setDateFrom("");
                           setDateTo("");
                           setCityFilter("");
-                          setStatusFilter(
-                            exchangeOnly
-                              ? EXCHANGE_DEFAULT_LIST_STATUS
-                              : returnOnly
-                                ? RETURN_DEFAULT_LIST_STATUS
-                                : "",
-                          );
+                          setStatusFilter("");
                           setLineConsistencyFilter("");
                           setPaymentFilter("");
                           setSortBy("createdAt");
@@ -7600,15 +7599,9 @@ const Orders = ({
                       className={ui.inputCompact}
                     >
                       {exchangeOnly ? (
-                        <>
-                          <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
-                          <option value="EXCHANGE">All exchange statuses</option>
-                        </>
+                        <option value="">All exchange statuses</option>
                       ) : returnOnly ? (
-                        <>
-                          <option value={RETURN_DEFAULT_LIST_STATUS}>Return requested</option>
-                          <option value="RETURN">All return statuses</option>
-                        </>
+                        <option value="">All return statuses</option>
                       ) : (
                         <option value="">All statuses</option>
                       )}
@@ -7900,13 +7893,7 @@ const Orders = ({
                           setDateTo("");
                           setCityFilter("");
                           setShippingProviderFilter("");
-                          setItemStatusFilter(
-                            exchangeOnly
-                              ? EXCHANGE_DEFAULT_LIST_STATUS
-                              : returnOnly
-                                ? RETURN_DEFAULT_LIST_STATUS
-                                : "",
-                          );
+                          setItemStatusFilter("");
                           setPaymentFilter("");
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
@@ -7974,15 +7961,9 @@ const Orders = ({
                       className={ui.inputCompact}
                     >
                       {exchangeOnly ? (
-                        <>
-                          <option value={EXCHANGE_DEFAULT_LIST_STATUS}>Exchange requested</option>
-                          <option value="EXCHANGE">All exchange statuses</option>
-                        </>
+                        <option value="">All exchange statuses</option>
                       ) : returnOnly ? (
-                        <>
-                          <option value={RETURN_DEFAULT_LIST_STATUS}>Return requested</option>
-                          <option value="RETURN">All return statuses</option>
-                        </>
+                        <option value="">All return statuses</option>
                       ) : (
                         <option value="">All statuses</option>
                       )}
@@ -9182,7 +9163,7 @@ const Orders = ({
                         disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
                         className={`${ui.inputCompact} min-w-[12rem] py-1.5`}
                       >
-                        {filteredStatusOptions.map((opt) => (
+                        {statusChangeOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
@@ -9756,7 +9737,7 @@ const Orders = ({
                               aria-label="Update selected items to status"
                             >
                               <option value="">Update to…</option>
-                              {filteredStatusOptions.map((opt) => (
+                              {statusChangeOptions.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                   {opt.label}
                                 </option>
@@ -9924,7 +9905,7 @@ const Orders = ({
                                       isUpdating ? "cursor-wait opacity-60" : ""
                                     }`}
                                   >
-                                    {filteredStatusOptions.map((opt) => (
+                                    {statusChangeOptions.map((opt) => (
                                       <option key={opt.value} value={opt.value}>
                                         {opt.label}
                                       </option>

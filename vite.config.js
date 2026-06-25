@@ -67,10 +67,30 @@ function resolveBuildAppEnv(env, mode) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiOrigin = resolveOriginFromUrl(env.VITE_API_BASE_URL || "");
+  const apiOrigin = resolveOriginFromUrl(env.VITE_API_BASE_URL || env.VITE_API_URL || "");
   const cdnOrigin = resolveOriginFromUrl(env.VITE_CDN_BASE_URL || "");
   const exposeDevServerOnLan = env.VITE_DEV_LAN === "true";
   const isProdApp = resolveBuildAppEnv(env, mode) === "prod";
+
+  const devProxy = apiOrigin
+    ? {
+        "/api": {
+          target: apiOrigin,
+          changeOrigin: true,
+        },
+        "/socket.io": {
+          target: apiOrigin,
+          changeOrigin: true,
+          ws: true,
+        },
+      }
+    : undefined;
+
+  if (mode === "development" && !apiOrigin) {
+    console.warn(
+      "[Khushadminpanel] VITE_API_BASE_URL is not set — dev /api proxy disabled. Add it to .env.",
+    );
+  }
 
   return {
     plugins: [
@@ -85,6 +105,7 @@ export default defineConfig(({ mode }) => {
       host: exposeDevServerOnLan ? true : "localhost",
       port: 5173,
       strictPort: true,
+      ...(devProxy ? { proxy: devProxy } : {}),
     },
     preview: {
       host: exposeDevServerOnLan ? true : "localhost",
