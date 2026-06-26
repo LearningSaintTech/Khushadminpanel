@@ -42,6 +42,9 @@ export function toStatusCountMap(counts = []) {
 }
 
 export function sectionTotalFromPayload(section, { isOrderView = false } = {}) {
+  if (section?.databaseTotal != null && Number(section.databaseTotal) > 0) {
+    return Number(section.databaseTotal);
+  }
   const lineTotal = section?.total ?? 0;
   if (isOrderView) return lineTotal;
   const documentTotal = section?.documentTotal ?? 0;
