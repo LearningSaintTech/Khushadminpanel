@@ -65,6 +65,13 @@ import {
   orderHasBindOfferDiscount,
   resolveOrderBindOfferDiscount,
 } from "../../utils/bindOffer.util";
+import {
+  getLineStatusDisplay,
+  getLineMilestoneForBadge,
+  isExceptionScan,
+  formatStatusTokenForUi as formatLineStatusForUi,
+  renderLineJourneySummary,
+} from "./orderStatusDisplay.jsx";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -798,16 +805,36 @@ const getDisplayOrderStatus = (order) => {
   const items = order?.items;
   if (!Array.isArray(items) || items.length === 0) return base;
   if (items.length === 1) {
-    const line = normalizeItemStatusToken(items[0]?.status);
-    return line || getDisplayItemStatus(items[0]) || base;
+    const line = resolveAdminLineStatus(items[0], order);
+    return line || base;
   }
   const lineStatuses = items
-    .map((it) => normalizeItemStatusToken(it?.status))
+    .map((it) => resolveAdminLineStatus(it, order))
     .filter(Boolean);
   if (lineStatuses.length > 0 && new Set(lineStatuses).size === 1) {
     return lineStatuses[0];
   }
   return base;
+};
+
+const isPrepaidPaymentFailed = (order) => {
+  const mode = String(order?.payment?.mode || "").toUpperCase();
+  const status = String(order?.payment?.status || "").toUpperCase();
+  if (mode === "COD") return false;
+  return status === "FAILED";
+};
+
+/** When prepaid payment failed, unfulfilled lines should not display as active CONFIRMED. */
+const resolveAdminLineStatus = (item, order = null) => {
+  const stored = normalizeItemStatusToken(item?.status || "");
+  if (
+    order &&
+    isPrepaidPaymentFailed(order) &&
+    ["CREATED", "CONFIRMED", "PROCESSING"].includes(stored)
+  ) {
+    return "CANCELLED";
+  }
+  return getDisplayItemStatus(item) || stored;
 };
 
 /** Rebuild a line-like object from an admin “order item” list row for display helpers. */
@@ -817,16 +844,24 @@ const lineItemFromOrderItemRow = (row) => {
   return {
     ...nested,
     status: row.itemStatus ?? nested.status ?? "",
+    activeFlow: nested.activeFlow ?? row.activeFlow,
+    workflowHistory: nested.workflowHistory ?? row.workflowHistory,
+    shipping: nested.shipping ?? row.shipping,
     statusHistory: nested.statusHistory,
+    cancellation: nested.cancellation ?? row.cancellation ?? null,
     exchanges: getItemExchanges(nested),
+    returns: Array.isArray(nested.returns) ? nested.returns : [],
+    shadowfax: nested.shadowfax ?? row.shadowfax,
     shiprocket: nested.shiprocket ?? row.shiprocket,
     courier: nested.courier ?? row.courier,
     shippingProvider: nested.shippingProvider ?? row.shippingProvider,
     trackingId: nested.trackingId ?? row.trackingId,
     delhivery: nested.delhivery ?? row.delhivery,
+    selfShipping: nested.selfShipping ?? row.selfShipping,
     delivery:
       nested.delivery ||
       (row.deliveryType ? { type: row.deliveryType } : undefined),
+    payment: row.payment ?? nested.payment ?? null,
   };
 };
 
@@ -1643,6 +1678,148 @@ const getExchangeReason = (exchange) => {
   return String(reason || "").trim();
 };
 
+const formatReasonToken = (raw) =>
+  String(raw || "")
+    .trim()
+    .replace(/_/g, " ");
+
+const getCancellationReasonFromItem = (item) => {
+  if (!item || typeof item !== "object") return null;
+  const cancel = item.cancellation;
+  if (cancel?.reason) {
+    return {
+      label: cancel.reason,
+      source: cancel.source || null,
+    };
+  }
+  const history = Array.isArray(item.statusHistory) ? item.statusHistory : [];
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i];
+    if (String(entry.status || "").toUpperCase() !== "CANCELLED") continue;
+    const reasons = entry.metadata?.cancellationReasons;
+    if (Array.isArray(reasons) && reasons.length > 0) {
+      return { label: reasons.join(", "), source: entry.changedByType || "admin" };
+    }
+    const notes = String(entry.notes || "").trim();
+    const userMatch = notes.match(/Cancelled by user\.\s*Reason:\s*(.+)/i);
+    if (userMatch?.[1]) return { label: userMatch[1].trim(), source: "user" };
+    const adminMatch = notes.match(/Reasons:\s*([^.]+)/i);
+    if (adminMatch?.[1]) return { label: adminMatch[1].trim(), source: entry.changedByType || "admin" };
+    if (notes) return { label: notes, source: entry.changedByType || "system" };
+  }
+  return null;
+};
+
+const getReturnReasonDisplay = (ret) => {
+  if (!ret || typeof ret !== "object") return null;
+  const requestParts = [];
+  if (ret.reason) requestParts.push(formatReasonToken(ret.reason));
+  if (ret.description?.trim()) requestParts.push(ret.description.trim());
+  const rejection =
+    ret.qualityCheck?.rejectionReason?.trim() ||
+    (String(ret.status || "").toLowerCase().includes("reject")
+      ? ret.adminRemark?.trim()
+      : "");
+  return {
+    request: requestParts.join(" · ") || null,
+    rejection: rejection || null,
+  };
+};
+
+const getExchangeReasonDisplay = (exchange, item) => {
+  const reason = getExchangeReason(exchange);
+  const adminRemark = String(exchange?.adminRemark || "").trim();
+  const isRejected =
+    String(exchange?.status || "").toLowerCase().includes("reject") ||
+    String(item?.status || "").toUpperCase() === "EXCHANGE_REJECTED";
+  return {
+    request: reason || null,
+    rejection: isRejected && adminRemark ? adminRemark : null,
+    adminRemark: !isRejected && adminRemark ? adminRemark : null,
+  };
+};
+
+function LineReasonSummary({ item, compact = true }) {
+  const cancel = getCancellationReasonFromItem(item);
+  const returnInfo = getReturnReasonDisplay(getLatestReturn(item));
+  const exchangeInfo = getExchangeReasonDisplay(getLatestExchange(item), item);
+
+  const rows = [];
+  if (cancel?.label) {
+    rows.push({
+      key: "cancel",
+      kind: "Cancel",
+      text: cancel.label,
+      sub: cancel.source ? `By ${cancel.source}` : null,
+      tone: "red",
+    });
+  }
+  if (returnInfo?.request) {
+    rows.push({
+      key: "return-reason",
+      kind: "Return",
+      text: returnInfo.request,
+      tone: "amber",
+    });
+  }
+  if (returnInfo?.rejection) {
+    rows.push({
+      key: "return-reject",
+      kind: "Return rejected",
+      text: returnInfo.rejection,
+      tone: "red",
+    });
+  }
+  if (exchangeInfo?.request) {
+    rows.push({
+      key: "exchange-reason",
+      kind: "Exchange",
+      text: exchangeInfo.request,
+      tone: "brand",
+    });
+  }
+  if (exchangeInfo?.rejection) {
+    rows.push({
+      key: "exchange-reject",
+      kind: "Exchange rejected",
+      text: exchangeInfo.rejection,
+      tone: "red",
+    });
+  } else if (exchangeInfo?.adminRemark) {
+    rows.push({
+      key: "exchange-note",
+      kind: "Exchange note",
+      text: exchangeInfo.adminRemark,
+      tone: "stone",
+    });
+  }
+
+  if (!rows.length) return null;
+
+  const toneClass = {
+    red: "text-red-700",
+    amber: "text-amber-800",
+    brand: "text-brand-800",
+    stone: "text-stone-600",
+  };
+
+  return (
+    <div className={`${compact ? "mt-0.5" : "mt-1"} space-y-0.5`}>
+      {rows.map(({ key, kind, text, sub, tone }) => (
+        <p
+          key={key}
+          className={`${compact ? "text-[9px] leading-tight" : "text-[10px] leading-snug"} ${toneClass[tone] || "text-stone-600"}`}
+          title={sub ? `${kind}: ${text} (${sub})` : `${kind}: ${text}`}
+        >
+          <span className="font-semibold uppercase tracking-wide">{kind}:</span>{" "}
+          <span className={compact ? "line-clamp-2" : ""}>{text}</span>
+          {sub ? <span className="text-stone-400"> · {sub}</span> : null}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 const formatExchangeDocumentStatusLabel = (status) => {
   const mapped = mapExchangeDocumentStatusToItemStatus(status);
   if (mapped) return formatStatusTokenForUi(mapped);
@@ -1657,6 +1834,7 @@ const EXCHANGE_MANUAL_PICKUP_METHODS = new Set([
 ]);
 
 const getExchangeReturnPickupAwb = (exchange, item = null) =>
+  item?.shipping?.reversePickup?.awb ||
   exchange?.returnPickup?.manualTrackingId ||
   exchange?.delhivery?.returnPickup?.waybill ||
   exchange?.shadowfax?.returnPickup?.awb ||
@@ -1679,7 +1857,7 @@ const formatExchangePickupMethodLabel = (method) => {
 const canAssignExchangePickup = (item, exchange) => {
   const method = String(exchange?.returnPickupMethod || "").toUpperCase();
   if (!EXCHANGE_MANUAL_PICKUP_METHODS.has(method)) return false;
-  const st = String(getDisplayItemStatus(item) || "").toUpperCase();
+  const st = String(getLineMilestoneForBadge(item) || "").toUpperCase();
   return [
     "EXCHANGE_PICKUP_SCHEDULED",
     "EXCHANGE_APPROVED",
@@ -1735,7 +1913,7 @@ function ExchangeDetailsPanel({
     .filter(Boolean)
     .join("/");
   const thumbUrl = item?.variant?.imageUrl || orderedVariant?.imageUrl || null;
-  const lineStatus = formatStatusTokenForUi(getDisplayItemStatus(item));
+  const lineStatus = formatLineStatusForUi(getLineMilestoneForBadge(item));
   const exchangeId = getExchangeRecordId(latestExchange);
   const docStatus = formatExchangeDocumentStatusLabel(latestExchange?.status);
 
@@ -1754,7 +1932,22 @@ function ExchangeDetailsPanel({
         </p>
         {exchangeReason ? (
           <p className="line-clamp-1 text-stone-500" title={exchangeReason}>
-            {exchangeReason}
+            <span className="font-semibold text-stone-600">Reason:</span> {exchangeReason}
+          </p>
+        ) : null}
+        {latestExchange?.adminRemark ? (
+          <p
+            className="line-clamp-1 text-red-700"
+            title={latestExchange.adminRemark}
+          >
+            <span className="font-semibold">
+              {String(latestExchange.status || "")
+                .toLowerCase()
+                .includes("reject")
+                ? "Rejection:"
+                : "Admin note:"}
+            </span>{" "}
+            {latestExchange.adminRemark}
           </p>
         ) : null}
         {exchangeId || docStatus ? (
@@ -1762,6 +1955,22 @@ function ExchangeDetailsPanel({
             {exchangeId ? <span title="Exchange ID">#{exchangeId}</span> : null}
             {exchangeId && docStatus ? " · " : null}
             {docStatus ? <span>{docStatus}</span> : null}
+          </p>
+        ) : null}
+        {latestExchange?.replacementForward?.awb ||
+        latestExchange?.replacementOrderId ? (
+          <p className="truncate text-stone-500" title="Replacement forward leg">
+            Fwd repl
+            {latestExchange.replacementForward?.awb
+              ? ` · ${latestExchange.replacementForward.awb}`
+              : latestExchange.replacementOrderId
+                ? ` · #${latestExchange.replacementOrderId}`
+                : ""}
+          </p>
+        ) : null}
+        {getExchangeReturnPickupAwb(latestExchange, item) ? (
+          <p className="truncate text-stone-500" title={getExchangeReturnPickupAwb(latestExchange, item)}>
+            RVP {getExchangeReturnPickupAwb(latestExchange, item)}
           </p>
         ) : null}
         {exchangeImageUrls.length > 0 ? (
@@ -1822,7 +2031,22 @@ function ExchangeDetailsPanel({
           </p>
           {exchangeReason ? (
             <p className="line-clamp-1 text-[9px] text-stone-500" title={exchangeReason}>
-              {exchangeReason}
+              <span className="font-semibold text-stone-600">Reason:</span> {exchangeReason}
+            </p>
+          ) : null}
+          {latestExchange?.adminRemark ? (
+            <p
+              className="line-clamp-2 text-[9px] text-red-700"
+              title={latestExchange.adminRemark}
+            >
+              <span className="font-semibold">
+                {String(latestExchange.status || "")
+                  .toLowerCase()
+                  .includes("reject")
+                  ? "Rejection:"
+                  : "Admin note:"}
+              </span>{" "}
+              {latestExchange.adminRemark}
             </p>
           ) : null}
           {exchangeId || docStatus ? (
@@ -1832,16 +2056,40 @@ function ExchangeDetailsPanel({
               {docStatus ? <span>Request: {docStatus}</span> : null}
             </p>
           ) : null}
-          {latestExchange?.replacementOrderId ? (
+          {latestExchange?.replacementForward?.orderId ||
+          latestExchange?.replacementOrderId ? (
             <p className="truncate text-[9px] text-stone-600">
-              Replacement:{" "}
+              Forward replacement:{" "}
               <button
                 type="button"
-                onClick={() => onOpenOrder?.(latestExchange.replacementOrderId)}
+                onClick={() =>
+                  onOpenOrder?.(
+                    latestExchange.replacementForward?.orderId ||
+                      latestExchange.replacementOrderId,
+                  )
+                }
                 className="font-medium text-brand-700 hover:underline"
               >
-                #{latestExchange.replacementOrderId}
+                #
+                {latestExchange.replacementForward?.orderId ||
+                  latestExchange.replacementOrderId}
               </button>
+              {latestExchange.replacementForward?.awb ? (
+                <>
+                  {" "}
+                  · AWB{" "}
+                  <span className="font-mono">
+                    {latestExchange.replacementForward.awb}
+                  </span>
+                </>
+              ) : null}
+              {latestExchange.replacementForward?.itemStatus ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  {formatStatusTokenForUi(latestExchange.replacementForward.itemStatus)}
+                </>
+              ) : null}
             </p>
           ) : null}
           {latestExchange?.returnPickupMethod ? (
@@ -1997,6 +2245,7 @@ const formatReturnDocumentStatusLabel = (status) => {
 };
 
 const getReturnPickupAwb = (ret, item) =>
+  item?.shipping?.reversePickup?.awb ||
   ret?.returnPickup?.manualTrackingId ||
   ret?.delhivery?.returnPickup?.waybill ||
   ret?.shadowfax?.returnPickup?.awb ||
@@ -2059,8 +2308,9 @@ function ReturnDetailsPanel({
   if (!returnHasVisibleDetails(latestReturn, item)) return null;
 
   const reason = latestReturn?.reason
-    ? String(latestReturn.reason).replace(/_/g, " ")
+    ? formatReasonToken(latestReturn.reason)
     : "";
+  const returnReasonInfo = getReturnReasonDisplay(latestReturn);
   const docStatus =
     formatReturnDocumentStatusLabel(latestReturn?.status) ||
     formatStatusTokenForUi(item?.status || "");
@@ -2089,7 +2339,7 @@ function ReturnDetailsPanel({
       <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug text-stone-600">
         {reason ? (
           <p className="line-clamp-1 text-stone-600" title={reason}>
-            {reason}
+            <span className="font-semibold text-stone-700">Reason:</span> {reason}
           </p>
         ) : docStatus ? (
           <p className="line-clamp-1 text-stone-500">{docStatus}</p>
@@ -2129,10 +2379,20 @@ function ReturnDetailsPanel({
           ID {returnId}
         </p>
       ) : null}
-      {reason ? <p className="text-stone-700">Reason: {reason}</p> : null}
+      {reason ? (
+        <p className="text-stone-700">
+          <span className="font-semibold">Customer reason:</span> {reason}
+        </p>
+      ) : null}
       {latestReturn?.description ? (
         <p className="line-clamp-2 text-stone-600" title={latestReturn.description}>
+          <span className="font-semibold text-stone-700">Description:</span>{" "}
           {latestReturn.description}
+        </p>
+      ) : null}
+      {returnReasonInfo?.rejection ? (
+        <p className="text-red-700">
+          <span className="font-semibold">Rejection:</span> {returnReasonInfo.rejection}
         </p>
       ) : null}
       {latestReturn?.unboxingVideo?.url ? (
@@ -2164,8 +2424,10 @@ function ReturnDetailsPanel({
           {latestReturn?.refund?.status ? ` (${latestReturn.refund.status})` : ""}
         </p>
       ) : null}
-      {latestReturn?.adminRemark ? (
-        <p className="text-stone-500">Admin: {latestReturn.adminRemark}</p>
+      {latestReturn?.adminRemark && !returnReasonInfo?.rejection ? (
+        <p className="text-stone-500">
+          <span className="font-semibold">Admin note:</span> {latestReturn.adminRemark}
+        </p>
       ) : null}
       {!latestReturn && hasActiveReturnStatus(item) ? (
         <p className="text-[9px] text-amber-800">
@@ -2215,6 +2477,8 @@ const isNormalDeliveryLine = (item, order = null) => {
 };
 
 const isLineManifestedOnCarrier = (item, order = null) => {
+  const st = String(item?.status || "").toUpperCase();
+  if (PRE_MANIFEST_LINE_STATUSES.has(st)) return false;
   if (item?.shiprocket?.orderId || item?.delhivery?.waybill || item?.shadowfax?.awb) return true;
   const gid = String(item?.shipmentGroupId || "");
   if (!gid || !Array.isArray(order?.shipments)) return false;
@@ -2224,6 +2488,28 @@ const isLineManifestedOnCarrier = (item, order = null) => {
       shipment?.delhivery?.waybill ||
       shipment?.shadowfax?.awb,
   );
+};
+
+/** Mirror backend _itemCarrierManifestUnset — for optimistic CONFIRMED UI state. */
+const stripItemCarrierManifestFields = (item = {}) => {
+  const next = { ...item };
+  for (const key of [
+    "shiprocket",
+    "delhivery",
+    "shadowfax",
+    "selfShipping",
+    "trackingId",
+    "courier",
+    "shippingProvider",
+    "shippingManifestError",
+    "shippingManifestFailedAt",
+    "shippedAt",
+    "deliveredAt",
+    "labelDownloadedAt",
+  ]) {
+    delete next[key];
+  }
+  return next;
 };
 
 const isSelfShippingLine = (item) =>
@@ -2377,6 +2663,10 @@ const extractManifestFailures = (apiRes, extras = {}) => {
 };
 
 const getItemShippingProvider = (item) => {
+  const unified = String(item?.shipping?.provider || "").toUpperCase();
+  if (unified === "DELHIVERY" || unified === "SHIPROCKET" || unified === "SHADOWFAX" || unified === "SELF_SHIPPING") {
+    return unified;
+  }
   const p = String(item?.shippingProvider || "").toUpperCase();
   if (p === "DELHIVERY" || p === "SHIPROCKET" || p === "SHADOWFAX" || p === "SELF_SHIPPING") return p;
   if (item?.delhivery?.waybill) return "DELHIVERY";
@@ -5358,17 +5648,20 @@ const Orders = ({
       if (!prev) return prev;
       return {
         ...prev,
-        items: prev.items.map((it) =>
-          String(it.itemId || it._id) === stringItemId
-            ? {
-                ...it,
-                status: newStatus,
-                ...(shippingProvider && newStatus === "PROCESSING"
-                  ? { shippingProvider }
-                  : {}),
-              }
-            : it,
-        ),
+        items: prev.items.map((it) => {
+          if (String(it.itemId || it._id) !== stringItemId) return it;
+          let patched = {
+            ...it,
+            status: newStatus,
+            ...(shippingProvider && newStatus === "PROCESSING"
+              ? { shippingProvider }
+              : {}),
+          };
+          if (String(newStatus).toUpperCase() === "CONFIRMED") {
+            patched = stripItemCarrierManifestFields(patched);
+          }
+          return patched;
+        }),
       };
     });
     try {
@@ -5630,40 +5923,95 @@ const Orders = ({
     );
   };
 
-  /** Single resolved status badge — stored line status first; courier hint in tooltip */
-  const renderItemStatusBreakdown = (item, { tableRow = false } = {}) => {
-    const apiStatus = normalizeItemStatusToken(item?.status);
-    const effective = apiStatus || getDisplayItemStatus(item);
-    const provider = getItemShippingProvider(item);
-    const sr = provider === "SHIPROCKET" ? getLineShiprocket(item) : null;
-    const dl = provider === "DELHIVERY" ? getNormalDeliveryDelhivery(item) : null;
-    const titleParts = [formatStatusTokenForUi(effective)];
-    const enriched = getDisplayItemStatus(item);
-    if (apiStatus && enriched && apiStatus !== enriched) {
-      titleParts.push(`Courier sync: ${formatStatusTokenForUi(enriched)}`);
+  /** Milestone badge + optional carrier scan subtitle (v2 status model). */
+  const renderItemStatusBreakdown = (item, { tableRow = false, order = null } = {}) => {
+    const resolvedOrder = order || selectedOrder;
+    const display = getLineStatusDisplay(item);
+    const milestone =
+      resolveAdminLineStatus(item, resolvedOrder) ||
+      getLineMilestoneForBadge(item) ||
+      display?.milestone ||
+      "";
+    const titleParts = [display?.milestoneLabel || formatStatusTokenForUi(milestone)];
+    if (display?.activeFlow && display.activeFlow !== "FORWARD") {
+      titleParts.push(`Flow: ${display.activeFlow}`);
     }
-    if (provider === "SELF_SHIPPING") titleParts.push("Self shipping");
-    if (sr?.courier) titleParts.push(sr.courier);
-    if (sr?.status) titleParts.push(`Shiprocket: ${sr.status}`);
-    if (dl?.status) titleParts.push(`Delhivery: ${dl.status}`);
+    if (display?.providerLabel) titleParts.push(display.providerLabel);
+    if (display?.reverseAwb && display.activeFlow !== "FORWARD") {
+      titleParts.push(`RVP ${display.reverseAwb}`);
+    } else if (display?.awb) {
+      titleParts.push(`AWB ${display.awb}`);
+    }
+    if (display?.forwardAwb && display.activeFlow !== "FORWARD") {
+      titleParts.push(`Fwd ${display.forwardAwb}`);
+    }
+    if (display?.lastScanLabel) {
+      titleParts.push(
+        display.scanKind === "EXCEPTION" || display.scanKind === "TERMINAL"
+          ? `⚠ ${display.lastScanLabel}`
+          : display.lastScanLabel,
+      );
+    }
+    if (display?.selfShippingCarrier) {
+      titleParts.push(display.selfShippingCarrier);
+    }
+
+    const scanSubtitle =
+      display?.lastScanLabel &&
+      display.lastScanLabel !== display?.milestoneLabel &&
+      display.scanKind !== "MILESTONE"
+        ? display.lastScanLabel
+        : null;
+    const showScanWarning = isExceptionScan(item);
 
     return (
       <div
         className={`min-w-0 ${tableRow ? "max-w-[9.5rem]" : "max-w-[12rem]"}`}
         title={titleParts.join(" · ")}
       >
-        {getStatusBadge(effective)}
-        {item?.shippingManifestError ? (
+        {getStatusBadge(milestone)}
+        {item?.shippingManifestError || getLineStatusDisplay(item)?.manifestError ? (
           <p
             className="mt-0.5 truncate text-[9px] leading-tight text-red-600"
-            title={item.shippingManifestError}
+            title={item.shippingManifestError || getLineStatusDisplay(item)?.manifestError}
           >
-            Manifest: {item.shippingManifestError}
+            Manifest: {item.shippingManifestError || getLineStatusDisplay(item)?.manifestError}
           </p>
         ) : null}
-        {sr?.courier ? (
+        {display?.reverseAwb && display.activeFlow !== "FORWARD" ? (
+          <p
+            className="mt-0.5 truncate text-[9px] leading-tight text-stone-600"
+            title={display.reverseAwb}
+          >
+            RVP {display.reverseAwb}
+          </p>
+        ) : null}
+        {scanSubtitle ? (
+          <p
+            className={`mt-0.5 truncate text-[9px] leading-tight ${
+              showScanWarning ? "text-orange-600" : "text-stone-500"
+            }`}
+            title={scanSubtitle}
+          >
+            {showScanWarning ? "⚠ " : ""}
+            {scanSubtitle}
+          </p>
+        ) : display?.providerLabel && display.provider !== "SELF_SHIPPING" ? (
           <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">
-            {sr.courier}
+            {display.providerLabel}
+          </p>
+        ) : display?.selfShippingCarrier ? (
+          <p className="mt-0.5 truncate text-[9px] leading-tight text-stone-500">
+            {display.selfShippingCarrier}
+          </p>
+        ) : null}
+        <LineReasonSummary item={item} compact={tableRow} />
+        {resolvedOrder && isPrepaidPaymentFailed(resolvedOrder) ? (
+          <p
+            className="mt-0.5 truncate text-[9px] font-semibold leading-tight text-red-700"
+            title="Prepaid payment failed — line should be cancelled"
+          >
+            Payment failed
           </p>
         ) : null}
       </div>
@@ -6017,23 +6365,18 @@ const Orders = ({
         if (items.length > 1) {
           return (
             <ListLineStack order={order} className="flex flex-col gap-2 divide-y divide-gray-100">
-              {(item) =>
-                getStatusBadge(
-                  normalizeItemStatusToken(item?.status) ||
-                    getDisplayItemStatus(item) ||
-                    item?.status,
-                )
-              }
+              {(item) => renderItemStatusBreakdown(item, { tableRow: true })}
             </ListLineStack>
           );
         }
+        const singleLine = items[0];
         return (
           <div className="min-w-0" title="Order status">
-            {getStatusBadge(
-              normalizeItemStatusToken(items[0]?.status) ||
-                getDisplayOrderStatus(order) ||
-                orderLevelStatus,
-            )}
+            {singleLine
+              ? renderItemStatusBreakdown(singleLine, { tableRow: true })
+              : getStatusBadge(
+                  normalizeItemStatusToken(orderLevelStatus) || orderLevelStatus,
+                )}
           </div>
         );
       }
@@ -6335,6 +6678,13 @@ const Orders = ({
       case "status":
         return renderItemStatusBreakdown(
           lineItemFromOrderItemRow(row) || { status: row.itemStatus },
+          {
+            tableRow: true,
+            order: {
+              payment: row.payment,
+              status: row.orderStatus,
+            },
+          },
         );
       case "delivery":
         return (
@@ -8876,6 +9226,21 @@ const Orders = ({
                           onBookReversePickup={handleBookReturnReversePickup}
                           bookPickupLoading={returnBookPickupLoading}
                         />
+                        {(() => {
+                          const cancel = getCancellationReasonFromItem(focusedItem);
+                          if (!cancel?.label) return null;
+                          return (
+                            <p className="mt-2 text-xs text-red-700">
+                              <span className="font-semibold uppercase tracking-wide">
+                                Cancel reason:
+                              </span>{" "}
+                              {cancel.label}
+                              {cancel.source ? (
+                                <span className="text-stone-500"> · By {cancel.source}</span>
+                              ) : null}
+                            </p>
+                          );
+                        })()}
                         <h3 className="mt-1 text-sm font-semibold text-stone-900">
                           {getLineProductDisplayName(focusedItem) ||
                             focusedItem.sku ||
@@ -8923,6 +9288,7 @@ const Orders = ({
                         Status
                       </p>
                       {renderItemStatusBreakdown(focusedItem)}
+                      <div className="mt-2">{renderLineJourneySummary(focusedItem, { compact: true })}</div>
                     </div>
                   </div>
                   {(() => {
@@ -9253,9 +9619,7 @@ const Orders = ({
                     {getStatusBadge(
                       normalizeItemStatusToken(
                         selectedOrder?.status || selectedOrder?.orderStatus,
-                      ) ||
-                        getDisplayOrderStatus(selectedOrder) ||
-                        "",
+                      ) || "",
                     )}
                   </div>
                 </div>
@@ -9693,6 +10057,51 @@ const Orders = ({
                         </div>
                       );
                     })()}
+                    {(() => {
+                      const cancelledItems = (selectedOrder?.items || []).filter((it) => {
+                        if (String(it?.status || "").toUpperCase() !== "CANCELLED") return false;
+                        return Boolean(getCancellationReasonFromItem(it)?.label);
+                      });
+                      if (!cancelledItems.length) return null;
+                      return (
+                        <div className="mb-2 overflow-hidden rounded-xl border border-red-200/80 bg-white shadow-sm">
+                          <div className="flex items-center gap-1.5 border-b border-red-100 bg-red-50/60 px-2.5 py-1">
+                            <XCircle
+                              className="h-3 w-3 shrink-0 text-red-700"
+                              aria-hidden
+                            />
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-red-900">
+                              Cancellations ({cancelledItems.length})
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1 p-1.5">
+                            {cancelledItems.map((item) => {
+                              const cancel = getCancellationReasonFromItem(item);
+                              const label =
+                                getLineProductDisplayName(item) ||
+                                item.sku ||
+                                String(item.itemId || item._id || "—");
+                              return (
+                                <div
+                                  key={String(item.itemId || item._id)}
+                                  className="rounded-lg border border-red-100 bg-red-50/30 px-2 py-1.5 text-[10px] leading-snug"
+                                >
+                                  <p className="truncate font-medium text-stone-900" title={label}>
+                                    {label}
+                                  </p>
+                                  <p className="text-red-800">
+                                    <span className="font-semibold">Reason:</span> {cancel?.label}
+                                    {cancel?.source ? (
+                                      <span className="text-stone-500"> · By {cancel.source}</span>
+                                    ) : null}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="space-y-2">
                       <div className={ui.detailItemsToolbar}>
                         <ShoppingBag
@@ -9864,6 +10273,7 @@ const Orders = ({
                               ))}
                               <td className="min-w-0 px-1.5 py-1.5 align-middle">
                                 {renderItemStatusBreakdown(item, { tableRow: true })}
+                                {renderLineJourneySummary(item, { compact: true })}
                                 <ReturnDetailsPanel
                                   item={item}
                                   embedded
@@ -9871,6 +10281,14 @@ const Orders = ({
                                   approveReturnLoading={returnApproveLoading}
                                   onBookReversePickup={handleBookReturnReversePickup}
                                   bookPickupLoading={returnBookPickupLoading}
+                                />
+                                <ExchangeDetailsPanel
+                                  item={item}
+                                  embedded
+                                  onZoomImage={setZoomImageUrl}
+                                  onOpenOrder={openOrderById}
+                                  onAssignPickup={handleOpenAssignExchangePickup}
+                                  assignPickupLoading={exchangePickupLoading}
                                 />
                               </td>
                               <td className="min-w-0 px-1.5 py-1.5 align-middle">
