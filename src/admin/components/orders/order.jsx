@@ -1685,6 +1685,8 @@ const formatReasonToken = (raw) =>
 
 const getCancellationReasonFromItem = (item) => {
   if (!item || typeof item !== "object") return null;
+  const currentStatus = normalizeItemStatusToken(item.status || item.itemStatus || "");
+  if (currentStatus !== "CANCELLED") return null;
   const cancel = item.cancellation;
   if (cancel?.reason) {
     return {
