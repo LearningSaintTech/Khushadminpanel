@@ -631,6 +631,72 @@ const mapDelhiveryStatusToItemStatus = (raw) => {
   return null;
 };
 
+/**
+ * Shadowfax *forward* (warehouse → customer) status → fulfilment item status key.
+ * Aligns with SHADOWFAX_FORWARD_ITEM_STATUS_MAP in carrierSync.constants.js.
+ * "Picked" is a forward pickup milestone — not EXCHANGE_PICKED.
+ */
+const mapShadowfaxOutboundStatusToItemStatus = (raw) => {
+  const eventKey = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const eventMap = {
+    new: "SHIPPED",
+    assigned_for_seller_pickup: "SHIPPED",
+    ofp: "SHIPPED",
+    picked: "SHIPPED",
+    recd_at_rev_hub: "SHIPPED",
+    received_from_client_warehouse: "SHIPPED",
+    item_manifested: "SHIPPED",
+    bag_in_transit: "SHIPPED",
+    bag_received_at_via: "SHIPPED",
+    bag_received: "SHIPPED",
+    recd_at_fwd_dc: "SHIPPED",
+    recd_at_fwd_hub: "SHIPPED",
+    assigned_for_delivery: "SHIPPED",
+    ofd: "OUT_FOR_DELIVERY",
+    delivered: "DELIVERED",
+    cancelled_by_customer: "CANCELLED",
+    cancelled_by_seller: "CANCELLED",
+    rto: "CANCELLED",
+    rto_d: "CANCELLED",
+    rts: "CANCELLED",
+    rts_in_process: "CANCELLED",
+    rts_ofd: "CANCELLED",
+    rts_d: "CANCELLED",
+    bag_in_transit_return: "CANCELLED",
+    recd_at_dc_rts: "CANCELLED",
+    received_at_rts_hub: "CANCELLED",
+    lost: "CANCELLED",
+  };
+  if (eventMap[eventKey]) return eventMap[eventKey];
+
+  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (u.includes("CANCEL") || u.includes("RTO") || u.includes("RTS") || u === "LOST") {
+    return "CANCELLED";
+  }
+  if (u.includes("DELIVERED") && !u.includes("OUT FOR")) return "DELIVERED";
+  if (u.includes("OUT FOR DELIVERY") || u === "OFD") return "OUT_FOR_DELIVERY";
+  if (
+    u.includes("IN TRANSIT") ||
+    u.includes("SHIPPED") ||
+    u.includes("DISPATCHED") ||
+    u === "PICKED" ||
+    u.includes("PICKED UP") ||
+    u.includes("MANIFEST") ||
+    u.includes("HUB") ||
+    u.includes("BAG")
+  ) {
+    return "SHIPPED";
+  }
+  if (u === "NEW" || u.includes("ASSIGNED") || u.includes("OUT FOR PICKUP")) {
+    return "SHIPPED";
+  }
+  return null;
+};
+
 const canEnrichLineStatusFromCourier = (item) => {
   const base = normalizeItemStatusToken(item?.status);
   return Boolean(base && !PRE_MANIFEST_LINE_STATUSES.has(base));
@@ -759,7 +825,12 @@ const collectItemStatusCandidates = (item) => {
         mappers: [mapDelhiveryStatusToItemStatus],
       });
     } else if (provider === "SHADOWFAX") {
-      add(item?.shadowfax?.status);
+      add(item?.shadowfax?.status, {
+        mappers: [mapShadowfaxOutboundStatusToItemStatus],
+      });
+      add(item?.shipping?.carrierScan?.label, {
+        mappers: [mapShadowfaxOutboundStatusToItemStatus],
+      });
     }
     // Self shipping: no third-party courier status to merge
   }
