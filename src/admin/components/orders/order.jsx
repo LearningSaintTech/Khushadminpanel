@@ -70,6 +70,7 @@ import {
   getLineMilestoneForBadge,
   isExceptionScan,
   formatStatusTokenForUi as formatLineStatusForUi,
+  inferActiveFlow,
   renderLineJourneySummary,
 } from "./orderStatusDisplay.jsx";
 import toast from "react-hot-toast";
@@ -528,6 +529,58 @@ const FULFILMENT_FLOW_RANK = {
   CANCELED: 90,
 };
 
+/** Progress order for return workflow milestones. */
+const RETURN_FLOW_RANK = {
+  RETURN_REQUESTED: 10,
+  RETURN_APPROVED: 20,
+  RETURN_PICKUP_SCHEDULED: 30,
+  RETURNED: 40,
+  REFUNDED: 50,
+};
+
+const RETURN_LINE_STATUSES = new Set([
+  "RETURN_REQUESTED",
+  "RETURN_APPROVED",
+  "RETURN_PICKUP_SCHEDULED",
+  "RETURNED",
+  "REFUNDED",
+]);
+
+const isReturnStatus = (status) => RETURN_LINE_STATUSES.has(String(status || "").toUpperCase());
+
+const isReturnLineItem = (item) => {
+  if (!item) return false;
+  if (item.activeFlow === "RETURN") return true;
+  if (inferActiveFlow(item) === "RETURN") return true;
+  if (isReturnStatus(item?.status ?? item?.itemStatus)) return true;
+  return Array.isArray(item?.returns) && item.returns.length > 0;
+};
+
+const hasActiveReturnStatus = (itemOrStatus) => {
+  const st =
+    typeof itemOrStatus === "string"
+      ? itemOrStatus
+      : itemOrStatus?.status ?? itemOrStatus?.itemStatus;
+  return isReturnStatus(st);
+};
+
+/** Admin APIs attach returns on `item.returns`. */
+const getItemReturns = (item) => {
+  if (!item || typeof item !== "object") return [];
+  return Array.isArray(item.returns) ? item.returns : [];
+};
+
+const getLatestReturn = (item) => {
+  const returns = [...getItemReturns(item)];
+  if (!returns.length) return null;
+  returns.sort((a, b) => {
+    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
+    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
+    return bTs - aTs;
+  });
+  return returns[0];
+};
+
 /** Progress order for exchange line items — used when backend `item.status` lags Shiprocket/history. */
 const EXCHANGE_FLOW_RANK = {
   EXCHANGE_REQUESTED: 10,
@@ -697,7 +750,27 @@ const mapShadowfaxOutboundStatusToItemStatus = (raw) => {
   return null;
 };
 
+const mapReturnDocumentStatusToItemStatus = (raw) => {
+  const k = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  const map = {
+    returnrequested: "RETURN_REQUESTED",
+    returnapproved: "RETURN_APPROVED",
+    pickupscheduled: "RETURN_PICKUP_SCHEDULED",
+    pickedup: "RETURN_PICKUP_SCHEDULED",
+    intransit: "RETURN_PICKUP_SCHEDULED",
+    receivedatwarehouse: "RETURNED",
+    qualitycheck: "RETURNED",
+    refundprocessed: "REFUNDED",
+    returnrejected: "RETURN_REQUESTED",
+  };
+  return map[k] ? normalizeItemStatusToken(map[k]) : null;
+};
+
 const canEnrichLineStatusFromCourier = (item) => {
+  if (isReturnLineItem(item)) return false;
   const base = normalizeItemStatusToken(item?.status);
   return Boolean(base && !PRE_MANIFEST_LINE_STATUSES.has(base));
 };
@@ -756,10 +829,14 @@ const getStatusProgressRank = (key) => {
   const k = normalizeItemStatusToken(key);
   if (!k) return -1;
   if (k.startsWith("EXCHANGE_")) return EXCHANGE_FLOW_RANK[k] ?? 0;
+  if (RETURN_LINE_STATUSES.has(k)) return RETURN_FLOW_RANK[k] ?? 0;
   return FULFILMENT_FLOW_RANK[k] ?? 0;
 };
 
-const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => {
+const pickHighestDisplayStatus = (
+  candidates,
+  { exchangeOnly = false, returnOnly = false } = {},
+) => {
   let best = null;
   let bestRank = -1;
   for (const c of candidates) {
@@ -767,6 +844,7 @@ const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => 
     const key = normalizeItemStatusToken(c);
     if (!key) continue;
     if (exchangeOnly && !key.startsWith("EXCHANGE_")) continue;
+    if (returnOnly && !RETURN_LINE_STATUSES.has(key)) continue;
     const r = getStatusProgressRank(key);
     if (r > bestRank) {
       bestRank = r;
@@ -778,6 +856,7 @@ const pickHighestDisplayStatus = (candidates, { exchangeOnly = false } = {}) => 
 
 const collectItemStatusCandidates = (item) => {
   const candidates = [];
+  const returnLine = isReturnLineItem(item);
   const add = (s, { mappers = null } = {}) => {
     if (!s) return;
     const mapperList = mappers || [
@@ -786,6 +865,7 @@ const collectItemStatusCandidates = (item) => {
       mapShiprocketForwardStatusToItemStatus,
       mapDelhiveryStatusToItemStatus,
       mapExchangeDocumentStatusToItemStatus,
+      mapReturnDocumentStatusToItemStatus,
     ];
     let mapped = null;
     for (const fn of mapperList) {
@@ -807,7 +887,12 @@ const collectItemStatusCandidates = (item) => {
     for (const h of item.statusHistory) add(h?.status);
   }
 
-  if (isExchangeLineItem(item)) {
+  if (returnLine) {
+    const ret = getLatestReturn(item);
+    if (ret) {
+      add(ret.status, { mappers: [mapReturnDocumentStatusToItemStatus] });
+    }
+  } else if (isExchangeLineItem(item)) {
     const ex = getLatestExchange(item);
     if (ex) {
       add(ex.status);
@@ -850,6 +935,16 @@ const getDisplayItemStatus = (item) => {
   if (base === "EXCHANGE_REJECTED") return "EXCHANGE_REJECTED";
   if (base === "CANCELLED" || base === "CANCELED") return "CANCELLED";
   if (PRE_MANIFEST_LINE_STATUSES.has(base)) return base;
+
+  if (isReturnLineItem(item)) {
+    const candidates = collectItemStatusCandidates(item);
+    const enriched =
+      pickHighestDisplayStatus(candidates, { returnOnly: true }) || base;
+    const baseRank = getStatusProgressRank(base);
+    const enrichedRank = getStatusProgressRank(enriched);
+    if (enriched && enrichedRank >= baseRank) return enriched;
+    return base || baseRaw || "";
+  }
 
   if (!canEnrichLineStatusFromCourier(item) && !isExchangeLineItem(item)) {
     return base || baseRaw || "";
@@ -917,11 +1012,17 @@ const lineItemFromOrderItemRow = (row) => {
     status: row.itemStatus ?? nested.status ?? "",
     activeFlow: nested.activeFlow ?? row.activeFlow,
     workflowHistory: nested.workflowHistory ?? row.workflowHistory,
+    returnRequestedAt: nested.returnRequestedAt ?? row.returnRequestedAt ?? null,
+    exchangeRequestedAt: nested.exchangeRequestedAt ?? row.exchangeRequestedAt ?? null,
     shipping: nested.shipping ?? row.shipping,
     statusHistory: nested.statusHistory,
     cancellation: nested.cancellation ?? row.cancellation ?? null,
     exchanges: getItemExchanges(nested),
-    returns: Array.isArray(nested.returns) ? nested.returns : [],
+    returns: Array.isArray(nested.returns)
+      ? nested.returns
+      : Array.isArray(row.returns)
+        ? row.returns
+        : [],
     shadowfax: nested.shadowfax ?? row.shadowfax,
     shiprocket: nested.shiprocket ?? row.shiprocket,
     courier: nested.courier ?? row.courier,
@@ -1216,6 +1317,192 @@ function getOrderWalletUsedAmount(order) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function getOrderPaymentSplit(source = {}) {
+  const payment = source?.payment && typeof source.payment === "object" ? source.payment : {};
+  const wallet = getOrderWalletUsedAmount(source);
+  const mode = String(payment.mode || "").trim().toUpperCase();
+  const status = String(payment.status || "").trim().toUpperCase();
+
+  const gatewayPaid = Number(payment.amount ?? source.gatewayPaidAmount ?? 0);
+  const finalPayable = Number(source.pricing?.finalPayable ?? source.finalPayable ?? 0);
+  const beforeWallet = Number(
+    source.pricing?.finalPayableBeforeWallet ?? source.orderTotalBeforeWallet ?? 0,
+  );
+
+  let gateway = 0;
+  if (mode === "COD") {
+    gateway =
+      Number.isFinite(gatewayPaid) && gatewayPaid > 0
+        ? gatewayPaid
+        : beforeWallet > 0
+          ? beforeWallet
+          : finalPayable;
+  } else if (mode === "RAZORPAY" || mode === "NIMBLE") {
+    if (Number.isFinite(gatewayPaid) && gatewayPaid > 0) {
+      gateway = gatewayPaid;
+    } else if (finalPayable > 0) {
+      gateway = finalPayable;
+    } else if (beforeWallet > wallet) {
+      gateway = beforeWallet - wallet;
+    }
+  }
+
+  return {
+    payment,
+    mode,
+    status,
+    wallet,
+    gateway: Number.isFinite(gateway) && gateway > 0 ? gateway : 0,
+  };
+}
+
+function getGatewayRowLabel(mode) {
+  const key = String(mode || "").trim().toUpperCase();
+  if (key === "COD") return "COD";
+  if (key === "NIMBLE") return "Nimble";
+  if (key === "RAZORPAY") return "Razorpay";
+  return "Gateway";
+}
+
+function formatGatewayPaymentStatus(status, mode) {
+  const st = String(status || "").trim().toUpperCase();
+  const m = String(mode || "").trim().toUpperCase();
+  if (!st) return "";
+  if (m === "COD") {
+    if (st === "COLLECTED") return "Collected";
+    if (st === "PENDING") return "Pending";
+  }
+  if (st === "SUCCESS") return "Paid";
+  if (st === "FAILED") return "Failed";
+  if (st === "PENDING") return "Pending";
+  return st.charAt(0) + st.slice(1).toLowerCase();
+}
+
+function gatewayStatusClass(status) {
+  const st = String(status || "").trim().toUpperCase();
+  if (st === "SUCCESS" || st === "COLLECTED") return "text-green-700";
+  if (st === "FAILED") return "text-red-700";
+  if (st === "PENDING") return "text-amber-700";
+  return "text-stone-600";
+}
+
+function formatOrderPaymentSummaryText(source) {
+  const { mode, status, wallet, gateway } = getOrderPaymentSplit(source);
+  if (!mode && wallet <= 0 && gateway <= 0) return "—";
+
+  const parts = [`Wallet ${wallet > 0 ? formatInr(wallet) : "—"}`];
+  const gatewayLabel = getGatewayRowLabel(mode);
+  const gatewayStatus = formatGatewayPaymentStatus(status, mode);
+  if (mode === "RAZORPAY" || mode === "NIMBLE") {
+    parts.push(
+      `${gatewayLabel} ${gateway > 0 ? formatInr(gateway) : "—"}${
+        gatewayStatus ? ` (${gatewayStatus})` : ""
+      }`,
+    );
+  } else if (mode) {
+    parts.push(`${gatewayLabel}${gatewayStatus ? ` (${gatewayStatus})` : ""}`);
+  }
+  return parts.join(" · ");
+}
+
+function buildPaymentSourceFromOrder(order) {
+  if (!order) return {};
+  return {
+    payment: order.payment,
+    pricing: order.pricing,
+    walletUsedAmount: order.walletUsedAmount,
+    gatewayPaidAmount: order.gatewayPaidAmount,
+    orderTotalBeforeWallet: order.pricing?.finalPayableBeforeWallet,
+    finalPayable: order.pricing?.finalPayable ?? order.totalAmount,
+  };
+}
+
+function buildPaymentSourceFromRow(row) {
+  if (!row) return {};
+  return {
+    payment: row.payment,
+    walletUsedAmount: row.walletUsedAmount,
+    gatewayPaidAmount: row.gatewayPaidAmount,
+    orderTotalBeforeWallet: row.orderTotalBeforeWallet,
+    finalPayable: row.finalPayable,
+    pricing: {
+      walletUsedAmount: row.walletUsedAmount,
+      finalPayable: row.finalPayable,
+      finalPayableBeforeWallet: row.orderTotalBeforeWallet,
+    },
+  };
+}
+
+function renderWalletUsedCell(source) {
+  const wallet = getOrderWalletUsedAmount(source);
+  return wallet > 0 ? (
+    <span className="text-xs font-medium tabular-nums text-violet-800">{formatInr(wallet)}</span>
+  ) : (
+    <span className="text-xs text-stone-400">—</span>
+  );
+}
+
+function OrderGatewayUsedCell({ source, className = "" }) {
+  const { mode, status, gateway } = getOrderPaymentSplit(source);
+  const isOnline = mode === "RAZORPAY" || mode === "NIMBLE";
+  if (!isOnline) {
+    return <span className={`text-xs text-stone-400 ${className}`.trim()}>—</span>;
+  }
+
+  const gatewayStatus = formatGatewayPaymentStatus(status, mode);
+  const showGatewayStatus =
+    Boolean(gatewayStatus) &&
+    (status === "FAILED" ||
+      status === "PENDING" ||
+      (gateway > 0 && status === "SUCCESS"));
+
+  if (gateway <= 0 && !showGatewayStatus) {
+    return <span className={`text-xs text-stone-400 ${className}`.trim()}>—</span>;
+  }
+
+  return (
+    <div className={`min-w-0 space-y-0.5 ${className}`.trim()}>
+      {gateway > 0 ? (
+        <p className="text-xs font-medium tabular-nums text-brand-800">{formatInr(gateway)}</p>
+      ) : (
+        <p className="text-xs text-stone-400">—</p>
+      )}
+      {showGatewayStatus ? (
+        <p className={`text-[10px] font-semibold leading-tight ${gatewayStatusClass(status)}`}>
+          {gatewayStatus}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function OrderPaymentModeCell({ source, className = "" }) {
+  const payment = source?.payment;
+  if (!payment || typeof payment !== "object") {
+    return <span className={className}>—</span>;
+  }
+  const mode = payment.mode != null ? String(payment.mode) : "";
+  const status = payment.status != null ? String(payment.status) : "";
+  if (!mode && !status) return <span className={className}>—</span>;
+
+  const statusKey = status.toUpperCase();
+  const statusCls =
+    statusKey === "SUCCESS" || statusKey === "COLLECTED"
+      ? "text-green-700"
+      : statusKey === "PENDING"
+        ? "text-amber-700"
+        : statusKey === "FAILED"
+          ? "text-red-700"
+          : "text-stone-600";
+
+  return (
+    <div className={`min-w-0 text-[11px] leading-snug ${className}`.trim()}>
+      {mode ? <p className="font-medium text-stone-800">{mode}</p> : null}
+      {status ? <p className={`font-semibold uppercase ${statusCls}`}>{status}</p> : null}
+    </div>
+  );
+}
+
 function formatInr(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
 }
@@ -1304,6 +1591,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "storeLink", label: "Store link", defaultVisible: false },
   { key: "total", label: "Order amount", defaultVisible: true },
   { key: "walletUsed", label: "Wallet used", defaultVisible: true },
+  { key: "gatewayUsed", label: "Razorpay used", defaultVisible: true },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
   { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
   { key: "status", label: "Status", defaultVisible: true },
@@ -1332,6 +1620,8 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "pincode", label: "Ship-to pincode", defaultVisible: false },
   { key: "city", label: "City", defaultVisible: false },
   { key: "storeLink", label: "Store link", defaultVisible: false },
+  { key: "walletUsed", label: "Wallet used", defaultVisible: true },
+  { key: "gatewayUsed", label: "Razorpay used", defaultVisible: true },
   { key: "payment", label: "Payment (order)", defaultVisible: false },
   { key: "gatewayOrderId", label: "Gateway order ID", defaultVisible: false },
   { key: "status", label: "Line status", defaultVisible: true },
@@ -1555,13 +1845,15 @@ function ColumnPickerDropdown({
   );
 }
 
-function manufacturingPaymentLabel(payment) {
-  if (!payment || typeof payment !== "object") return "—";
-  const mode = payment.mode != null ? String(payment.mode) : "";
-  const status = payment.status != null ? String(payment.status) : "";
+function manufacturingPaymentLabel(payment, source = {}) {
+  const mode = payment?.mode != null ? String(payment.mode) : "";
+  const status = payment?.status != null ? String(payment.status) : "";
   if (mode && status) return `${mode} / ${status}`;
   if (mode) return mode;
   if (status) return status;
+  if (source && typeof source === "object") {
+    return formatOrderPaymentSummaryText({ payment, ...source });
+  }
   return "—";
 }
 
@@ -1582,7 +1874,10 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
     [ctx.user?.countryCode, ctx.user?.phoneNumber].filter(Boolean).join("") ||
     (ctx.address?.phone ? String(ctx.address.phone) : "") ||
     "—";
-  const pay = manufacturingPaymentLabel(ctx.payment);
+  const pay = manufacturingPaymentLabel(ctx.payment, {
+    pricing: ctx.pricing,
+    walletUsedAmount: ctx.walletUsedAmount,
+  });
 
   const field = (label, value, colClass = "") => (
     <div className={`min-w-0 ${colClass}`}>
@@ -1963,7 +2258,8 @@ function ExchangeDetailsPanel({
   assignPickupLoading = false,
 }) {
   const latestExchange = getLatestExchange(item);
-  if (!exchangeHasVisibleDetails(latestExchange, item)) return null;
+  const exchangeRequestedAt = getExchangeRequestTimeForItem(item);
+  if (!exchangeHasVisibleDetails(latestExchange, item) && !exchangeRequestedAt) return null;
 
   const exchangeImageUrls = extractExchangeImageUrls(latestExchange);
   const exchangeReason = getExchangeReason(latestExchange);
@@ -2006,6 +2302,11 @@ function ExchangeDetailsPanel({
         {exchangeReason ? (
           <p className="line-clamp-1 text-stone-500" title={exchangeReason}>
             <span className="font-semibold text-stone-600">Reason:</span> {exchangeReason}
+          </p>
+        ) : null}
+        {exchangeRequestedAt ? (
+          <p className="truncate text-stone-400" title={exchangeRequestedAt}>
+            Exchange time: {exchangeRequestedAt}
           </p>
         ) : null}
         {latestExchange?.adminRemark ? (
@@ -2105,6 +2406,11 @@ function ExchangeDetailsPanel({
           {exchangeReason ? (
             <p className="line-clamp-1 text-[9px] text-stone-500" title={exchangeReason}>
               <span className="font-semibold text-stone-600">Reason:</span> {exchangeReason}
+            </p>
+          ) : null}
+          {exchangeRequestedAt ? (
+            <p className="text-[9px] text-stone-500">
+              <span className="font-semibold">Exchange time:</span> {exchangeRequestedAt}
             </p>
           ) : null}
           {latestExchange?.adminRemark ? (
@@ -2273,42 +2579,9 @@ function ExchangeReplacementOrderBadge({ compact = false }) {
   );
 }
 
-const RETURN_LINE_STATUSES = new Set([
-  "RETURN_REQUESTED",
-  "RETURN_APPROVED",
-  "RETURN_PICKUP_SCHEDULED",
-  "RETURNED",
-  "REFUNDED",
-]);
-
-const isReturnStatus = (status) => RETURN_LINE_STATUSES.has(String(status || "").toUpperCase());
-
-const hasActiveReturnStatus = (itemOrStatus) => {
-  const st =
-    typeof itemOrStatus === "string"
-      ? itemOrStatus
-      : itemOrStatus?.status ?? itemOrStatus?.itemStatus;
-  return isReturnStatus(st);
-};
-
-/** Admin APIs attach returns on `item.returns`. */
-const getItemReturns = (item) => {
-  if (!item || typeof item !== "object") return [];
-  return Array.isArray(item.returns) ? item.returns : [];
-};
-
-const getLatestReturn = (item) => {
-  const returns = [...getItemReturns(item)];
-  if (!returns.length) return null;
-  returns.sort((a, b) => {
-    const aTs = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
-    const bTs = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
-    return bTs - aTs;
-  });
-  return returns[0];
-};
-
 const formatReturnDocumentStatusLabel = (status) => {
+  const mapped = mapReturnDocumentStatusToItemStatus(status);
+  if (mapped) return formatStatusTokenForUi(mapped);
   const key = String(status || "").trim();
   if (!key) return "";
   return key
@@ -2316,6 +2589,86 @@ const formatReturnDocumentStatusLabel = (status) => {
     .replace(/^./, (c) => c.toUpperCase())
     .trim();
 };
+
+const formatReturnRequestTime = (ret, item = null) => {
+  const format = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+
+  const candidates = [ret?.createdAt, ret?.updatedAt, item?.returnRequestedAt];
+
+  const history = Array.isArray(item?.statusHistory) ? item.statusHistory : [];
+  const statusEntry = [...history]
+    .sort(
+      (a, b) =>
+        new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+    )
+    .find((h) => String(h?.status || "").toUpperCase() === "RETURN_REQUESTED");
+  if (statusEntry?.createdAt) candidates.push(statusEntry.createdAt);
+
+  if (item && (item.activeFlow === "RETURN" || inferActiveFlow(item) === "RETURN")) {
+    const segs = Array.isArray(item.workflowHistory) ? item.workflowHistory : [];
+    const lastSeg = segs[segs.length - 1];
+    if (lastSeg?.endedAt) candidates.push(lastSeg.endedAt);
+  }
+
+  for (const candidate of candidates) {
+    const formatted = format(candidate);
+    if (formatted) return formatted;
+  }
+  return null;
+};
+
+const getReturnRequestTimeForItem = (item) =>
+  formatReturnRequestTime(getLatestReturn(item), item);
+
+const formatExchangeRequestTime = (exchange, item = null) => {
+  const format = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+
+  const candidates = [
+    exchange?.createdAt,
+    exchange?.updatedAt,
+    item?.exchangeRequestedAt,
+  ];
+
+  const history = Array.isArray(item?.statusHistory) ? item.statusHistory : [];
+  const statusEntry = [...history]
+    .sort(
+      (a, b) =>
+        new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime(),
+    )
+    .find((h) => String(h?.status || "").toUpperCase() === "EXCHANGE_REQUESTED");
+  if (statusEntry?.createdAt) candidates.push(statusEntry.createdAt);
+
+  if (item && (item.activeFlow === "EXCHANGE" || inferActiveFlow(item) === "EXCHANGE")) {
+    const segs = Array.isArray(item.workflowHistory) ? item.workflowHistory : [];
+    const lastSeg = segs[segs.length - 1];
+    if (lastSeg?.endedAt) candidates.push(lastSeg.endedAt);
+  }
+
+  for (const candidate of candidates) {
+    const formatted = format(candidate);
+    if (formatted) return formatted;
+  }
+  return null;
+};
+
+const getExchangeRequestTimeForItem = (item) =>
+  formatExchangeRequestTime(getLatestExchange(item), item);
 
 const getReturnPickupAwb = (ret, item) =>
   item?.shipping?.reversePickup?.awb ||
@@ -2378,7 +2731,8 @@ function ReturnDetailsPanel({
   bookPickupLoading = false,
 }) {
   const latestReturn = getLatestReturn(item);
-  if (!returnHasVisibleDetails(latestReturn, item)) return null;
+  const returnRequestedAt = getReturnRequestTimeForItem(item);
+  if (!returnHasVisibleDetails(latestReturn, item) && !returnRequestedAt) return null;
 
   const reason = latestReturn?.reason
     ? formatReasonToken(latestReturn.reason)
@@ -2417,6 +2771,11 @@ function ReturnDetailsPanel({
         ) : docStatus ? (
           <p className="line-clamp-1 text-stone-500">{docStatus}</p>
         ) : null}
+        {returnRequestedAt ? (
+          <p className="truncate text-stone-400" title={returnRequestedAt}>
+            Return time: {returnRequestedAt}
+          </p>
+        ) : null}
         {returnId ? (
           <p className="truncate text-stone-400" title={returnId}>
             Return #{returnId.slice(-8)}
@@ -2450,6 +2809,11 @@ function ReturnDetailsPanel({
       {returnId ? (
         <p className="truncate font-mono text-[9px] text-stone-500" title={returnId}>
           ID {returnId}
+        </p>
+      ) : null}
+      {returnRequestedAt ? (
+        <p className="text-stone-500">
+          <span className="font-semibold">Return time:</span> {returnRequestedAt}
         </p>
       ) : null}
       {reason ? (
@@ -5971,6 +6335,31 @@ const Orders = ({
         text: "text-green-800",
         Icon: CheckCircle,
       },
+      "RETURN REQUESTED": {
+        bg: "bg-amber-100",
+        text: "text-amber-900",
+        Icon: RotateCcw,
+      },
+      "RETURN APPROVED": {
+        bg: "bg-teal-100",
+        text: "text-teal-800",
+        Icon: CheckCircle,
+      },
+      "RETURN PICKUP SCHEDULED": {
+        bg: "bg-amber-100",
+        text: "text-amber-800",
+        Icon: Truck,
+      },
+      RETURNED: {
+        bg: "bg-teal-100",
+        text: "text-teal-800",
+        Icon: Package,
+      },
+      REFUNDED: {
+        bg: "bg-green-100",
+        text: "text-green-800",
+        Icon: CheckCircle,
+      },
     };
     const {
       bg = "bg-gray-100",
@@ -6000,11 +6389,22 @@ const Orders = ({
   const renderItemStatusBreakdown = (item, { tableRow = false, order = null } = {}) => {
     const resolvedOrder = order || selectedOrder;
     const display = getLineStatusDisplay(item);
-    const milestone =
-      resolveAdminLineStatus(item, resolvedOrder) ||
-      getLineMilestoneForBadge(item) ||
-      display?.milestone ||
-      "";
+    const milestoneToken =
+      isReturnLineItem(item) || isExchangeLineItem(item)
+        ? getLineMilestoneForBadge(item) ||
+          resolveAdminLineStatus(item, resolvedOrder) ||
+          display?.milestone ||
+          ""
+        : resolveAdminLineStatus(item, resolvedOrder) ||
+          getLineMilestoneForBadge(item) ||
+          display?.milestone ||
+          "";
+    const milestone = milestoneToken;
+    const returnTime = isReturnLineItem(item) ? getReturnRequestTimeForItem(item) : null;
+    const exchangeTime =
+      isExchangeLineItem(item) && !isReturnLineItem(item)
+        ? getExchangeRequestTimeForItem(item)
+        : null;
     const titleParts = [display?.milestoneLabel || formatStatusTokenForUi(milestone)];
     if (display?.activeFlow && display.activeFlow !== "FORWARD") {
       titleParts.push(`Flow: ${display.activeFlow}`);
@@ -6032,7 +6432,9 @@ const Orders = ({
     const scanSubtitle =
       display?.lastScanLabel &&
       display.lastScanLabel !== display?.milestoneLabel &&
-      display.scanKind !== "MILESTONE"
+      display.scanKind !== "MILESTONE" &&
+      !isReturnLineItem(item) &&
+      !isExchangeLineItem(item)
         ? display.lastScanLabel
         : null;
     const showScanWarning = isExceptionScan(item);
@@ -6043,6 +6445,22 @@ const Orders = ({
         title={titleParts.join(" · ")}
       >
         {getStatusBadge(milestone)}
+        {returnTime ? (
+          <p
+            className="mt-0.5 truncate text-[9px] leading-tight text-amber-800"
+            title={`Return requested: ${returnTime}`}
+          >
+            Return {returnTime}
+          </p>
+        ) : null}
+        {exchangeTime ? (
+          <p
+            className="mt-0.5 truncate text-[9px] leading-tight text-brand-800"
+            title={`Exchange requested: ${exchangeTime}`}
+          >
+            Exchange {exchangeTime}
+          </p>
+        ) : null}
         {item?.shippingManifestError || getLineStatusDisplay(item)?.manifestError ? (
           <p
             className="mt-0.5 truncate text-[9px] leading-tight text-red-600"
@@ -6415,10 +6833,10 @@ const Orders = ({
             order.pricing?.finalPayable ??
             0,
         );
-      case "walletUsed": {
-        const walletUsed = getOrderWalletUsedAmount(order);
-        return walletUsed > 0 ? formatInr(walletUsed) : "—";
-      }
+      case "walletUsed":
+        return renderWalletUsedCell(buildPaymentSourceFromOrder(order));
+      case "gatewayUsed":
+        return <OrderGatewayUsedCell source={buildPaymentSourceFromOrder(order)} />;
       case "status": {
         const items = orderLineItems(order, lineStackFilterProps);
         const orderLevelStatus = order?.status || order?.orderStatus || "";
@@ -6620,7 +7038,7 @@ const Orders = ({
           </ListLineStack>
         );
       case "payment":
-        return manufacturingPaymentLabel(order.payment);
+        return <OrderPaymentModeCell source={buildPaymentSourceFromOrder(order)} />;
       case "gatewayOrderId": {
         const id = order.payment?.gatewayOrderId || null;
         if (!id) return "—";
@@ -6836,7 +7254,11 @@ const Orders = ({
         );
       }
       case "payment":
-        return manufacturingPaymentLabel(row.payment);
+        return <OrderPaymentModeCell source={buildPaymentSourceFromRow(row)} />;
+      case "walletUsed":
+        return renderWalletUsedCell(buildPaymentSourceFromRow(row));
+      case "gatewayUsed":
+        return <OrderGatewayUsedCell source={buildPaymentSourceFromRow(row)} />;
       case "gatewayOrderId": {
         const id = row.payment?.gatewayOrderId || null;
         if (!id) return "—";
@@ -6881,6 +7303,7 @@ const Orders = ({
         return "px-2 py-2 align-top text-center text-xs text-gray-600 tabular-nums";
       case "total":
       case "walletUsed":
+      case "gatewayUsed":
         return "min-w-0 px-2 py-2 align-top text-xs font-medium text-gray-900 tabular-nums";
       case "date":
         return "min-w-0 px-2 py-2 align-top text-[11px] tabular-nums text-gray-500";
@@ -6905,6 +7328,9 @@ const Orders = ({
         return "px-2 py-2 align-top max-w-[220px]";
       case "qty":
         return "px-2 py-2 align-top text-center text-xs tabular-nums";
+      case "walletUsed":
+      case "gatewayUsed":
+        return "px-2 py-2 align-top text-xs tabular-nums";
       case "status":
         return "px-2 py-2 align-top min-w-[10rem]";
       default:
@@ -7116,7 +7542,7 @@ const Orders = ({
       case "pincode":
         return order?.address?.pincode || "—";
       case "payment":
-        return manufacturingPaymentLabel(order?.payment);
+        return <OrderPaymentModeCell source={buildPaymentSourceFromOrder(order)} />;
       case "customerName":
         return order?.userId?.name || order?.address?.name || "—";
       case "customerPhone":
@@ -9615,6 +10041,37 @@ const Orders = ({
                     </div>
                     <p className="mt-1.5 text-[10px] text-stone-500">Select a new status for this line.</p>
                   </div>
+                  {focusedItem.carrierWebhookTimeline && focusedItem.carrierWebhookTimeline.length > 0 && (
+                    <div className="rounded-xl border border-orange-200/80 bg-orange-50/40 p-3 shadow-sm">
+                      <div className={ui.detailSectionTitle}>
+                        <Truck className="h-3.5 w-3.5 text-orange-600" aria-hidden />
+                        Carrier tracking (Shadowfax webhooks)
+                      </div>
+                      <ul className="space-y-0">
+                        {focusedItem.carrierWebhookTimeline.map((ev, i) => (
+                          <li
+                            key={`${ev.event}-${ev.at}-${i}`}
+                            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-orange-100 py-2.5 text-sm last:border-0 last:pb-0 first:pt-0"
+                          >
+                            <span className="min-w-[120px] font-medium text-gray-900">
+                              {ev.statusLabel || ev.event || "—"}
+                            </span>
+                            {ev.remarks ? (
+                              <span className="text-xs text-gray-500 italic">{ev.remarks}</span>
+                            ) : null}
+                            {ev.at ? (
+                              <span className="ml-auto text-xs text-gray-500 tabular-nums">
+                                {new Date(ev.at).toLocaleString("en-IN", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {focusedItem.statusHistory && focusedItem.statusHistory.length > 0 && (
                     <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
                       <div className={ui.detailSectionTitle}>
@@ -9772,21 +10229,51 @@ const Orders = ({
                           {selectedOrder?.payment?.mode || "—"}
                         </span>
                       </OrderDetailRow>
-                      <OrderDetailRow label="Status">
-                        <span
-                          className={
-                            selectedOrder?.payment?.status === "SUCCESS"
-                              ? "text-green-700"
-                              : selectedOrder?.payment?.status === "PENDING"
-                                ? "text-amber-700"
-                                : "text-red-700"
-                          }
-                        >
-                          {selectedOrder?.payment?.status || "—"}
-                        </span>
+                      <OrderDetailRow label="Wallet used">
+                        {(() => {
+                          const { wallet } = getOrderPaymentSplit(selectedOrder);
+                          return wallet > 0 ? (
+                            <span className="tabular-nums font-medium text-violet-800">
+                              {formatInr(wallet)}
+                            </span>
+                          ) : (
+                            "—"
+                          );
+                        })()}
+                      </OrderDetailRow>
+                      <OrderDetailRow label="Gateway used">
+                        {(() => {
+                          const { wallet, gateway, mode, status } =
+                            getOrderPaymentSplit(selectedOrder);
+                          const gatewayLabel = getGatewayRowLabel(mode);
+                          const gatewayStatus = formatGatewayPaymentStatus(status, mode);
+                          if (!mode) return "—";
+                          return (
+                            <span className="block space-y-0.5">
+                              <span className="block tabular-nums font-medium text-brand-800">
+                                {gatewayLabel}: {gateway > 0 ? formatInr(gateway) : "—"}
+                              </span>
+                              {gatewayStatus ? (
+                                <span
+                                  className={`block text-[11px] font-semibold ${gatewayStatusClass(status)}`}
+                                >
+                                  {gatewayStatus}
+                                </span>
+                              ) : null}
+                            </span>
+                          );
+                        })()}
                       </OrderDetailRow>
                       <OrderDetailRow label="Paid">
-                        {formatInr(selectedOrder?.payment?.amount || 0)}
+                        {(() => {
+                          const { wallet, gateway } = getOrderPaymentSplit(selectedOrder);
+                          const total = wallet + gateway;
+                          return (
+                            <span className="tabular-nums font-medium text-stone-900">
+                              {total > 0 ? formatInr(total) : "—"}
+                            </span>
+                          );
+                        })()}
                       </OrderDetailRow>
                     </OrderDetailDenseGrid>
                   </div>
