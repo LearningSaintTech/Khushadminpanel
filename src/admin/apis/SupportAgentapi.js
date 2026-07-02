@@ -2,10 +2,19 @@ import { apiConnector } from "../services/Apiconnector";
 
 const BASE = "/admin/support-agents";
 
-export const getSupportAgents = (page = 1, limit = 20, search = "", status = "") => {
+export const getSupportAgents = (
+  page = 1,
+  limit = 20,
+  search = "",
+  status = "",
+  autoAssignmentEnabled = ""
+) => {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (search) params.set("search", search);
   if (status) params.set("status", status);
+  if (autoAssignmentEnabled !== "") {
+    params.set("autoAssignmentEnabled", String(autoAssignmentEnabled));
+  }
   return apiConnector("GET", `${BASE}?${params.toString()}`);
 };
 

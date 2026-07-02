@@ -1760,6 +1760,17 @@ const ORDER_DETAIL_ITEM_DATA_COLUMNS = [
   { key: "storeLink", label: "Store link", defaultVisible: false },
 ];
 
+const SPECIAL_FLOW_DETAIL_COLUMN_KEYS = [
+  "image",
+  "productName",
+  "lineSku",
+  "variantSku",
+  "size",
+  "color",
+  "qty",
+  "price",
+];
+
 const ORDER_DETAIL_ITEM_COL_CLASS = {
   image: "w-12",
   productName: "min-w-[7rem] max-w-[10.5rem]",
@@ -2423,6 +2434,13 @@ const EXCHANGE_MANUAL_PICKUP_METHODS = new Set([
   "KHUSH_INTERNAL",
 ]);
 
+const RETURN_ASSIGNABLE_PICKUP_METHODS = new Set([
+  "DELHIVERY_MANUAL",
+  "SHADOWFAX_MANUAL",
+  "KHUSH_DRIVER",
+  "KHUSH_INTERNAL",
+]);
+
 const getExchangeReturnPickupAwb = (exchange, item = null) =>
   item?.shipping?.reversePickup?.awb ||
   exchange?.returnPickup?.manualTrackingId ||
@@ -2901,6 +2919,28 @@ const getReturnPickupAwb = (ret, item) =>
   item?.delhivery?.returnPickupWaybill ||
   null;
 
+const getReturnPickupTrackingUrl = (ret, item) =>
+  ret?.shadowfax?.returnPickup?.trackingUrl ||
+  ret?.delhivery?.returnPickup?.trackingUrl ||
+  item?.shadowfax?.returnPickupTrackingUrl ||
+  item?.delhivery?.returnPickupTrackingUrl ||
+  item?.shipping?.reversePickup?.trackingUrl ||
+  (ret?.shadowfax?.returnPickup?.awb
+    ? buildShadowfaxTrackingUrl(ret.shadowfax.returnPickup.awb)
+    : null) ||
+  (ret?.delhivery?.returnPickup?.waybill
+    ? buildDelhiveryTrackingUrl(ret.delhivery.returnPickup.waybill)
+    : null) ||
+  null;
+
+const formatReturnPickupStatusLabel = (status) => {
+  const key = String(status || "").trim();
+  if (!key) return "";
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 const isReturnOrderEntry = (order) => {
   if (hasActiveReturnStatus(order?.status || order?.orderStatus)) return true;
   return (
@@ -2951,6 +2991,8 @@ function ReturnDetailsPanel({
   approveReturnLoading = false,
   onBookReversePickup,
   bookPickupLoading = false,
+  onAssignPickup,
+  assignPickupLoading = false,
 }) {
   const latestReturn = getLatestReturn(item);
   const returnRequestedAt = getReturnRequestTimeForItem(item);
@@ -2964,6 +3006,12 @@ function ReturnDetailsPanel({
     formatReturnDocumentStatusLabel(latestReturn?.status) ||
     formatStatusTokenForUi(item?.status || "");
   const pickupAwb = getReturnPickupAwb(latestReturn, item);
+  const pickupTrackingUrl = getReturnPickupTrackingUrl(latestReturn, item);
+  const pickupStatus = formatReturnPickupStatusLabel(
+    latestReturn?.shadowfax?.returnPickup?.status ||
+      latestReturn?.delhivery?.returnPickup?.status ||
+      latestReturn?.returnPickup?.status,
+  );
   const returnId = latestReturn?._id ? String(latestReturn._id) : null;
   const forwardAwb =
     getNormalDeliveryShadowfax(item)?.awb ||
@@ -2975,13 +3023,26 @@ function ReturnDetailsPanel({
   const canApproveReturn =
     latestReturn &&
     !latestReturn.isApproved &&
-    String(latestReturn.status || "").toLowerCase() === "returnrequested";
+    String(latestReturn.status || "").toLowerCase() === "returnrequested" &&
+    !["RETURN_APPROVED", "RETURN_PICKUP_SCHEDULED", "RETURNED", "REFUNDED"].includes(
+      String(item?.status || "").toUpperCase(),
+    );
+  const returnPickupAlreadyScheduled =
+    String(latestReturn?.returnPickup?.status || "").toLowerCase() === "scheduled" ||
+    String(item?.status || "").toUpperCase() === "RETURN_PICKUP_SCHEDULED" ||
+    String(latestReturn?.status || "").toLowerCase() === "pickupscheduled";
   const canBookReversePickup =
     latestReturn?.isApproved &&
+    !returnPickupAlreadyScheduled &&
     !pickupAwb &&
     (latestReturn?.returnPickupMethod === "SHADOWFAX_MANUAL" ||
       latestReturn?.originalShippingProvider === "SHADOWFAX" ||
       Boolean(item?.shadowfax?.awb));
+  const canAssignReturnPickup =
+    latestReturn?.isApproved &&
+    RETURN_ASSIGNABLE_PICKUP_METHODS.has(
+      String(latestReturn?.returnPickupMethod || "").toUpperCase(),
+    );
 
   if (embedded) {
     return (
@@ -3007,6 +3068,10 @@ function ReturnDetailsPanel({
           <p className="truncate text-stone-500" title={pickupAwb}>
             RVP {pickupAwb}
           </p>
+        ) : pickupStatus ? (
+          <p className="truncate text-stone-500" title={pickupStatus}>
+            {pickupStatus}
+          </p>
         ) : forwardAwb ? (
           <p className="truncate text-stone-400" title={forwardAwb}>
             Fwd {forwardAwb}
@@ -3015,6 +3080,8 @@ function ReturnDetailsPanel({
       </div>
     );
   }
+
+  const hasReversePickupInfo = Boolean(pickupAwb || pickupStatus || pickupTrackingUrl);
 
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-amber-200/80 bg-amber-50/40 px-2 py-1.5 text-[10px] leading-snug">
@@ -3072,10 +3139,32 @@ function ReturnDetailsPanel({
           Forward AWB: <span className="font-mono font-medium text-stone-800">{forwardAwb}</span>
         </p>
       ) : null}
-      {pickupAwb ? (
-        <p className="font-medium text-stone-800">
-          Reverse pickup AWB: <span className="font-mono">{pickupAwb}</span>
-        </p>
+      {hasReversePickupInfo ? (
+        <div className="rounded-md border border-brand-200/80 bg-white/80 px-2 py-1.5">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-brand-800">
+              Reverse Pickup
+            </p>
+            {pickupStatus ? (
+              <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 text-[8px] font-semibold text-brand-800">
+                {pickupStatus}
+              </span>
+            ) : null}
+          </div>
+          {pickupAwb ? (
+            <p className="font-medium text-stone-800">
+              AWB: <span className="font-mono">{pickupAwb}</span>
+            </p>
+          ) : null}
+          {pickupTrackingUrl ? (
+            <SafeExternalLink
+              href={pickupTrackingUrl}
+              className="mt-1 inline-flex text-[9px] font-medium text-brand-700 hover:underline"
+            >
+              Track reverse pickup
+            </SafeExternalLink>
+          ) : null}
+        </div>
       ) : null}
       {refundAmount != null && Number(refundAmount) > 0 ? (
         <p className="text-stone-600">
@@ -3114,6 +3203,63 @@ function ReturnDetailsPanel({
           {bookPickupLoading ? "Booking…" : "Book reverse pickup"}
         </button>
       ) : null}
+      {canAssignReturnPickup && onAssignPickup ? (
+        <button
+          type="button"
+          disabled={assignPickupLoading}
+          onClick={() => onAssignPickup(latestReturn, item)}
+          className="mt-0.5 inline-flex items-center rounded border border-brand-200 bg-brand-50 px-2 py-0.5 text-[9px] font-semibold text-brand-800 hover:bg-brand-100 disabled:opacity-60"
+        >
+          {assignPickupLoading ? "Assigning…" : "Assign pickup"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ReturnInlineSubrow({ item }) {
+  const latestReturn = getLatestReturn(item);
+  if (!latestReturn || !returnHasVisibleDetails(latestReturn, item)) return null;
+
+  const returnId = latestReturn?._id ? String(latestReturn._id) : null;
+  const pickupAwb = getReturnPickupAwb(latestReturn, item);
+  const pickupTrackingUrl = getReturnPickupTrackingUrl(latestReturn, item);
+  const pickupStatus = formatReturnPickupStatusLabel(
+    latestReturn?.shadowfax?.returnPickup?.status ||
+      latestReturn?.delhivery?.returnPickup?.status ||
+      latestReturn?.returnPickup?.status,
+  );
+  const returnStatus =
+    formatReturnDocumentStatusLabel(latestReturn?.status) ||
+    formatStatusTokenForUi(item?.status || "");
+  const pickupMethod = formatExchangePickupMethodLabel(latestReturn?.returnPickupMethod);
+
+  return (
+    <div className="rounded-md border border-amber-200/70 bg-amber-50/40 px-2.5 py-2 text-[10px] leading-snug">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-semibold uppercase tracking-wide text-amber-900">Return Flow</span>
+        {returnStatus ? <span className="text-stone-700">Status: {returnStatus}</span> : null}
+        {pickupMethod && pickupMethod !== "—" ? (
+          <span className="text-stone-700">Pickup: {pickupMethod}</span>
+        ) : null}
+        {pickupStatus ? <span className="text-stone-700">RVP: {pickupStatus}</span> : null}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-stone-600">
+        {returnId ? <span>ID: {returnId.slice(-8)}</span> : null}
+        {pickupAwb ? (
+          <span>
+            AWB: <span className="font-mono text-stone-800">{pickupAwb}</span>
+          </span>
+        ) : null}
+        {latestReturn?.refund?.amount != null ? (
+          <span>Refund: {formatInr(latestReturn.refund.amount)}</span>
+        ) : null}
+        {pickupTrackingUrl ? (
+          <SafeExternalLink href={pickupTrackingUrl} className="font-medium text-brand-700 hover:underline">
+            Track reverse pickup
+          </SafeExternalLink>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -4026,6 +4172,15 @@ const Orders = ({
     bookShadowfax: false,
   });
   const [exchangePickupLoading, setExchangePickupLoading] = useState(false);
+  const [returnPickupModal, setReturnPickupModal] = useState(null);
+  const [returnPickupForm, setReturnPickupForm] = useState({
+    returnPickupMethod: "KHUSH_INTERNAL",
+    manualTrackingId: "",
+    notes: "",
+    scheduledAt: "",
+    bookShadowfax: false,
+  });
+  const [returnPickupLoading, setReturnPickupLoading] = useState(false);
   const [returnApproveLoading, setReturnApproveLoading] = useState(false);
   const [returnBookPickupLoading, setReturnBookPickupLoading] = useState(false);
   // When true, assignment modal only assigns driver (no status update) - used after exchange status change
@@ -4852,7 +5007,7 @@ const Orders = ({
       const payload = res?.data ?? res;
       const pickup = payload?.pickupResult;
       if (pickup?.scheduled) {
-        toast.success(pickup.message || "Return approved and reverse pickup booked.");
+        toast.success(pickup.message || "Return approved and pickup scheduled.");
       } else if (pickup?.error) {
         toast.error(`Return approved but pickup failed: ${pickup.error}`);
       } else if (pickup?.message) {
@@ -4894,6 +5049,75 @@ const Orders = ({
       showBackendErrorsAsToasts(err, "Failed to book reverse pickup.");
     } finally {
       setReturnBookPickupLoading(false);
+    }
+  };
+
+  const handleOpenReturnPickupModal = (returnDoc, item) => {
+    const method = String(returnDoc?.returnPickupMethod || "").toUpperCase();
+    const initialMethod =
+      method === "KHUSH_INTERNAL" || method === "SHADOWFAX_MANUAL"
+        ? method
+        : "KHUSH_INTERNAL";
+    setReturnPickupForm({
+      returnPickupMethod: initialMethod,
+      manualTrackingId:
+        returnDoc?.returnPickup?.manualTrackingId ||
+        returnDoc?.shadowfax?.returnPickup?.awb ||
+        returnDoc?.delhivery?.returnPickup?.waybill ||
+        "",
+      notes: returnDoc?.returnPickup?.notes || "",
+      scheduledAt: "",
+      bookShadowfax:
+        initialMethod === "SHADOWFAX_MANUAL" &&
+        !returnDoc?.returnPickup?.manualTrackingId &&
+        !returnDoc?.shadowfax?.returnPickup?.awb,
+    });
+    setReturnPickupModal({
+      returnId: returnDoc?._id ? String(returnDoc._id) : getLatestReturnId(item),
+      orderId: item?.orderId || selectedOrder?.orderId || null,
+      item,
+      currentMethod: method || null,
+    });
+  };
+
+  const maybeOpenReturnPickupChoiceModal = (item, newStatus, orderId = null) => {
+    if (String(newStatus || "").toUpperCase() !== "RETURN_PICKUP_SCHEDULED") return false;
+    const latestReturn = getLatestReturn(item);
+    if (!latestReturn?.isApproved) return false;
+    const method = String(latestReturn?.returnPickupMethod || "").toUpperCase();
+    if (method !== "KHUSH_INTERNAL") return false;
+    handleOpenReturnPickupModal(latestReturn, {
+      ...item,
+      orderId: item?.orderId || orderId || selectedOrder?.orderId || null,
+    });
+    return true;
+  };
+
+  const handleSubmitReturnPickup = async () => {
+    if (!returnPickupModal?.returnId) return;
+    setReturnPickupLoading(true);
+    try {
+      const body = {
+        returnPickupMethod: returnPickupForm.returnPickupMethod,
+        manualTrackingId: returnPickupForm.manualTrackingId.trim() || undefined,
+        notes: returnPickupForm.notes.trim() || undefined,
+        scheduledAt: returnPickupForm.scheduledAt || undefined,
+        bookShadowfax:
+          returnPickupForm.returnPickupMethod === "SHADOWFAX_MANUAL" &&
+          returnPickupForm.bookShadowfax
+            ? true
+            : undefined,
+      };
+      await assignReturnPickup(returnPickupModal.returnId, body);
+      toast.success("Return pickup assigned.");
+      setReturnPickupModal(null);
+      const refreshOrderId = returnPickupModal.orderId || selectedOrder?.orderId || null;
+      if (refreshOrderId) await fetchSingleOrder(refreshOrderId);
+      else await fetchOrders();
+    } catch (err) {
+      showBackendErrorsAsToasts(err, "Failed to assign return pickup.");
+    } finally {
+      setReturnPickupLoading(false);
     }
   };
 
@@ -5242,13 +5466,16 @@ const Orders = ({
     [itemListVisibleColumns],
   );
 
-  const orderDetailItemActiveColumns = useMemo(
-    () =>
-      ORDER_DETAIL_ITEM_DATA_COLUMNS.filter((c) =>
-        orderDetailItemVisibleColumns.includes(c.key),
-      ),
-    [orderDetailItemVisibleColumns],
-  );
+  const orderDetailItemActiveColumns = useMemo(() => {
+    const visibleSet = new Set(orderDetailItemVisibleColumns);
+    const specialAllowedSet =
+      exchangeOnly || returnOnly ? new Set(SPECIAL_FLOW_DETAIL_COLUMN_KEYS) : null;
+    return ORDER_DETAIL_ITEM_DATA_COLUMNS.filter((c) => {
+      if (!visibleSet.has(c.key)) return false;
+      if (specialAllowedSet && !specialAllowedSet.has(c.key)) return false;
+      return true;
+    });
+  }, [orderDetailItemVisibleColumns, exchangeOnly, returnOnly]);
 
   const makeColumnToggle = (columns, storageKey, setter) => (key) => {
     const def = columns.find((c) => c.key === key);
@@ -5891,6 +6118,17 @@ const Orders = ({
     ) {
       return;
     }
+    if (wholeOrderNewStatus === "RETURN_PICKUP_SCHEDULED") {
+      const firstInternalReturnItem = (selectedOrder?.items || []).find((item) =>
+        maybeOpenReturnPickupChoiceModal(item, wholeOrderNewStatus, selectedOrder?.orderId),
+      );
+      if (firstInternalReturnItem) {
+        toast.info(
+          "Choose Self Shipping or Shadowfax for this return before scheduling the pickup status.",
+        );
+        return;
+      }
+    }
     await runWholeOrderStatusUpdate(wholeOrderNewStatus);
   };
 
@@ -5933,6 +6171,19 @@ const Orders = ({
         const currentItem = selectedOrder?.items?.find(
           (it) => String(it.itemId || it._id) === String(itemId),
         );
+        if (
+          currentItem &&
+          maybeOpenReturnPickupChoiceModal(
+            currentItem,
+            bulkStatusValue,
+            selectedOrder?.orderId,
+          )
+        ) {
+          toast.info(
+            "Choose Self Shipping or Shadowfax for this return before scheduling the pickup status.",
+          );
+          return;
+        }
         if (bulkStatusValue === "EXCHANGE_APPROVED") {
           const exchangeId = getLatestExchangeId(currentItem);
           if (!exchangeId) {
@@ -6275,6 +6526,10 @@ const Orders = ({
         newStatus,
         detailsOnly: false,
       });
+      return;
+    }
+
+    if (!skipProviderPrompt && prevItem && maybeOpenReturnPickupChoiceModal(prevItem, newStatus, orderId)) {
       return;
     }
 
@@ -9233,37 +9488,53 @@ const Orders = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
-                      {orderItems.map((row) => (
-                        <tr
-                          key={`${row.orderId}-${row.itemId}`}
-                          className={`border-t border-border/80 transition-colors ${ui.rowHover}`}
-                        >
-                          <td className="px-1.5 py-2 align-top text-center">
-                            <input
-                              type="checkbox"
-                              aria-label={`Select item ${row?.itemId || ""}`}
-                              checked={listSelectedItemKeys.includes(`${String(row?.orderId || "")}__${String(row?.itemId || "")}`)}
-                              onChange={(e) => {
-                                const key = `${String(row?.orderId || "")}__${String(row?.itemId || "")}`;
-                                if (key.startsWith("__")) return;
-                                setListSelectedItemKeys((prev) =>
-                                  e.target.checked
-                                    ? Array.from(new Set([...prev, key]))
-                                    : prev.filter((k) => k !== key),
-                                );
-                              }}
-                              className={ui.checkbox}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          {itemListActiveColumns.map((col) => (
-                            <td key={col.key} className={itemListCellTdClass(col.key)}>
-                              {renderItemListCell(col.key, row)}
-                            </td>
-                          ))}
-                          <td className="px-1.5 py-2 align-top">{renderItemListActions(row)}</td>
-                        </tr>
-                      ))}
+                      {orderItems.map((row) => {
+                        const rowItem = lineItemFromOrderItemRow(row) || row;
+                        return (
+                          <>
+                            <tr
+                              key={`${row.orderId}-${row.itemId}`}
+                              className={`border-t border-border/80 transition-colors ${ui.rowHover}`}
+                            >
+                              <td className="px-1.5 py-2 align-top text-center">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select item ${row?.itemId || ""}`}
+                                  checked={listSelectedItemKeys.includes(`${String(row?.orderId || "")}__${String(row?.itemId || "")}`)}
+                                  onChange={(e) => {
+                                    const key = `${String(row?.orderId || "")}__${String(row?.itemId || "")}`;
+                                    if (key.startsWith("__")) return;
+                                    setListSelectedItemKeys((prev) =>
+                                      e.target.checked
+                                        ? Array.from(new Set([...prev, key]))
+                                        : prev.filter((k) => k !== key),
+                                    );
+                                  }}
+                                  className={ui.checkbox}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </td>
+                              {itemListActiveColumns.map((col) => (
+                                <td key={col.key} className={itemListCellTdClass(col.key)}>
+                                  {renderItemListCell(col.key, row)}
+                                </td>
+                              ))}
+                              <td className="px-1.5 py-2 align-top">{renderItemListActions(row)}</td>
+                            </tr>
+                            {returnOnly && (hasActiveReturnStatus(rowItem) || returnHasVisibleDetails(getLatestReturn(rowItem), rowItem)) ? (
+                              <tr
+                                key={`${row.orderId}-${row.itemId}-return`}
+                                className="border-t border-amber-100 bg-amber-50/20"
+                              >
+                                <td className="px-1.5 py-1.5" />
+                                <td colSpan={itemListActiveColumns.length + 1} className="px-1.5 py-1.5">
+                                  <ReturnInlineSubrow item={rowItem} />
+                                </td>
+                              </tr>
+                            ) : null}
+                          </>
+                        );
+                      })}
                     </tbody>
                   </table>
                   </div>
@@ -9967,6 +10238,8 @@ const Orders = ({
                           approveReturnLoading={returnApproveLoading}
                           onBookReversePickup={handleBookReturnReversePickup}
                           bookPickupLoading={returnBookPickupLoading}
+                          onAssignPickup={handleOpenReturnPickupModal}
+                          assignPickupLoading={returnPickupLoading}
                         />
                         {(() => {
                           const cancel = getCancellationReasonFromItem(focusedItem);
@@ -10811,7 +11084,7 @@ const Orders = ({
             <div className={ui.detailBody}>
                     {(() => {
                       const exchangeItems = (selectedOrder?.items || []).filter((it) =>
-                        exchangeHasVisibleDetails(getLatestExchange(it), it),
+                        exchangeOnly || hasActiveExchangeStatus(it),
                       );
                       if (!exchangeItems.length) return null;
                         return (
@@ -10842,7 +11115,7 @@ const Orders = ({
                     })()}
                     {(() => {
                       const returnItems = (selectedOrder?.items || []).filter((it) =>
-                        returnHasVisibleDetails(getLatestReturn(it), it),
+                        returnOnly || hasActiveReturnStatus(it),
                       );
                       if (!returnItems.length) return null;
                       return (
@@ -10865,6 +11138,8 @@ const Orders = ({
                                 approveReturnLoading={returnApproveLoading}
                                 onBookReversePickup={handleBookReturnReversePickup}
                                 bookPickupLoading={returnBookPickupLoading}
+                                onAssignPickup={handleOpenReturnPickupModal}
+                                assignPickupLoading={returnPickupLoading}
                               />
                             ))}
                           </div>
@@ -11013,7 +11288,11 @@ const Orders = ({
                   <>
                   <TableScrollHint />
                   <div className={ui.tableScrollShellMuted}>
-                    <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-xs">
+                    <table
+                      className={`w-full ${
+                        returnOnly || exchangeOnly ? "min-w-[760px]" : "min-w-[920px]"
+                      } table-fixed border-collapse text-left text-xs`}
+                    >
                       <thead className={ui.thead}>
                         <tr>
                           <th className={`${ui.th} w-8 px-1 py-1 text-center`}>
@@ -11039,19 +11318,33 @@ const Orders = ({
                               </span>
                             </th>
                           ))}
-                          <th className={`${ui.th} w-[6.5rem] px-1.5 py-1 text-left`}>
+                          <th
+                            className={`${ui.th} ${
+                              returnOnly || exchangeOnly ? "w-[16rem]" : "w-[6.5rem]"
+                            } px-1.5 py-1 text-left`}
+                          >
                             Status
                           </th>
                           <th
-                            className={`${ui.th} w-[6.75rem] px-1.5 py-1 text-left`}
+                            className={`${ui.th} ${
+                              returnOnly || exchangeOnly ? "w-[5.5rem]" : "w-[6.75rem]"
+                            } px-1.5 py-1 text-left`}
                             title="Shiprocket — normal delivery only"
                           >
                             Ship / docs
                           </th>
-                          <th className={`${ui.th} w-[5.5rem] px-1.5 py-1 text-left`}>
+                          <th
+                            className={`${ui.th} ${
+                              returnOnly || exchangeOnly ? "w-[4.5rem]" : "w-[5.5rem]"
+                            } px-1.5 py-1 text-left`}
+                          >
                             Driver
                           </th>
-                          <th className={`${ui.th} w-[6.25rem] px-1 py-1 text-center`}>
+                          <th
+                            className={`${ui.th} ${
+                              returnOnly || exchangeOnly ? "w-[5.5rem]" : "w-[6.25rem]"
+                            } px-1 py-1 text-center`}
+                          >
                             Update
                           </th>
                         </tr>
@@ -11063,94 +11356,119 @@ const Orders = ({
                           const isSelected = selectedItemIds.includes(itemId);
                           const driverDisplay = getDriverPartnerDisplay(item);
                           return (
-                            <tr
-                              key={itemId}
-                              className={`border-t border-border/80 ${ui.rowHover} ${
-                                isSelected ? "bg-brand-50/40" : ""
-                              }`}
-                            >
-                              <td className="px-1 py-1.5 align-middle text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggleItemSelection(itemId)}
-                                  className={ui.checkbox}
-                                />
-                              </td>
-                              {orderDetailItemActiveColumns.map((col) => (
-                                <td
-                                  key={col.key}
-                                  className={`min-w-0 px-1.5 py-1.5 align-middle ${orderDetailItemColClass(col.key)}`}
-                                >
-                                  {renderOrderDetailItemDataCell(col.key, item, selectedOrder)}
+                            <>
+                              <tr
+                                key={itemId}
+                                className={`border-t border-border/80 ${ui.rowHover} ${
+                                  isSelected ? "bg-brand-50/40" : ""
+                                }`}
+                              >
+                                <td className="px-1 py-1.5 align-middle text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleItemSelection(itemId)}
+                                    className={ui.checkbox}
+                                  />
                                 </td>
-                              ))}
-                              <td className="min-w-0 px-1.5 py-1.5 align-middle">
-                                {renderItemStatusBreakdown(item, { tableRow: true })}
-                                {renderLineJourneySummary(item, { compact: true })}
-                                <ReturnDetailsPanel
-                                  item={item}
-                                  embedded
-                                  onApproveReturn={handleApproveReturn}
-                                  approveReturnLoading={returnApproveLoading}
-                                  onBookReversePickup={handleBookReturnReversePickup}
-                                  bookPickupLoading={returnBookPickupLoading}
-                                />
-                                <ExchangeDetailsPanel
-                                  item={item}
-                                  embedded
-                                  onZoomImage={setZoomImageUrl}
-                                  onOpenOrder={openOrderById}
-                                  onAssignPickup={handleOpenAssignExchangePickup}
-                                  assignPickupLoading={exchangePickupLoading}
-                                />
-                              </td>
-                              <td className="min-w-0 px-1.5 py-1.5 align-middle">
-                                {renderOrderDetailShipDocsCell(item)}
-                              </td>
-                              <td className="min-w-0 px-1.5 py-1.5 align-middle text-[11px] text-gray-700">
-                                {driverDisplay ? (
-                                  <span
-                                    className="block min-w-0 truncate font-medium"
-                                    title={
-                                      driverDisplay.phone
-                                        ? `${driverDisplay.name} · ${driverDisplay.phone}`
-                                        : driverDisplay.name
-                                    }
+                                {orderDetailItemActiveColumns.map((col) => (
+                                  <td
+                                    key={col.key}
+                                    className={`min-w-0 px-1.5 py-1.5 align-middle ${orderDetailItemColClass(col.key)}`}
                                   >
-                                    {driverDisplay.name}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400">—</span>
-                                )}
-                              </td>
-                              <td className="min-w-0 px-1 py-1.5 align-middle text-center">
-                                <div className="relative mx-auto w-full max-w-[6.25rem]">
-                                  <select
-                                    value={item.status || "CREATED"}
-                                    onChange={(e) => {
-                                      const newVal = e.target.value;
-                                      handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
-                                    }}
-                                    disabled={isUpdating}
-                                    className={`${ui.selectToolbar} w-full max-w-[6.25rem] ${
-                                      isUpdating ? "cursor-wait opacity-60" : ""
-                                    }`}
-                                  >
-                                    {statusChangeOptions.map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  {isUpdating && (
-                                    <div className="absolute inset-0 flex items-center justify-center rounded bg-white/60">
-                                      <RefreshCw size={14} className="animate-spin text-brand-600" />
-                                    </div>
+                                    {renderOrderDetailItemDataCell(col.key, item, selectedOrder)}
+                                  </td>
+                                ))}
+                                <td
+                                  className={`min-w-0 px-1.5 py-1.5 ${
+                                    returnOnly || exchangeOnly ? "align-top" : "align-middle"
+                                  }`}
+                                >
+                                  {renderItemStatusBreakdown(item, { tableRow: true })}
+                                  {!returnOnly && !exchangeOnly
+                                    ? renderLineJourneySummary(item, { compact: true })
+                                    : null}
+                                  {returnOnly || hasActiveReturnStatus(item) ? (
+                                    <ReturnDetailsPanel
+                                      item={item}
+                                      embedded
+                                      onApproveReturn={handleApproveReturn}
+                                      approveReturnLoading={returnApproveLoading}
+                                      onBookReversePickup={handleBookReturnReversePickup}
+                                      bookPickupLoading={returnBookPickupLoading}
+                                      onAssignPickup={handleOpenReturnPickupModal}
+                                      assignPickupLoading={returnPickupLoading}
+                                    />
+                                  ) : null}
+                                  {exchangeOnly || hasActiveExchangeStatus(item) ? (
+                                    <ExchangeDetailsPanel
+                                      item={item}
+                                      embedded
+                                      onZoomImage={setZoomImageUrl}
+                                      onOpenOrder={openOrderById}
+                                      onAssignPickup={handleOpenAssignExchangePickup}
+                                      assignPickupLoading={exchangePickupLoading}
+                                    />
+                                  ) : null}
+                                </td>
+                                <td className="min-w-0 px-1.5 py-1.5 align-middle">
+                                  {renderOrderDetailShipDocsCell(item)}
+                                </td>
+                                <td className="min-w-0 px-1.5 py-1.5 align-middle text-[11px] text-gray-700">
+                                  {driverDisplay ? (
+                                    <span
+                                      className="block min-w-0 truncate font-medium"
+                                      title={
+                                        driverDisplay.phone
+                                          ? `${driverDisplay.name} · ${driverDisplay.phone}`
+                                          : driverDisplay.name
+                                      }
+                                    >
+                                      {driverDisplay.name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">—</span>
                                   )}
-                                </div>
-                              </td>
-                            </tr>
+                                </td>
+                                <td className="min-w-0 px-1 py-1.5 align-middle text-center">
+                                  <div className="relative mx-auto w-full max-w-[6.25rem]">
+                                    <select
+                                      value={item.status || "CREATED"}
+                                      onChange={(e) => {
+                                        const newVal = e.target.value;
+                                        handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
+                                      }}
+                                      disabled={isUpdating}
+                                      className={`${ui.selectToolbar} w-full max-w-[6.25rem] ${
+                                        isUpdating ? "cursor-wait opacity-60" : ""
+                                      }`}
+                                    >
+                                      {statusChangeOptions.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {isUpdating && (
+                                      <div className="absolute inset-0 flex items-center justify-center rounded bg-white/60">
+                                        <RefreshCw size={14} className="animate-spin text-brand-600" />
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                              {returnOnly || hasActiveReturnStatus(item) ? (
+                                <tr key={`${itemId}-return`} className="border-t border-amber-100 bg-amber-50/20">
+                                  <td className="px-1 py-1.5" />
+                                  <td
+                                    colSpan={orderDetailItemActiveColumns.length + 4}
+                                    className="px-1.5 py-1.5"
+                                  >
+                                    <ReturnInlineSubrow item={item} />
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </>
                           );
                         })}
                       </tbody>
@@ -11981,6 +12299,139 @@ const Orders = ({
                   className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
                 >
                   {exchangePickupLoading ? "Saving…" : "Save pickup"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {returnPickupModal && (
+          <div
+            className={`${ui.modalOverlayDark} z-[84]`}
+            onClick={() => !returnPickupLoading && setReturnPickupModal(null)}
+          >
+            <div
+              className={`${ui.modalShell} ${ui.modalShellMd} border-border`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`${ui.modalHeader} py-3`}>
+                <h3 className="text-sm font-semibold text-stone-900">Assign return pickup</h3>
+                <p className="mt-1 text-[11px] text-stone-600">
+                  For self-shipping returns, choose `Self Shipping` or `Shadowfax`. You can also
+                  save a manual AWB if pickup is already arranged.
+                </p>
+              </div>
+              <div className={`${ui.modalBody} space-y-3 py-3`}>
+                {String(returnPickupModal?.currentMethod || "").toUpperCase() ===
+                "KHUSH_INTERNAL" ? (
+                  <label className="block text-[11px] font-medium text-stone-700">
+                    Pickup option
+                    <select
+                      value={returnPickupForm.returnPickupMethod}
+                      onChange={(e) =>
+                        setReturnPickupForm((prev) => ({
+                          ...prev,
+                          returnPickupMethod: e.target.value,
+                          bookShadowfax: e.target.value === "SHADOWFAX_MANUAL",
+                          manualTrackingId:
+                            e.target.value === "SHADOWFAX_MANUAL" ? "" : prev.manualTrackingId,
+                        }))
+                      }
+                      className={`${ui.inputCompact} mt-1 w-full`}
+                    >
+                      <option value="KHUSH_INTERNAL">Self Shipping</option>
+                      <option value="SHADOWFAX_MANUAL">Shadowfax</option>
+                    </select>
+                  </label>
+                ) : null}
+                {String(returnPickupForm.returnPickupMethod || "").toUpperCase() ===
+                "SHADOWFAX_MANUAL" ? (
+                  <label className="flex items-start gap-2 text-[11px] text-stone-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(returnPickupForm.bookShadowfax)}
+                      onChange={(e) =>
+                        setReturnPickupForm((prev) => ({
+                          ...prev,
+                          bookShadowfax: e.target.checked,
+                        }))
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Book reverse pickup with Shadowfax API
+                      <span className="block text-[10px] text-stone-500">
+                        Creates customer pickup AWB automatically. Leave AWB empty when checked.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Return AWB / tracking ID
+                  <input
+                    type="text"
+                    value={returnPickupForm.manualTrackingId}
+                    onChange={(e) =>
+                      setReturnPickupForm((prev) => ({
+                        ...prev,
+                        manualTrackingId: e.target.value,
+                      }))
+                    }
+                    disabled={Boolean(returnPickupForm.bookShadowfax)}
+                    className={`${ui.inputCompact} mt-1 w-full disabled:bg-stone-50`}
+                    placeholder={
+                      returnPickupForm.bookShadowfax
+                        ? "AWB will be assigned by Shadowfax"
+                        : "Carrier AWB for return pickup"
+                    }
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Notes
+                  <textarea
+                    value={returnPickupForm.notes}
+                    onChange={(e) =>
+                      setReturnPickupForm((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className={`${ui.inputCompact} mt-1 w-full resize-y`}
+                    placeholder="Pickup instructions (optional)"
+                  />
+                </label>
+                <label className="block text-[11px] font-medium text-stone-700">
+                  Scheduled at
+                  <input
+                    type="datetime-local"
+                    value={returnPickupForm.scheduledAt}
+                    onChange={(e) =>
+                      setReturnPickupForm((prev) => ({
+                        ...prev,
+                        scheduledAt: e.target.value,
+                      }))
+                    }
+                    className={`${ui.inputCompact} mt-1 w-full`}
+                  />
+                </label>
+              </div>
+              <div className={ui.modalFooter}>
+                <button
+                  type="button"
+                  disabled={returnPickupLoading}
+                  onClick={() => setReturnPickupModal(null)}
+                  className={ui.btnOutline}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={returnPickupLoading}
+                  onClick={handleSubmitReturnPickup}
+                  className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {returnPickupLoading ? "Saving…" : "Save pickup"}
                 </button>
               </div>
             </div>

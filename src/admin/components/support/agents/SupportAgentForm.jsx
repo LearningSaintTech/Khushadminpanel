@@ -15,6 +15,7 @@ const emptyForm = {
   phoneNumber: "",
   ticketNumber: "",
   status: "OPEN",
+  autoAssignmentEnabled: false,
 };
 
 export default function SupportAgentForm() {
@@ -40,6 +41,7 @@ export default function SupportAgentForm() {
           phoneNumber: agent.phoneNumber || "",
           ticketNumber: agent.ticketNumber || "",
           status: agent.status || "OPEN",
+          autoAssignmentEnabled: Boolean(agent.autoAssignmentEnabled),
         });
       } catch (err) {
         toast.error(err?.response?.data?.message || "Failed to load agent");
@@ -65,6 +67,7 @@ export default function SupportAgentForm() {
         phoneNumber: form.phoneNumber.trim(),
         ticketNumber: form.ticketNumber.trim() || undefined,
         status: form.status,
+        autoAssignmentEnabled: Boolean(form.autoAssignmentEnabled),
       };
       if (isEdit) {
         await updateSupportAgent(id, payload);
@@ -135,6 +138,39 @@ export default function SupportAgentForm() {
             <option value="OPEN">OPEN — can receive tickets</option>
             <option value="CLOSED">CLOSED — not assignable</option>
           </select>
+        </label>
+        <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-stone-50 px-3 py-3">
+          <span className="space-y-0.5">
+            <span className="block text-[11px] font-medium text-stone-700">
+              Automatic ticket assignment
+            </span>
+            <span className="block text-[11px] text-stone-500">
+              Toggle this on to include the agent in the auto-assignment pool.
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.autoAssignmentEnabled}
+            onClick={() =>
+              setForm((f) => ({
+                ...f,
+                autoAssignmentEnabled: !f.autoAssignmentEnabled,
+              }))
+            }
+            className={`relative inline-flex h-7 w-14 items-center rounded-full border transition ${
+              form.autoAssignmentEnabled
+                ? "border-brand-600 bg-brand-600"
+                : "border-stone-300 bg-stone-300"
+            }`}
+          >
+            <span className="sr-only">Toggle automatic ticket assignment</span>
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                form.autoAssignmentEnabled ? "translate-x-8" : "translate-x-1"
+              }`}
+            />
+          </button>
         </label>
         <button type="submit" className={btnPrimary} disabled={saving}>
           {saving ? "Saving…" : isEdit ? "Update agent" : "Create agent"}

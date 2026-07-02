@@ -6,6 +6,7 @@ import { useAdminPanelBasePath } from "../../../../context/AdminPanelBasePathCon
 import {
   deleteSupportAgent,
   getSupportAgents,
+  updateSupportAgent,
 } from "../../../apis/SupportAgentapi";
 import {
   btnPrimary,
@@ -31,6 +32,8 @@ export default function SupportAgentList() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [autoAssignmentFilter, setAutoAssignmentFilter] = useState("");
+  const [togglingAgentId, setTogglingAgentId] = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
@@ -39,12 +42,18 @@ export default function SupportAgentList() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, autoAssignmentFilter]);
 
   const fetchAgents = async () => {
     setLoading(true);
     try {
-      const res = await getSupportAgents(page, LIMIT, debouncedSearch, statusFilter);
+      const res = await getSupportAgents(
+        page,
+        LIMIT,
+        debouncedSearch,
+        statusFilter,
+        autoAssignmentFilter
+      );
       const data = unwrapData(res);
       setAgents(data?.agents || data?.items || []);
       const pag = data?.pagination || {};
@@ -59,7 +68,7 @@ export default function SupportAgentList() {
 
   useEffect(() => {
     fetchAgents();
-  }, [page, debouncedSearch, statusFilter]);
+  }, [page, debouncedSearch, statusFilter, autoAssignmentFilter]);
 
   const handleDelete = async (agent) => {
     if (!window.confirm(`Delete agent "${agent.name}"?`)) return;
@@ -69,6 +78,23 @@ export default function SupportAgentList() {
       fetchAgents();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Delete failed");
+    }
+  };
+
+  const handleAutoAssignToggle = async (agent) => {
+    setTogglingAgentId(agent._id);
+    try {
+      await updateSupportAgent(agent._id, {
+        autoAssignmentEnabled: !agent.autoAssignmentEnabled,
+      });
+      toast.success(
+        `Auto assignment ${agent.autoAssignmentEnabled ? "disabled" : "enabled"}`
+      );
+      fetchAgents();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update auto assignment");
+    } finally {
+      setTogglingAgentId("");
     }
   };
 
@@ -100,6 +126,15 @@ export default function SupportAgentList() {
           <option value="OPEN">Open</option>
           <option value="CLOSED">Closed</option>
         </select>
+        <select
+          className={inputClass}
+          value={autoAssignmentFilter}
+          onChange={(e) => setAutoAssignmentFilter(e.target.value)}
+        >
+          <option value="">All assignment modes</option>
+          <option value="true">Auto assignment enabled</option>
+          <option value="false">Auto assignment disabled</option>
+        </select>
       </div>
 
       <div className={tableShell}>
@@ -110,6 +145,7 @@ export default function SupportAgentList() {
               <th className="px-3 py-2">Phone</th>
               <th className="px-3 py-2">Badge</th>
               <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Auto Assign</th>
               <th className="px-3 py-2">Tickets</th>
               <th className="px-3 py-2">Created</th>
               <th className="px-3 py-2 text-right">Actions</th>
@@ -118,13 +154,13 @@ export default function SupportAgentList() {
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-stone-500">
                   <Loader2 className="mx-auto animate-spin" size={20} />
                 </td>
               </tr>
             ) : agents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-stone-500">
                   No agents found
                 </td>
               </tr>
@@ -143,6 +179,38 @@ export default function SupportAgentList() {
                       }`}
                     >
                       {agent.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={agent.autoAssignmentEnabled}
+                      disabled={togglingAgentId === agent._id}
+                      onClick={() => handleAutoAssignToggle(agent)}
+                      className={`relative inline-flex h-6 w-12 items-center rounded-full border transition ${
+                        agent.autoAssignmentEnabled
+                          ? "border-brand-600 bg-brand-600"
+                          : "border-stone-300 bg-stone-300"
+                      } ${togglingAgentId === agent._id ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <span className="sr-only">
+                        Toggle auto assignment for {agent.name}
+                      </span>
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                          agent.autoAssignmentEnabled ? "translate-x-7" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span
+                      className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        agent.autoAssignmentEnabled
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-stone-200 text-stone-600"
+                      }`}
+                    >
+                      {agent.autoAssignmentEnabled ? "Enabled" : "Disabled"}
                     </span>
                   </td>
                   <td className="px-3 py-2">{agent.assignedTicketsCount ?? 0}</td>
