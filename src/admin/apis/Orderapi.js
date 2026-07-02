@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 // ✅ Orders Endpoints
 const orderEndpoints = {
   // Get All Orders (with pagination + search + status + date range + sort)
-  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false) => {
+  GET_ORDERS: (page = 1, limit = 10, search = "", status = "", startDate = "", endDate = "", sortBy = "createdAt", sortOrder = "desc", deliveryType = "", paymentStatus = "", paymentMode = "", itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false, paymentFilters = "") => {
     let url = `/admin/orders?page=${page}&limit=${limit}`;
 
     if (search) {
@@ -44,6 +44,10 @@ const orderEndpoints = {
 
     if (paymentMode) {
       url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
+    }
+
+    if (paymentFilters) {
+      url += `&paymentFilters=${encodeURIComponent(paymentFilters)}`;
     }
 
     if (itemStatusConsistency) {
@@ -102,7 +106,7 @@ const orderEndpoints = {
   `/order/invoice/${orderId}/${itemId}`,
 
   // Get All Order Items (item-based list for admin)
-  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false) => {
+  GET_ORDER_ITEMS: (page = 1, limit = 20, search = "", orderStatus = "", itemStatus = "", startDate = "", endDate = "", deliveryType = "", paymentStatus = "", paymentMode = "", city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false, paymentFilters = "") => {
     let url = `/admin/orders/items?page=${page}&limit=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
     if (searchExact) url += "&searchExact=true";
@@ -113,6 +117,7 @@ const orderEndpoints = {
     if (deliveryType) url += `&deliveryType=${encodeURIComponent(deliveryType)}`;
     if (paymentStatus) url += `&paymentStatus=${encodeURIComponent(paymentStatus)}`;
     if (paymentMode) url += `&paymentMode=${encodeURIComponent(paymentMode)}`;
+    if (paymentFilters) url += `&paymentFilters=${encodeURIComponent(paymentFilters)}`;
     if (city) url += `&city=${encodeURIComponent(city)}`;
     if (exchangeOnly) url += "&exchangeOnly=true";
     if (returnOnly) url += "&returnOnly=true";
@@ -284,10 +289,10 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false) => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false, paymentFilters = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly, searchExact)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly, searchExact, paymentFilters)
   );
 };
 
@@ -301,10 +306,10 @@ export const getOrderStatusAnalytics = (params = {}) => {
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false) => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false, paymentFilters = "") => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider, searchExact)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider, searchExact, paymentFilters)
   );
 };
 

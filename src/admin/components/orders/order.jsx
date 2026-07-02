@@ -150,15 +150,22 @@ function lineStatusMatchesAdminFilter(itemStatus, filterStatus) {
 }
 
 /** Mixed tab: 2+ lines with different statuses; optional Status = present on any line. */
-function isOrderMixedLines(order, statusFilter = "") {
+function isOrderMixedLines(order, statusFilters = []) {
+  const filters = Array.isArray(statusFilters)
+    ? statusFilters
+    : statusFilters
+      ? [statusFilters]
+      : [];
   const items = Array.isArray(order?.items) ? order.items : [];
   if (items.length <= 1) return false;
   const statuses = items
     .map((it) => normalizeFulfilmentLineStatus(it?.status))
     .filter(Boolean);
   if (new Set(statuses).size <= 1) return false;
-  if (!statusFilter) return true;
-  return statuses.some((st) => lineStatusMatchesAdminFilter(st, statusFilter));
+  if (!filters.length) return true;
+  return statuses.some((st) =>
+    filters.some((f) => lineStatusMatchesAdminFilter(st, f)),
+  );
 }
 
 function getOrderLineStatusSummary(order) {
@@ -378,13 +385,29 @@ function ListPaginationFooter({
   );
 }
 
-/** Payment filter dropdown → API `paymentStatus` / `paymentMode` */
+/** Payment filter dropdown → API `paymentStatus` / `paymentMode` / `paymentFilters` */
 const PAYMENT_FILTER_OPTIONS = [
   { value: "", label: "All payments" },
   { value: "cod", label: "COD" },
   { value: "prepaid", label: "Prepaid" },
   { value: "prepaid_pending", label: "Prepaid pending" },
 ];
+
+const PAYMENT_MULTI_FILTER_OPTIONS = PAYMENT_FILTER_OPTIONS.filter((opt) => opt.value);
+
+function toggleMultiFilterValue(current, value) {
+  const v = String(value || "").trim();
+  if (!v) return [];
+  return current.includes(v)
+    ? current.filter((x) => x !== v)
+    : [...current, v];
+}
+
+function multiFilterQueryParam(values) {
+  if (!Array.isArray(values) || values.length === 0) return undefined;
+  const list = values.map((v) => String(v).trim()).filter(Boolean);
+  return list.length ? list.join(",") : undefined;
+}
 
 const paymentFilterToQuery = (paymentFilter) => {
   switch (paymentFilter) {
@@ -398,6 +421,21 @@ const paymentFilterToQuery = (paymentFilter) => {
     default:
       return { paymentStatus: undefined, paymentMode: undefined };
   }
+};
+
+const paymentFiltersToQuery = (paymentFilters) => {
+  const list = (Array.isArray(paymentFilters) ? paymentFilters : []).filter(Boolean);
+  if (!list.length) {
+    return { paymentStatus: undefined, paymentMode: undefined, paymentFilters: undefined };
+  }
+  if (list.length === 1) {
+    return { ...paymentFilterToQuery(list[0]), paymentFilters: undefined };
+  }
+  return {
+    paymentStatus: undefined,
+    paymentMode: undefined,
+    paymentFilters: list.join(","),
+  };
 };
 
 /** apiConnector rejects with a string message; success body is { success, message, data } */
@@ -1507,16 +1545,90 @@ function formatInr(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
 }
 
+const NOTE_LONG_CHAR_THRESHOLD = 48;
+
+function CompactNoteDisplay({
+  text,
+  label = "Note",
+  className = "",
+  compact = false,
+  onViewClick,
+  /** When true, long notes show only the (i) button — no inline preview text. */
+  iconOnlyWhenLong = false,
+}) {
+  const note = String(text || "").trim();
+  if (!note) return null;
+
+  const isLong = note.length > NOTE_LONG_CHAR_THRESHOLD;
+  const sizeClass = compact ? "text-[9px] leading-tight" : "text-xs";
+
+  const infoButton = (
+    <div className="relative inline-flex shrink-0 group">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onViewClick?.(note);
+        }}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-stone-200 bg-stone-50 text-stone-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+        aria-label={`View full ${label}`}
+      >
+        <Info className="h-2.5 w-2.5" strokeWidth={2.5} />
+      </button>
+      <div
+        role="tooltip"
+        className="pointer-events-none invisible absolute left-0 top-full z-[80] mt-1 w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-2 text-left opacity-0 shadow-lg transition-opacity duration-150 group-hover:visible group-hover:opacity-100"
+      >
+        <p className="text-[10px] font-semibold text-gray-900">{label}</p>
+        <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[10px] leading-snug text-stone-700">
+          {note}
+        </p>
+        {onViewClick ? (
+          <p className="mt-1 text-[9px] text-stone-400">Click (i) to open</p>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (!isLong) {
+    return (
+      <span
+        className={`block min-w-0 truncate ${sizeClass} ${className}`.trim()}
+        title={note}
+      >
+        {note}
+      </span>
+    );
+  }
+
+  if (iconOnlyWhenLong) {
+    return <span className={className}>{infoButton}</span>;
+  }
+
+  const preview = `${note.slice(0, 36)}…`;
+  return (
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-0.5 ${className}`.trim()}>
+      <span className={`min-w-0 truncate ${sizeClass} text-stone-500`} title={preview}>
+        {preview}
+      </span>
+      {infoButton}
+    </span>
+  );
+}
+
 function OrderLineBindOfferNote({ bindOffer, className = "" }) {
   const note = getLineBindOfferNote(bindOffer);
   if (!note) return null;
   return (
-    <p
-      className={`mt-0.5 text-[9px] font-medium leading-tight text-violet-700 ${className}`.trim()}
-      title={note}
-    >
-      {note}
-    </p>
+    <div className={`mt-0.5 min-w-0 max-w-[12rem] ${className}`.trim()}>
+      <CompactNoteDisplay
+        text={note}
+        label="Offer note"
+        compact
+        iconOnlyWhenLong
+        className="font-medium text-violet-700"
+      />
+    </div>
   );
 }
 
@@ -1841,6 +1953,102 @@ function ColumnPickerDropdown({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function FilterMultiSelectDropdown({
+  id,
+  label,
+  options = [],
+  selectedValues = [],
+  onChange,
+  placeholder = "All",
+  inputClassName = "",
+  open,
+  onOpenChange,
+}) {
+  const selected = Array.isArray(selectedValues) ? selectedValues : [];
+  const toggleValue = (value) => {
+    const v = String(value || "").trim();
+    if (!v) {
+      onChange([]);
+      return;
+    }
+    onChange(
+      selected.includes(v)
+        ? selected.filter((x) => x !== v)
+        : [...selected, v],
+    );
+  };
+
+  const summary = !selected.length
+    ? placeholder
+    : selected.length === 1
+      ? options.find((o) => o.value === selected[0])?.label || selected[0]
+      : `${selected.length} selected`;
+
+  return (
+    <div className="relative" data-order-filter-picker={id || "filter"}>
+      {label ? (
+        <div className="mb-1 text-[10px] font-semibold text-gray-500">{label}</div>
+      ) : null}
+      <button
+        type="button"
+        id={id}
+        onClick={() => onOpenChange(!open)}
+        className={`${inputClassName} flex items-center justify-between gap-1 text-left`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className="truncate">{summary}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40"
+            aria-label="Close filter"
+            onClick={() => onOpenChange(false)}
+          />
+          <div
+            role="listbox"
+            aria-label={label || placeholder}
+            className="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-white py-1 shadow-lg ring-1 ring-black/5"
+          >
+            {options.map((opt) => {
+              const checked = selected.includes(opt.value);
+              return (
+                <label
+                  key={opt.value}
+                  className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-[11px] hover:bg-canvas-muted"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleValue(opt.value)}
+                    className="rounded border-border accent-brand-600"
+                  />
+                  <span className="text-stone-800">{opt.label}</span>
+                </label>
+              );
+            })}
+            {selected.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="mt-1 w-full border-t border-border px-2.5 py-1.5 text-left text-[10px] font-medium text-stone-600 hover:bg-canvas-muted"
+              >
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -2173,17 +2381,31 @@ function LineReasonSummary({ item, compact = true }) {
 
   return (
     <div className={`${compact ? "mt-0.5" : "mt-1"} space-y-0.5`}>
-      {rows.map(({ key, kind, text, sub, tone }) => (
-        <p
+      {rows.map(({ key, kind, text, sub, tone }) => {
+        const isLong = String(text || "").length > NOTE_LONG_CHAR_THRESHOLD;
+        return (
+        <div
           key={key}
-          className={`${compact ? "text-[9px] leading-tight" : "text-[10px] leading-snug"} ${toneClass[tone] || "text-stone-600"}`}
-          title={sub ? `${kind}: ${text} (${sub})` : `${kind}: ${text}`}
+          className={`flex min-w-0 max-w-[14rem] items-start gap-0.5 ${compact ? "text-[9px] leading-tight" : "text-[10px] leading-snug"} ${toneClass[tone] || "text-stone-600"}`}
         >
-          <span className="font-semibold uppercase tracking-wide">{kind}:</span>{" "}
-          <span className={compact ? "line-clamp-2" : ""}>{text}</span>
-          {sub ? <span className="text-stone-400"> · {sub}</span> : null}
-        </p>
-      ))}
+          <span className="shrink-0 font-semibold uppercase tracking-wide">{kind}:</span>
+          {isLong ? (
+            <CompactNoteDisplay
+              text={text}
+              label={kind}
+              compact
+              iconOnlyWhenLong
+              className="min-w-0 flex-1 text-inherit"
+            />
+          ) : (
+            <span className="min-w-0 truncate" title={sub ? `${text} (${sub})` : text}>
+              {text}
+            </span>
+          )}
+          {sub ? <span className="shrink-0 text-stone-400"> · {sub}</span> : null}
+        </div>
+        );
+      })}
     </div>
   );
 }
@@ -3734,7 +3956,7 @@ const Orders = ({
   });
   const [search, setSearch] = useState("");
   const [searchExact, setSearchExact] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilters, setStatusFilters] = useState([]);
   /** By order only: "" | "mixed" | "uniform" */
   const [lineConsistencyFilter, setLineConsistencyFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -3743,9 +3965,9 @@ const Orders = ({
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState("desc");
   /** Filters both By order and By item lists (sent as ?deliveryType= to API) */
-  const [deliveryTypeFilter, setDeliveryTypeFilter] = useState("");
+  const [deliveryTypeFilters, setDeliveryTypeFilters] = useState([]);
   /** COD / prepaid / prepaid pending — shared by By order and By item lists */
-  const [paymentFilter, setPaymentFilter] = useState("");
+  const [paymentFilters, setPaymentFilters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Item-based view state
@@ -3757,7 +3979,7 @@ const Orders = ({
     totalPages: 1,
   });
   const [itemSearch, setItemSearch] = useState("");
-  const [itemStatusFilter, setItemStatusFilter] = useState("");
+  const [itemStatusFilters, setItemStatusFilters] = useState([]);
   const [shippingProviderFilter, setShippingProviderFilter] = useState("");
   const [itemLoading, setItemLoading] = useState(false);
   const [itemError, setItemError] = useState(null);
@@ -3832,6 +4054,9 @@ const Orders = ({
   );
   const [orderListColumnsOpen, setOrderListColumnsOpen] = useState(false);
   const [listFiltersOpen, setListFiltersOpen] = useState(false);
+  const [orderStatusFilterOpen, setOrderStatusFilterOpen] = useState(false);
+  const [itemStatusFilterOpen, setItemStatusFilterOpen] = useState(false);
+  const [paymentFilterOpen, setPaymentFilterOpen] = useState(false);
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [itemListVisibleColumns, setItemListVisibleColumns] = useState(() =>
     loadVisibleColumnsFromStorage(ITEM_LIST_COLUMNS_STORAGE_KEY, ITEM_LIST_TABLE_COLUMNS),
@@ -3949,15 +4174,15 @@ const Orders = ({
   useEffect(() => {
     if (!exchangeOnly) return;
     setViewMode(VIEW_ORDER);
-    setStatusFilter("");
-    setItemStatusFilter("");
+    setStatusFilters([]);
+    setItemStatusFilters([]);
   }, [exchangeOnly]);
 
   useEffect(() => {
     if (!returnOnly) return;
     setViewMode(VIEW_ORDER);
-    setStatusFilter("");
-    setItemStatusFilter("");
+    setStatusFilters([]);
+    setItemStatusFilters([]);
   }, [returnOnly]);
 
   const resolveDocUrl = (res) => {
@@ -4701,15 +4926,16 @@ const Orders = ({
     try {
       setLoading(true);
       setError(null);
-      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
+      const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
+        paymentFiltersToQuery(paymentFilters);
       const consistencyParam = lineConsistencyFilter || "";
+      const effectiveOrderStatus = multiFilterQueryParam(statusFilters);
       dbgOrders("getOrders:request", {
         lineConsistencyFilter: consistencyParam || "(all)",
-        orderStatus: statusFilter || "(all)",
+        orderStatus: effectiveOrderStatus || "(all)",
         page: pagination.page,
         limit: pagination.limit,
       });
-      const effectiveOrderStatus = statusFilter;
       const res = await getOrders(
         pagination.page,
         pagination.limit,
@@ -4719,7 +4945,7 @@ const Orders = ({
         dateTo || undefined,
         sortBy,
         sortOrder,
-        deliveryTypeFilter || undefined,
+        multiFilterQueryParam(deliveryTypeFilters),
         paymentStatus,
         paymentMode,
         consistencyParam,
@@ -4727,6 +4953,7 @@ const Orders = ({
         !!exchangeOnly,
         !!returnOnly,
         searchExact,
+        paymentFiltersParam,
       );
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
@@ -4772,7 +4999,7 @@ const Orders = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search, searchExact, statusFilter, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly]);
+  }, [pagination.page, pagination.limit, search, searchExact, statusFilters, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly]);
 
   useEffect(() => {
     if (viewMode === VIEW_ORDER && !selectedOrder) {
@@ -4784,8 +5011,9 @@ const Orders = ({
     try {
       setItemLoading(true);
       setItemError(null);
-      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
-      const effectiveItemStatus = itemStatusFilter;
+      const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
+        paymentFiltersToQuery(paymentFilters);
+      const effectiveItemStatus = multiFilterQueryParam(itemStatusFilters);
       const res = await getOrderItems(
         itemPagination.page,
         itemPagination.limit,
@@ -4794,7 +5022,7 @@ const Orders = ({
         effectiveItemStatus,
         dateFrom || undefined,
         dateTo || undefined,
-        deliveryTypeFilter || undefined,
+        multiFilterQueryParam(deliveryTypeFilters),
         paymentStatus,
         paymentMode,
         cityFilter.trim() || undefined,
@@ -4802,6 +5030,7 @@ const Orders = ({
         !!returnOnly,
         shippingProviderFilter || undefined,
         searchExact,
+        paymentFiltersParam,
       );
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
@@ -4828,7 +5057,7 @@ const Orders = ({
     } finally {
       setItemLoading(false);
     }
-  }, [itemPagination.page, itemPagination.limit, itemSearch, searchExact, itemStatusFilter, shippingProviderFilter, deliveryTypeFilter, paymentFilter, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
+  }, [itemPagination.page, itemPagination.limit, itemSearch, searchExact, itemStatusFilters, shippingProviderFilter, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
 
   useEffect(() => {
     if (viewMode === VIEW_ITEM) fetchOrderItems();
@@ -4904,14 +5133,14 @@ const Orders = ({
     viewMode,
     pagination.page,
     search,
-    statusFilter,
+    statusFilters,
     dateFrom,
     dateTo,
     cityFilter,
     sortBy,
     sortOrder,
-    deliveryTypeFilter,
-    paymentFilter,
+    deliveryTypeFilters,
+    paymentFilters,
     exchangeOnly,
     returnOnly,
   ]);
@@ -4922,13 +5151,13 @@ const Orders = ({
     viewMode,
     itemPagination.page,
     itemSearch,
-    itemStatusFilter,
+    itemStatusFilters,
     shippingProviderFilter,
     dateFrom,
     dateTo,
     cityFilter,
-    deliveryTypeFilter,
-    paymentFilter,
+    deliveryTypeFilters,
+    paymentFilters,
     exchangeOnly,
     returnOnly,
   ]);
@@ -4940,21 +5169,23 @@ const Orders = ({
         viewMode === VIEW_ORDER
           ? search?.trim() || undefined
           : itemSearch?.trim() || undefined;
-      const { paymentStatus, paymentMode } = paymentFilterToQuery(paymentFilter);
+      const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
+        paymentFiltersToQuery(paymentFilters);
       const body = {
         search: searchVal,
         searchExact: searchExact || undefined,
         itemStatus:
-          viewMode === VIEW_ITEM ? itemStatusFilter || undefined : undefined,
+          viewMode === VIEW_ITEM ? multiFilterQueryParam(itemStatusFilters) : undefined,
         orderStatus:
-          viewMode === VIEW_ORDER ? statusFilter || undefined : undefined,
+          viewMode === VIEW_ORDER ? multiFilterQueryParam(statusFilters) : undefined,
         itemStatusConsistency:
           viewMode === VIEW_ORDER && lineConsistencyFilter
             ? lineConsistencyFilter
             : undefined,
-        deliveryType: deliveryTypeFilter || undefined,
+        deliveryType: multiFilterQueryParam(deliveryTypeFilters),
         paymentStatus,
         paymentMode,
+        paymentFilters: paymentFiltersParam,
         startDate: dateFrom || undefined,
         endDate: dateTo || undefined,
         city: cityFilter.trim() || undefined,
@@ -6600,19 +6831,25 @@ const Orders = ({
   const showOpsCarrierCards = !exchangeOnly && !returnOnly;
 
   const activeAnalyticsStatus = normalizeStatusToken(
-    viewMode === VIEW_ORDER ? statusFilter : itemStatusFilter,
+    viewMode === VIEW_ORDER
+      ? statusFilters.length === 1
+        ? statusFilters[0]
+        : ""
+      : itemStatusFilters.length === 1
+        ? itemStatusFilters[0]
+        : "",
   );
 
   const activeAnalyticsProvider = String(shippingProviderFilter || "").toUpperCase();
 
   const applyAnalyticsStatus = (status) => {
     setShippingProviderFilter("");
-    const next = status || "";
+    const next = status ? [status] : [];
     if (viewMode === VIEW_ORDER) {
-      setStatusFilter(next);
+      setStatusFilters(next);
       setPagination((p) => ({ ...p, page: 1 }));
     } else {
-      setItemStatusFilter(next);
+      setItemStatusFilters(next);
       setItemPagination((p) => ({ ...p, page: 1 }));
     }
   };
@@ -6620,8 +6857,8 @@ const Orders = ({
   const applyAnalyticsProvider = (provider) => {
     const next = String(provider || "").toUpperCase();
     setShippingProviderFilter(next);
-    setStatusFilter("");
-    setItemStatusFilter("");
+    setStatusFilters([]);
+    setItemStatusFilters([]);
     setViewMode(VIEW_ITEM);
     setItemPagination((p) => ({ ...p, page: 1 }));
   };
@@ -6641,26 +6878,26 @@ const Orders = ({
   const hasActiveListFilters = useMemo(
     () =>
       Boolean(
-        deliveryTypeFilter ||
-          paymentFilter ||
+        deliveryTypeFilters.length ||
+          paymentFilters.length ||
           dateFrom ||
           dateTo ||
           cityFilter ||
-          statusFilter ||
+          statusFilters.length ||
           lineConsistencyFilter ||
-          itemStatusFilter ||
+          itemStatusFilters.length ||
           shippingProviderFilter ||
           sortOrder !== "desc",
       ),
     [
-      deliveryTypeFilter,
-      paymentFilter,
+      deliveryTypeFilters,
+      paymentFilters,
       dateFrom,
       dateTo,
       cityFilter,
-      statusFilter,
+      statusFilters,
       lineConsistencyFilter,
-      itemStatusFilter,
+      itemStatusFilters,
       shippingProviderFilter,
       sortOrder,
     ],
@@ -6768,26 +7005,32 @@ const Orders = ({
           (order?.latestOrderNote?.text != null
             ? String(order.latestOrderNote.text)
             : "") ||
-          // Fallback: order detail view includes full `orderNotes`
           (Array.isArray(order.orderNotes) && order.orderNotes.length
             ? String(order.orderNotes[order.orderNotes.length - 1]?.text || "")
             : "");
+        const hasNote = Boolean(String(latestText || "").trim());
         return (
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1 min-w-0 max-w-[8.5rem]">
             <button
               type="button"
               onClick={() => openOrderNotesModal(order.orderId)}
-              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-50"
+              className="inline-flex shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white p-1 text-gray-700 hover:bg-gray-50"
               title="View all notes"
             >
               <StickyNote size={14} />
             </button>
-            <span
-              className="block min-w-0 truncate text-xs text-gray-600"
-              title={latestText || "No notes"}
-            >
-              {latestText || "—"}
-            </span>
+            {hasNote ? (
+              <CompactNoteDisplay
+                text={latestText}
+                label="Order note"
+                compact
+                iconOnlyWhenLong
+                className="min-w-0 flex-1 text-gray-600"
+                onViewClick={() => openOrderNotesModal(order.orderId)}
+              />
+            ) : (
+              <span className="text-xs text-gray-400">—</span>
+            )}
           </div>
         );
       }
@@ -6840,7 +7083,7 @@ const Orders = ({
       case "status": {
         const items = orderLineItems(order, lineStackFilterProps);
         const orderLevelStatus = order?.status || order?.orderStatus || "";
-        if (lineConsistencyFilter === "mixed" && isOrderMixedLines(order, statusFilter)) {
+        if (lineConsistencyFilter === "mixed" && isOrderMixedLines(order, statusFilters)) {
           const summary = getOrderLineStatusSummary(order);
           return (
             <div className="min-w-0 space-y-0.5" title={summary || "Mixed line statuses"}>
@@ -8289,52 +8532,57 @@ const Orders = ({
                 Delivery
               </span>
               <div className="flex flex-wrap items-center gap-1">
-                {DELIVERY_TYPE_TABS.map((tab) => (
+                {DELIVERY_TYPE_TABS.map((tab) => {
+                  const isAll = !tab.value;
+                  const isActive = isAll
+                    ? deliveryTypeFilters.length === 0
+                    : deliveryTypeFilters.includes(tab.value);
+                  return (
                   <button
                     key={tab.value || "all"}
                     type="button"
                     onClick={() => {
-                      setDeliveryTypeFilter(tab.value);
+                      if (isAll) {
+                        setDeliveryTypeFilters([]);
+                      } else {
+                        setDeliveryTypeFilters((prev) =>
+                          toggleMultiFilterValue(prev, tab.value),
+                        );
+                      }
                       setPagination((p) => ({ ...p, page: 1 }));
                       setItemPagination((p) => ({ ...p, page: 1 }));
                     }}
                     className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      deliveryTypeFilter === tab.value
+                      isActive
                         ? ui.deliveryTabActive
                         : ui.deliveryTabInactive
                     }`}
                   >
                     {tab.label}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <span
                 className="hidden h-4 w-px shrink-0 bg-border sm:block"
                 aria-hidden
               />
-              <div className="flex min-w-[9rem] flex-col gap-0.5 sm:min-w-[10.5rem]">
-                <label
-                  htmlFor="orders-payment-filter"
-                  className="text-[10px] font-semibold uppercase tracking-wide text-stone-500"
-                >
-                  Payment
-                </label>
-                <select
+              <div className="min-w-[9rem] sm:min-w-[10.5rem]">
+                <FilterMultiSelectDropdown
                   id="orders-payment-filter"
-                  value={paymentFilter}
-                  onChange={(e) => {
-                    setPaymentFilter(e.target.value);
+                  label="Payment"
+                  options={PAYMENT_MULTI_FILTER_OPTIONS}
+                  selectedValues={paymentFilters}
+                  onChange={(next) => {
+                    setPaymentFilters(next);
                     setPagination((p) => ({ ...p, page: 1 }));
                     setItemPagination((p) => ({ ...p, page: 1 }));
                   }}
-                  className={`${ui.inputCompact} min-w-[10.5rem]`}
-                >
-                  {PAYMENT_FILTER_OPTIONS.map((opt) => (
-                    <option key={opt.value || "all-payments"} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="All payments"
+                  inputClassName={`${ui.inputCompact} min-w-[10.5rem]`}
+                  open={paymentFilterOpen}
+                  onOpenChange={setPaymentFilterOpen}
+                />
               </div>
             </div>
           </div>
@@ -8365,9 +8613,9 @@ const Orders = ({
                     {(dateFrom ||
                       dateTo ||
                       cityFilter ||
-                      statusFilter ||
+                      statusFilters.length ||
                       lineConsistencyFilter ||
-                      paymentFilter ||
+                      paymentFilters.length ||
                       sortOrder !== "desc") && (
                       <button
                         type="button"
@@ -8375,9 +8623,9 @@ const Orders = ({
                           setDateFrom("");
                           setDateTo("");
                           setCityFilter("");
-                          setStatusFilter("");
+                          setStatusFilters([]);
                           setLineConsistencyFilter("");
-                          setPaymentFilter("");
+                          setPaymentFilters([]);
                           setSortBy("createdAt");
                           setSortOrder("desc");
                           setPagination((p) => ({ ...p, page: 1 }));
@@ -8429,38 +8677,35 @@ const Orders = ({
                       className={ui.inputCompact}
                     />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor="order-filter-status" className="text-[10px] font-semibold text-gray-500">
-                      Status
-                      {lineConsistencyFilter === "mixed" ? (
-                        <span className="font-normal text-stone-400"> (any line)</span>
-                      ) : (
-                        <span className="font-normal text-stone-400"> (order)</span>
-                      )}
-                    </label>
-                    <select
-                      id="order-filter-status"
-                      value={statusFilter}
-                      onChange={(e) => {
-                        setStatusFilter(e.target.value);
-                        setPagination((p) => ({ ...p, page: 1 }));
-                      }}
-                      className={ui.inputCompact}
-                    >
-                      {exchangeOnly ? (
-                        <option value="">All exchange statuses</option>
-                      ) : returnOnly ? (
-                        <option value="">All return statuses</option>
-                      ) : (
-                        <option value="">All statuses</option>
-                      )}
-                      {filteredStatusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <FilterMultiSelectDropdown
+                    id="order-filter-status"
+                    label={
+                      <>
+                        Status
+                        {lineConsistencyFilter === "mixed" ? (
+                          <span className="font-normal text-stone-400"> (any line)</span>
+                        ) : (
+                          <span className="font-normal text-stone-400"> (order)</span>
+                        )}
+                      </>
+                    }
+                    options={filteredStatusOptions}
+                    selectedValues={statusFilters}
+                    onChange={(next) => {
+                      setStatusFilters(next);
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    placeholder={
+                      exchangeOnly
+                        ? "All exchange statuses"
+                        : returnOnly
+                          ? "All return statuses"
+                          : "All statuses"
+                    }
+                    inputClassName={ui.inputCompact}
+                    open={orderStatusFilterOpen}
+                    onOpenChange={setOrderStatusFilterOpen}
+                  />
                   <div className="flex flex-col gap-1">
                     <label htmlFor="order-filter-sort" className="text-[10px] font-semibold text-gray-500">
                       Sort
@@ -8734,7 +8979,7 @@ const Orders = ({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 overflow-visible sm:justify-end">
-                    {(dateFrom || dateTo || cityFilter || itemStatusFilter || paymentFilter || shippingProviderFilter) && (
+                    {(dateFrom || dateTo || cityFilter || itemStatusFilters.length || paymentFilters.length || shippingProviderFilter) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -8742,8 +8987,8 @@ const Orders = ({
                           setDateTo("");
                           setCityFilter("");
                           setShippingProviderFilter("");
-                          setItemStatusFilter("");
-                          setPaymentFilter("");
+                          setItemStatusFilters([]);
+                          setPaymentFilters([]);
                           setItemPagination((p) => ({ ...p, page: 1 }));
                         }}
                         className={`${ui.btnOutline} py-1 text-[11px]`}
@@ -8796,33 +9041,26 @@ const Orders = ({
                       className={ui.inputCompact}
                     />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label htmlFor="item-filter-status" className="text-[10px] font-semibold text-stone-500">
-                      Line status
-                    </label>
-                    <select
-                      id="item-filter-status"
-                      value={itemStatusFilter}
-                      onChange={(e) => {
-                        setItemStatusFilter(e.target.value);
-                        setItemPagination((p) => ({ ...p, page: 1 }));
-                      }}
-                      className={ui.inputCompact}
-                    >
-                      {exchangeOnly ? (
-                        <option value="">All exchange statuses</option>
-                      ) : returnOnly ? (
-                        <option value="">All return statuses</option>
-                      ) : (
-                        <option value="">All statuses</option>
-                      )}
-                      {filteredStatusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <FilterMultiSelectDropdown
+                    id="item-filter-status"
+                    label="Line status"
+                    options={filteredStatusOptions}
+                    selectedValues={itemStatusFilters}
+                    onChange={(next) => {
+                      setItemStatusFilters(next);
+                      setItemPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    placeholder={
+                      exchangeOnly
+                        ? "All exchange statuses"
+                        : returnOnly
+                          ? "All return statuses"
+                          : "All statuses"
+                    }
+                    inputClassName={ui.inputCompact}
+                    open={itemStatusFilterOpen}
+                    onOpenChange={setItemStatusFilterOpen}
+                  />
                   <div className="flex flex-col gap-1">
                     <label htmlFor="item-filter-city" className="text-[10px] font-semibold text-stone-500">
                       City
@@ -9168,7 +9406,12 @@ const Orders = ({
                                         <p className="font-mono">AWB: {rowItem.trackingId}</p>
                                       ) : null}
                                       {rowItem?.selfShipping?.notes ? (
-                                        <p className="text-stone-500">{rowItem.selfShipping.notes}</p>
+                                        <CompactNoteDisplay
+                                          text={rowItem.selfShipping.notes}
+                                          label="Shipping note"
+                                          iconOnlyWhenLong
+                                          className="text-stone-500"
+                                        />
                                       ) : null}
                                       <button
                                         type="button"
@@ -9874,7 +10117,11 @@ const Orders = ({
                                   <p className="font-mono text-xs">AWB: {focusedItem.trackingId}</p>
                                 ) : null}
                                 {focusedItem?.selfShipping?.notes ? (
-                                  <p className="text-xs text-stone-500">{focusedItem.selfShipping.notes}</p>
+                                  <CompactNoteDisplay
+                                    text={focusedItem.selfShipping.notes}
+                                    label="Shipping note"
+                                    className="text-stone-500"
+                                  />
                                 ) : null}
                                 <button
                                   type="button"
@@ -10086,7 +10333,14 @@ const Orders = ({
                           >
                             <span className="font-semibold text-gray-900 min-w-[140px]">{h.status}</span>
                             {h.previousStatus && <span className="text-blue-700">← {h.previousStatus}</span>}
-                            {h.notes && <span className="text-gray-500 italic">"{h.notes}"</span>}
+                            {h.notes ? (
+                              <CompactNoteDisplay
+                                text={h.notes}
+                                label="Status note"
+                                className="italic text-gray-500"
+                                iconOnlyWhenLong
+                              />
+                            ) : null}
                             {h.createdAt && (
                               <span className="ml-auto text-xs text-gray-500 tabular-nums">
                                 {new Date(h.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
