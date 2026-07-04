@@ -672,7 +672,10 @@ const mapShiprocketOutboundStatusToItemStatus = (raw) => {
   const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
   if (!u) return null;
   if (u.includes("CANCEL") || u === "CANCELED") return "CANCELLED";
-  if (u.includes("DELIVERED") && !u.includes("OUT FOR")) return "DELIVERED";
+  if (/\bUNDELIVERED\b/.test(u) || /\bNOT\s+DELIVERED\b/.test(u)) return null;
+  if (/\bDELIVERED\b/.test(u) && !/\bOUT\s+FOR\b/.test(u) && !/\bUNDELIVERED\b/.test(u)) {
+    return "DELIVERED";
+  }
   if (u.includes("OUT FOR DELIVERY") || u.includes("OUT_FOR_DELIVERY"))
     return "OUT_FOR_DELIVERY";
   if (
@@ -706,18 +709,38 @@ const mapShiprocketOutboundStatusToItemStatus = (raw) => {
   return null;
 };
 
-/** Delhivery scan / shipment status → fulfilment item status key */
+/** Delhivery forward scan label → fulfilment item status (exact match; aligns with backend map). */
+const DELHIVERY_FORWARD_UI_STATUS_MAP = {
+  manifested: "SHIPPED",
+  scheduled: "SHIPPED",
+  pending: "SHIPPED",
+  open: "SHIPPED",
+  "in transit": "SHIPPED",
+  dispatched: "SHIPPED",
+  "out for delivery": "OUT_FOR_DELIVERY",
+  delivered: "DELIVERED",
+  rto: "CANCELLED",
+  "rto in transit": "CANCELLED",
+  "rto delivered": "CANCELLED",
+  dto: "CANCELLED",
+  returned: "CANCELLED",
+  cancelled: "CANCELLED",
+  canceled: "CANCELLED",
+  lost: "CANCELLED",
+  damaged: "CANCELLED",
+  undelivered: null,
+};
+
 const mapDelhiveryStatusToItemStatus = (raw) => {
-  const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
-  if (!u) return null;
-  if (u.includes("CANCEL")) return "CANCELLED";
-  if (u.includes("DELIVER")) return "DELIVERED";
-  if (u.includes("OUT FOR") || u.includes("OFD")) return "OUT_FOR_DELIVERY";
-  if (u.includes("TRANSIT") || u.includes("DISPATCH") || u.includes("SHIPPED")) {
-    return "SHIPPED";
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (DELHIVERY_FORWARD_UI_STATUS_MAP[lower] !== undefined) {
+    return DELHIVERY_FORWARD_UI_STATUS_MAP[lower];
   }
-  if (u.includes("MANIFEST") || u.includes("BOOK") || u.includes("PICKUP")) {
-    return "PROCESSING";
+  const underscored = lower.replace(/\s+/g, "_");
+  for (const [key, value] of Object.entries(DELHIVERY_FORWARD_UI_STATUS_MAP)) {
+    if (key.replace(/\s+/g, "_") === underscored) return value;
   }
   return null;
 };
@@ -760,15 +783,23 @@ const mapShadowfaxOutboundStatusToItemStatus = (raw) => {
     recd_at_dc_rts: "CANCELLED",
     received_at_rts_hub: "CANCELLED",
     lost: "CANCELLED",
+    undelivered: null,
+    not_delivered: null,
+    nc: null,
+    cid: null,
+    na: null,
   };
-  if (eventMap[eventKey]) return eventMap[eventKey];
+  if (eventKey in eventMap) return eventMap[eventKey];
 
   const u = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
   if (!u) return null;
   if (u.includes("CANCEL") || u.includes("RTO") || u.includes("RTS") || u === "LOST") {
     return "CANCELLED";
   }
-  if (u.includes("DELIVERED") && !u.includes("OUT FOR")) return "DELIVERED";
+  if (/\bUNDELIVERED\b/.test(u) || /\bNOT\s+DELIVERED\b/.test(u)) return null;
+  if (/\bDELIVERED\b/.test(u) && !/\bOUT\s+FOR\b/.test(u) && !/\bUNDELIVERED\b/.test(u)) {
+    return "DELIVERED";
+  }
   if (u.includes("OUT FOR DELIVERY") || u === "OFD") return "OUT_FOR_DELIVERY";
   if (
     u.includes("IN TRANSIT") ||
@@ -921,9 +952,9 @@ const collectItemStatusCandidates = (item) => {
   const allowCourierEnrichment =
     Boolean(base && !PRE_MANIFEST_LINE_STATUSES.has(base));
 
-  if (allowCourierEnrichment && Array.isArray(item?.statusHistory)) {
-    for (const h of item.statusHistory) add(h?.status);
-  }
+  // Do not re-map statusHistory through carrier parsers — detail API attaches history
+  // but the orders list does not, which caused list vs detail badge mismatches (e.g.
+  // UNDELIVERED / stale DELIVERED history promoting SHIPPED lines to Delivered).
 
   if (returnLine) {
     const ret = getLatestReturn(item);
