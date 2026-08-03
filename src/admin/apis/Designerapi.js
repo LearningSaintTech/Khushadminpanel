@@ -46,7 +46,14 @@ export const getDesignerInventory = ({
 export const getDesignerInventoryById = (id) =>
   apiConnector("GET", `${ADMIN_BASE}/inventory/${id}`);
 export const updateDesignerInventory = (id, data) =>
-  apiConnector("PUT", `${ADMIN_BASE}/inventory/${id}/update`, data);
+  apiConnector(
+    "PUT",
+    `${ADMIN_BASE}/inventory/${id}/update`,
+    data,
+    {},
+    {},
+    { timeout: 300000 }
+  );
 /** Admin PATCH …/inventory/:id/status — body `{ status }`. */
 export const changeDesignerInventoryStatus = async (id, status) => {
   const body = { status: String(status || "").trim() };

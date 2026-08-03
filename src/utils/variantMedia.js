@@ -7,6 +7,56 @@ export function variantMediaUrl(img) {
   return "";
 }
 
+/** Prefer explicit url; if missing, build CDN URL from imageKey/key. */
+export function resolveVariantMediaUrl(img, cdnBase = "") {
+  const url = variantMediaUrl(img);
+  if (url) return url;
+  const key =
+    img && typeof img === "object"
+      ? String(img.imageKey || img.key || "").trim()
+      : "";
+  if (!key) return "";
+  const base = String(cdnBase || "").replace(/\/$/, "");
+  if (!base) return "";
+  return `${base}/${key.replace(/^\//, "")}`;
+}
+
+/**
+ * Normalize a designer/catalog media slot for publish/sync.
+ * Keeps imageKey-only rows when a CDN base (or existing url) can resolve a display URL,
+ * or when imageKey is present even without CDN (backend can rebuild via buildAssetUrl).
+ */
+export function normalizeVariantMediaSlot(im, { cdnBase = "" } = {}) {
+  if (im == null) return null;
+  if (typeof File !== "undefined" && im instanceof File) return im;
+  if (typeof Blob !== "undefined" && im instanceof Blob && !(im instanceof File)) return im;
+
+  if (typeof im === "string") {
+    const url = im.trim();
+    if (!url) return null;
+    return {
+      url,
+      imageKey: "",
+      type: inferVariantMediaType(url),
+      thumbnail: "",
+    };
+  }
+
+  if (typeof im !== "object") return null;
+
+  const imageKey = String(im.imageKey || im.key || "").trim();
+  const url = resolveVariantMediaUrl(im, cdnBase);
+  if (!url && !imageKey) return null;
+
+  return {
+    url: url || "",
+    imageKey,
+    type: im.type || inferVariantMediaType(im),
+    thumbnail: im.thumbnail != null ? String(im.thumbnail) : "",
+    ...(im.order != null ? { order: im.order } : {}),
+  };
+}
+
 export function inferVariantMediaTypeFromUrl(url) {
   const u = String(url || "").trim();
   if (!u) return "image";

@@ -28,6 +28,7 @@ import {
   downloadOrderInvoicePdf,
   downloadManifest,
   downloadManufacturingSheetPdf,
+  downloadManufacturingSheetExcel,
   appendOrderNote,
   forceSuccessPaymentAndConfirm,
   createShiprocketForOrderShipments,
@@ -2851,11 +2852,16 @@ function ExchangeReplacementOrderBadge({ compact = false }) {
 }
 
 const formatReturnDocumentStatusLabel = (status) => {
-  const mapped = mapReturnDocumentStatusToItemStatus(status);
+  const raw = String(status || "").trim();
+  const normalizedKey = raw.toLowerCase().replace(/[\s_-]+/g, "");
+  // Legacy / mislabeled docs sometimes store "created" instead of returnRequested
+  if (normalizedKey === "created" || normalizedKey === "new") {
+    return formatStatusTokenForUi("RETURN_REQUESTED");
+  }
+  const mapped = mapReturnDocumentStatusToItemStatus(raw);
   if (mapped) return formatStatusTokenForUi(mapped);
-  const key = String(status || "").trim();
-  if (!key) return "";
-  return key
+  if (!raw) return "";
+  return raw
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (c) => c.toUpperCase())
     .trim();
@@ -3051,10 +3057,21 @@ function ReturnDetailsPanel({
     item?.trackingId ||
     null;
   const refundAmount = latestReturn?.refund?.amount;
+  const returnDocStatusKey = String(latestReturn?.status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  const returnDocIsAwaitingApproval =
+    returnDocStatusKey === "returnrequested" ||
+    (!latestReturn?.isApproved &&
+      !["returnapproved", "pickupscheduled", "pickedup", "intransit", "receivedatwarehouse", "qualitycheck", "refundprocessed", "returnrejected"].includes(
+        returnDocStatusKey,
+      ) &&
+      Boolean(latestReturn));
   const canApproveReturn =
-    latestReturn &&
+    Boolean(latestReturn?._id) &&
     !latestReturn.isApproved &&
-    String(latestReturn.status || "").toLowerCase() === "returnrequested" &&
+    returnDocIsAwaitingApproval &&
     !["RETURN_APPROVED", "RETURN_PICKUP_SCHEDULED", "RETURNED", "REFUNDED"].includes(
       String(item?.status || "").toUpperCase(),
     );
@@ -3107,6 +3124,45 @@ function ReturnDetailsPanel({
           <p className="truncate text-stone-400" title={forwardAwb}>
             Fwd {forwardAwb}
           </p>
+        ) : null}
+        {canApproveReturn && onApproveReturn ? (
+          <button
+            type="button"
+            disabled={approveReturnLoading}
+            onClick={(e) => {
+              e.stopPropagation();
+              onApproveReturn(latestReturn, item);
+            }}
+            className="mt-0.5 inline-flex items-center rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-semibold text-amber-900 hover:bg-amber-200 disabled:opacity-60"
+          >
+            {approveReturnLoading ? "Approving…" : "Approve return"}
+          </button>
+        ) : null}
+        {canBookReversePickup && onBookReversePickup ? (
+          <button
+            type="button"
+            disabled={bookPickupLoading}
+            onClick={(e) => {
+              e.stopPropagation();
+              onBookReversePickup(latestReturn, item);
+            }}
+            className="mt-0.5 inline-flex items-center rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-60"
+          >
+            {bookPickupLoading ? "Booking…" : "Book reverse pickup"}
+          </button>
+        ) : null}
+        {canAssignReturnPickup && onAssignPickup ? (
+          <button
+            type="button"
+            disabled={assignPickupLoading}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssignPickup(latestReturn, item);
+            }}
+            className="mt-0.5 inline-flex items-center rounded border border-brand-200 bg-brand-50 px-2 py-0.5 text-[9px] font-semibold text-brand-800 hover:bg-brand-100 disabled:opacity-60"
+          >
+            {assignPickupLoading ? "Assigning…" : "Assign pickup"}
+          </button>
         ) : null}
       </div>
     );
@@ -4234,6 +4290,7 @@ const Orders = ({
     () => new Set(),
   );
   const [manufacturingPdfLoading, setManufacturingPdfLoading] = useState(false);
+  const [manufacturingExcelLoading, setManufacturingExcelLoading] = useState(false);
 
   const [orderListVisibleColumns, setOrderListVisibleColumns] = useState(() =>
     loadVisibleColumnsFromStorage(ORDER_LIST_COLUMNS_STORAGE_KEY, ORDER_LIST_TABLE_COLUMNS),
@@ -5417,39 +5474,68 @@ const Orders = ({
     returnOnly,
   ]);
 
+  const buildManufacturingExportBody = useCallback(() => {
+    const searchVal =
+      viewMode === VIEW_ORDER
+        ? search?.trim() || undefined
+        : itemSearch?.trim() || undefined;
+    const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
+      paymentFiltersToQuery(paymentFilters);
+    return {
+      search: searchVal,
+      searchExact: searchExact || undefined,
+      itemStatus:
+        viewMode === VIEW_ITEM ? multiFilterQueryParam(itemStatusFilters) : undefined,
+      orderStatus:
+        viewMode === VIEW_ORDER ? multiFilterQueryParam(statusFilters) : undefined,
+      itemStatusConsistency:
+        viewMode === VIEW_ORDER && lineConsistencyFilter
+          ? lineConsistencyFilter
+          : undefined,
+      deliveryType: multiFilterQueryParam(deliveryTypeFilters),
+      paymentStatus,
+      paymentMode,
+      paymentFilters: paymentFiltersParam,
+      startDate: dateFrom || undefined,
+      endDate: dateTo || undefined,
+      city: cityFilter.trim() || undefined,
+      allPages: true,
+      maxExportRows: 8000,
+      ...(exchangeOnly ? { exchangeOnly: true } : {}),
+      ...(returnOnly ? { returnOnly: true } : {}),
+    };
+  }, [
+    viewMode,
+    search,
+    itemSearch,
+    searchExact,
+    itemStatusFilters,
+    statusFilters,
+    lineConsistencyFilter,
+    deliveryTypeFilters,
+    paymentFilters,
+    dateFrom,
+    dateTo,
+    cityFilter,
+    exchangeOnly,
+    returnOnly,
+  ]);
+
+  const manufacturingExportFilenameBase = useCallback(() => {
+    const nameParts = [
+      viewMode === VIEW_ORDER && lineConsistencyFilter
+        ? lineConsistencyFilter
+        : "all",
+      dateFrom ? `from${dateFrom}` : null,
+      dateTo ? `to${dateTo}` : null,
+    ].filter(Boolean);
+    return `manufacturing-sheet-${nameParts.join("-")}`;
+  }, [viewMode, lineConsistencyFilter, dateFrom, dateTo]);
+
   const handleDownloadManufacturingPdf = async () => {
     try {
       setManufacturingPdfLoading(true);
-      const searchVal =
-        viewMode === VIEW_ORDER
-          ? search?.trim() || undefined
-          : itemSearch?.trim() || undefined;
-      const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
-        paymentFiltersToQuery(paymentFilters);
-      const body = {
-        search: searchVal,
-        searchExact: searchExact || undefined,
-        itemStatus:
-          viewMode === VIEW_ITEM ? multiFilterQueryParam(itemStatusFilters) : undefined,
-        orderStatus:
-          viewMode === VIEW_ORDER ? multiFilterQueryParam(statusFilters) : undefined,
-        itemStatusConsistency:
-          viewMode === VIEW_ORDER && lineConsistencyFilter
-            ? lineConsistencyFilter
-            : undefined,
-        deliveryType: multiFilterQueryParam(deliveryTypeFilters),
-        paymentStatus,
-        paymentMode,
-        paymentFilters: paymentFiltersParam,
-        startDate: dateFrom || undefined,
-        endDate: dateTo || undefined,
-        city: cityFilter.trim() || undefined,
-        allPages: true,
-        maxExportRows: 8000,
-        ...(exchangeOnly ? { exchangeOnly: true } : {}),
-        ...(returnOnly ? { returnOnly: true } : {}),
-      };
-      const blob = await downloadManufacturingSheetPdf(body);
+      const blob = await downloadManufacturingSheetPdf(buildManufacturingExportBody());
       if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
         const text = await blob.text();
         let msg = "Could not generate manufacturing PDF";
@@ -5464,14 +5550,7 @@ const Orders = ({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const nameParts = [
-        viewMode === VIEW_ORDER && lineConsistencyFilter
-          ? lineConsistencyFilter
-          : "all",
-        dateFrom ? `from${dateFrom}` : null,
-        dateTo ? `to${dateTo}` : null,
-      ].filter(Boolean);
-      a.download = `manufacturing-sheet-${nameParts.join("-")}.pdf`;
+      a.download = `${manufacturingExportFilenameBase()}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -5484,6 +5563,40 @@ const Orders = ({
       );
     } finally {
       setManufacturingPdfLoading(false);
+    }
+  };
+
+  const handleDownloadManufacturingExcel = async () => {
+    try {
+      setManufacturingExcelLoading(true);
+      const blob = await downloadManufacturingSheetExcel(buildManufacturingExportBody());
+      if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
+        const text = await blob.text();
+        let msg = "Could not generate manufacturing Excel";
+        try {
+          const j = JSON.parse(text);
+          if (j?.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${manufacturingExportFilenameBase()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Manufacturing Excel downloaded");
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        getBackendErrorMessages(err, "Could not generate manufacturing Excel"),
+      );
+    } finally {
+      setManufacturingExcelLoading(false);
     }
   };
 
@@ -6048,6 +6161,7 @@ const Orders = ({
       }
       if (newStatus === "RETURN_APPROVED") {
         const targetItems = selectedOrder?.items ?? [];
+        let approved = 0;
         for (const item of targetItems) {
           const returnId = getLatestReturnId(item);
           if (!returnId) continue;
@@ -6057,8 +6171,18 @@ const Orders = ({
             returnId,
           });
           await approveReturn(returnId);
+          approved += 1;
         }
-        toast.success("Return(s) approved.");
+        if (!approved) {
+          throw new Error(
+            "No return requests found on this order to approve. Open a line with an active return request.",
+          );
+        }
+        toast.success(
+          approved === 1
+            ? "Return approved."
+            : `${approved} return(s) approved.`,
+        );
         setWholeOrderNewStatus("");
         await fetchSingleOrder(selectedOrder.orderId);
         setUpdatingWholeOrder(false);
@@ -6231,15 +6355,18 @@ const Orders = ({
         }
         if (bulkStatusValue === "RETURN_APPROVED") {
           const returnId = getLatestReturnId(currentItem);
-          if (returnId) {
-            dbgOrders("approveReturn:bulk", {
-              orderId: selectedOrder?.orderId,
-              itemId,
-              returnId,
-            });
-            await approveReturn(returnId);
-            continue;
+          if (!returnId) {
+            throw new Error(
+              `No return request found for item ${String(itemId)} to approve.`,
+            );
           }
+          dbgOrders("approveReturn:bulk", {
+            orderId: selectedOrder?.orderId,
+            itemId,
+            returnId,
+          });
+          await approveReturn(returnId);
+          continue;
         }
         const res = await updateOrderItemStatus(
           selectedOrder.orderId,
@@ -6629,14 +6756,17 @@ const Orders = ({
       }
       if (newStatus === "RETURN_APPROVED") {
         const returnId = getLatestReturnId(prevItem);
-        if (returnId) {
-          dbgOrders("approveReturn:single", { orderId, itemId, returnId });
-          await approveReturn(returnId);
-          toast.success(`Return approved for item ${stringItemId}.`);
-          await fetchSingleOrder(orderId);
-          setUpdatingItemId(null);
-          return;
+        if (!returnId) {
+          throw new Error(
+            "No return request found for this item. Customer must submit a return before it can be approved.",
+          );
         }
+        dbgOrders("approveReturn:single", { orderId, itemId, returnId });
+        await approveReturn(returnId);
+        toast.success(`Return approved for item ${stringItemId}.`);
+        await fetchSingleOrder(orderId);
+        setUpdatingItemId(null);
+        return;
       }
       const payload = buildStatusPayload(
         newStatus,
@@ -7078,6 +7208,25 @@ const Orders = ({
       (opt) => !isExchangeStatus(opt.value) && !isReturnStatus(opt.value),
     );
   }, [exchangeOnly, returnOnly]);
+
+  const statusOptionsForItem = useCallback(
+    (item) => {
+      const current = normalizeItemStatusToken(item?.status || "");
+      if (!current) return statusChangeOptions;
+      if (statusChangeOptions.some((opt) => opt.value === current)) {
+        return statusChangeOptions;
+      }
+      const fromAll = statusOptions.find((opt) => opt.value === current);
+      return [
+        fromAll || {
+          value: current,
+          label: formatStatusTokenForUi(current) || current,
+        },
+        ...statusChangeOptions,
+      ];
+    },
+    [statusChangeOptions],
+  );
 
   const filteredStatusOptions = useMemo(() => {
     const fromBackend = getStatusOptionsForSection(sidebarCounts, analyticsSection);
@@ -8331,8 +8480,8 @@ const Orders = ({
                           ? "Exact order ID, name, or phone…"
                           : "Exact order ID, name, or phone…"
                         : viewMode === VIEW_ORDER
-                          ? "Search order ID, customer, product name…"
-                          : "Search order ID, product name, SKU…"
+                          ? "Order ID, customer, or full product name…"
+                          : "Order ID, full product name, or SKU…"
                     }
                     value={viewMode === VIEW_ORDER ? search : itemSearch}
                     onChange={(e) => {
@@ -8643,7 +8792,7 @@ const Orders = ({
                     </button>
                     <button
                       type="button"
-                      disabled={manufacturingPdfLoading}
+                      disabled={manufacturingPdfLoading || manufacturingExcelLoading}
                       onClick={handleDownloadManufacturingPdf}
                       className={`${ui.btnOutline} text-[11px] py-1`}
                       title={
@@ -8660,6 +8809,26 @@ const Orders = ({
                         <FileDown className="h-3.5 w-3.5" aria-hidden />
                       )}
                       Mfg PDF
+                    </button>
+                    <button
+                      type="button"
+                      disabled={manufacturingPdfLoading || manufacturingExcelLoading}
+                      onClick={handleDownloadManufacturingExcel}
+                      className={`${ui.btnOutline} text-[11px] py-1`}
+                      title={
+                        exchangeOnly
+                          ? "Downloads an Excel of exchange lines matching your current filters (max 8,000 lines per file)."
+                          : viewMode === VIEW_ITEM
+                            ? "Downloads an Excel of all matching lines (uses dates, delivery, payment, search + line status from By item). Max 8,000 lines per file."
+                            : "Downloads an Excel of all matching lines (uses dates, delivery, payment, search). Open By item to filter by line status. Max 8,000 lines per file."
+                      }
+                    >
+                      {manufacturingExcelLoading ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <FileDown className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      Mfg Excel
                     </button>
 
                   {!exchangeOnly ? (
@@ -9366,6 +9535,7 @@ const Orders = ({
                 </div>
                 <p className="border-t border-border px-3 py-2.5 text-[11px] text-stone-500 leading-snug">
                   The list is paginated for speed. <span className="font-medium">Mfg PDF</span>{" "}
+                  / <span className="font-medium">Mfg Excel</span>{" "}
                   above exports <span className="font-medium">all</span> lines matching dates, city, delivery, payment, status, and
                   search (not only this page).
                 </p>
@@ -10567,7 +10737,7 @@ const Orders = ({
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <select
-                        value={focusedItem.status || "CREATED"}
+                        value={focusedItem.status || ""}
                         onChange={(e) => {
                           const newVal = e.target.value;
                           handleUpdateItemStatus(
@@ -10579,7 +10749,7 @@ const Orders = ({
                         disabled={updatingItemId === String(focusedItem.itemId || focusedItem._id)}
                         className={`${ui.inputCompact} min-w-[12rem] py-1.5`}
                       >
-                        {statusChangeOptions.map((opt) => (
+                        {statusOptionsForItem(focusedItem).map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
@@ -11464,7 +11634,7 @@ const Orders = ({
                                 <td className="min-w-0 px-1 py-1.5 align-middle text-center">
                                   <div className="relative mx-auto w-full max-w-[6.25rem]">
                                     <select
-                                      value={item.status || "CREATED"}
+                                      value={item.status || ""}
                                       onChange={(e) => {
                                         const newVal = e.target.value;
                                         handleUpdateItemStatus(selectedOrder.orderId, itemId, newVal);
@@ -11474,7 +11644,7 @@ const Orders = ({
                                         isUpdating ? "cursor-wait opacity-60" : ""
                                       }`}
                                     >
-                                      {statusChangeOptions.map((opt) => (
+                                      {statusOptionsForItem(item).map((opt) => (
                                         <option key={opt.value} value={opt.value}>
                                           {opt.label}
                                         </option>

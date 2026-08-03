@@ -129,11 +129,14 @@ const orderEndpoints = {
 
   /** POST: filters + allPages (default true) = all matching lines; maxExportRows (≤15000); or allPages false + page + limit */
   MANUFACTURING_SHEET_PDF: `/admin/orders/items/manufacturing-sheet`,
+  MANUFACTURING_SHEET_EXCEL: `/admin/orders/items/manufacturing-sheet-excel`,
 
   STALE_ORDERS_LIST: (hours = 24) =>
     `/admin/orders/stale-alert/list?hours=${encodeURIComponent(hours)}`,
   STALE_ORDERS_PDF: (hours = 24) =>
     `/admin/orders/stale-alert/preview?hours=${encodeURIComponent(hours)}`,
+  STALE_ORDERS_EXCEL: (hours = 24) =>
+    `/admin/orders/stale-alert/preview-excel?hours=${encodeURIComponent(hours)}`,
   STALE_ORDERS_RUN: `/admin/orders/stale-alert/run`,
 
   // Get Single Order (with item pagination)
@@ -269,6 +272,18 @@ export const downloadManufacturingSheetPdf = (body = {}) => {
   );
 };
 
+/** Manufacturing / fulfilment Excel (blob). Same filters as PDF; no image fetch so usually faster. */
+export const downloadManufacturingSheetExcel = (body = {}) => {
+  return apiConnector(
+    "POST",
+    orderEndpoints.MANUFACTURING_SHEET_EXCEL,
+    body,
+    {},
+    {},
+    { responseType: "blob", timeout: 300000 }
+  );
+};
+
 /** Stale CONFIRMED lines (no status change for `hours`). */
 export const getStaleOrders = (hours = 24) => {
   return apiConnector("GET", orderEndpoints.STALE_ORDERS_LIST(hours));
@@ -278,6 +293,17 @@ export const downloadStaleOrdersPdf = (hours = 24) => {
   return apiConnector(
     "GET",
     orderEndpoints.STALE_ORDERS_PDF(hours),
+    null,
+    {},
+    {},
+    { responseType: "blob", timeout: 120000 }
+  );
+};
+
+export const downloadStaleOrdersExcel = (hours = 24) => {
+  return apiConnector(
+    "GET",
+    orderEndpoints.STALE_ORDERS_EXCEL(hours),
     null,
     {},
     {},

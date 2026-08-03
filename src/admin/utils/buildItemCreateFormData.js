@@ -2,9 +2,9 @@ import { normalizeIdList } from "./catalogCategoryDisplay.js";
 import { designerItemToFormSizeCharts } from "../../utils/designerSizeChartDisplay.js";
 import {
   inferVariantMediaType,
-  isVariantVideoMedia,
-  variantMediaUrl,
+  normalizeVariantMediaSlot,
 } from "../../utils/variantMedia.js";
+import { getCdnBaseUrl } from "../../utils/apiConfig.js";
 
 /**
  * Builds multipart FormData for POST /items/create (same field layout as ItemForm.jsx handleSave, create path).
@@ -383,21 +383,7 @@ export function designerInventoryToItemFormState(designer) {
     .filter((v) => v?.color?.name)
     .map((v) => {
       const imgs = orderedVariantImages(v)
-        .map((im) => {
-          const url = variantMediaUrl(im);
-          if (!url) return null;
-          if (typeof im === "object" && im != null && (im.url || im.type || im.imageKey || im.key)) {
-            return {
-              url,
-              imageKey: im.imageKey || im.key || "",
-              type: im.type || (isVariantVideoMedia(im) ? "video" : "image"),
-              thumbnail: im.thumbnail != null ? String(im.thumbnail) : "",
-            };
-          }
-          return inferVariantMediaType(im) === "video"
-            ? { url, type: "video", imageKey: "", thumbnail: "" }
-            : url;
-        })
+        .map((im) => normalizeVariantMediaSlot(im, { cdnBase: getCdnBaseUrl() }))
         .filter(Boolean);
       const sizes = (v.sizes || [])
         .filter((s) => s && s.size)

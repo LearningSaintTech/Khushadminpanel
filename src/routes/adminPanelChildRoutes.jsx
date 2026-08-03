@@ -80,6 +80,7 @@ import SkuFormulaFormPage from "../admin/components/inventory/SkuFormulaFormPage
 import DesignerList from "../admin/components/designer/DesignerList";
 import DesignerForm from "../admin/components/designer/DesignerForm";
 import DesignerInventory from "../admin/components/designer/DesignerInventory";
+import AdminDesignerInventoryEdit from "../admin/components/designer/AdminDesignerInventoryEdit";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
 import UsersLayout from "../admin/components/users/UsersLayout";
@@ -216,6 +217,7 @@ export const adminPanelChildRoutes = [
   <Route key="des-cr" path="designer/create" element={<DesignerForm />} />,
   <Route key="des-ed" path="designer/edit/:id" element={<DesignerForm />} />,
   <Route key="des-inv" path="designer/inventory" element={<DesignerInventory />} />,
+  <Route key="des-inv-ed" path="designer/inventory/edit/:id" element={<AdminDesignerInventoryEdit />} />,
   <Route key="ex" path="exchange" element={<Exchanges />} />,
   <Route key="ex-cr" path="exchange/create" element={<ExchangeForm />} />,
   <Route key="ex-ed" path="exchange/edit/:id" element={<ExchangeForm />} />,
