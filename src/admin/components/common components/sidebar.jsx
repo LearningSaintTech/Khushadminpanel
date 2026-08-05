@@ -93,6 +93,7 @@ const Sidebar = ({
     location.pathname.startsWith(ap("coupon-analytics"));
   const isMoneyFeaturesSectionActive = () =>
     location.pathname.includes("/money-features") ||
+    location.pathname.startsWith(ap("gift")) ||
     location.pathname.startsWith(ap("referral")) ||
     location.pathname.startsWith(ap("rewards"));
 

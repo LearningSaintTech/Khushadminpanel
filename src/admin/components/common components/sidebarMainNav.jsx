@@ -150,19 +150,19 @@ export default function SidebarMainNav({
       </Link>,
     );
 
-    push(
-      "Gift cards",
-      ["gift", "card", "cards"],
-      canUse(["gift-card"]),
-      <Link
-        key="gift"
-        to={ap("gift")}
-        className={linkClass(location.pathname.startsWith(ap("gift")))}
-      >
-        <Gift size={ICON} className={iconClass} />
-        <span className="truncate">Gift cards</span>
-      </Link>,
-    );
+    // push(
+    //   "Gift cards",
+    //   ["gift", "card", "cards"],
+    //   canUse(["gift-card"]),
+    //   <Link
+    //     key="gift"
+    //     to={ap("gift")}
+    //     className={linkClass(location.pathname.startsWith(ap("gift")))}
+    //   >
+    //     <Gift size={ICON} className={iconClass} />
+    //     <span className="truncate">Gift cards</span>
+    //   </Link>,
+    // );
 
     push(
       "Marque Text",
@@ -631,10 +631,8 @@ export default function SidebarMainNav({
       },
       canUse(["gift-card"]) && {
         label: "Gift card",
-        to: ap("money-features/gift-card"),
-        active:
-          isActive(ap("money-features/gift-card")) ||
-          isActive(ap("money-features/giftcard")),
+        to: ap("gift"),
+        active: location.pathname.startsWith(ap("gift")),
         keywords: ["gift"],
         icon: Gift,
       },

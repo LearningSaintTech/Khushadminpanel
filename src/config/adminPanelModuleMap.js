@@ -41,6 +41,7 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^feedback(?:\/|$)/, modules: ["suggestions"] },
   { pattern: /^gift(?:\/|$)/, modules: ["gift-card"] },
   { pattern: /^money-features\/gift-card(?:\/|$)/, modules: ["gift-card"] },
+  { pattern: /^money-features\/gift(?:\/|$)/, modules: ["gift-card"] },
   { pattern: /^money-features\/giftcard(?:\/|$)/, modules: ["gift-card"] },
   { pattern: /^coupons(?:\/|$)/, modules: ["coupons"] },
   { pattern: /^analytics(?:\/|$)/, modules: ["analytics"] },

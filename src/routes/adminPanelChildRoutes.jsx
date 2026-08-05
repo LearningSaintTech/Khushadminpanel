@@ -89,7 +89,6 @@ import Referral from "../admin/components/Refferal/Refferal";
 import ReferralConfig from "../admin/components/Refferal/ReferralConfig";
 import MoneyFeaturesHub from "../admin/components/moneyFeatures/MoneyFeaturesHub";
 import MoneyFeaturesCashWallet from "../admin/components/moneyFeatures/MoneyFeaturesCashWallet";
-import MoneyFeaturesGiftCard from "../admin/components/moneyFeatures/MoneyFeaturesGiftCard";
 import MoneyFeaturesPointsWallet from "../admin/components/moneyFeatures/MoneyFeaturesPointsWallet";
 import AppPopup from "../admin/components/AppPopup/AppPopup";
 import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
@@ -223,12 +222,13 @@ export const adminPanelChildRoutes = [
   <Route key="ref" path="referral" element={<Navigate to="money-features/refer-earn" replace />} />,
   <Route key="mf-index" path="money-features" element={<MoneyFeaturesHub />} />,
   <Route key="mf-cash" path="money-features/cash-wallet" element={<MoneyFeaturesCashWallet />} />,
-  <Route key="mf-gift" path="money-features/gift-card" element={<MoneyFeaturesGiftCard />} />,
   <Route key="mf-points" path="money-features/points-wallet" element={<MoneyFeaturesPointsWallet />} />,
   <Route key="mf-refer" path="money-features/refer-earn" element={<Referral />} />,
   <Route key="mf-refer-config" path="money-features/refer-earn/config" element={<ReferralConfig />} />,
   <Route key="mf-wallet-redirect" path="money-features/wallet" element={<Navigate to="money-features/cash-wallet" replace />} />,
-  <Route key="mf-giftcard-redirect" path="money-features/giftcard" element={<Navigate to="money-features/gift-card" replace />} />,
+  <Route key="mf-giftcard-redirect" path="money-features/gift-card" element={<Navigate to="gift" replace />} />,
+  <Route key="mf-gift-redirect" path="money-features/gift" element={<Navigate to="gift" replace />} />,
+  <Route key="mf-giftcard-alt-redirect" path="money-features/giftcard" element={<Navigate to="gift" replace />} />,
   <Route key="mf-coins-redirect" path="money-features/redeem-coins" element={<Navigate to="money-features/points-wallet" replace />} />,
   <Route key="prof" path="profile" element={<Profile />} />,
   <Route key="contact" path="contact-us" element={<ContactUs />} />,
