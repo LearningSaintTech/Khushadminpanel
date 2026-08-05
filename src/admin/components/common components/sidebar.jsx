@@ -55,6 +55,7 @@ const Sidebar = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isCouponOpen, setIsCouponOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isBlogOpen, setIsBlogOpen] = useState(false);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [isMoneyFeaturesOpen, setIsMoneyFeaturesOpen] = useState(false);
@@ -91,6 +92,7 @@ const Sidebar = ({
   const isAnalyticsSectionActive = () =>
     location.pathname.startsWith(ap("analytics")) ||
     location.pathname.startsWith(ap("coupon-analytics"));
+  const isBlogSectionActive = () => location.pathname.startsWith(ap("blog"));
   const isMoneyFeaturesSectionActive = () =>
     location.pathname.includes("/money-features") ||
     location.pathname.startsWith(ap("gift")) ||
@@ -161,6 +163,12 @@ const Sidebar = ({
   useEffect(() => {
     if (isAnalyticsSectionActive()) {
       setIsAnalyticsOpen(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (isBlogSectionActive()) {
+      setIsBlogOpen(true);
     }
   }, [location.pathname]);
 
@@ -532,6 +540,9 @@ const Sidebar = ({
               isAnalyticsSectionActive={isAnalyticsSectionActive}
               isAnalyticsOpen={isAnalyticsOpen}
               setIsAnalyticsOpen={setIsAnalyticsOpen}
+              isBlogSectionActive={isBlogSectionActive}
+              isBlogOpen={isBlogOpen}
+              setIsBlogOpen={setIsBlogOpen}
               isCouponOpen={isCouponOpen}
               setIsCouponOpen={setIsCouponOpen}
               isInventoryOpen={isInventoryOpen}

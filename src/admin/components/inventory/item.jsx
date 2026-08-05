@@ -527,7 +527,13 @@ export default function Items() {
                     );
                     setSearchTerm(e.target.value);
                   }}
-                  placeholder="Search by product name or product ID..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSearchClick();
+                    }
+                  }}
+                  placeholder="Search by exact product name or product ID..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-full border border-black/10 text-sm focus:outline-none focus:ring-2 focus:ring-brand-100/80 focus:border-brand-500/80 bg-white"
                 />
                 <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400 text-sm">

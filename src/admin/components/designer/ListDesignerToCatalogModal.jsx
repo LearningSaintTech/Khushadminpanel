@@ -25,7 +25,8 @@ import {
 } from "../../../utils/sizeChartPresets.js";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { resolveCareIconSrc } from "../../../utils/resolveCareIconSrc.js";
-import { isVariantVideoMedia, variantMediaUrl } from "../../../utils/variantMedia.js";
+import { isVariantVideoMedia, resolveVariantMediaUrl, variantMediaUrl } from "../../../utils/variantMedia.js";
+import { getCdnBaseUrl } from "../../../utils/apiConfig.js";
 import { btnOutline, btnPrimary, fieldClass } from "./designerShared";
 
 const sectionTitle =
@@ -1157,13 +1158,13 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                         Media in payload: {v.images?.length || 0}
                         {Array.isArray(v.images) && v.images.length ? (
                           <span className="mt-1 flex flex-wrap items-start gap-1.5">
-                            {v.images.slice(0, 4).map((im, k) => {
-                              const u = variantMediaUrl(im);
-                              if (!u) return null;
+                            {v.images.map((im, k) => {
+                              const mediaSrc = resolveVariantMediaUrl(im, getCdnBaseUrl()) || variantMediaUrl(im);
+                              if (!mediaSrc) return null;
                               return isVariantVideoMedia(im) ? (
                                 <video
                                   key={`pv-${k}`}
-                                  src={u}
+                                  src={mediaSrc}
                                   className="h-9 w-9 shrink-0 rounded border border-amber-200/80 object-cover bg-black"
                                   muted
                                   playsInline
@@ -1172,7 +1173,7 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                               ) : (
                                 <img
                                   key={`pi-${k}`}
-                                  src={u}
+                                  src={mediaSrc}
                                   alt=""
                                   className="h-9 w-9 shrink-0 rounded border border-amber-200/80 object-cover"
                                   loading="lazy"
@@ -1181,11 +1182,9 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                             })}
                             <span className="min-w-0 break-all text-[10px] text-gray-500">
                               {v.images
-                                .slice(0, 2)
                                 .map((im) => variantFormImageLabel(im))
                                 .filter(Boolean)
                                 .join(" · ")}
-                              {v.images.length > 2 ? " …" : ""}
                             </span>
                           </span>
                         ) : null}

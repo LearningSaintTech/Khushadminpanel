@@ -17,6 +17,7 @@ import {
 import {
   getStaleOrders,
   downloadStaleOrdersPdf,
+  downloadStaleOrdersExcel,
   runStaleOrderAlertEmail,
 } from "../../apis/Orderapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
@@ -65,6 +66,7 @@ export default function StaleOrdersPage() {
   });
   const [staleLoading, setStaleLoading] = useState(true);
   const [stalePdfLoading, setStalePdfLoading] = useState(false);
+  const [staleExcelLoading, setStaleExcelLoading] = useState(false);
   const [staleEmailLoading, setStaleEmailLoading] = useState(false);
   const [staleHours, setStaleHours] = useState(24);
   const [staleSearch, setStaleSearch] = useState("");
@@ -191,6 +193,39 @@ export default function StaleOrdersPage() {
     }
   };
 
+  const handleDownloadStaleExcel = async () => {
+    try {
+      setStaleExcelLoading(true);
+      const blob = await downloadStaleOrdersExcel(staleHours);
+      if (blob && typeof blob.type === "string" && blob.type.includes("json")) {
+        const text = await blob.text();
+        let msg = "Could not generate stale orders Excel";
+        try {
+          const j = JSON.parse(text);
+          if (j?.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      if (!(blob instanceof Blob)) {
+        toast.error("Could not generate stale orders Excel");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `stale-orders-${staleHours}h.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Stale orders Excel downloaded");
+    } catch (err) {
+      toast.error(getBackendErrorMessages(err, "Could not download stale orders Excel")[0]);
+    } finally {
+      setStaleExcelLoading(false);
+    }
+  };
+
   const handleSendStaleAlertEmail = async () => {
     try {
       setStaleEmailLoading(true);
@@ -240,7 +275,7 @@ export default function StaleOrdersPage() {
         </p>
         <p className="mt-0.5 text-stone-600">
           Order lines still in <strong>CONFIRMED</strong> without moving to PROCESSING or shipped
-          within the threshold. Use PDF export or email for ops reports; open a row to fix it in
+          within the threshold. Use PDF/Excel export or email for ops reports; open a row to fix it in
           order details.
         </p>
       </div>
@@ -349,7 +384,7 @@ export default function StaleOrdersPage() {
           </button>
           <button
             type="button"
-            disabled={stalePdfLoading || staleLoading}
+            disabled={stalePdfLoading || staleExcelLoading || staleLoading}
             onClick={handleDownloadStalePdf}
             className={staleBtnOutline}
           >
@@ -359,6 +394,19 @@ export default function StaleOrdersPage() {
               <FileDown className="h-3.5 w-3.5" />
             )}
             PDF
+          </button>
+          <button
+            type="button"
+            disabled={stalePdfLoading || staleExcelLoading || staleLoading}
+            onClick={handleDownloadStaleExcel}
+            className={staleBtnOutline}
+          >
+            {staleExcelLoading ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileDown className="h-3.5 w-3.5" />
+            )}
+            Excel
           </button>
           <button
             type="button"
@@ -384,7 +432,7 @@ export default function StaleOrdersPage() {
           <>
             <span className="font-medium text-stone-800">{staleMeta.totalMatched}</span> line(s)
             matched
-            {staleMeta.truncated ? " · list capped — use PDF for full export" : ""}
+            {staleMeta.truncated ? " · list capped — use PDF/Excel for full export" : ""}
             {staleSearch.trim() ? ` · ${filteredStaleOrders.length} after search` : ""}
             {!staleLoading && filteredStaleOrders.length > 0
               ? ` · page ${stalePage}/${staleTotalPages}`

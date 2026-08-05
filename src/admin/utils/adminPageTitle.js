@@ -38,6 +38,12 @@ const ROUTE_TITLES = {
   "exchange/create": "Create exchange policy",
   "cancellation/create": "Create cancellation policy",
   faq: "FAQ",
+  blog: "All blogs",
+  "blog/detail": "Blog details",
+  "blog/categories": "Blog categories",
+  "blog/comments": "Blog comments",
+  "blog/create": "Create blog post",
+  "blog/edit": "Edit blog post",
   marquee: "Marquee text",
   feedback: "Feedback",
   banner: "Banners",
@@ -111,6 +117,11 @@ export function getAdminPageTitle(pathname, basePath = "/admin") {
   if (last === "create") {
     const subject = ROUTE_TITLES[parent] || ROUTE_TITLES[segments.slice(0, -1).join("/")] || humanize(parent);
     return subject ? `Create ${subject.replace(/^Create\s/i, "")}` : "Create";
+  }
+
+  if (parent === "detail" && isMongoId(last)) {
+    const key = segments.slice(0, -1).join("/");
+    return ROUTE_TITLES[key] || "Details";
   }
 
   if (last === "edit" || isMongoId(last)) {

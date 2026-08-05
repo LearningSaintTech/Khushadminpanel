@@ -1,4 +1,4 @@
-import { createItem, searchItems } from "../apis/itemapi";
+import { createItem, searchItems, updateItem } from "../apis/itemapi";
 import {
   patchDesignerInventoryListed,
   unwrapDesignerInventoryItem,
@@ -6,8 +6,85 @@ import {
 import { buildItemCreateFormData } from "./buildItemCreateFormData";
 import { logFormDataSummary } from "./logFormDataSummary";
 import { variantSkuSet } from "./catalogDesignerSyncPreflight";
+import { variantMediaUrl } from "../../utils/variantMedia.js";
 
 const LOG = "[publishDesignerToCatalog]";
+
+function catalogMediaCount(item) {
+  const variants = Array.isArray(item?.variants) ? item.variants : [];
+  return variants.reduce((sum, v) => {
+    const imgs = Array.isArray(v?.images) ? v.images : [];
+    return (
+      sum +
+      imgs.filter((im) => {
+        if (typeof im === "string") return Boolean(im.trim());
+        return Boolean(variantMediaUrl(im) || im?.imageKey || im?.key);
+      }).length
+    );
+  }, 0);
+}
+
+function formMediaCount(form) {
+  const variants = Array.isArray(form?.variants) ? form.variants : [];
+  return variants.reduce((sum, v) => {
+    const imgs = Array.isArray(v?.images) ? v.images : [];
+    return (
+      sum +
+      imgs.filter((im) => {
+        if (im instanceof File) return true;
+        if (typeof im === "string") return Boolean(im.trim());
+        return Boolean(variantMediaUrl(im) || im?.imageKey || im?.key);
+      }).length
+    );
+  }, 0);
+}
+
+/**
+ * When linking to an existing catalog item, push designer media/details so images are not left behind.
+ */
+async function syncDesignerFormOntoCatalog({
+  catalogItem,
+  form,
+  categoryId,
+  subcategoryId,
+  designerRow,
+}) {
+  if (!form || !catalogItem) return null;
+  const productId = String(
+    catalogItem.productId || form.productId || designerRow?.StyleNumber || ""
+  ).trim();
+  if (!productId) return null;
+
+  const designerMedia = formMediaCount(form);
+  const catalogMedia = catalogMediaCount(catalogItem);
+  if (designerMedia === 0) return null;
+  // Always sync when designer has more media, or catalog has none.
+  if (catalogMedia >= designerMedia && catalogMedia > 0) {
+    console.log(`${LOG} skip media sync — catalog already has ${catalogMedia} vs designer ${designerMedia}`);
+    return null;
+  }
+
+  const catId = categoryId || catalogItem.categoryId;
+  const subId = subcategoryId || catalogItem.subcategoryId;
+  if (!catId || !subId) {
+    console.warn(`${LOG} cannot sync media — missing category/subcategory`);
+    return null;
+  }
+
+  const secondaryCategoryId =
+    form.secondaryCategoryId ?? designerRow?.secondaryCategoryId ?? [];
+  const secondarySubcategoryId =
+    form.secondarySubcategoryId ?? designerRow?.secondarySubcategoryId ?? [];
+
+  const formData = buildItemCreateFormData(form, catId, subId, {
+    isEdit: true,
+    id: catalogItemIdOf(catalogItem) || productId,
+    secondaryCategoryId,
+    secondarySubcategoryId,
+  });
+  logFormDataSummary(formData, `PATCH /items/update/${productId} (link media sync)`);
+  return updateItem(productId, formData);
+}
 
 function unwrapSearchItems(res) {
   const root = res?.data ?? res ?? {};
@@ -107,6 +184,9 @@ export async function linkDesignerToExistingCatalog({
   catalogItem,
   catalogItemId,
   designerRow = null,
+  form = null,
+  categoryId = null,
+  subcategoryId = null,
 }) {
   const id = String(designerInventoryId || "").trim();
   const cid = String(catalogItemId || catalogItemIdOf(catalogItem) || "").trim();
@@ -128,6 +208,19 @@ export async function linkDesignerToExistingCatalog({
     catalogItemId: cid,
   };
 
+  let syncResponse = null;
+  try {
+    syncResponse = await syncDesignerFormOntoCatalog({
+      catalogItem: catalogItem || { _id: cid, productId: designerRow?.StyleNumber },
+      form,
+      categoryId,
+      subcategoryId,
+      designerRow,
+    });
+  } catch (err) {
+    console.warn(`${LOG} catalog media sync after link failed`, err?.message || err);
+  }
+
   return {
     mode: "link",
     catalogItem: catalogItem || { _id: cid },
@@ -135,6 +228,7 @@ export async function linkDesignerToExistingCatalog({
     listedResponse,
     updatedDesigner,
     createResponse: null,
+    syncResponse,
   };
 }
 
@@ -161,6 +255,9 @@ export async function publishDesignerToCatalog({
       designerInventoryId: id,
       catalogItemId: presetCatalogId,
       designerRow,
+      form,
+      categoryId,
+      subcategoryId,
     });
   }
 
@@ -188,6 +285,9 @@ export async function publishDesignerToCatalog({
       designerInventoryId: id,
       catalogItem: existingCatalog,
       designerRow,
+      form,
+      categoryId,
+      subcategoryId,
     });
   }
 
@@ -233,6 +333,9 @@ export async function publishDesignerToCatalog({
           designerInventoryId: id,
           catalogItem: retryCatalog,
           designerRow,
+          form,
+          categoryId,
+          subcategoryId,
         });
       }
     }

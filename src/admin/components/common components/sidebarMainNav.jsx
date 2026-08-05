@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Bell,
   FileText,
+  BookOpen,
   Mail,
   Headphones,
   Megaphone,
@@ -45,6 +46,9 @@ export default function SidebarMainNav({
   isAnalyticsSectionActive,
   isAnalyticsOpen,
   setIsAnalyticsOpen,
+  isBlogSectionActive,
+  isBlogOpen,
+  setIsBlogOpen,
   isCouponOpen,
   setIsCouponOpen,
   isInventoryOpen,
@@ -150,19 +154,67 @@ export default function SidebarMainNav({
       </Link>,
     );
 
-    // push(
-    //   "Gift cards",
-    //   ["gift", "card", "cards"],
-    //   canUse(["gift-card"]),
-    //   <Link
-    //     key="gift"
-    //     to={ap("gift")}
-    //     className={linkClass(location.pathname.startsWith(ap("gift")))}
-    //   >
-    //     <Gift size={ICON} className={iconClass} />
-    //     <span className="truncate">Gift cards</span>
-    //   </Link>,
-    // );
+    push(
+      "Blog",
+      ["blog", "story", "fashion", "article", "category", "categories"],
+      canUse(["blog"]),
+      <div key="blog">
+        <button
+          type="button"
+          onClick={() => setIsBlogOpen(!isBlogOpen)}
+          className={groupBtnClass(isBlogSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <BookOpen size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Blog"}</span>
+          </div>
+          {!compact && (isBlogOpen ? (
+            <ChevronDown size={14} className={chevronClass} />
+          ) : (
+            <ChevronRight size={14} className={chevronClass} />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isBlogOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            <Link
+              to={ap("blog")}
+              className={subLinkClass(
+                location.pathname === ap("blog") ||
+                  location.pathname.includes("/blog/detail/") ||
+                  location.pathname.includes("/blog/create") ||
+                  location.pathname.includes("/blog/edit/")
+              )}
+            >
+              All blogs
+            </Link>
+            <Link
+              to={ap("blog/categories")}
+              className={subLinkClass(isActive(ap("blog/categories")))}
+            >
+              Blog categories
+            </Link>
+          </div>
+        </div>
+      </div>,
+    );
+
+    push(
+      "Gift cards",
+      ["gift", "card", "cards"],
+      canUse(["gift-card"]),
+      <Link
+        key="gift"
+        to={ap("gift")}
+        className={linkClass(location.pathname.startsWith(ap("gift")))}
+      >
+        <Gift size={ICON} className={iconClass} />
+        <span className="truncate">Gift cards</span>
+      </Link>,
+    );
 
     push(
       "Marque Text",
@@ -1138,6 +1190,8 @@ export default function SidebarMainNav({
     searchQuery,
     isAnalyticsSectionActive,
     isAnalyticsOpen,
+    isBlogSectionActive,
+    isBlogOpen,
     isCouponOpen,
     isInventoryOpen,
     isNotificationSectionActive,
@@ -1166,6 +1220,8 @@ export default function SidebarMainNav({
     if (!q) return;
     if (matchesQuery("Analytics", ["workspace", "events"], q))
       setIsAnalyticsOpen(true);
+    if (matchesQuery("Blog", ["blog", "story", "fashion", "category"], q))
+      setIsBlogOpen(true);
     if (matchesQuery("Coupons", ["coupon"], q)) setIsCouponOpen(true);
     if (matchesQuery("Inventory", ["stock", "category", "items"], q))
       setIsInventoryOpen(true);

@@ -76,6 +76,7 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^support-agents(?:\/|$)/, modules: ["support-agents"] },
   { pattern: /^notifications(?:\/|$)/, modules: ["notification"] },
   { pattern: /^faq(?:\/|$)/, modules: ["faq"] },
+  { pattern: /^blog(?:\/|$)/, modules: ["blog"] },
   { pattern: /^marque(?:\/|$)/, modules: ["marque-headings"] },
 ];
 

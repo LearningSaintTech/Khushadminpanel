@@ -20,6 +20,11 @@ import {
   listDesignerSizeCharts,
   updateDesignerItem,
 } from "../../apis/designerApi";
+import {
+  getDesignerInventoryById as adminGetDesignerInventoryById,
+  updateDesignerInventory as adminUpdateDesignerInventory,
+} from "../../../admin/apis/Designerapi";
+import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { getAllCategories } from "../../../admin/apis/categoryapi";
 import { getSubcategoriesByCategory } from "../../../admin/apis/subcategoryapis";
 import { extractBackendMessages } from "../../../admin/utils/extractBackendMessages";
@@ -636,10 +641,29 @@ function SearchableCodeSelect({
   );
 }
 
-const DesignerInventoryForm = () => {
+const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
   const { id } = useParams();
+  const isAdminPanel = panel === "admin";
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const adminBasePath = useAdminPanelBasePath();
+  const inventoryListPath = isAdminPanel
+    ? `${adminBasePath}/designer/inventory`
+    : "/designer/inventory";
+
+  const fetchInventoryItem = useCallback(
+    (itemId) =>
+      isAdminPanel ? adminGetDesignerInventoryById(itemId) : getDesignerItemById(itemId),
+    [isAdminPanel]
+  );
+  const saveInventoryItem = useCallback(
+    (itemId, formData) =>
+      isAdminPanel
+        ? adminUpdateDesignerInventory(itemId, formData)
+        : updateDesignerItem(itemId, formData),
+    [isAdminPanel]
+  );
+
   const [loading, setLoading] = useState(false);
   const [submitErrors, setSubmitErrors] = useState([]);
   const [uploadValidationErrors, setUploadValidationErrors] = useState([]);
@@ -718,12 +742,18 @@ const DesignerInventoryForm = () => {
   });
 
   useEffect(() => {
+    if (isAdminPanel && !isEdit) {
+      navigate(inventoryListPath, { replace: true });
+    }
+  }, [isAdminPanel, isEdit, inventoryListPath, navigate]);
+
+  useEffect(() => {
     if (!isEdit) return;
     (async () => {
       setLoadItem(true);
       setLoadItemErrors([]);
       try {
-        const res = await getDesignerItemById(id);
+        const res = await fetchInventoryItem(id);
         if (res?.success && res.data) {
           const d = res.data;
           setReadOnlyListed(Boolean(d.isListed));
@@ -739,11 +769,11 @@ const DesignerInventoryForm = () => {
         setLoadItem(false);
       }
     })();
-  }, [id, isEdit]);
+  }, [id, isEdit, fetchInventoryItem]);
 
   /** Prefill designer-facing fields from auth profile when creating a new item. */
   useEffect(() => {
-    if (isEdit) return;
+    if (isEdit || isAdminPanel) return;
     let cancelled = false;
     (async () => {
       try {
@@ -1708,9 +1738,9 @@ const DesignerInventoryForm = () => {
         }
       });
 
-      if (isEdit) await updateDesignerItem(id, formData);
+      if (isEdit) await saveInventoryItem(id, formData);
       else await createDesignerItem(formData);
-      navigate("/designer/inventory");
+      navigate(inventoryListPath);
     } catch (err) {
       const msgs = extractBackendMessages(err);
       setSubmitErrors(
@@ -2073,7 +2103,7 @@ const DesignerInventoryForm = () => {
         {isEdit ? (
           <button
             type="button"
-            onClick={() => navigate("/designer/inventory")}
+            onClick={() => navigate(inventoryListPath)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-800 shadow-sm hover:bg-indigo-50"
             aria-label="Back to inventory"
             title="Back to inventory"
@@ -2100,7 +2130,7 @@ const DesignerInventoryForm = () => {
         <button
           type="button"
           className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-rose-800 hover:bg-rose-100"
-          onClick={() => navigate("/designer/inventory")}
+          onClick={() => navigate(inventoryListPath)}
         >
           Back to inventory
         </button>
@@ -2114,7 +2144,7 @@ const DesignerInventoryForm = () => {
         {isEdit ? (
           <button
             type="button"
-            onClick={() => navigate("/designer/inventory")}
+            onClick={() => navigate(inventoryListPath)}
             className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-800 shadow-sm hover:bg-indigo-50"
             aria-label="Back to inventory"
             title="Back to inventory"
@@ -2124,7 +2154,11 @@ const DesignerInventoryForm = () => {
         ) : null}
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold tracking-tight">
-            {isEdit ? "Edit item" : "Create item"}
+            {isAdminPanel
+              ? "Edit item (approval)"
+              : isEdit
+                ? "Edit item"
+                : "Create item"}
           </h1>
           <p className="text-xs text-gray-500">
             All fields sync with designer inventory on the server. Use product type

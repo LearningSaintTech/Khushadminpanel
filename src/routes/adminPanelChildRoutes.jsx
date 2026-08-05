@@ -80,6 +80,7 @@ import SkuFormulaFormPage from "../admin/components/inventory/SkuFormulaFormPage
 import DesignerList from "../admin/components/designer/DesignerList";
 import DesignerForm from "../admin/components/designer/DesignerForm";
 import DesignerInventory from "../admin/components/designer/DesignerInventory";
+import AdminDesignerInventoryEdit from "../admin/components/designer/AdminDesignerInventoryEdit";
 import RewardForm from "../admin/components/reward/RewardForm";
 import Reward from "../admin/components/reward/Reward";
 import UsersLayout from "../admin/components/users/UsersLayout";
@@ -97,6 +98,11 @@ import Giftform from "../admin/components/Gift/GIftform";
 import Sectionformnew from "../admin/components/Section/Sectionformnew";
 import Sectionnew from "../admin/components/Section/Sectionnew";
 import Faq from "../admin/components/Faq/Faq";
+import Blog from "../admin/components/Blog/Blog";
+import BlogDetail from "../admin/components/Blog/BlogDetail";
+import BlogForm from "../admin/components/Blog/BlogForm";
+import BlogCategory from "../admin/components/Blog/BlogCategory";
+import BlogComments from "../admin/components/Blog/BlogComments";
 import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
 import UsPolicy from "../admin/components/Policy/uspPolicy";
@@ -175,6 +181,12 @@ export const adminPanelChildRoutes = [
     <Route key="sections-cr" path="section/create" element={<Sectionformnew/>}/>,
       <Route key="sections-ed" path="section/edit/:id" element={<Sectionformnew/>}/>,
       <Route key="faq" path="faq" element={<Faq/>}/>,
+      <Route key="blog" path="blog" element={<Blog />} />,
+      <Route key="blog-detail" path="blog/detail/:id" element={<BlogDetail />} />,
+      <Route key="blog-categories" path="blog/categories" element={<BlogCategory />} />,
+      <Route key="blog-comments" path="blog/comments" element={<BlogComments />} />,
+      <Route key="blog-cr" path="blog/create" element={<BlogForm />} />,
+      <Route key="blog-ed" path="blog/edit/:id" element={<BlogForm />} />,
       <Route key="marque" path="marque" element={<Marque/>}/>,
 
   <Route key="splash" path="splash" element={<SplashPage />} />,
@@ -204,6 +216,7 @@ export const adminPanelChildRoutes = [
   <Route key="des-cr" path="designer/create" element={<DesignerForm />} />,
   <Route key="des-ed" path="designer/edit/:id" element={<DesignerForm />} />,
   <Route key="des-inv" path="designer/inventory" element={<DesignerInventory />} />,
+  <Route key="des-inv-ed" path="designer/inventory/edit/:id" element={<AdminDesignerInventoryEdit />} />,
   <Route key="ex" path="exchange" element={<Exchanges />} />,
   <Route key="ex-cr" path="exchange/create" element={<ExchangeForm />} />,
   <Route key="ex-ed" path="exchange/edit/:id" element={<ExchangeForm />} />,

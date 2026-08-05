@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Columns3,
   Eye,
+  Pencil,
   Info,
   Loader2,
   Search,
@@ -1536,6 +1537,15 @@ const DesignerInventory = () => {
                           >
                             <Eye className="h-3.5 w-3.5" aria-hidden />
                           </button>
+                          <button
+                            type="button"
+                            className={btnIconEdit}
+                            onClick={() => navigate(ap(`designer/inventory/edit/${r._id}`))}
+                            title="Edit details & images"
+                            aria-label="Edit details and images"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                          </button>
                           <select
                             className="min-w-[7rem] rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-1 text-[11px] font-medium text-indigo-900 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={busyStatusId === r._id}
@@ -1713,6 +1723,20 @@ const DesignerInventory = () => {
                   <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3">
                     <p className="mb-2 text-[11px] font-semibold text-indigo-900">Admin actions</p>
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-50"
+                        onClick={() => {
+                          const itemId = selectedItem?._id;
+                          if (!itemId) return;
+                          setSelectedItem(null);
+                          navigate(ap(`designer/inventory/edit/${itemId}`));
+                        }}
+                        title="Edit product details and images before approval"
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        Edit details & images
+                      </button>
                       <label className="text-[11px] text-gray-700">
                         Status
                         <select
