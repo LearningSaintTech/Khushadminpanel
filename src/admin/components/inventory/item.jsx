@@ -43,6 +43,16 @@ function normalizeWarehouseRows(res) {
   return Array.isArray(list) ? list : [];
 }
 
+function formatItemDateTime(val) {
+  if (!val) return "—";
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
 export default function Items() {
   const { categoryId, subcategoryId } = useParams();
   const navigate = useNavigate();
@@ -635,6 +645,8 @@ export default function Items() {
                 <th className="px-4 py-3 text-right font-medium">Price</th>
                 <th className="px-4 py-3 text-right font-medium">Discounted</th>
                 <th className="px-4 py-3 text-center font-medium">Pricing</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Created At</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Updated At</th>
                 <th className="px-4 py-3 text-center font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -644,7 +656,7 @@ export default function Items() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={13}
                     className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     Loading products...
@@ -653,7 +665,7 @@ export default function Items() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={13}
                     className="px-4 py-10 text-center text-stone-500 text-sm"
                   >
                     No products found
@@ -842,6 +854,20 @@ export default function Items() {
                       >
                         History
                       </button>
+                    </td>
+
+                    <td
+                      className="px-4 py-3 align-middle text-xs text-stone-600 whitespace-nowrap"
+                      title={item.createdAt ? new Date(item.createdAt).toISOString() : undefined}
+                    >
+                      {formatItemDateTime(item.createdAt)}
+                    </td>
+
+                    <td
+                      className="px-4 py-3 align-middle text-xs text-stone-600 whitespace-nowrap"
+                      title={item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined}
+                    >
+                      {formatItemDateTime(item.updatedAt)}
                     </td>
 
                     <td className="px-4 py-3 align-middle text-center">

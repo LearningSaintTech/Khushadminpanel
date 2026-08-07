@@ -127,7 +127,7 @@ const orderEndpoints = {
     return url;
   },
 
-  /** POST: filters + allPages (default true) = all matching lines; maxExportRows (≤15000); or allPages false + page + limit */
+  /** POST: filters + allPages (default true); or selectedOrderIds / selectedItems for selection-only export; maxExportRows (≤15000); or allPages false + page + limit */
   MANUFACTURING_SHEET_PDF: `/admin/orders/items/manufacturing-sheet`,
   MANUFACTURING_SHEET_EXCEL: `/admin/orders/items/manufacturing-sheet-excel`,
 

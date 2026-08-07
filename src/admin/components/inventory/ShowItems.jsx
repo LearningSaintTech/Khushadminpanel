@@ -95,8 +95,20 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "mrp", label: "MRP", defaultVisible: true },
   { key: "discount", label: "Discount", defaultVisible: true },
   { key: "pricingHistory", label: "Pricing", defaultVisible: true },
+  { key: "createdAt", label: "Created At", defaultVisible: true },
+  { key: "updatedAt", label: "Updated At", defaultVisible: true },
   { key: "status", label: "Status", defaultVisible: true },
 ];
+
+function formatItemListDateTime(val) {
+  if (!val) return "—";
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
 
 const tableScrollShell =
   "w-full min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
@@ -1371,6 +1383,24 @@ const ShowItems = () => {
             >
               History
             </button>
+          </td>
+        );
+      case "createdAt":
+        return (
+          <td
+            className={`${tdClass} whitespace-nowrap text-slate-500`}
+            title={item.createdAt ? new Date(item.createdAt).toISOString() : undefined}
+          >
+            {formatItemListDateTime(item.createdAt)}
+          </td>
+        );
+      case "updatedAt":
+        return (
+          <td
+            className={`${tdClass} whitespace-nowrap text-slate-500`}
+            title={item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined}
+          >
+            {formatItemListDateTime(item.updatedAt)}
           </td>
         );
       case "status":

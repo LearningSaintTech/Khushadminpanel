@@ -5481,6 +5481,25 @@ const Orders = ({
         : itemSearch?.trim() || undefined;
     const { paymentStatus, paymentMode, paymentFilters: paymentFiltersParam } =
       paymentFiltersToQuery(paymentFilters);
+
+    const selectedOrderIds =
+      viewMode === VIEW_ORDER
+        ? [...new Set(listSelectedOrderIds.map(String).filter(Boolean))]
+        : [];
+    const selectedItems =
+      viewMode === VIEW_ITEM
+        ? listSelectedItemKeys
+            .map((key) => {
+              const sep = String(key).indexOf("__");
+              if (sep <= 0) return null;
+              const orderId = String(key).slice(0, sep).trim();
+              const itemId = String(key).slice(sep + 2).trim();
+              if (!orderId || !itemId) return null;
+              return { orderId, itemId };
+            })
+            .filter(Boolean)
+        : [];
+
     return {
       search: searchVal,
       searchExact: searchExact || undefined,
@@ -5503,6 +5522,8 @@ const Orders = ({
       maxExportRows: 8000,
       ...(exchangeOnly ? { exchangeOnly: true } : {}),
       ...(returnOnly ? { returnOnly: true } : {}),
+      ...(selectedOrderIds.length ? { selectedOrderIds } : {}),
+      ...(selectedItems.length ? { selectedItems } : {}),
     };
   }, [
     viewMode,
@@ -5519,10 +5540,16 @@ const Orders = ({
     cityFilter,
     exchangeOnly,
     returnOnly,
+    listSelectedOrderIds,
+    listSelectedItemKeys,
   ]);
 
   const manufacturingExportFilenameBase = useCallback(() => {
+    const hasSelection =
+      (viewMode === VIEW_ORDER && listSelectedOrderIds.length > 0) ||
+      (viewMode === VIEW_ITEM && listSelectedItemKeys.length > 0);
     const nameParts = [
+      hasSelection ? "selected" : null,
       viewMode === VIEW_ORDER && lineConsistencyFilter
         ? lineConsistencyFilter
         : "all",
@@ -5530,9 +5557,27 @@ const Orders = ({
       dateTo ? `to${dateTo}` : null,
     ].filter(Boolean);
     return `manufacturing-sheet-${nameParts.join("-")}`;
-  }, [viewMode, lineConsistencyFilter, dateFrom, dateTo]);
+  }, [
+    viewMode,
+    lineConsistencyFilter,
+    dateFrom,
+    dateTo,
+    listSelectedOrderIds.length,
+    listSelectedItemKeys.length,
+  ]);
 
   const handleDownloadManufacturingPdf = async () => {
+    const hasSelection =
+      (viewMode === VIEW_ORDER && listSelectedOrderIds.length > 0) ||
+      (viewMode === VIEW_ITEM && listSelectedItemKeys.length > 0);
+    if (!hasSelection) {
+      toast.error(
+        viewMode === VIEW_ITEM
+          ? "Select one or more items (checkboxes) before exporting the PDF."
+          : "Select one or more orders (checkboxes) before exporting the PDF.",
+      );
+      return;
+    }
     try {
       setManufacturingPdfLoading(true);
       const blob = await downloadManufacturingSheetPdf(buildManufacturingExportBody());
@@ -5555,7 +5600,13 @@ const Orders = ({
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      toast.success("Manufacturing PDF downloaded");
+      toast.success(
+        `Manufacturing PDF downloaded (${
+          viewMode === VIEW_ORDER
+            ? listSelectedOrderIds.length
+            : listSelectedItemKeys.length
+        } selected)`,
+      );
     } catch (err) {
       console.error(err);
       toast.error(
@@ -5567,6 +5618,17 @@ const Orders = ({
   };
 
   const handleDownloadManufacturingExcel = async () => {
+    const hasSelection =
+      (viewMode === VIEW_ORDER && listSelectedOrderIds.length > 0) ||
+      (viewMode === VIEW_ITEM && listSelectedItemKeys.length > 0);
+    if (!hasSelection) {
+      toast.error(
+        viewMode === VIEW_ITEM
+          ? "Select one or more items (checkboxes) before exporting Excel."
+          : "Select one or more orders (checkboxes) before exporting Excel.",
+      );
+      return;
+    }
     try {
       setManufacturingExcelLoading(true);
       const blob = await downloadManufacturingSheetExcel(buildManufacturingExportBody());
@@ -5589,7 +5651,13 @@ const Orders = ({
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      toast.success("Manufacturing Excel downloaded");
+      toast.success(
+        `Manufacturing Excel downloaded (${
+          viewMode === VIEW_ORDER
+            ? listSelectedOrderIds.length
+            : listSelectedItemKeys.length
+        } selected)`,
+      );
     } catch (err) {
       console.error(err);
       toast.error(
@@ -8476,12 +8544,14 @@ const Orders = ({
                     type="text"
                     placeholder={
                       searchExact
-                        ? viewMode === VIEW_ORDER
-                          ? "Exact order ID, name, or phone…"
-                          : "Exact order ID, name, or phone…"
-                        : viewMode === VIEW_ORDER
-                          ? "Order ID, customer, or full product name…"
-                          : "Order ID, full product name, or SKU…"
+                        ? "Exact order ID, name, or phone…"
+                        : exchangeOnly || returnOnly
+                          ? viewMode === VIEW_ORDER
+                            ? "Order ID, AWB, or {orderId}-RET-N / RVP…"
+                            : "Order ID, return AWB, or {orderId}-RET-N…"
+                          : viewMode === VIEW_ORDER
+                            ? "Order ID, customer, or full product name…"
+                            : "Order ID, full product name, or SKU…"
                     }
                     value={viewMode === VIEW_ORDER ? search : itemSearch}
                     onChange={(e) => {
@@ -8796,11 +8866,13 @@ const Orders = ({
                       onClick={handleDownloadManufacturingPdf}
                       className={`${ui.btnOutline} text-[11px] py-1`}
                       title={
-                        exchangeOnly
-                          ? "Downloads a PDF of exchange lines matching your current filters (max 8,000 lines per file)."
+                        listBulkSelectedCount > 0
+                          ? `Download PDF for ${listBulkSelectedCount} selected ${
+                              viewMode === VIEW_ITEM ? "item(s)" : "order(s)"
+                            } only. Unselected rows are excluded.`
                           : viewMode === VIEW_ITEM
-                            ? "Downloads a PDF of all matching lines (uses dates, delivery, payment, search + line status from By item). Max 8,000 lines per file."
-                            : "Downloads a PDF of all matching lines (uses dates, delivery, payment, search). Open By item to filter by line status. Max 8,000 lines per file."
+                            ? "Select item checkboxes first — PDF includes only selected lines."
+                            : "Select order checkboxes first — PDF includes only lines from selected orders."
                       }
                     >
                       {manufacturingPdfLoading ? (
@@ -8809,6 +8881,11 @@ const Orders = ({
                         <FileDown className="h-3.5 w-3.5" aria-hidden />
                       )}
                       Mfg PDF
+                      {listBulkSelectedCount > 0 ? (
+                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                          {listBulkSelectedCount}
+                        </span>
+                      ) : null}
                     </button>
                     <button
                       type="button"
@@ -8816,11 +8893,13 @@ const Orders = ({
                       onClick={handleDownloadManufacturingExcel}
                       className={`${ui.btnOutline} text-[11px] py-1`}
                       title={
-                        exchangeOnly
-                          ? "Downloads an Excel of exchange lines matching your current filters (max 8,000 lines per file)."
+                        listBulkSelectedCount > 0
+                          ? `Download Excel for ${listBulkSelectedCount} selected ${
+                              viewMode === VIEW_ITEM ? "item(s)" : "order(s)"
+                            } only. Unselected rows are excluded.`
                           : viewMode === VIEW_ITEM
-                            ? "Downloads an Excel of all matching lines (uses dates, delivery, payment, search + line status from By item). Max 8,000 lines per file."
-                            : "Downloads an Excel of all matching lines (uses dates, delivery, payment, search). Open By item to filter by line status. Max 8,000 lines per file."
+                            ? "Select item checkboxes first — Excel includes only selected lines."
+                            : "Select order checkboxes first — Excel includes only lines from selected orders."
                       }
                     >
                       {manufacturingExcelLoading ? (
@@ -8829,6 +8908,11 @@ const Orders = ({
                         <FileDown className="h-3.5 w-3.5" aria-hidden />
                       )}
                       Mfg Excel
+                      {listBulkSelectedCount > 0 ? (
+                        <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                          {listBulkSelectedCount}
+                        </span>
+                      ) : null}
                     </button>
 
                   {!exchangeOnly ? (
