@@ -1,5 +1,5 @@
 import { apiConnector } from "../services/Apiconnector";
-//fghjj
+
 const ANALYTICS_API = {
   EVENTS: "/analytics/events",
 };

@@ -82,4 +82,73 @@ export const adminNotificationApi = {
 
   testWhatsApp: (body) =>
     apiConnector("POST", `${ADMIN_BASE}/test-whatsapp`, body).then(getData),
+
+  listWhatsappModules: () =>
+    apiConnector("GET", `${ADMIN_BASE}/whatsapp/modules`).then(getData),
+
+  listWhatsappVariables: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/whatsapp/variables`, null, {}, params).then(getData),
+
+  registerWhatsappVariable: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/whatsapp/variables`, body).then(getData),
+
+  listWhatsappTemplates: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/whatsapp/templates`, null, {}, params).then(getData),
+
+  updateWhatsappTemplateConfig: (id, body) =>
+    apiConnector("PUT", `${ADMIN_BASE}/whatsapp/templates/${id}/config`, body).then(getData),
+
+  syncWhatsappTemplates: () =>
+    apiConnector("POST", `${ADMIN_BASE}/whatsapp/templates/sync`).then(getData),
+
+  seedWhatsappEnvMappings: () =>
+    apiConnector("POST", `${ADMIN_BASE}/whatsapp/templates/seed-env-mappings`).then(getData),
+
+  linkWhatsappTemplateKey: (id, body) =>
+    apiConnector("PUT", `${ADMIN_BASE}/whatsapp/templates/${id}/link`, body).then(getData),
+
+  createWhatsappTemplateOnMeta: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/whatsapp/templates/create`, body).then(getData),
+
+  listWhatsappMessages: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/whatsapp/messages`, null, {}, params).then(getData),
+
+  listNotificationSegments: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/segments`, null, {}, params).then(getData),
+
+  getNotificationSegment: (code) =>
+    apiConnector("GET", `${ADMIN_BASE}/segments/${encodeURIComponent(code)}`).then(getData),
+
+  updateNotificationSegmentConfig: (code, body) =>
+    apiConnector("PUT", `${ADMIN_BASE}/segments/${encodeURIComponent(code)}/config`, body).then(getData),
+
+  previewNotificationSegment: (code, body = {}) =>
+    apiConnector("POST", `${ADMIN_BASE}/segments/${encodeURIComponent(code)}/preview`, body).then(getData),
+
+  sendNotificationSegment: (code, body) =>
+    apiConnector("POST", `${ADMIN_BASE}/segments/${encodeURIComponent(code)}/send`, body).then(getData),
+
+  listSegmentSendHistory: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/segments/history/list`, null, {}, params).then(getData),
+
+  getSegmentSendHistoryDetail: (historyId, params = {}) =>
+    apiConnector(
+      "GET",
+      `${ADMIN_BASE}/segments/history/detail/${encodeURIComponent(historyId)}`,
+      null,
+      {},
+      params,
+    ).then(getData),
+
+  getSegmentRoiSummary: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/segments/roi/summary`, null, {}, params).then(getData),
+
+  getSegmentRequirementsMap: () =>
+    apiConnector("GET", `${ADMIN_BASE}/segments/requirements`).then(getData),
+
+  listSegmentSchedules: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/segments/schedules/list`, null, {}, params).then(getData),
+
+  cancelSegmentSchedule: (scheduleId) =>
+    apiConnector("DELETE", `${ADMIN_BASE}/segments/schedules/${encodeURIComponent(scheduleId)}`).then(getData),
 };

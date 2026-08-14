@@ -15,11 +15,13 @@ import {
   Package,
   Columns3,
 } from "lucide-react";
+import ComingSoonListCell from "./ComingSoonListCell.jsx";
 import {
   searchItems,
   getItemsBySubcategory,
   updateItem,
   getSingleItem,
+  bulkUploadItems,
 } from "../../apis/itemapi";
 import {
   getWarehouses,
@@ -32,7 +34,6 @@ import {
   getAllSubcategories,
   getSubcategoriesByCategory,
 } from "../../apis/subcategoryapis";
-import { bulkUploadItems } from "../../apis/itemapi";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
 import ItemPricingHistoryModal from "./ItemPricingHistoryModal.jsx";
 
@@ -95,8 +96,21 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "mrp", label: "MRP", defaultVisible: true },
   { key: "discount", label: "Discount", defaultVisible: true },
   { key: "pricingHistory", label: "Pricing", defaultVisible: true },
+  { key: "createdAt", label: "Created At", defaultVisible: true },
+  { key: "updatedAt", label: "Updated At", defaultVisible: true },
+  { key: "comingSoon", label: "Coming soon", defaultVisible: true },
   { key: "status", label: "Status", defaultVisible: true },
 ];
+
+function formatItemListDateTime(val) {
+  if (!val) return "—";
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
 
 const tableScrollShell =
   "w-full min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [scrollbar-color:rgb(148_163_184)_rgb(248_250_252)]";
@@ -1121,6 +1135,27 @@ const ShowItems = () => {
     }
   };
 
+  const saveComingSoon = async (itemId, { isComingSoon, launchDate }) => {
+    try {
+      const formData = new FormData();
+      formData.append("isComingSoon", String(Boolean(isComingSoon)));
+      formData.append("launchDate", launchDate || "");
+      await updateItem(itemId, formData);
+      setItems((prev) =>
+        prev.map((row) =>
+          String(row._id) === String(itemId)
+            ? { ...row, isComingSoon: Boolean(isComingSoon), launchDate: launchDate || null }
+            : row,
+        ),
+      );
+      toast.success("Coming soon updated");
+    } catch (error) {
+      console.error("Failed to update coming soon:", error);
+      toast.error(error?.message || "Failed to update coming soon");
+      throw error;
+    }
+  };
+
   const tableMinWidth = Math.max(420, activeColumns.length * 100 + 72);
 
   const renderItemCell = (key, item, index) => {
@@ -1371,6 +1406,30 @@ const ShowItems = () => {
             >
               History
             </button>
+          </td>
+        );
+      case "createdAt":
+        return (
+          <td
+            className={`${tdClass} whitespace-nowrap text-slate-500`}
+            title={item.createdAt ? new Date(item.createdAt).toISOString() : undefined}
+          >
+            {formatItemListDateTime(item.createdAt)}
+          </td>
+        );
+      case "updatedAt":
+        return (
+          <td
+            className={`${tdClass} whitespace-nowrap text-slate-500`}
+            title={item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined}
+          >
+            {formatItemListDateTime(item.updatedAt)}
+          </td>
+        );
+      case "comingSoon":
+        return (
+          <td className={tdClass}>
+            <ComingSoonListCell item={item} onSave={saveComingSoon} compact />
           </td>
         );
       case "status":

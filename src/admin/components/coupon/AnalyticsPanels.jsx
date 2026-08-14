@@ -365,7 +365,13 @@ export function InsightPanel({
       { id: "appInstallTimeline", title: "App installs by day", rows: m.appInstallTimeline || [] },
       { id: "androidInstallTimeline", title: "Android installs by day", rows: m.androidInstallTimeline || [] },
       { id: "iphoneInstallTimeline", title: "iPhone installs by day", rows: m.iphoneInstallTimeline || [] },
-      { id: "cartTimeline", title: "Cart events by day", rows: m.cartTimeline || [] },
+      { id: "cartTimeline", title: "Add to cart by day", rows: m.cartTimeline || [] },
+      { id: "cartViewTimeline", title: "Cart views by day", rows: m.cartViewTimeline || [] },
+      { id: "removeFromCartTimeline", title: "Remove from cart by day", rows: m.removeFromCartTimeline || [] },
+      { id: "orderPlacedTimeline", title: "Orders placed (events) by day", rows: m.orderPlacedTimeline || [] },
+      { id: "orderCancelledTimeline", title: "Order cancellations by day", rows: m.orderCancelledTimeline || [] },
+      { id: "refundRequestedTimeline", title: "Refund requests by day", rows: m.refundRequestedTimeline || [] },
+      { id: "orderTrackingViewTimeline", title: "Order tracking views by day", rows: m.orderTrackingViewTimeline || [] },
       { id: "rewardsEarnedTimeline", title: "Rewards earned by day", rows: m.rewardsEarnedTimeline || [] },
       { id: "rewardsRedeemedTimeline", title: "Rewards redeemed by day", rows: m.rewardsRedeemedTimeline || [] },
       { id: "couponAppliedTimeline", title: "Coupon applied by day", rows: m.couponAppliedTimeline || [] },
@@ -375,6 +381,17 @@ export function InsightPanel({
       { id: "failedTimeline", title: "Failed events by day", rows: m.failedTimeline || [] },
       { id: "successTimeline", title: "Success events by day", rows: m.successTimeline || [] },
       { id: "deliveredTimeline", title: "Delivered orders by day", rows: m.deliveredTimeline || [] },
+      { id: "paymentFailedTimeline", title: "Payment failures by day", rows: m.paymentFailedTimeline || [] },
+      { id: "paymentSuccessTimeline", title: "Payment success by day", rows: m.paymentSuccessTimeline || [] },
+      { id: "paymentInitiatedTimeline", title: "Payment initiated by day", rows: m.paymentInitiatedTimeline || [] },
+      { id: "authFailedTimeline", title: "Auth failures by day", rows: m.authFailedTimeline || [] },
+      { id: "authSuccessTimeline", title: "Auth success by day", rows: m.authSuccessTimeline || [] },
+      { id: "productViewTimeline", title: "Product views by day", rows: m.productViewTimeline || [] },
+      { id: "searchTimeline", title: "Search events by day", rows: m.searchTimeline || [] },
+      { id: "categoryViewTimeline", title: "Category views by day", rows: m.categoryViewTimeline || [] },
+      { id: "recommendationTimeline", title: "Recommendations by day", rows: m.recommendationTimeline || [] },
+      { id: "sessionTimeline", title: "Sessions by day", rows: m.sessionTimeline || [] },
+      { id: "notificationOpenedTimeline", title: "Notification opens by day", rows: m.notificationOpenedTimeline || [] },
     ];
   }, [summaryData]);
 
@@ -421,6 +438,114 @@ export function InsightPanel({
                 <SummaryStat title="Wishlist Current Count" value={Number(summaryData.metrics.wishlistCurrentCount || 0).toLocaleString()} />
                 <SummaryStat title="Most Ordered Pincodes" value={Number(summaryData.metrics.mostOrderedPincode?.length || 0).toLocaleString()} />
               </div>
+              {(summaryData.metrics.checkoutStartsCount > 0 ||
+                summaryData.metrics.paymentSuccessRate != null) && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  {summaryData.metrics.checkoutStartsCount > 0 ? (
+                    <>
+                      <SummaryStat
+                        title="Checkout starts"
+                        value={Number(summaryData.metrics.checkoutStartsCount || 0).toLocaleString()}
+                      />
+                      <SummaryStat
+                        title="Orders placed (events)"
+                        value={Number(summaryData.metrics.orderPlacedEventsCount || 0).toLocaleString()}
+                      />
+                      <SummaryStat
+                        title="Cart abandonment"
+                        value={
+                          summaryData.metrics.cartAbandonmentRate != null
+                            ? `${summaryData.metrics.cartAbandonmentRate}%`
+                            : "—"
+                        }
+                      />
+                    </>
+                  ) : null}
+                  {summaryData.metrics.paymentSuccessRate != null ? (
+                    <SummaryStat
+                      title="Payment success rate"
+                      value={`${summaryData.metrics.paymentSuccessRate}%`}
+                    />
+                  ) : null}
+                </div>
+              )}
+              {summaryData.metrics.repeatPaymentFailureUsers > 0 ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <SummaryStat
+                    title="Repeat payment failures"
+                    value={Number(summaryData.metrics.repeatPaymentFailureUsers || 0).toLocaleString()}
+                  />
+                  <SummaryStat
+                    title="Payment successes"
+                    value={Number(summaryData.metrics.paymentSuccessCount || 0).toLocaleString()}
+                  />
+                  <SummaryStat
+                    title="Payment failures"
+                    value={Number(summaryData.metrics.paymentFailedCount || 0).toLocaleString()}
+                  />
+                </div>
+              ) : null}
+              {(summaryData.metrics.engagementActiveUsers30d > 0 ||
+                summaryData.metrics.notificationTotals?.totalSends > 0) && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {summaryData.metrics.engagementActiveUsers30d > 0 ? (
+                    <SummaryStat
+                      title="Active users (30d)"
+                      value={Number(summaryData.metrics.engagementActiveUsers30d || 0).toLocaleString()}
+                    />
+                  ) : null}
+                  {summaryData.metrics.notificationTotals?.totalSends > 0 ? (
+                    <>
+                      <SummaryStat
+                        title="Segment sends"
+                        value={Number(summaryData.metrics.notificationTotals.totalSends || 0).toLocaleString()}
+                      />
+                      <SummaryStat
+                        title="Messages sent"
+                        value={Number(summaryData.metrics.notificationTotals.totalSent || 0).toLocaleString()}
+                      />
+                      {summaryData.metrics.notificationSegmentAttribution?.ordersWithinWindow > 0 ? (
+                        <SummaryStat
+                          title="Orders after sends (48h)"
+                          value={Number(
+                            summaryData.metrics.notificationSegmentAttribution.ordersWithinWindow || 0,
+                          ).toLocaleString()}
+                        />
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              )}
+              {(summaryData.metrics.notificationSegmentStats || []).length > 0 ? (
+                <CardSection title="Notification segment performance">
+                  <div className={tableScrollShell}>
+                    <table className="min-w-full text-[11px]">
+                      <thead className={tableHeadClass}>
+                        <tr>
+                          <th className={thClass}>Segment</th>
+                          <th className={`${thClass} text-right`}>Sends</th>
+                          <th className={`${thClass} text-right`}>Audience</th>
+                          <th className={`${thClass} text-right`}>Sent</th>
+                          <th className={`${thClass} text-right`}>Orders (48h)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {summaryData.metrics.notificationSegmentStats.map((row) => (
+                          <tr key={row.segmentCode} className="hover:bg-canvas-muted/50">
+                            <td className="px-2 py-1.5 font-medium text-stone-700">{row.segmentCode}</td>
+                            <td className="px-2 py-1.5 text-right text-stone-600">{Number(row.sends || 0).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-right text-stone-600">{Number(row.audienceCount || 0).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-right text-stone-600">{Number(row.sentCount || 0).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-right font-medium text-emerald-700">
+                              {Number(row.ordersWithinWindow || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardSection>
+              ) : null}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                 <div className="font-semibold">Backend compatibility notes</div>
                 {(summaryData?.compatibility?.notes || []).map((n) => (
