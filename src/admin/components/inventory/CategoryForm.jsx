@@ -27,6 +27,7 @@ const CategoryForm = () => {
     isActive: true,
     isNavbar: false,
     isFooter: false,
+    isSidebar: false,
   });
 
   const [categories, setCategories] = useState([]);
@@ -77,6 +78,7 @@ const CategoryForm = () => {
               isActive: category.isActive ?? true,
               isNavbar: category.isNavbar ?? false,
               isFooter: category.isFooter ?? false,
+              isSidebar: category.isSidebar ?? false,
             });
 
             setOriginalSortOrder(loadedSort);
@@ -216,6 +218,7 @@ const CategoryForm = () => {
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.isNavbar);
       formData.append("isFooter", form.isFooter);
+      formData.append("isSidebar", form.isSidebar);
       if (form.iconFile) {
         formData.append("icon", form.iconFile);
       }
@@ -553,6 +556,18 @@ const CategoryForm = () => {
                     Show in Footer
                   </span>
                 </label>
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+  <input
+    type="checkbox"
+    name="isSidebar"
+    checked={form.isSidebar}
+    onChange={handleChange}
+    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
+  />
+  <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
+    Show in Sidebar
+  </span>
+</label>
               </div>
 
               {/* Error */}

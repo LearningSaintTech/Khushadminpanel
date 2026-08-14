@@ -24,6 +24,10 @@ import {
   Coins,
   Truck,
   Palette,
+  UsersRound,
+  IndianRupee,
+  Hash,
+  Clapperboard,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -65,6 +69,14 @@ export default function SidebarMainNav({
   isMoneyFeaturesOpen,
   setIsMoneyFeaturesOpen,
   isMoneyFeaturesSectionActive,
+  isCommunityOpen,
+  setIsCommunityOpen,
+  isCommunitySectionActive,
+  showCommunity,
+  isEarningsOpen,
+  setIsEarningsOpen,
+  isEarningsSectionActive,
+  showEarnings,
   isOrdersOpen,
   setIsOrdersOpen,
   isOrdersSectionActive,
@@ -777,6 +789,188 @@ export default function SidebarMainNav({
       </div>,
     );
 
+    const communityLinks = [
+      {
+        label: "Overview",
+        to: ap("community"),
+        active:
+          location.pathname.endsWith("/community") ||
+          location.pathname.endsWith("/community/"),
+        keywords: ["community", "overview"],
+        icon: UsersRound,
+      },
+      {
+        label: "Keywords",
+        to: ap("community/keywords"),
+        active: isActive(ap("community/keywords")),
+        keywords: ["hashtag", "keyword"],
+        icon: Hash,
+      },
+      {
+        label: "Content",
+        to: ap("community/content"),
+        active: isActive(ap("community/content")),
+        keywords: ["post", "reel", "feed"],
+        icon: Clapperboard,
+      },
+      {
+        label: "Community designers",
+        to: ap("community/designers"),
+        active: isActive(ap("community/designers")),
+        keywords: ["verify", "community designer", "isDesigner"],
+        icon: Users,
+      },
+    ];
+
+    push(
+      "Community",
+      [
+        "community",
+        "hashtag",
+        "keyword",
+        "reel",
+        "post",
+        ...communityLinks.map((l) => l.label),
+      ],
+      showCommunity,
+      <div key="community">
+        <button
+          type="button"
+          onClick={() => setIsCommunityOpen(!isCommunityOpen)}
+          className={groupBtnClass(isCommunitySectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <UsersRound size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Community"}</span>
+          </div>
+          {!compact && (isCommunityOpen ? (
+            <ChevronDown size={14} className={chevronClass} />
+          ) : (
+            <ChevronRight size={14} className={chevronClass} />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isCommunityOpen
+              ? "max-h-80 opacity-100 mt-0.5"
+              : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {communityLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={subLinkClass(item.active)}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon size={12} className="shrink-0" />
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>,
+    );
+
+    const earningsLinks = [
+      {
+        label: "Overview",
+        to: ap("earnings"),
+        active:
+          location.pathname.endsWith("/earnings") ||
+          location.pathname.endsWith("/earnings/"),
+        keywords: ["earnings", "overview"],
+        icon: IndianRupee,
+      },
+      {
+        label: "Policy",
+        to: ap("earnings/policy"),
+        active: isActive(ap("earnings/policy")),
+        keywords: ["policy", "rate"],
+        icon: Activity,
+      },
+      {
+        label: "Commissions",
+        to: ap("earnings/commissions"),
+        active: isActive(ap("earnings/commissions")),
+        keywords: ["commission", "ledger"],
+        icon: Receipt,
+      },
+      {
+        label: "Payouts",
+        to: ap("earnings/payouts"),
+        active: isActive(ap("earnings/payouts")),
+        keywords: ["payout", "upi", "bank"],
+        icon: Wallet,
+      },
+      {
+        label: "Attribution",
+        to: ap("earnings/attribution"),
+        active: isActive(ap("earnings/attribution")),
+        keywords: ["attribution", "content"],
+        icon: FileText,
+      },
+    ];
+
+    push(
+      "Earnings",
+      [
+        "earnings",
+        "commission",
+        "payout",
+        "creator",
+        ...earningsLinks.map((l) => l.label),
+      ],
+      showEarnings,
+      <div key="earnings">
+        <button
+          type="button"
+          onClick={() => setIsEarningsOpen(!isEarningsOpen)}
+          className={groupBtnClass(isEarningsSectionActive())}
+        >
+          <div className={`flex items-center min-w-0 ${compact ? "" : "gap-2"}`}>
+            <IndianRupee size={ICON} className={iconClass} />
+            <span className="truncate">{compact ? "" : "Earnings"}</span>
+          </div>
+          {!compact && (isEarningsOpen ? (
+            <ChevronDown size={14} className={chevronClass} />
+          ) : (
+            <ChevronRight size={14} className={chevronClass} />
+          ))}
+        </button>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showChildren && isEarningsOpen
+              ? "max-h-80 opacity-100 mt-0.5"
+              : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="pl-7 pr-2 py-1 space-y-0.5">
+            {earningsLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={subLinkClass(item.active)}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon size={12} className="shrink-0" />
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>,
+    );
+
     push(
       "Notifications",
       [
@@ -1202,6 +1396,12 @@ export default function SidebarMainNav({
     isUsersSectionActive,
     isMoneyFeaturesOpen,
     isMoneyFeaturesSectionActive,
+    isCommunityOpen,
+    isCommunitySectionActive,
+    showCommunity,
+    isEarningsOpen,
+    isEarningsSectionActive,
+    showEarnings,
     isOrdersOpen,
     isOrdersSectionActive,
     isInfluencerOpen,
@@ -1234,6 +1434,10 @@ export default function SidebarMainNav({
     if (matchesQuery("Users", ["fake", "real"], q)) setIsUsersOpen(true);
     if (matchesQuery("Money features", ["wallet", "gift", "referral"], q))
       setIsMoneyFeaturesOpen(true);
+    if (matchesQuery("Community", ["community", "hashtag", "reel", "keyword"], q))
+      setIsCommunityOpen(true);
+    if (matchesQuery("Earnings", ["earnings", "commission", "payout"], q))
+      setIsEarningsOpen(true);
     if (matchesQuery("Referrals", ["referral", "refer", "earn"], q))
       setIsMoneyFeaturesOpen(true);
     if (matchesQuery("Rewards", ["rewards", "points", "coins"], q))

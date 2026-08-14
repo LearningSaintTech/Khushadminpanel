@@ -57,6 +57,8 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^money-features\/refer(?:\/|$)/, modules: ["referral"] },
   { pattern: /^money-features\/refer-earn(?:\/|$)/, modules: ["referral"] },
   { pattern: /^money-features(?:\/|$)/, modules: ["referral", "gift-card", "admin-wallet", "reward-wallet", "reward-rules"] },
+  { pattern: /^community(?:\/|$)/, modules: ["community"] },
+  { pattern: /^earnings(?:\/|$)/, modules: ["earnings"] },
   { pattern: /^referral(?:\/|$)/, modules: ["referral"] },
   { pattern: /^delivery(?:\/|$)/, modules: ["delivery"] },
   { pattern: /^orders(?:\/|$)/, modules: ["order"] },

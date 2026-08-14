@@ -107,6 +107,15 @@ import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
 import UsPolicy from "../admin/components/Policy/uspPolicy";
 import UspPolicyForm from "../admin/components/Policy/UspPolicyForm";
+import CommunityHub from "../admin/components/community/CommunityHub";
+import CommunityKeywords from "../admin/components/community/CommunityKeywords";
+import CommunityContent from "../admin/components/community/CommunityContent";
+import CommunityDesigners from "../admin/components/community/CommunityDesigners";
+import EarningsHub from "../admin/components/earnings/EarningsHub";
+import EarningsPolicy from "../admin/components/earnings/EarningsPolicy";
+import EarningsCommissions from "../admin/components/earnings/EarningsCommissions";
+import EarningsPayouts from "../admin/components/earnings/EarningsPayouts";
+import EarningsAttribution from "../admin/components/earnings/EarningsAttribution";
 
 /** Shared routes for /admin/* and /subadmin/* (same components). */
 export const adminPanelChildRoutes = [
@@ -243,6 +252,15 @@ export const adminPanelChildRoutes = [
   <Route key="mf-gift-redirect" path="money-features/gift" element={<Navigate to="gift" replace />} />,
   <Route key="mf-giftcard-alt-redirect" path="money-features/giftcard" element={<Navigate to="gift" replace />} />,
   <Route key="mf-coins-redirect" path="money-features/redeem-coins" element={<Navigate to="money-features/points-wallet" replace />} />,
+  <Route key="community" path="community" element={<CommunityHub />} />,
+  <Route key="community-kw" path="community/keywords" element={<CommunityKeywords />} />,
+  <Route key="community-content" path="community/content" element={<CommunityContent />} />,
+  <Route key="community-designers" path="community/designers" element={<CommunityDesigners />} />,
+  <Route key="earnings" path="earnings" element={<EarningsHub />} />,
+  <Route key="earnings-policy" path="earnings/policy" element={<EarningsPolicy />} />,
+  <Route key="earnings-commissions" path="earnings/commissions" element={<EarningsCommissions />} />,
+  <Route key="earnings-payouts" path="earnings/payouts" element={<EarningsPayouts />} />,
+  <Route key="earnings-attribution" path="earnings/attribution" element={<EarningsAttribution />} />,
   <Route key="prof" path="profile" element={<Profile />} />,
   <Route key="contact" path="contact-us" element={<ContactUs />} />,
   <Route key="sup-tix" path="support-tickets" element={<SupportTicketList />} />,
