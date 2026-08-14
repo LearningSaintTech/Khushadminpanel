@@ -209,10 +209,27 @@ export default function SidebarMainNav({
       <Link
         key="gift"
         to={ap("gift")}
-        className={linkClass(location.pathname.startsWith(ap("gift")))}
+        className={linkClass(
+          location.pathname === ap("gift") ||
+            location.pathname.startsWith(`${ap("gift")}/`),
+        )}
       >
         <Gift size={ICON} className={iconClass} />
         <span className="truncate">Gift cards</span>
+      </Link>,
+    );
+
+    push(
+      "Gift Items",
+      ["gift", "items", "addon", "add-on"],
+      canUse(["gift-items"]),
+      <Link
+        key="gift-items"
+        to={ap("gift-items")}
+        className={linkClass(location.pathname.startsWith(ap("gift-items")))}
+      >
+        <Gift size={ICON} className={iconClass} />
+        <span className="truncate">Gift Items</span>
       </Link>,
     );
 
@@ -836,7 +853,8 @@ export default function SidebarMainNav({
                 onClick={() => setIsTemplatesOpen((o) => !o)}
                 className={`w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-medium rounded-md ${
                   isActive(ap("notifications/templates")) ||
-                  isActive(ap("notifications/email-templates"))
+                  isActive(ap("notifications/email-templates")) ||
+                  isActive(ap("notifications/whatsapp-templates"))
                     ? "bg-white/10 text-white"
                     : "text-stone-400 hover:bg-white/5 hover:text-stone-200"
                 }`}
@@ -849,7 +867,7 @@ export default function SidebarMainNav({
                 )}
               </button>
               <div
-                className={`overflow-hidden ${isTemplatesOpen ? "max-h-24" : "max-h-0"}`}
+                className={`overflow-hidden ${isTemplatesOpen ? "max-h-32" : "max-h-0"}`}
               >
                 <Link
                   to={ap("notifications/templates")}
@@ -863,6 +881,12 @@ export default function SidebarMainNav({
                 >
                   Email
                 </Link>
+                <Link
+                  to={ap("notifications/whatsapp-templates")}
+                  className="block pl-3 py-1 text-[10px] text-stone-500 hover:text-stone-300"
+                >
+                  WhatsApp
+                </Link>
               </div>
             </div>
             <Link
@@ -870,6 +894,18 @@ export default function SidebarMainNav({
               className={subLinkClass(isActive(ap("notifications/broadcast")))}
             >
               Broadcast
+            </Link>
+            <Link
+              to={ap("notifications/segments")}
+              className={subLinkClass(isActive(ap("notifications/segments")))}
+            >
+              Segments
+            </Link>
+            <Link
+              to={ap("notifications/whatsapp-messages")}
+              className={subLinkClass(isActive(ap("notifications/whatsapp-messages")))}
+            >
+              WhatsApp log
             </Link>
             <Link
               to={ap("notifications/history")}

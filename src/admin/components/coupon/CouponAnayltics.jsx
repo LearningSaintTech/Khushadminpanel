@@ -11,6 +11,7 @@ import {
   getEventAnalytics,
 } from "../../apis/analyticsApi";
 import { getOrders } from "../../apis/Orderapi";
+import { ChartsPanel } from "./AnalyticsCharts";
 import { ExplorerPanel, InsightPanel, OverviewPanel } from "./AnalyticsPanels";
 import { FilterField, SegmentedTabs } from "./AnalyticsUiParts";
 import {
@@ -40,6 +41,11 @@ const SUMMARY_MODULE_OPTIONS = [
   { id: "success", label: "Success" },
   { id: "delivered", label: "Delivered" },
   { id: "pincode", label: "Most Ordered Pincode" },
+  { id: "browse", label: "Browse & Search" },
+  { id: "engagement", label: "Engagement" },
+  { id: "notifications", label: "Notifications ROI" },
+  { id: "payment", label: "Payment" },
+  { id: "auth", label: "Auth" },
 ];
 const EVENT_TYPE_OPTIONS = [
   "all",
@@ -113,7 +119,7 @@ const EVENT_TYPE_OPTIONS = [
 
 const INSIGHT_QUERY_OPTIONS = [
   { id: "", label: "Select insight query" },
-  { id: "phase1_summary", label: "Phase 1: Full analytics summary" },
+  { id: "phase1_summary", label: "Dashboard summary (all modules)" },
   { id: "top_search_terms", label: "Most searched keywords (Top 10)" },
   { id: "most_visited_products", label: "Most visited products" },
   { id: "most_added_to_cart", label: "Most add-to-cart products" },
@@ -152,7 +158,7 @@ const EventAnalyticsTab = () => {
     to: "",
   });
   const [isDeleting, setIsDeleting] = useState(false);
-  const [insightQuery, setInsightQuery] = useState("");
+  const [insightQuery, setInsightQuery] = useState("phase1_summary");
   const [insightRows, setInsightRows] = useState([]);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightMeta, setInsightMeta] = useState({
@@ -164,6 +170,8 @@ const EventAnalyticsTab = () => {
   const [insightError, setInsightError] = useState("");
   const [activePreset, setActivePreset] = useState("all");
   const [summaryModule, setSummaryModule] = useState("all");
+  const [chartsLoading, setChartsLoading] = useState(false);
+  const [chartsError, setChartsError] = useState("");
 
   const toDateInput = (value) => value.toISOString().slice(0, 10);
   const applyDatePreset = (days) => {
@@ -307,6 +315,39 @@ const EventAnalyticsTab = () => {
     URL.revokeObjectURL(url);
   };
 
+  const buildSummaryParams = () => {
+    const params = {};
+    if (filters.channel !== "all") params.channel = filters.channel;
+    if (filters.from) params.from = filters.from;
+    if (filters.to) params.to = filters.to;
+    if (summaryModule !== "all") params.module = summaryModule;
+    if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
+    return params;
+  };
+
+  const loadChartsSummary = async (dateOverride = null) => {
+    setChartsLoading(true);
+    setChartsError("");
+    setError("");
+    try {
+      const params = buildSummaryParams();
+      if (dateOverride?.from) params.from = new Date(dateOverride.from).toISOString();
+      if (dateOverride?.to) params.to = new Date(dateOverride.to).toISOString();
+      const res = await getAnalyticsSummary(params);
+      if (!res?.success) {
+        throw new Error(res?.message || "Failed to load analytics summary.");
+      }
+      setSummaryData(res?.data || null);
+    } catch (err) {
+      const message = err?.message || "Failed to load chart data.";
+      setChartsError(message);
+      setError(message);
+      setSummaryData(null);
+    } finally {
+      setChartsLoading(false);
+    }
+  };
+
   const runInsightQuery = async () => {
     if (!insightQuery) {
       setError("Please select an insight query.");
@@ -318,14 +359,7 @@ const EventAnalyticsTab = () => {
     setInsightError("");
     try {
       if (insightQuery === "phase1_summary") {
-        const params = {};
-        if (filters.channel !== "all") params.channel = filters.channel;
-        if (filters.from) params.from = filters.from;
-        if (filters.to) params.to = filters.to;
-        if (summaryModule !== "all") params.module = summaryModule;
-        if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
-
-        const res = await getAnalyticsSummary(params);
+        const res = await getAnalyticsSummary(buildSummaryParams());
         if (!res?.success) {
           throw new Error(res?.message || "Failed to load analytics summary.");
         }
@@ -696,6 +730,22 @@ const EventAnalyticsTab = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize]);
 
+  useEffect(() => {
+    if (activeTab !== "charts") return;
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 29);
+    const defaultFrom = toDateInput(start);
+    const defaultTo = toDateInput(end);
+    const from = filters.from || defaultFrom;
+    const to = filters.to || defaultTo;
+    if (!filters.from || !filters.to) {
+      setFilters((prev) => ({ ...prev, from, to }));
+    }
+    loadChartsSummary({ from, to });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   const eventTypeCounts = useMemo(() => {
     return events.reduce((acc, ev) => {
       const key = ev?.eventType || "unknown";
@@ -728,7 +778,15 @@ const EventAnalyticsTab = () => {
   }, [events]);
 
   const totalPages = Math.max(1, Number(pagination?.totalPages || 1));
-  const isPhase1SummaryMode = activeTab === "insight" && insightQuery === "phase1_summary";
+  const isPhase1SummaryMode =
+    (activeTab === "insight" && insightQuery === "phase1_summary") || activeTab === "charts";
+  const chartsDashboardStatus = chartsLoading
+    ? "Loading"
+    : chartsError || error
+      ? "Error"
+      : summaryData?.metrics
+        ? "Loaded"
+        : "Empty";
   const hasActiveFilters =
     filters.channel !== "all" ||
     filters.platform !== "all" ||
@@ -755,6 +813,7 @@ const EventAnalyticsTab = () => {
           onChange={setActiveTab}
           tabs={[
             { id: "overview", label: "Overview" },
+            { id: "charts", label: "Charts" },
             { id: "insight", label: "Insight" },
             { id: "event", label: "Event" },
           ]}
@@ -768,11 +827,17 @@ const EventAnalyticsTab = () => {
       <div className={`${pageToolbar} mb-2 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap`}>
         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
           <span className="rounded-full bg-canvas-muted px-2 py-0.5 font-medium text-stone-700">
-            {activeTab === "overview" ? "Overview" : activeTab === "insight" ? "Insight" : "Event"}
+            {activeTab === "overview"
+              ? "Overview"
+              : activeTab === "charts"
+                ? "Charts"
+                : activeTab === "insight"
+                  ? "Insight"
+                  : "Event"}
           </span>
           {isPhase1SummaryMode ? (
             <span className="rounded-full bg-brand-50 px-2 py-0.5 font-medium text-brand-700">
-              Phase summary
+              Dashboard summary
             </span>
           ) : null}
           {!hasActiveFilters ? (
@@ -910,7 +975,9 @@ const EventAnalyticsTab = () => {
               type="button"
               onClick={async () => {
                 await fetchEvents(1);
-                if (activeTab === "insight" && insightQuery) {
+                if (activeTab === "charts") {
+                  await loadChartsSummary();
+                } else if (activeTab === "insight" && insightQuery) {
                   await runInsightQuery();
                 }
               }}
@@ -988,6 +1055,18 @@ const EventAnalyticsTab = () => {
             currentPage={currentPage}
             totalPages={totalPages}
             fetchEvents={fetchEvents}
+          />
+        ) : null}
+
+        {activeTab === "charts" ? (
+          <ChartsPanel
+            summaryData={summaryData}
+            insightRows={insightRows}
+            summaryModule={summaryModule}
+            loading={chartsLoading}
+            error={chartsError}
+            onRefresh={loadChartsSummary}
+            dashboardStatus={chartsDashboardStatus}
           />
         ) : null}
 

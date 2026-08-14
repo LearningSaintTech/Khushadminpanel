@@ -26,6 +26,30 @@ function metaTagsToJsonPayload(str) {
   return JSON.stringify(arr);
 }
 
+/** Date input value (yyyy-mm-dd) from API Date / ISO string. */
+export function launchDateToInputValue(val) {
+  if (!val) return "";
+  const s = String(val);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** ISO date for item create/update, or empty string to clear. */
+export function launchDateToApiValue(val) {
+  const s = String(val || "").trim();
+  if (!s) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00.000Z`;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
 export function buildItemCreateFormData(form, categoryId, subcategoryId, options = {}) {
   const { isEdit = false, id = null } = options;
   console.log("[buildItemCreateFormData] start", {
@@ -60,6 +84,8 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
   formData.append("secondarySubcategoryId", JSON.stringify(secondarySubcategoryId));
   formData.append("defaultColor", form.defaultColor);
   formData.append("isActive", String(form.isActive !== false));
+  formData.append("isComingSoon", String(Boolean(form.isComingSoon)));
+  formData.append("launchDate", launchDateToApiValue(form.launchDate));
 
   const variantsData = (form.variants || [])
     .filter((variant) => variant && variant.color && variant.color.name && variant.color.name.trim())
@@ -452,6 +478,8 @@ export function designerInventoryToItemFormState(designer) {
     },
     defaultColor: (designer.defaultColor || designer.variants?.[0]?.color?.name || "Black").trim() || "Black",
     isActive: true,
+    isComingSoon: Boolean(designer.isComingSoon),
+    launchDate: launchDateToInputValue(designer.launchDate),
     variants: variants.length
       ? variants
       : [

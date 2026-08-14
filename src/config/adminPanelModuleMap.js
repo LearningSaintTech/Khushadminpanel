@@ -39,6 +39,7 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^features(?:\/|$)/, modules: ["features"] },
   { pattern: /^filters(?:\/|$)/, modules: ["filters"] },
   { pattern: /^feedback(?:\/|$)/, modules: ["suggestions"] },
+  { pattern: /^gift-items(?:\/|$)/, modules: ["gift-items"] },
   { pattern: /^gift(?:\/|$)/, modules: ["gift-card"] },
   { pattern: /^money-features\/gift-card(?:\/|$)/, modules: ["gift-card"] },
   { pattern: /^money-features\/giftcard(?:\/|$)/, modules: ["gift-card"] },

@@ -55,6 +55,8 @@ const ROUTE_TITLES = {
   wallet: "Reward rules",
   "rewards/create": "Create reward rule",
   "app-popup": "App popup",
+  "gift-items": "Gift Items",
+  "gift-items/create": "Create gift item",
   gift: "Gift cards",
   "gift/create": "Create gift card",
   analytics: "Analytics",
@@ -82,6 +84,9 @@ const ROUTE_TITLES = {
   "notifications/email-templates": "Email templates",
   "notifications/broadcast": "Broadcast",
   "notifications/test": "Notification test",
+  "notifications/whatsapp-templates": "WhatsApp templates",
+  "notifications/whatsapp-messages": "WhatsApp messages",
+  "notifications/segments": "Notification segments",
   exchange: "Exchange policies",
   cancellation: "Cancellation policies",
 };

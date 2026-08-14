@@ -15,11 +15,13 @@ import {
   Package,
   Columns3,
 } from "lucide-react";
+import ComingSoonListCell from "./ComingSoonListCell.jsx";
 import {
   searchItems,
   getItemsBySubcategory,
   updateItem,
   getSingleItem,
+  bulkUploadItems,
 } from "../../apis/itemapi";
 import {
   getWarehouses,
@@ -32,7 +34,6 @@ import {
   getAllSubcategories,
   getSubcategoriesByCategory,
 } from "../../apis/subcategoryapis";
-import { bulkUploadItems } from "../../apis/itemapi";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
 import ItemPricingHistoryModal from "./ItemPricingHistoryModal.jsx";
 
@@ -97,6 +98,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "pricingHistory", label: "Pricing", defaultVisible: true },
   { key: "createdAt", label: "Created At", defaultVisible: true },
   { key: "updatedAt", label: "Updated At", defaultVisible: true },
+  { key: "comingSoon", label: "Coming soon", defaultVisible: true },
   { key: "status", label: "Status", defaultVisible: true },
 ];
 
@@ -1133,6 +1135,27 @@ const ShowItems = () => {
     }
   };
 
+  const saveComingSoon = async (itemId, { isComingSoon, launchDate }) => {
+    try {
+      const formData = new FormData();
+      formData.append("isComingSoon", String(Boolean(isComingSoon)));
+      formData.append("launchDate", launchDate || "");
+      await updateItem(itemId, formData);
+      setItems((prev) =>
+        prev.map((row) =>
+          String(row._id) === String(itemId)
+            ? { ...row, isComingSoon: Boolean(isComingSoon), launchDate: launchDate || null }
+            : row,
+        ),
+      );
+      toast.success("Coming soon updated");
+    } catch (error) {
+      console.error("Failed to update coming soon:", error);
+      toast.error(error?.message || "Failed to update coming soon");
+      throw error;
+    }
+  };
+
   const tableMinWidth = Math.max(420, activeColumns.length * 100 + 72);
 
   const renderItemCell = (key, item, index) => {
@@ -1401,6 +1424,12 @@ const ShowItems = () => {
             title={item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined}
           >
             {formatItemListDateTime(item.updatedAt)}
+          </td>
+        );
+      case "comingSoon":
+        return (
+          <td className={tdClass}>
+            <ComingSoonListCell item={item} onSave={saveComingSoon} compact />
           </td>
         );
       case "status":

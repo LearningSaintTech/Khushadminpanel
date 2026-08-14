@@ -883,6 +883,29 @@ export default function ListDesignerToCatalogModal({ open, designerRow, onClose,
                     Active in catalog
                   </label>
                 </div>
+                <div className="flex items-center gap-2 pt-5">
+                  <input
+                    id="ldc-coming-soon"
+                    type="checkbox"
+                    checked={!!form.isComingSoon}
+                    onChange={(e) => setForm((f) => ({ ...f, isComingSoon: e.target.checked }))}
+                  />
+                  <label htmlFor="ldc-coming-soon" className="text-[12px] text-gray-700">
+                    Coming soon
+                  </label>
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-xs font-medium text-gray-700">Launch date</label>
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={form.launchDate || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, launchDate: e.target.value }))}
+                  />
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    Storefront stays blurred until this date.
+                  </p>
+                </div>
                 <div className="sm:col-span-2">
                   <label className="mb-0.5 block text-xs font-medium text-gray-700">
                     Short description *

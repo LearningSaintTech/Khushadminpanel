@@ -280,6 +280,18 @@ export default function ItemDetails() {
                   />
                   {item.isActive ? "In Stock" : "Inactive / Out of Stock"}
                 </div>
+                {item.isComingSoon ? (
+                  <div className="mt-3 inline-flex items-center gap-2 px-4 sm:px-5 py-2 rounded-full bg-amber-50 text-amber-900 text-xs sm:text-sm font-medium ring-1 ring-amber-200">
+                    Coming soon
+                    {item.launchDate
+                      ? ` · ${new Date(item.launchDate).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}`
+                      : ""}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -327,6 +339,28 @@ export default function ItemDetails() {
                     </dt>
                     <dd className="mt-1 text-sm sm:text-base font-semibold">
                       {item.totalStock ?? "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs sm:text-sm text-stone-500 font-medium">
+                      Coming soon
+                    </dt>
+                    <dd className="mt-1 text-sm sm:text-base font-semibold">
+                      {item.isComingSoon ? "Yes" : "No"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs sm:text-sm text-stone-500 font-medium">
+                      Launch date
+                    </dt>
+                    <dd className="mt-1 text-sm sm:text-base font-semibold">
+                      {item.launchDate
+                        ? new Date(item.launchDate).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "—"}
                     </dd>
                   </div>
                 </div>

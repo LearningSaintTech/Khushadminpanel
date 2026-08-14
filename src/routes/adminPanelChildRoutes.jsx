@@ -65,6 +65,9 @@ import AdminNotificationTemplatesPage from "../admin/components/notifications/Ad
 import AdminEmailTemplatesPage from "../admin/components/notifications/AdminEmailTemplatesPage";
 import AdminBroadcastPage from "../admin/components/notifications/AdminBroadcastPage";
 import AdminNotificationTestPage from "../admin/components/notifications/AdminNotificationTestPage";
+import AdminWhatsappTemplatesPage from "../admin/components/notifications/AdminWhatsappTemplatesPage";
+import AdminWhatsappMessagesPage from "../admin/components/notifications/AdminWhatsappMessagesPage";
+import AdminNotificationSegmentsPage from "../admin/components/notifications/AdminNotificationSegmentsPage";
 import ContactUs from "../admin/components/ContactUs/ContactUs";
 import SupportAgentList from "../admin/components/support/agents/SupportAgentList";
 import SupportAgentForm from "../admin/components/support/agents/SupportAgentForm";
@@ -94,6 +97,8 @@ import MoneyFeaturesGiftCard from "../admin/components/moneyFeatures/MoneyFeatur
 import MoneyFeaturesPointsWallet from "../admin/components/moneyFeatures/MoneyFeaturesPointsWallet";
 import AppPopup from "../admin/components/AppPopup/AppPopup";
 import AppPopupForm from "../admin/components/AppPopup/AppPopupForm";
+import GiftItems from "../admin/components/GiftItems/GiftItems";
+import GiftItemsForm from "../admin/components/GiftItems/GiftItemsForm";
 import Gift from "../admin/components/Gift/Giftcard";
 import Giftform from "../admin/components/Gift/GIftform";
 import Sectionformnew from "../admin/components/Section/Sectionformnew";
@@ -146,6 +151,9 @@ export const adminPanelChildRoutes = [
   <Route key="app-popup" path="app-popup" element={<AppPopup />} />,
   <Route key="app-popup-cr" path="app-popup/create" element={<AppPopupForm />} />,
   <Route key="app-popup-ed" path="app-popup/edit/:id" element={<AppPopupForm />} />,
+  <Route key="gift-items" path="gift-items" element={<GiftItems />} />,
+  <Route key="gift-items-cr" path="gift-items/create" element={<GiftItemsForm />} />,
+  <Route key="gift-items-ed" path="gift-items/edit/:id" element={<GiftItemsForm />} />,
   <Route key="brands" path="brands" element={<Brand />} />,
   <Route key="brands-cr" path="brands/create" element={<BrandForm />} />,
   <Route key="brands-ed" path="brands/edit/:id" element={<BrandForm />} />,
@@ -260,6 +268,9 @@ export const adminPanelChildRoutes = [
   <Route key="notif-email" path="notifications/email-templates" element={<AdminEmailTemplatesPage />} />,
   <Route key="notif-bc" path="notifications/broadcast" element={<AdminBroadcastPage />} />,
   <Route key="notif-test" path="notifications/test" element={<AdminNotificationTestPage />} />,
+  <Route key="notif-wa-tpl" path="notifications/whatsapp-templates" element={<AdminWhatsappTemplatesPage />} />,
+  <Route key="notif-wa-msg" path="notifications/whatsapp-messages" element={<AdminWhatsappMessagesPage />} />,
+  <Route key="notif-segments" path="notifications/segments" element={<AdminNotificationSegmentsPage />} />,
   <Route key="audit" path="audit-logs" element={<AuditLogsPage />} />,
   <Route key="usp" path="usp" element={<UsPolicy />} />,
   <Route key="usp-cr" path="usp/create" element={<UspPolicyForm />} />,

@@ -24,6 +24,7 @@ import {
   presetGenderKeyFromSkuGender,
 } from "../../../utils/sizeChartPresets.js";
 import { compressImageFilesForUpload } from "../../../utils/compressImageForUpload.js";
+import { launchDateToApiValue, launchDateToInputValue } from "../../utils/buildItemCreateFormData";
 
 /** Friendly toast listing every backend validation / error message */
 function showItemSaveErrorToasts(messages, isCreate) {
@@ -224,6 +225,8 @@ const ItemForm = () => {
     },
     defaultColor: "Black",
     isActive: true,
+    isComingSoon: false,
+    launchDate: "",
 
     variants: [
       {
@@ -438,6 +441,8 @@ const ItemForm = () => {
             },
             defaultColor: itemData.defaultColor || "Black",
             isActive: itemData.isActive ?? true,
+            isComingSoon: Boolean(itemData.isComingSoon),
+            launchDate: launchDateToInputValue(itemData.launchDate),
 
             variants: itemData.variants?.map((variant, vIdx) => {
               console.log(`[loadItem] Processing variant #${vIdx + 1}:`, variant.color?.name);
@@ -991,6 +996,8 @@ const ItemForm = () => {
       formData.append("subcategoryId", subcategoryId);
       formData.append("defaultColor", form.defaultColor);
       formData.append("isActive", String(form.isActive));
+      formData.append("isComingSoon", String(Boolean(form.isComingSoon)));
+      formData.append("launchDate", launchDateToApiValue(form.launchDate));
 
       // Variants - prepare JSON structure
       console.log("[ItemForm] handleSave: preparing variantsData from variants:", form.variants);
@@ -1674,6 +1681,36 @@ const ItemForm = () => {
                         Active
                       </span>
                     </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2.5 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.isComingSoon)}
+                        onChange={(e) => setForm({ ...form, isComingSoon: e.target.checked })}
+                        className="w-4 h-4 rounded border-border text-brand-600 focus:ring-2 focus:ring-brand-500 cursor-pointer"
+                      />
+                      <span className="text-sm font-semibold text-stone-700 group-hover:text-stone-900">
+                        Coming soon
+                      </span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-stone-700 mb-2">
+                      Launch date
+                    </label>
+                    <input
+                      type="date"
+                      value={form.launchDate || ""}
+                      onChange={(e) => setForm({ ...form, launchDate: e.target.value })}
+                      className="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-border bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200"
+                    />
+                    <p className="mt-1 text-[11px] text-stone-500">
+                      Storefront stays blurred and locked until this date (or until Coming soon is turned off).
+                    </p>
                   </div>
                 </div>
 
