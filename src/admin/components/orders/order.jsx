@@ -114,6 +114,10 @@ import { getSafeHttpHref, openSafeExternalUrl } from "../../../utils/safeUrl.uti
 const VIEW_ORDER = "order";
 const VIEW_ITEM = "item";
 
+/** A gift is only "real" when it has an id/name/image; the API sends { giftItemId: "" } for no gift. */
+const isGiftPopulated = (g) =>
+  !!g && (!!g.giftItemId || !!g.name || !!g.image);
+
 /** Fulfilment line statuses — mixed filter uses 2+ distinct values from this set. */
 const FULFILMENT_LINE_STATUSES = new Set([
   "CREATED",
@@ -1724,6 +1728,7 @@ const ORDER_LIST_TABLE_COLUMNS = [
   { key: "phone", label: "Customer phone", defaultVisible: true },
   { key: "email", label: "Email", defaultVisible: false },
   { key: "notes", label: "Notes", defaultVisible: true },
+  { key: "giftItem", label: "Gift item", defaultVisible: true },
   { key: "qty", label: "Quantity", defaultVisible: true },
   { key: "productName", label: "Dress / product name", defaultVisible: true },
   { key: "productId", label: "Catalog product ID", defaultVisible: false },
@@ -4282,6 +4287,9 @@ const Orders = ({
   const [docDownloadLoading, setDocDownloadLoading] = useState(false);
   const [docActionType, setDocActionType] = useState(null); // "label" | "manifest" | "invoice" | "forward"
   const [zoomImageUrl, setZoomImageUrl] = useState(null);
+  // List API does not return giftItem; it only comes from the single-order API.
+  const [giftItemByOrderId, setGiftItemByOrderId] = useState({});
+  const giftItemRequestedRef = useRef(new Set());
   const [storeInfoModal, setStoreInfoModal] = useState(null);
   const [downloadedManifestShipments, setDownloadedManifestShipments] = useState(
     () => new Set(),
@@ -5677,6 +5685,45 @@ const Orders = ({
     () => ITEM_LIST_TABLE_COLUMNS.filter((c) => itemListVisibleColumns.includes(c.key)),
     [itemListVisibleColumns],
   );
+
+  const giftColumnVisible = orderListVisibleColumns.includes("giftItem");
+
+  useEffect(() => {
+    console.log("[gift] gate", { giftColumnVisible, viewMode, orderCount: orders?.length });
+    if (!giftColumnVisible || viewMode !== VIEW_ORDER) return;
+    const pending = (orders || [])
+      .filter(
+        (row) =>
+          row?.orderId &&
+          !isGiftPopulated(row?.giftItem) &&
+          !giftItemRequestedRef.current.has(row.orderId),
+      )
+      .map((row) => row.orderId);
+    console.log("[gift] effect run; pending:", pending);
+    if (!pending.length) return;
+    let cancelled = false;
+    pending.forEach((oid) => giftItemRequestedRef.current.add(oid));
+    (async () => {
+      for (const oid of pending) {
+        if (cancelled) return;
+        let gift = null;
+        try {
+          const res = await getSingleOrder(oid, 1, 1);
+          gift = (res?.data ?? res)?.giftItem || null;
+          console.log("[gift] fetched", oid, { raw: res, gift });
+        } catch (err) {
+          console.error("[gift] lookup failed", oid, err);
+          giftItemRequestedRef.current.delete(oid);
+          continue;
+        }
+        if (cancelled) return;
+        setGiftItemByOrderId((prev) => ({ ...prev, [oid]: gift }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orders, giftColumnVisible, viewMode]);
 
   const orderDetailItemActiveColumns = useMemo(() => {
     const visibleSet = new Set(orderDetailItemVisibleColumns);
@@ -7534,6 +7581,52 @@ const Orders = ({
             ) : (
               <span className="text-xs text-gray-400">—</span>
             )}
+          </div>
+        );
+      }
+      case "giftItem": {
+        const gift = isGiftPopulated(order?.giftItem)
+          ? order.giftItem
+          : order?.orderId
+            ? giftItemByOrderId[order.orderId]
+            : null;
+        if (!isGiftPopulated(gift)) {
+          return <span className="text-xs text-gray-400">—</span>;
+        }
+        const giftName = gift.name || "Gift";
+        const giftImg = gift.image || null;
+        return (
+          <div className="flex min-w-0 max-w-[10rem] items-center gap-1.5">
+            {giftImg ? (
+              <button
+                type="button"
+                onClick={() => setZoomImageUrl(giftImg)}
+                className="h-8 w-8 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+                title={giftName}
+              >
+                <img
+                  src={giftImg}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <span
+                className="block truncate text-xs font-medium text-gray-900"
+                title={giftName}
+              >
+                {giftName}
+              </span>
+              {gift.description ? (
+                <span
+                  className="block truncate text-[10px] text-gray-500"
+                  title={gift.description}
+                >
+                  {gift.description}
+                </span>
+              ) : null}
+            </div>
           </div>
         );
       }
