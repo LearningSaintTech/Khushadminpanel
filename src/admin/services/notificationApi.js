@@ -12,6 +12,14 @@ function getData(res) {
   return res?.data ?? res;
 }
 
+function getPayload(res) {
+  const body = res?.data ?? res;
+  if (body && typeof body === "object" && body.data != null && typeof body.data === "object") {
+    return body.data;
+  }
+  return body;
+}
+
 /** User APIs – Admin, SubAdmin, Driver (receive) */
 export const notificationApi = {
   getList: (params = {}) =>
@@ -45,7 +53,13 @@ export const notificationApi = {
 /** Admin-only APIs (send) – may 403 for SubAdmin */
 export const adminNotificationApi = {
   broadcast: (body) =>
-    apiConnector("POST", `${ADMIN_BASE}/broadcast`, body).then(getData),
+    apiConnector("POST", `${ADMIN_BASE}/broadcast`, body).then(getPayload),
+
+  getBroadcastStatus: (id) =>
+    apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}`).then(getPayload),
+
+  cancelBroadcast: (id) =>
+    apiConnector("POST", `${ADMIN_BASE}/broadcast/${id}/cancel`).then(getPayload),
 
   listTemplates: (params = {}) =>
     apiConnector("GET", `${ADMIN_BASE}/templates`, null, {}, params).then(getData),
