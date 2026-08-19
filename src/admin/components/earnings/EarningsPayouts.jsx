@@ -23,6 +23,8 @@ import {
   fmtInr,
   shortId,
   statusPill,
+  extractCommunityList,
+  communityRowId,
 } from "./earningsShared";
 
 const EarningsPayouts = () => {
@@ -47,11 +49,12 @@ const EarningsPayouts = () => {
       const params = { page, limit };
       if (status) params.status = status;
       if (userId.trim()) params.userId = userId.trim();
+      console.log("[Earnings] payouts params", params);
       const res = await getEarningsPayouts(params);
       const data = res?.data ?? res;
-      const list =
-        data?.items || data?.payouts || (Array.isArray(data) ? data : []);
-      setItems(Array.isArray(list) ? list : []);
+      const list = extractCommunityList(res, ["payouts"]);
+      console.log("[Earnings] parsed payouts", { count: list.length, data, list });
+      setItems(list);
       setTotalPages(
         data?.pagination?.pages ||
           data?.pagination?.totalPages ||
@@ -71,14 +74,21 @@ const EarningsPayouts = () => {
   }, [fetchList]);
 
   const runAction = async () => {
-    if (!modal) return;
+    if (!modal?.id) {
+      toast.error("Missing payoutId");
+      return;
+    }
     setActingId(modal.id);
     try {
+      console.log("[Earnings] mark payout paid / reject", {
+        payoutId: modal.id,
+        action: modal.action,
+        notes,
+      });
       if (modal.action === "pay") {
-        await payEarningsPayout(modal.id, {
-          ...(notes.trim() ? { notes: notes.trim() } : {}),
-        });
-        toast.success("Marked paid");
+        const body = notes.trim() ? { notes: notes.trim() } : {};
+        await payEarningsPayout(modal.id, body);
+        toast.success("Payout marked paid");
       } else {
         await rejectEarningsPayout(modal.id, {
           ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -111,7 +121,7 @@ const EarningsPayouts = () => {
       <PageHeader
         icon={Banknote}
         title="Earnings payouts"
-        subtitle="Pay or reject after manual NEFT/UPI"
+        subtitle="GET /admin/earnings/payouts · PATCH …/payouts/:payoutId/pay"
         onRefresh={fetchList}
         loading={loading}
         backLink={
@@ -183,15 +193,16 @@ const EarningsPayouts = () => {
               </tr>
             ) : (
               items.map((row) => {
-                const pending =
-                  String(row.status || "").toLowerCase() === "pending";
+                const id = communityRowId(row);
+                const st = String(row.status || "").toLowerCase();
+                const pending = st === "pending" || st === "requested";
                 return (
                   <tr
-                    key={row._id}
+                    key={id}
                     className="border-t border-border/80 hover:bg-brand-50/30"
                   >
                     <td className="px-2 py-2 font-mono text-[10px]">
-                      {shortId(row.userId)}
+                      {shortId(row.userId?._id || row.userId)}
                     </td>
                     <td className="px-2 py-2 font-semibold">
                       {fmtInr(row.amount)}
@@ -214,20 +225,21 @@ const EarningsPayouts = () => {
                         <div className="flex justify-end gap-1">
                           <button
                             type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-success/30 bg-success-bg text-success"
-                            title="Mark paid"
+                            className="inline-flex items-center gap-1 rounded-lg border border-success/30 bg-success-bg px-2 py-1 text-[10px] font-semibold text-success hover:opacity-90"
+                            title="PATCH /admin/earnings/payouts/:payoutId/pay"
                             onClick={() =>
-                              setModal({ id: row._id, action: "pay" })
+                              setModal({ id, action: "pay", amount: row.amount })
                             }
                           >
                             <Check size={13} />
+                            Mark paid
                           </button>
                           <button
                             type="button"
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger"
                             title="Reject"
                             onClick={() =>
-                              setModal({ id: row._id, action: "reject" })
+                              setModal({ id, action: "reject" })
                             }
                           >
                             <X size={13} />
@@ -264,6 +276,9 @@ const EarningsPayouts = () => {
             <h3 className="mb-2 text-sm font-semibold text-stone-900">
               {modal.action === "pay" ? "Mark payout paid" : "Reject payout"}
             </h3>
+            <p className="mb-2 font-mono text-[10px] text-stone-500">
+              payoutId: {modal.id}
+            </p>
             <label className={labelClass}>Notes (optional)</label>
             <textarea
               className={`${fieldClass} mb-3 min-h-[64px]`}
@@ -288,7 +303,7 @@ const EarningsPayouts = () => {
                 {actingId ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
-                Confirm
+                {modal.action === "pay" ? "Mark paid" : "Confirm"}
               </button>
             </div>
           </div>

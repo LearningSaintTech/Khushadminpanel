@@ -77,6 +77,8 @@ const ROUTE_TITLES = {
   "community/keywords": "Community keywords",
   "community/content": "Community content",
   "community/designers": "Community designers",
+  "community/projects": "Community projects",
+  "community/project-categories": "Project categories",
   earnings: "Earnings",
   "earnings/policy": "Earnings policy",
   "earnings/commissions": "Commissions",

@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Clapperboard, Loader2, Trash2, X, ZoomIn } from "lucide-react";
+import {
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  Clapperboard,
+  Heart,
+  Loader2,
+  MessageCircle,
+  Package,
+  PanelLeft,
+  Share2,
+  Trash2,
+  X,
+  ZoomIn,
+} from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
   getCommunityFeed,
@@ -20,6 +34,8 @@ import {
   statusPill,
 } from "./communityShared";
 
+const TAGGED_PAGE_SIZE = 4;
+
 function mediaUrl(item) {
   return (
     item?.thumbnailUrl ||
@@ -30,6 +46,83 @@ function mediaUrl(item) {
     item?.imageUrl ||
     null
   );
+}
+
+function firstAvailable(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function toCompactCount(value) {
+  const num = Number(value || 0);
+  if (!Number.isFinite(num)) return "0";
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K`;
+  return `${num}`;
+}
+
+function authorMeta(item) {
+  const author = item?.author || item?.user || item?.creator || item?.userId || {};
+  return {
+    name: firstAvailable(item?.authorName, author?.name, item?.userName, "Creator"),
+    role: firstAvailable(item?.authorRoleLabel, author?.roleLabel, "CREATOR"),
+    image: firstAvailable(
+      item?.authorProfileImage,
+      author?.profileImage,
+      author?.avatar,
+      item?.profileImage,
+      item?.avatar,
+      "",
+    ),
+  };
+}
+
+function taggedProductsOf(item) {
+  const raw =
+    item?.taggedProducts ||
+    item?.products ||
+    item?.taggedItems ||
+    item?.productTags ||
+    item?.linkedProducts ||
+    [];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      const product = entry?.product || entry?.item || entry;
+      return {
+        id: firstAvailable(
+          product?._id,
+          product?.id,
+          product?.productId,
+          entry?._id,
+          entry?.id,
+          `tag-${index}`,
+        ),
+        name: firstAvailable(
+          product?.name,
+          product?.title,
+          entry?.name,
+          entry?.title,
+          `Product ${index + 1}`,
+        ),
+        image: firstAvailable(
+          product?.image,
+          product?.imageUrl,
+          product?.thumbnail,
+          product?.images?.[0]?.url,
+          entry?.image,
+          entry?.imageUrl,
+          "",
+        ),
+        price: firstAvailable(
+          product?.price,
+          product?.sellingPrice,
+          product?.mrp,
+          entry?.price,
+          null,
+        ),
+      };
+    })
+    .filter((entry) => entry.id || entry.name);
 }
 
 const CommunityContent = () => {
@@ -45,6 +138,9 @@ const CommunityContent = () => {
   const [hasMore, setHasMore] = useState(false);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showTaggedProducts, setShowTaggedProducts] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [taggedPage, setTaggedPage] = useState(0);
 
   const fetchFeed = useCallback(
     async ({ reset = false, cursorVal = null } = {}) => {
@@ -81,6 +177,9 @@ const CommunityContent = () => {
   const openDetail = async (id) => {
     setDetailLoading(true);
     setDetail({ _id: id });
+    setShowTaggedProducts(false);
+    setPreviewCollapsed(false);
+    setTaggedPage(0);
     try {
       const res = await getCommunityContent(id);
       setDetail(res?.data ?? res);
@@ -109,6 +208,18 @@ const CommunityContent = () => {
       toast.error(err?.message || "Delete not allowed");
     }
   };
+
+  const detailAuthor = useMemo(() => authorMeta(detail), [detail]);
+  const detailTaggedProducts = useMemo(() => taggedProductsOf(detail), [detail]);
+  const taggedPageCount = Math.max(
+    1,
+    Math.ceil(detailTaggedProducts.length / TAGGED_PAGE_SIZE),
+  );
+  const taggedSlide = detailTaggedProducts.slice(
+    taggedPage * TAGGED_PAGE_SIZE,
+    taggedPage * TAGGED_PAGE_SIZE + TAGGED_PAGE_SIZE,
+  );
+  const detailCaption = firstAvailable(detail?.caption, detail?.description, "—");
 
   return (
     <div className="text-stone-900">

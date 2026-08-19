@@ -19,4 +19,4 @@ export {
   tableHeadClass,
 } from "../Section/sectionShared";
 
-export { fmtInr, shortId, statusPill } from "../community/communityShared";
+export { fmtInr, shortId, statusPill, extractCommunityList, extractCommunityRecord, communityRowId } from "../community/communityShared";

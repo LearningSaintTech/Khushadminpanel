@@ -28,6 +28,7 @@ import {
   IndianRupee,
   Hash,
   Clapperboard,
+  FolderKanban,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -837,6 +838,20 @@ export default function SidebarMainNav({
         keywords: ["verify", "community designer", "isDesigner"],
         icon: Users,
       },
+      {
+        label: "Projects",
+        to: ap("community/projects"),
+        active: isActive(ap("community/projects")),
+        keywords: ["project", "approve", "reject"],
+        icon: FolderKanban,
+      },
+      {
+        label: "Project categories",
+        to: ap("community/project-categories"),
+        active: isActive(ap("community/project-categories")),
+        keywords: ["project category", "category"],
+        icon: Tags,
+      },
     ];
 
     push(
@@ -847,6 +862,7 @@ export default function SidebarMainNav({
         "keyword",
         "reel",
         "post",
+        "project",
         ...communityLinks.map((l) => l.label),
       ],
       showCommunity,
@@ -869,7 +885,7 @@ export default function SidebarMainNav({
         <div
           className={`overflow-hidden transition-all duration-300 ${
             showChildren && isCommunityOpen
-              ? "max-h-80 opacity-100 mt-0.5"
+              ? "max-h-[28rem] opacity-100 mt-0.5"
               : "max-h-0 opacity-0"
           }`}
         >
@@ -1470,7 +1486,7 @@ export default function SidebarMainNav({
     if (matchesQuery("Users", ["fake", "real"], q)) setIsUsersOpen(true);
     if (matchesQuery("Money features", ["wallet", "gift", "referral"], q))
       setIsMoneyFeaturesOpen(true);
-    if (matchesQuery("Community", ["community", "hashtag", "reel", "keyword"], q))
+    if (matchesQuery("Community", ["community", "hashtag", "reel", "keyword", "project"], q))
       setIsCommunityOpen(true);
     if (matchesQuery("Earnings", ["earnings", "commission", "payout"], q))
       setIsEarningsOpen(true);

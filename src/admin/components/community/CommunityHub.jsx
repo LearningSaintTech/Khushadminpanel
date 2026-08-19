@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Hash, Users, Clapperboard, ArrowRight, UsersRound } from "lucide-react";
+import { Hash, Users, Clapperboard, ArrowRight, UsersRound, FolderKanban, Tags } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 
 const CommunityHub = () => {
@@ -32,6 +32,22 @@ const CommunityHub = () => {
       iconClass: "text-amber-600",
       desc: "Verify end-user community designers only — not staff Designers panel. APIs under /admin/panels/community-designers.",
     },
+    {
+      to: ap("community/projects"),
+      icon: FolderKanban,
+      title: "Projects",
+      border: "border-teal-200 hover:border-teal-400",
+      iconClass: "text-teal-600",
+      desc: "Review community projects. Pending / approved / rejected tabs — PATCH /community/admin/projects/:id/approve or /reject.",
+    },
+    {
+      to: ap("community/project-categories"),
+      icon: Tags,
+      title: "Project categories",
+      border: "border-sky-200 hover:border-sky-400",
+      iconClass: "text-sky-600",
+      desc: "Create and manage project categories — POST/GET/PATCH/DELETE /community/admin/project-categories.",
+    },
   ];
 
   return (
@@ -44,11 +60,11 @@ const CommunityHub = () => {
       </div>
 
       <p className="mb-2 max-w-3xl text-[11px] text-stone-600">
-        Admin tools for the Khush community: curated keywords, content browse, and
-        community designer verification. Separate from earnings commissions.
+        Admin tools for the Khush community: curated keywords, content browse,
+        community designer verification, project approval, and project categories.
       </p>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
         {cards.map(({ to, icon: Icon, title, border, iconClass, desc }) => (
           <Link
             key={to}

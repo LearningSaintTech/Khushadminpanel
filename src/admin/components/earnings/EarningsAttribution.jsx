@@ -11,6 +11,7 @@ import {
   fieldClass,
   btnPrimary,
   shortId,
+  extractCommunityRecord,
 } from "./earningsShared";
 
 const EarningsAttribution = () => {
@@ -35,8 +36,11 @@ const EarningsAttribution = () => {
       const params = {};
       if (orderId.trim()) params.orderId = orderId.trim();
       if (itemId.trim()) params.itemId = itemId.trim();
+      console.log("[Earnings] attribution params", params);
       const res = await getEarningsAttribution(params);
-      setResult(res?.data ?? res);
+      const record = extractCommunityRecord(res);
+      console.log("[Earnings] parsed attribution", record);
+      setResult(record);
     } catch (err) {
       toast.error(err?.message || "Lookup failed");
     } finally {
@@ -49,7 +53,7 @@ const EarningsAttribution = () => {
       <PageHeader
         icon={Search}
         title="Attribution lookup"
-        subtitle="GET /admin/earnings/attribution — order line → content → author"
+        subtitle="GET /admin/earnings/attribution?orderId=&itemId="
         backLink={
           <Link
             to={ap("earnings")}

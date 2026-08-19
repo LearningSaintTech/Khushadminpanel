@@ -31,6 +31,9 @@ import {
   thClass,
   shortId,
   statusPill,
+  extractCommunityList,
+  extractCommunityRecord,
+  communityRowId,
 } from "./communityShared";
 
 function fmtDate(value) {
@@ -63,7 +66,7 @@ const CommunityDesigners = () => {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -77,18 +80,26 @@ const CommunityDesigners = () => {
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listCommunityDesigners({
-        status,
-        page,
-        limit,
-        ...(search.trim() ? { search: search.trim() } : {}),
-      });
+      const params = { page, limit };
+      if (status && status !== "all") params.status = status;
+      if (search.trim()) params.search = search.trim();
+      console.log("[Community designers] list params", params);
+      const res = await listCommunityDesigners(params);
       const data = res?.data ?? res;
-      const list = data?.items || [];
-      setItems(Array.isArray(list) ? list : []);
+      const list = extractCommunityList(res, [
+        "designers",
+        "users",
+        "applications",
+      ]);
+      console.log("[Community designers] parsed list", {
+        count: list.length,
+        data,
+        list,
+      });
+      setItems(list);
       const pagination = data?.pagination || {};
       setTotalPages(pagination.pages || pagination.totalPages || 1);
-      setTotal(pagination.total ?? list.length);
+      setTotal(pagination.total ?? data?.total ?? list.length);
     } catch (err) {
       toast.error(err?.message || "Failed to load community designers");
       setItems([]);
@@ -111,7 +122,9 @@ const CommunityDesigners = () => {
     setDetail({ _id: id });
     try {
       const res = await getCommunityDesigner(id);
-      setDetail(res?.data ?? res);
+      const record = extractCommunityRecord(res);
+      console.log("[Community designers] parsed detail", record);
+      setDetail(record);
     } catch (err) {
       toast.error(err?.message || "Failed to load community designer");
       setDetail(null);
@@ -189,7 +202,7 @@ const CommunityDesigners = () => {
       <PageHeader
         icon={BadgeCheck}
         title="Community designers"
-        subtitle="Verify end-user community designer applications — not staff Designers (/designer)"
+        subtitle="GET /admin/panels/community-designers/list"
         onRefresh={fetchList}
         loading={loading}
         accentClass="text-amber-600"
@@ -233,10 +246,10 @@ const CommunityDesigners = () => {
           onChange={(e) => setStatus(e.target.value)}
           title="designerVerificationStatus"
         >
+          <option value="all">All</option>
           <option value="pending">Pending (review)</option>
           <option value="verified">Verified</option>
           <option value="rejected">Rejected</option>
-          <option value="all">All</option>
         </select>
         <input
           className={`${inputClass} min-w-[160px] flex-1`}
@@ -288,9 +301,11 @@ const CommunityDesigners = () => {
                 </td>
               </tr>
             ) : (
-              items.map((row) => (
+              items.map((row) => {
+                const id = communityRowId(row);
+                return (
                 <tr
-                  key={row._id}
+                  key={id}
                   className="border-t border-border/80 hover:bg-brand-50/30"
                 >
                   <td className="px-2 py-2">
@@ -311,7 +326,7 @@ const CommunityDesigners = () => {
                           {row.name || "—"}
                         </p>
                         <p className="text-[10px] text-stone-500">
-                          {row.phoneNumber || shortId(row._id)}
+                          {row.phoneNumber || shortId(id)}
                           {row.isActive === false ? " · inactive" : ""}
                         </p>
                       </div>
@@ -335,7 +350,7 @@ const CommunityDesigners = () => {
                     <div className="flex justify-end gap-1">
                       <button
                         type="button"
-                        onClick={() => openDetail(row._id)}
+                        onClick={() => openDetail(id)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100"
                         title="View community profile"
                       >
@@ -345,7 +360,7 @@ const CommunityDesigners = () => {
                         <>
                           <button
                             type="button"
-                            onClick={() => handleVerify(row._id)}
+                            onClick={() => handleVerify(id)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-success/30 bg-success-bg text-success hover:opacity-90"
                             title="Verify community designer"
                           >
@@ -353,7 +368,7 @@ const CommunityDesigners = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => openDetail(row._id)}
+                            onClick={() => openDetail(id)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-danger/30 bg-danger-bg text-danger hover:bg-danger/10"
                             title="Reject (requires reason)"
                           >
@@ -364,7 +379,8 @@ const CommunityDesigners = () => {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -572,7 +588,7 @@ const CommunityDesigners = () => {
                         type="button"
                         disabled={acting}
                         className={btnPrimary}
-                        onClick={() => handleVerify(detail._id)}
+                        onClick={() => handleVerify(communityRowId(detail))}
                       >
                         {acting ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -585,7 +601,7 @@ const CommunityDesigners = () => {
                         type="button"
                         disabled={acting}
                         className="inline-flex items-center gap-1 rounded-lg border border-danger/30 bg-danger-bg px-3 py-1.5 text-[11px] font-semibold text-danger disabled:opacity-50"
-                        onClick={() => handleReject(detail._id)}
+                        onClick={() => handleReject(communityRowId(detail))}
                       >
                         <X className="h-3.5 w-3.5" />
                         Reject

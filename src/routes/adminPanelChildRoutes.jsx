@@ -116,6 +116,8 @@ import CommunityHub from "../admin/components/community/CommunityHub";
 import CommunityKeywords from "../admin/components/community/CommunityKeywords";
 import CommunityContent from "../admin/components/community/CommunityContent";
 import CommunityDesigners from "../admin/components/community/CommunityDesigners";
+import CommunityProjects from "../admin/components/community/CommunityProjects";
+import CommunityProjectCategories from "../admin/components/community/CommunityProjectCategories";
 import EarningsHub from "../admin/components/earnings/EarningsHub";
 import EarningsPolicy from "../admin/components/earnings/EarningsPolicy";
 import EarningsCommissions from "../admin/components/earnings/EarningsCommissions";
@@ -264,6 +266,8 @@ export const adminPanelChildRoutes = [
   <Route key="community-kw" path="community/keywords" element={<CommunityKeywords />} />,
   <Route key="community-content" path="community/content" element={<CommunityContent />} />,
   <Route key="community-designers" path="community/designers" element={<CommunityDesigners />} />,
+  <Route key="community-projects" path="community/projects" element={<CommunityProjects />} />,
+  <Route key="community-project-cats" path="community/project-categories" element={<CommunityProjectCategories />} />,
   <Route key="earnings" path="earnings" element={<EarningsHub />} />,
   <Route key="earnings-policy" path="earnings/policy" element={<EarningsPolicy />} />,
   <Route key="earnings-commissions" path="earnings/commissions" element={<EarningsCommissions />} />,

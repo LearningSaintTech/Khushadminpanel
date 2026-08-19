@@ -20,6 +20,8 @@ import {
   fmtInr,
   shortId,
   statusPill,
+  extractCommunityList,
+  communityRowId,
 } from "./earningsShared";
 
 const EarningsCommissions = () => {
@@ -31,8 +33,9 @@ const EarningsCommissions = () => {
   const [loading, setLoading] = useState(true);
   const [settling, setSettling] = useState(false);
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState({
     status: "",
     role: "",
@@ -49,17 +52,19 @@ const EarningsCommissions = () => {
       Object.entries(filters).forEach(([k, v]) => {
         if (v?.trim()) params[k] = v.trim();
       });
+      console.log("[Earnings] commissions params", params);
       const res = await getEarningsCommissions(params);
       const data = res?.data ?? res;
-      const list =
-        data?.items || data?.commissions || (Array.isArray(data) ? data : []);
-      setItems(Array.isArray(list) ? list : []);
+      const list = extractCommunityList(res, ["commissions"]);
+      console.log("[Earnings] parsed commissions", { count: list.length, data, list });
+      setItems(list);
       setTotalPages(
         data?.pagination?.pages ||
           data?.pagination?.totalPages ||
           data?.totalPages ||
           1,
       );
+      setTotal(data?.pagination?.total ?? data?.total ?? list.length);
     } catch (err) {
       toast.error(err?.message || "Failed to load commissions");
       setItems([]);
@@ -76,6 +81,7 @@ const EarningsCommissions = () => {
     if (!window.confirm("Run manual earnings settle tick?")) return;
     setSettling(true);
     try {
+      console.log("[Earnings] settle now");
       await settleEarnings();
       toast.success("Settle requested");
       fetchList();
@@ -91,7 +97,7 @@ const EarningsCommissions = () => {
       <PageHeader
         icon={ScrollText}
         title="Commissions ledger"
-        subtitle="GET /admin/earnings/commissions"
+        subtitle="GET /admin/earnings/commissions?page=1&limit=50"
         onRefresh={fetchList}
         loading={loading}
         backLink={
@@ -169,6 +175,9 @@ const EarningsCommissions = () => {
           )}
           Settle now
         </button>
+        <span className="ml-auto text-[10px] text-stone-500">
+          {total} records
+        </span>
       </div>
 
       <div className={tableScrollShell}>
@@ -200,11 +209,11 @@ const EarningsCommissions = () => {
             ) : (
               items.map((row) => (
                 <tr
-                  key={row._id}
+                  key={communityRowId(row)}
                   className="border-t border-border/80 hover:bg-brand-50/30"
                 >
                   <td className="px-2 py-2 font-mono text-[10px] text-stone-700">
-                    {shortId(row.userId)}
+                    {shortId(row.userId?._id || row.userId)}
                   </td>
                   <td className="px-2 py-2">{row.role || "—"}</td>
                   <td className="px-2 py-2 font-semibold text-stone-900">

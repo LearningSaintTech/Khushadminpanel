@@ -12,6 +12,7 @@ import {
   btnPrimary,
   StatCard,
   fmtInr,
+  extractCommunityRecord,
 } from "./earningsShared";
 
 const EarningsPolicy = () => {
@@ -32,7 +33,8 @@ const EarningsPolicy = () => {
     setLoading(true);
     try {
       const res = await getEarningsPolicy();
-      const data = res?.data ?? res ?? {};
+      const data = extractCommunityRecord(res) || {};
+      console.log("[Earnings] parsed policy", data);
       setForm({
         creatorCommissionRatePct:
           data.creatorCommissionRatePct != null
@@ -72,6 +74,7 @@ const EarningsPolicy = () => {
       if (form.returnWindowDaysOverride !== "") {
         body.returnWindowDaysOverride = Number(form.returnWindowDaysOverride);
       }
+      console.log("[Earnings] update policy body", body);
       await updateEarningsPolicy(body);
       toast.success("Policy updated");
       load();
