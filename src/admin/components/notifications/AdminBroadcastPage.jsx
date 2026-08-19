@@ -32,6 +32,32 @@ const TEMPLATE_KEY_OPTIONS = [
   { value: "POPUP_COUPON", label: "POPUP_COUPON" },
 ];
 
+function campaignToResult(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const inner = payload.data && (payload.campaignId == null && payload._id == null)
+    ? payload.data
+    : payload;
+  const total = Number(inner.total ?? inner.totalUsers ?? 0) || 0;
+  const sent = Number(inner.sent ?? inner.processedUsers ?? 0) || 0;
+  return {
+    campaignId: inner.campaignId ?? inner._id ?? null,
+    status: inner.status || "queued",
+    total,
+    sent,
+    error: inner.error || null,
+  };
+}
+
+function broadcastStatusMessage(result) {
+  if (!result) return "";
+  const { status, sent, total, error } = result;
+  if (status === "completed") return `Sent to ${sent} of ${total} users.`;
+  if (status === "failed") return error || "Broadcast failed.";
+  if (status === "cancelled") return "Broadcast cancelled.";
+  if (status === "running") return `Sending… ${sent} of ${total} users.`;
+  return `Queued for ${total} users. Sending…`;
+}
+
 export default function AdminBroadcastPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -44,6 +70,31 @@ export default function AdminBroadcastPage() {
   const [result, setResult] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [zoomOpen, setZoomOpen] = useState(false);
+
+  useEffect(() => {
+    const campaignId = result?.campaignId;
+    const status = result?.status;
+    if (!campaignId || ["completed", "failed", "cancelled"].includes(status)) {
+      return undefined;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const payload = await adminNotificationApi.getBroadcastStatus(campaignId);
+        if (cancelled) return;
+        const next = campaignToResult(payload);
+        if (next) setResult(next);
+      } catch {
+        // keep last known progress
+      }
+    };
+    const timer = setInterval(tick, 2000);
+    tick();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [result?.campaignId, result?.status]);
 
   useEffect(() => {
     if (!imageFile) {
@@ -80,23 +131,22 @@ export default function AdminBroadcastPage() {
     setResult(null);
 
     try {
-      const payload = new FormData();
-      payload.append("title", title.trim());
-      payload.append("body", body?.trim() ?? "");
-      channels.forEach((channel) => payload.append("channels", channel));
+      const form = new FormData();
+      form.append("title", title.trim());
+      form.append("body", body?.trim() ?? "");
+      channels.forEach((channel) => form.append("channels", channel));
       if (channels.includes("whatsapp")) {
-        payload.append("whatsappTemplateKey", whatsappTemplateKey);
+        form.append("whatsappTemplateKey", whatsappTemplateKey);
       }
       if (channels.includes("sms")) {
-        payload.append("smsTemplateKey", smsTemplateKey);
+        form.append("smsTemplateKey", smsTemplateKey);
       }
       if (imageFile) {
-        payload.append("image", imageFile);
+        form.append("image", imageFile);
       }
 
-      const data = await adminNotificationApi.broadcast(payload);
-
-      setResult(data);
+      const response = await adminNotificationApi.broadcast(form);
+      setResult(campaignToResult(response));
       setTitle("");
       setBody("");
       setImageFile(null);
@@ -124,9 +174,8 @@ export default function AdminBroadcastPage() {
 
       {error ? <Alert>{error}</Alert> : null}
       {result ? (
-        <Alert variant="success">
-          Sent to {result.sent ?? result.data?.sent ?? 0} of{" "}
-          {result.total ?? result.data?.total ?? 0} users.
+        <Alert variant={result.status === "failed" ? undefined : "success"}>
+          {broadcastStatusMessage(result)}
         </Alert>
       ) : null}
 
