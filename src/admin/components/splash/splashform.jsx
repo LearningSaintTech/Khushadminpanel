@@ -7,36 +7,88 @@ import {
   getSingleBanner,
 } from "../../apis/homebannerapi";
 import { getAllCategories } from "../../apis/categoryapi";
+import { getSubcategoriesByCategory } from "../../apis/subcategoryapis";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { extractBackendMessages } from "../../utils/extractBackendMessages";
 
 const LOG = "[BannerForm]";
 const DEFAULT_CROP = { x: 5, y: 5, w: 90, h: 90 };
 
+const BANNER_TYPES = [
+  { value: "NORMAL", label: "Normal" },
+  { value: "CATEGORY", label: "Category" },
+  { value: "SUBCATEGORY", label: "Subcategory" },
+  { value: "PROMO", label: "Promo" },
+  { value: "PERCENT", label: "Percent" },
+  { value: "FLAT", label: "Flat" },
+  { value: "FLASH", label: "Flash" },
+];
+
+const DISCOUNT_TYPES = [
+  { value: "PERCENT", label: "Percent (%)" },
+  { value: "FLAT", label: "Flat (₹)" },
+  { value: "FLASH", label: "Flash deal" },
+];
+
+/** Three distinct media slots matching Banner schema. */
+const MEDIA_SLOTS = [
+  {
+    key: "desktop",
+    field: "desktopBanner",
+    label: "Desktop banner",
+    hint: "Wide landscape for desktop / large screens",
+    placeholder: "Upload desktop images or one video",
+  },
+  {
+    key: "mobile",
+    field: "mobileBanner",
+    label: "App mobile banner",
+    hint: "Native app mobile viewport (portrait-friendly)",
+    placeholder: "Upload app mobile images or one video",
+  },
+  {
+    key: "websiteMobile",
+    field: "websiteMobileBanner",
+    label: "Website mobile banner",
+    hint: "Responsive website / m-site (separate from app)",
+    placeholder: "Upload website-mobile images or one video",
+  },
+];
+
+const emptyMediaMap = () =>
+  MEDIA_SLOTS.reduce((acc, slot) => {
+    acc[slot.key] = [];
+    return acc;
+  }, {});
+
 const fieldClass =
   "block w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted";
 const labelClass =
   "mb-1 block text-[10px] font-semibold uppercase tracking-wide text-stone-500";
 
-function logFormDataEntries(formData, label = "FormData") {
-  const entries = [];
-  for (const [key, value] of formData.entries()) {
-    if (value instanceof File) {
-      entries.push({
-        key,
-        fileName: value.name,
-        size: value.size,
-        type: value.type,
-      });
-    } else {
-      entries.push({ key, value });
-    }
-  }
-  console.log(`${LOG} ${label} entries (${entries.length}):`, entries);
+function FormSection({ title, hint, children }) {
+  return (
+    <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
+      <div className="mb-2.5 border-b border-border pb-2">
+        <h2 className="text-xs font-semibold text-stone-900">{title}</h2>
+        {hint ? <p className="mt-0.5 text-[10px] text-stone-500">{hint}</p> : null}
+      </div>
+      <div className="space-y-2.5">{children}</div>
+    </section>
+  );
 }
 
-function logBannerMediaState(label, state) {
-  console.log(`${LOG} ${label}:`, state);
+function Field({ label, required, hint, children }) {
+  return (
+    <div>
+      <label className={labelClass}>
+        {label}
+        {required ? <span className="text-danger"> *</span> : null}
+      </label>
+      {children}
+      {hint ? <p className="mt-0.5 text-[10px] text-stone-400">{hint}</p> : null}
+    </div>
+  );
 }
 
 function normalizeBannerItems(media) {
@@ -48,7 +100,6 @@ function normalizeBannerItems(media) {
   return [];
 }
 
-/** Stable id for keep/remove on update (prefer S3 key, fallback Mongo _id) */
 function getBannerItemKey(item) {
   if (!item) return null;
   return item.key || item.imageKey || item._id || null;
@@ -58,7 +109,6 @@ function collectBannerKeys(items) {
   return items.map(getBannerItemKey).filter(Boolean);
 }
 
-/** Parse navigation whether API returns an object or a JSON string (legacy records). */
 function parseBannerNavigation(raw) {
   if (raw == null || raw === "") {
     return { navigate: "", externalLink: "" };
@@ -75,7 +125,7 @@ function parseBannerNavigation(raw) {
           };
         }
       } catch {
-        /* plain path string */
+        /* plain path */
       }
     }
     return { navigate: trimmed, externalLink: "" };
@@ -91,12 +141,43 @@ function appendBannerNavigation(formData, navigate, externalLink) {
   if (externalLink.trim()) {
     payload.externalLink = externalLink.trim();
   }
-  // Whole object — backend should replace `navigation` instead of dot-path $set
   formData.append("navigation", JSON.stringify(payload));
   formData.append("navigation[navigate]", payload.navigate);
   if (payload.externalLink) {
     formData.append("navigation[externalLink]", payload.externalLink);
   }
+}
+
+function toDatetimeLocalValue(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function inferMediaType(files, existingItems) {
+  const fromFiles = files.some(
+    (f) =>
+      f?.type?.startsWith("video/") ||
+      f?.name?.toLowerCase().endsWith(".mp4") ||
+      f?.name?.toLowerCase().endsWith(".webm") ||
+      f?.name?.toLowerCase().endsWith(".mov"),
+  );
+  if (fromFiles) return "video";
+  const fromExisting = existingItems.some((item) =>
+    /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(String(item?.url || "")),
+  );
+  if (fromExisting) return "video";
+  if (files.length > 0 || existingItems.length > 0) return "image";
+  return "";
 }
 
 function isVideoUrl(url) {
@@ -106,7 +187,7 @@ function isVideoUrl(url) {
 function isVideoFile(file) {
   return (
     file?.type?.startsWith("video/") ||
-    file?.name?.toLowerCase().endsWith(".mp4")
+    /\.(mp4|webm|mov)$/i.test(file?.name || "")
   );
 }
 
@@ -197,21 +278,25 @@ const BannerForm = () => {
   const isEdit = Boolean(id);
 
   const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
   const [type, setType] = useState("NORMAL");
-  const [discountType, setDiscountType] = useState("PERCENT");
+  const [discountType, setDiscountType] = useState("");
   const [discount, setDiscount] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [isActive, setIsActive] = useState(true);
   const [navigation, setNavigation] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [subcategoriesLoading, setSubcategoriesLoading] = useState(false);
 
-  const [desktopBannerFiles, setDesktopBannerFiles] = useState([]);
-  const [desktopExistingItems, setDesktopExistingItems] = useState([]);
-  const [initialDesktopKeys, setInitialDesktopKeys] = useState([]);
-  const [mobileBannerFiles, setMobileBannerFiles] = useState([]);
-  const [mobileExistingItems, setMobileExistingItems] = useState([]);
-  const [initialMobileKeys, setInitialMobileKeys] = useState([]);
+  const [mediaFiles, setMediaFiles] = useState(emptyMediaMap);
+  const [mediaExisting, setMediaExisting] = useState(emptyMediaMap);
+  const [mediaInitialKeys, setMediaInitialKeys] = useState(emptyMediaMap);
 
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState([]);
@@ -222,32 +307,25 @@ const BannerForm = () => {
   const [cropBusy, setCropBusy] = useState(false);
   const previewUrlRef = useRef("");
 
-  const clearErrors = () => setFormErrors([]);
+  const needsCategory = type === "CATEGORY" || type === "SUBCATEGORY";
+  const needsSubcategory = type === "SUBCATEGORY";
+  const needsDiscount =
+    type === "PERCENT" || type === "FLAT" || type === "FLASH";
 
+  const clearErrors = () => setFormErrors([]);
   const setErrors = (msgs) => {
     const list = Array.isArray(msgs) ? msgs : msgs ? [String(msgs)] : [];
-    const filtered = list.filter(Boolean);
-    if (filtered.length > 0) {
-      console.warn(`${LOG} validation/API errors:`, filtered);
-    }
-    setFormErrors(filtered);
+    setFormErrors(list.filter(Boolean));
   };
 
   useEffect(() => {
-    console.log(`${LOG} mount`, { mode: isEdit ? "edit" : "create", id: id || null });
-  }, [isEdit, id]);
-
-  useEffect(() => {
     const loadCategories = async () => {
-      console.log(`${LOG} loadCategories start`);
       setCategoriesLoading(true);
       try {
         const res = await getAllCategories(1, 500);
         const data = res?.data?.data || res?.data || {};
         const list = data.categories || data || [];
-        const final = Array.isArray(list) ? list : [];
-        console.log(`${LOG} loadCategories success`, { count: final.length });
-        setCategories(final);
+        setCategories(Array.isArray(list) ? list : []);
       } catch (err) {
         console.error(`${LOG} loadCategories failed`, err);
       } finally {
@@ -258,28 +336,53 @@ const BannerForm = () => {
   }, []);
 
   useEffect(() => {
-    if (!id) return;
+    if (!needsCategory || !categoryId) {
+      setSubcategories([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setSubcategoriesLoading(true);
+      try {
+        const res = await getSubcategoriesByCategory(categoryId, 1, 500);
+        if (cancelled) return;
+        const data = res?.data?.data || res?.data || {};
+        const list =
+          data.subcategories || data.subCategories || data.items || data || [];
+        setSubcategories(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error(`${LOG} loadSubcategories failed`, err);
+        if (!cancelled) setSubcategories([]);
+      } finally {
+        if (!cancelled) setSubcategoriesLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsCategory, categoryId]);
 
+  useEffect(() => {
+    if (!id) return;
     let cancelled = false;
 
     const fetchBanner = async () => {
-      console.log(`${LOG} fetchBanner start`, { id });
       setLoading(true);
       clearErrors();
       try {
         const data = await getSingleBanner(id);
-        if (cancelled) {
-          console.log(`${LOG} fetchBanner skipped (stale)`, { id });
-          return;
-        }
-        console.log(`${LOG} fetchBanner raw response:`, data);
+        if (cancelled) return;
         const banner = data?.data || data || {};
-        console.log(`${LOG} fetchBanner parsed banner:`, banner);
 
         setTitle(banner.title || "");
+        setText(banner.text || "");
         setType(banner.type || "NORMAL");
-        setDiscountType(banner.discountType || "PERCENT");
+        setDiscountType(banner.discountType || "");
         setDiscount(banner.discount != null ? String(banner.discount) : "");
+        setStartDate(toDatetimeLocalValue(banner.startDate));
+        setEndDate(toDatetimeLocalValue(banner.endDate));
+        setIsActive(banner.isActive !== false);
         const nav = parseBannerNavigation(banner.navigation);
         setNavigation(nav.navigate);
         setExternalLink(nav.externalLink);
@@ -288,35 +391,25 @@ const BannerForm = () => {
         setCategoryId(
           typeof cat === "string" ? cat : cat?._id ? String(cat._id) : "",
         );
+        const sub = banner.subcategoryId;
+        setSubcategoryId(
+          typeof sub === "string" ? sub : sub?._id ? String(sub._id) : "",
+        );
 
-        const desktopItems = normalizeBannerItems(banner.desktopBanner);
-        const mobileItems = normalizeBannerItems(banner.mobileBanner);
-        const deskKeys = collectBannerKeys(desktopItems);
-        const mobKeys = collectBannerKeys(mobileItems);
-        console.log(`${LOG} fetchBanner media`, {
-          desktopCount: desktopItems.length,
-          mobileCount: mobileItems.length,
-          initialDesktopKeys: deskKeys,
-          initialMobileKeys: mobKeys,
-          desktopItems,
-          mobileItems,
+        const nextExisting = emptyMediaMap();
+        const nextKeys = emptyMediaMap();
+        MEDIA_SLOTS.forEach((slot) => {
+          const items = normalizeBannerItems(banner[slot.field]);
+          nextExisting[slot.key] = items;
+          nextKeys[slot.key] = collectBannerKeys(items);
         });
-        setDesktopExistingItems(desktopItems);
-        setMobileExistingItems(mobileItems);
-        setInitialDesktopKeys(deskKeys);
-        setInitialMobileKeys(mobKeys);
-        setDesktopBannerFiles([]);
-        setMobileBannerFiles([]);
+        setMediaExisting(nextExisting);
+        setMediaInitialKeys(nextKeys);
+        setMediaFiles(emptyMediaMap());
       } catch (err) {
-        if (!cancelled) {
-          console.error(`${LOG} fetchBanner failed`, err);
-          setErrors(extractBackendMessages(err));
-        }
+        if (!cancelled) setErrors(extractBackendMessages(err));
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-          console.log(`${LOG} fetchBanner end`);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -326,36 +419,32 @@ const BannerForm = () => {
     };
   }, [id]);
 
-  const desktopFilePreviews = useMemo(
-    () =>
-      desktopBannerFiles.map((file) => ({
+  const mediaPreviews = useMemo(() => {
+    const map = {};
+    MEDIA_SLOTS.forEach((slot) => {
+      map[slot.key] = (mediaFiles[slot.key] || []).map((file) => ({
         file,
         url: URL.createObjectURL(file),
-      })),
-    [desktopBannerFiles],
-  );
-
-  const mobileFilePreviews = useMemo(
-    () =>
-      mobileBannerFiles.map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-      })),
-    [mobileBannerFiles],
-  );
+      }));
+    });
+    return map;
+  }, [mediaFiles]);
 
   useEffect(() => {
     return () => {
-      desktopFilePreviews.forEach((p) => URL.revokeObjectURL(p.url));
-      mobileFilePreviews.forEach((p) => URL.revokeObjectURL(p.url));
+      MEDIA_SLOTS.forEach((slot) => {
+        (mediaPreviews[slot.key] || []).forEach((p) =>
+          URL.revokeObjectURL(p.url),
+        );
+      });
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     };
-  }, [desktopFilePreviews, mobileFilePreviews]);
+  }, [mediaPreviews]);
 
   const validateFiles = (files, label) => {
     if (files.length === 0) return null;
     if (files.length > 1 && files.some(isVideoFile)) {
-      return `${label}: use images only when uploading multiple files (no video).`;
+      return `${label}: use images only when uploading multiple files (one video max).`;
     }
     for (const f of files) {
       if (f.size > 10 * 1024 * 1024) {
@@ -365,57 +454,37 @@ const BannerForm = () => {
     return null;
   };
 
-  const handleMultiFileChange = (e, setFiles, existingOnServerCount = 0) => {
+  const handleMultiFileChange = (e, slotKey) => {
+    const slot = MEDIA_SLOTS.find((s) => s.key === slotKey);
     const picked = Array.from(e.target.files || []);
-    const slot = e.target.name;
-    console.log(`${LOG} handleMultiFileChange`, {
-      slot,
-      pickedCount: picked.length,
-      existingOnServerCount,
-      files: picked.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-    });
-    if (picked.length === 0) return;
+    if (!picked.length || !slot) return;
 
-    const label = slot === "desktopBanner" ? "Desktop" : "Mobile";
-    const err = validateFiles(picked, label);
+    const err = validateFiles(picked, slot.label);
     if (err) {
       setErrors([err]);
       return;
     }
 
-    setFiles((prev) => {
-      const next = [...prev, ...picked];
-      console.log(`${LOG} ${slot} media after add`, {
-        newUploadsCount: next.length,
-        existingOnServerCount,
-        totalVisible: existingOnServerCount + next.length,
-        newFileNames: next.map((f) => f.name),
-      });
-      return next;
-    });
+    setMediaFiles((prev) => ({
+      ...prev,
+      [slotKey]: [...(prev[slotKey] || []), ...picked],
+    }));
     clearErrors();
     e.target.value = "";
   };
 
-  const appendBannerUpdateKeys = (formData, slot, existingItems, initialKeys) => {
+  const appendBannerUpdateKeys = (formData, field, existingItems, initialKeys) => {
     const keepKeys = collectBannerKeys(existingItems);
     const removeKeys = initialKeys.filter((k) => !keepKeys.includes(k));
     const keepJson = JSON.stringify(keepKeys);
     const removeJson = JSON.stringify(removeKeys);
 
-    console.log(`${LOG} appendBannerUpdateKeys [${slot}]`, {
-      initialKeys,
-      keepKeys,
-      removeKeys,
-      existingCount: existingItems.length,
-    });
-
-    formData.append(`${slot}KeepKeys`, keepJson);
+    formData.append(`${field}KeepKeys`, keepJson);
     if (removeKeys.length > 0) {
-      formData.append(`${slot}RemoveKeys`, removeJson);
+      formData.append(`${field}RemoveKeys`, removeJson);
     }
 
-    const cap = slot.charAt(0).toUpperCase() + slot.slice(1);
+    const cap = field.charAt(0).toUpperCase() + field.slice(1);
     formData.append(`keep${cap}Keys`, keepJson);
     if (removeKeys.length > 0) {
       formData.append(`remove${cap}Keys`, removeJson);
@@ -423,143 +492,115 @@ const BannerForm = () => {
   };
 
   const buildFormData = () => {
-    console.log(`${LOG} buildFormData start`, { isEdit, id });
-    logBannerMediaState("state before build", {
-      desktopExisting: desktopExistingItems,
-      mobileExisting: mobileExistingItems,
-      initialDesktopKeys,
-      initialMobileKeys,
-      newDesktopFiles: desktopBannerFiles.map((f) => f.name),
-      newMobileFiles: mobileBannerFiles.map((f) => f.name),
-    });
-
     const formData = new FormData();
     formData.append("title", title.trim());
     formData.append("type", type);
-    formData.append("discountType", discountType);
-    formData.append("discount", discount === "" ? "0" : String(discount));
+    formData.append("isActive", String(isActive));
+    if (text.trim()) formData.append("text", text.trim());
+
+    if (discountType) formData.append("discountType", discountType);
+    if (discount !== "") formData.append("discount", String(discount));
+
+    const startIso = fromDatetimeLocalValue(startDate);
+    const endIso = fromDatetimeLocalValue(endDate);
+    if (startIso) formData.append("startDate", startIso);
+    if (endIso) formData.append("endDate", endIso);
+
     appendBannerNavigation(formData, navigation, externalLink);
-    if (type === "CATEGORY" && categoryId) {
+
+    if (needsCategory && categoryId) {
       formData.append("categoryId", categoryId);
     }
-
-    if (isEdit) {
-      appendBannerUpdateKeys(
-        formData,
-        "desktopBanner",
-        desktopExistingItems,
-        initialDesktopKeys,
-      );
-      appendBannerUpdateKeys(
-        formData,
-        "mobileBanner",
-        mobileExistingItems,
-        initialMobileKeys,
-      );
+    if (needsSubcategory && subcategoryId) {
+      formData.append("subcategoryId", subcategoryId);
     }
 
-    desktopBannerFiles.forEach((file) => {
-      formData.append("desktopBanner", file);
-    });
-    mobileBannerFiles.forEach((file) => {
-      formData.append("mobileBanner", file);
+    MEDIA_SLOTS.forEach((slot) => {
+      const files = mediaFiles[slot.key] || [];
+      const existing = mediaExisting[slot.key] || [];
+      const initialKeys = mediaInitialKeys[slot.key] || [];
+
+      if (isEdit) {
+        appendBannerUpdateKeys(formData, slot.field, existing, initialKeys);
+      }
+
+      const mediaType = inferMediaType(files, existing);
+      if (mediaType) {
+        formData.append(`${slot.field}Type`, mediaType);
+        formData.append(`${slot.field}[type]`, mediaType);
+      }
+
+      files.forEach((file) => {
+        formData.append(slot.field, file);
+      });
     });
 
-    logFormDataEntries(formData, isEdit ? "UPDATE payload" : "CREATE payload");
-    console.log(`${LOG} buildFormData end`);
     return formData;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     clearErrors();
-    console.log(`${LOG} handleSubmit start`, {
-      isEdit,
-      id,
-      title,
-      type,
-      categoryId,
-    });
 
     const clientErrors = [];
     if (!title.trim()) clientErrors.push("Title is required.");
-    if (!navigation.trim()) {
-      clientErrors.push("Navigation path is required (navigation.navigate / navigation[navigate]).");
+    if (!type) clientErrors.push("Banner type is required.");
+    if (needsCategory && !categoryId) {
+      clientErrors.push("Select a category for this banner type.");
     }
-    if (type === "CATEGORY" && !categoryId) {
-      clientErrors.push("Select a category for CATEGORY banners.");
+    if (needsSubcategory && !subcategoryId) {
+      clientErrors.push("Select a subcategory for SUBCATEGORY banners.");
+    }
+    if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
+      clientErrors.push("End date must be after start date.");
     }
 
-    const hasDesktop =
-      desktopBannerFiles.length > 0 || desktopExistingItems.length > 0;
-    const hasMobile =
-      mobileBannerFiles.length > 0 || mobileExistingItems.length > 0;
-    if (!hasDesktop && !hasMobile) {
+    const hasAnyMedia = MEDIA_SLOTS.some(
+      (slot) =>
+        (mediaFiles[slot.key] || []).length > 0 ||
+        (mediaExisting[slot.key] || []).length > 0,
+    );
+    if (!hasAnyMedia) {
       clientErrors.push(
         isEdit
-          ? "Keep at least one desktop or mobile banner, or upload a new image."
-          : "Upload at least one desktop or mobile banner image.",
+          ? "Keep at least one media item, or upload a new file."
+          : "Upload media in at least one slot (desktop, app mobile, or website mobile).",
       );
     }
 
-    const desktopErr = validateFiles(desktopBannerFiles, "Desktop");
-    const mobileErr = validateFiles(mobileBannerFiles, "Mobile");
-    if (desktopErr) clientErrors.push(desktopErr);
-    if (mobileErr) clientErrors.push(mobileErr);
+    MEDIA_SLOTS.forEach((slot) => {
+      const err = validateFiles(mediaFiles[slot.key] || [], slot.label);
+      if (err) clientErrors.push(err);
+    });
 
     if (clientErrors.length) {
-      console.warn(`${LOG} handleSubmit client validation failed`, clientErrors);
       setErrors(clientErrors);
       return;
     }
 
-    console.log(`${LOG} handleSubmit validation passed`, {
-      hasDesktop,
-      hasMobile,
-      desktopExistingCount: desktopExistingItems.length,
-      mobileExistingCount: mobileExistingItems.length,
-      newDesktopCount: desktopBannerFiles.length,
-      newMobileCount: mobileBannerFiles.length,
-    });
-
     const formData = buildFormData();
-
     setLoading(true);
     try {
-      let response;
       if (isEdit) {
-        console.log(`${LOG} calling updateBanner`, { id });
-        response = await updateBanner(id, formData);
-        console.log(`${LOG} updateBanner success`, response);
+        await updateBanner(id, formData);
       } else {
-        console.log(`${LOG} calling createBanner`);
-        response = await createBanner(formData);
-        console.log(`${LOG} createBanner success`, response);
+        await createBanner(formData);
       }
       navigate(`${basePath}/splash`);
     } catch (err) {
-      console.error(`${LOG} handleSubmit failed`, {
-        isEdit,
-        id,
-        err,
-        messages: extractBackendMessages(err),
-      });
       setErrors(extractBackendMessages(err));
     } finally {
       setLoading(false);
-      console.log(`${LOG} handleSubmit end`);
     }
   };
 
   const openZoom = (url, name, isVideo = false) => {
     if (!url) return;
-    console.log(`${LOG} openZoom`, { name, isVideo, url: url?.slice?.(0, 80) });
     setZoomPreview({ url, name: name || "Banner", isVideo });
   };
 
   const openCrop = (session) => {
     if (session.isVideo || session.isSvg) return;
-    console.log(`${LOG} openCrop`, session);
     setCropPct(DEFAULT_CROP);
     setCropSession(session);
   };
@@ -600,7 +641,6 @@ const BannerForm = () => {
 
   const applyCrop = async () => {
     if (!cropSession) return;
-    console.log(`${LOG} applyCrop start`, { cropSession, cropPct });
     setCropBusy(true);
     clearErrors();
     try {
@@ -610,35 +650,29 @@ const BannerForm = () => {
         cropSession.fileName,
         cropSession.useCrossOrigin,
       );
+      const { bannerKey, kind, index } = cropSession;
 
-      const setFiles =
-        cropSession.bannerKey === "desktop"
-          ? setDesktopBannerFiles
-          : setMobileBannerFiles;
-      const setExisting =
-        cropSession.bannerKey === "desktop"
-          ? setDesktopExistingItems
-          : setMobileExistingItems;
-
-      if (cropSession.kind === "new") {
-        setFiles((prev) =>
-          prev.map((f, i) => (i === cropSession.index ? cropped : f)),
-        );
-        console.log(`${LOG} applyCrop replaced new file at index`, cropSession.index);
+      if (kind === "new") {
+        setMediaFiles((prev) => ({
+          ...prev,
+          [bannerKey]: (prev[bannerKey] || []).map((f, i) =>
+            i === index ? cropped : f,
+          ),
+        }));
       } else {
-        setFiles((prev) => [...prev, cropped]);
-        setExisting((prev) => prev.filter((_, i) => i !== cropSession.index));
-        console.log(`${LOG} applyCrop moved existing to new uploads`, {
-          bannerKey: cropSession.bannerKey,
-          removedIndex: cropSession.index,
-          croppedName: cropped.name,
-        });
+        setMediaFiles((prev) => ({
+          ...prev,
+          [bannerKey]: [...(prev[bannerKey] || []), cropped],
+        }));
+        setMediaExisting((prev) => ({
+          ...prev,
+          [bannerKey]: (prev[bannerKey] || []).filter((_, i) => i !== index),
+        }));
       }
       closeCrop();
     } catch (err) {
-      console.error(`${LOG} applyCrop failed`, err);
       setErrors([
-        "Could not crop image. If this is an existing CDN image, try re-uploading the file instead.",
+        "Could not crop image. If this is an existing CDN image, try re-uploading instead.",
         ...extractBackendMessages(err),
       ]);
       setCropBusy(false);
@@ -646,40 +680,17 @@ const BannerForm = () => {
   };
 
   const removeNewFile = (bannerKey, index) => {
-    console.log(`${LOG} removeNewFile`, { bannerKey, index });
-    const setter =
-      bannerKey === "desktop" ? setDesktopBannerFiles : setMobileBannerFiles;
-    setter((prev) => {
-      const removed = prev[index];
-      const next = prev.filter((_, i) => i !== index);
-      console.log(`${LOG} removeNewFile done`, {
-        bannerKey,
-        removed: removed?.name,
-        remaining: next.map((f) => f.name),
-      });
-      return next;
-    });
+    setMediaFiles((prev) => ({
+      ...prev,
+      [bannerKey]: (prev[bannerKey] || []).filter((_, i) => i !== index),
+    }));
   };
 
   const removeExistingItem = (bannerKey, index) => {
-    console.log(`${LOG} removeExistingItem`, { bannerKey, index });
-    const setter =
-      bannerKey === "desktop" ? setDesktopExistingItems : setMobileExistingItems;
-    const initial =
-      bannerKey === "desktop" ? initialDesktopKeys : initialMobileKeys;
-    setter((prev) => {
-      const removed = prev[index];
-      const next = prev.filter((_, i) => i !== index);
-      const removedKey = getBannerItemKey(removed);
-      console.log(`${LOG} removeExistingItem done`, {
-        bannerKey,
-        removedKey,
-        removedUrl: removed?.url,
-        remainingKeys: collectBannerKeys(next),
-        willSendRemoveOnUpdate: initial.includes(removedKey),
-      });
-      return next;
-    });
+    setMediaExisting((prev) => ({
+      ...prev,
+      [bannerKey]: (prev[bannerKey] || []).filter((_, i) => i !== index),
+    }));
   };
 
   const renderThumb = ({
@@ -692,7 +703,7 @@ const BannerForm = () => {
     onRemove,
     canCrop,
   }) => (
-    <div className="group relative h-28 w-28 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+    <div className="group relative h-28 w-28 overflow-hidden rounded-xl border border-border bg-canvas-muted shadow-sm">
       {isVideo ? (
         <video src={src} className="h-full w-full object-cover" muted />
       ) : (
@@ -702,7 +713,7 @@ const BannerForm = () => {
         <button
           type="button"
           onClick={onZoom}
-          className="rounded-lg bg-white/95 p-1.5 text-slate-800 shadow hover:bg-white"
+          className="rounded-lg bg-white/95 p-1.5 text-stone-800 shadow hover:bg-white"
           title="Zoom"
         >
           <ZoomIn className="h-4 w-4" />
@@ -711,7 +722,7 @@ const BannerForm = () => {
           <button
             type="button"
             onClick={onCrop}
-            className="rounded-lg bg-white/95 p-1.5 text-slate-800 shadow hover:bg-white"
+            className="rounded-lg bg-white/95 p-1.5 text-stone-800 shadow hover:bg-white"
             title="Crop"
           >
             <Crop className="h-4 w-4" />
@@ -721,7 +732,7 @@ const BannerForm = () => {
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-lg bg-red-500/95 p-1.5 text-white shadow hover:bg-red-600"
+            className="rounded-lg bg-danger/95 p-1.5 text-white shadow hover:opacity-90"
             title="Remove"
           >
             <Trash2 className="h-4 w-4" />
@@ -736,143 +747,160 @@ const BannerForm = () => {
     </div>
   );
 
-  const renderMediaGrid = (
-    existingItems,
-    filePreviews,
-    fileInputName,
-    bannerKey,
-    sectionLabel,
-    onClearNew,
-  ) => (
-    <div className="space-y-3">
-      <label className={labelClass}>{sectionLabel}</label>
-      <input
-        type="file"
-        name={fileInputName}
-        accept="image/jpeg,image/png,image/webp,image/svg+xml,video/mp4"
-        multiple
-        onChange={(e) =>
-          handleMultiFileChange(
-            e,
-            bannerKey === "desktop" ? setDesktopBannerFiles : setMobileBannerFiles,
-            existingItems.length,
-          )
-        }
-        className="block w-full text-[11px] text-stone-500 file:mr-2 file:rounded-lg file:border-0 file:bg-brand-50 file:px-2.5 file:py-1 file:text-[10px] file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
-      />
-      <p className="text-[10px] text-stone-500">
-        Upload multiple images. Hover a thumbnail to zoom, crop, or remove.
-        {isEdit && (
-          <span className="mt-1 block text-brand-700">
-            On update, images still listed here are kept. New files are added.
-            Use remove only when you want to delete a server image.
-          </span>
-        )}
-      </p>
+  const renderMediaGrid = (slot) => {
+    const existingItems = mediaExisting[slot.key] || [];
+    const filePreviews = mediaPreviews[slot.key] || [];
+    const mediaType = inferMediaType(mediaFiles[slot.key] || [], existingItems);
 
-      {(existingItems.length > 0 || filePreviews.length > 0) && (
-        <p className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-[10px] font-medium text-brand-900">
-          {existingItems.length > 0 && (
-            <span>{existingItems.length} on server</span>
-          )}
-          {filePreviews.length > 0 && (
-            <span>
-              {existingItems.length > 0 ? " + " : ""}
-              {filePreviews.length} new upload
-              {filePreviews.length !== 1 ? "s" : ""}
+    return (
+      <div
+        key={slot.key}
+        className="rounded-lg border border-border bg-canvas-muted/30 p-3"
+      >
+        <div className="mb-2">
+          <p className="text-[11px] font-semibold text-stone-900">{slot.label}</p>
+          <p className="text-[10px] text-stone-500">{slot.hint}</p>
+          {mediaType ? (
+            <span className="mt-1 inline-flex rounded-full border border-border bg-white px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-600">
+              {mediaType}
             </span>
-          )}
-          <span className="text-brand-700">
-            {" "}
-            = {existingItems.length + filePreviews.length} shown total
-          </span>
-        </p>
-      )}
-
-      {existingItems.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-gray-600">
-            {isEdit ? "On server" : "Saved"} ({existingItems.length})
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {existingItems.map((item, idx) => {
-              const video = isVideoUrl(item.url);
-              return (
-                <React.Fragment key={`${item.key || item.url}-${idx}`}>
-                  {renderThumb({
-                    src: item.url,
-                    isVideo: video,
-                    isSvg: /\.svg(\?|#|$)/i.test(item.url || ""),
-                    label: "Server",
-                    onZoom: () =>
-                      openZoom(item.url, `${bannerKey} ${idx + 1}`, video),
-                    onCrop: () =>
-                      openCrop({
-                        kind: "existing",
-                        bannerKey,
-                        index: idx,
-                        src: item.url,
-                        fileName: `cropped-${bannerKey}-${idx + 1}.jpg`,
-                        useCrossOrigin: true,
-                        isVideo: video,
-                        isSvg: /\.svg(\?|#|$)/i.test(item.url || ""),
-                      }),
-                    onRemove: () => removeExistingItem(bannerKey, idx),
-                    canCrop: true,
-                  })}
-                </React.Fragment>
-              );
-            })}
-          </div>
+          ) : null}
         </div>
-      )}
 
-      {filePreviews.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-gray-600">
-            New uploads ({filePreviews.length})
+        <input
+          type="file"
+          name={slot.field}
+          accept="image/jpeg,image/png,image/webp,image/svg+xml,video/mp4,video/webm"
+          multiple
+          onChange={(e) => handleMultiFileChange(e, slot.key)}
+          className="block w-full text-[11px] text-stone-500 file:mr-2 file:rounded-lg file:border-0 file:bg-brand-50 file:px-2.5 file:py-1 file:text-[10px] file:font-semibold file:text-brand-700 hover:file:bg-brand-100"
+        />
+        <p className="mt-1 text-[10px] text-stone-400">{slot.placeholder}</p>
+        {isEdit ? (
+          <p className="mt-1 text-[10px] text-brand-700">
+            Kept server images stay. New files are appended. Remove only deletes.
           </p>
-          <div className="flex flex-wrap gap-3">
-            {filePreviews.map(({ file, url }, idx) => {
-              const video = isVideoFile(file);
-              const svg = isSvgFile(file);
-              return (
-                <div key={`${file.name}-${idx}-${file.lastModified}`}>
-                  {renderThumb({
-                    src: url,
-                    isVideo: video,
-                    isSvg: svg,
-                    label: file.name,
-                    onZoom: () => openZoom(url, file.name, video),
-                    onCrop: () =>
-                      openCrop({
-                        kind: "new",
-                        bannerKey,
-                        index: idx,
-                        src: url,
-                        fileName: file.name.replace(/\.[^.]+$/, "") + ".jpg",
-                        useCrossOrigin: false,
-                        isVideo: video,
-                        isSvg: svg,
-                      }),
-                    onRemove: () => removeNewFile(bannerKey, idx),
-                    canCrop: true,
-                  })}
-                </div>
-              );
-            })}
+        ) : null}
+
+        {(existingItems.length > 0 || filePreviews.length > 0) && (
+          <p className="mt-2 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-[10px] font-medium text-brand-900">
+            {existingItems.length > 0 ? (
+              <span>{existingItems.length} on server</span>
+            ) : null}
+            {filePreviews.length > 0 ? (
+              <span>
+                {existingItems.length > 0 ? " + " : ""}
+                {filePreviews.length} new
+              </span>
+            ) : null}
+            <span className="text-brand-700">
+              {" "}
+              = {existingItems.length + filePreviews.length} total
+            </span>
+          </p>
+        )}
+
+        {existingItems.length > 0 && (
+          <div className="mt-2">
+            <p className="mb-1.5 text-[10px] font-medium text-stone-600">
+              On server ({existingItems.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {existingItems.map((item, idx) => {
+                const video = isVideoUrl(item.url);
+                return (
+                  <React.Fragment key={`${item.key || item.url}-${idx}`}>
+                    {renderThumb({
+                      src: item.url,
+                      isVideo: video,
+                      isSvg: /\.svg(\?|#|$)/i.test(item.url || ""),
+                      label: "Server",
+                      onZoom: () =>
+                        openZoom(item.url, `${slot.label} ${idx + 1}`, video),
+                      onCrop: () =>
+                        openCrop({
+                          kind: "existing",
+                          bannerKey: slot.key,
+                          index: idx,
+                          src: item.url,
+                          fileName: `cropped-${slot.field}-${idx + 1}.jpg`,
+                          useCrossOrigin: true,
+                          isVideo: video,
+                          isSvg: /\.svg(\?|#|$)/i.test(item.url || ""),
+                        }),
+                      onRemove: () => removeExistingItem(slot.key, idx),
+                      canCrop: true,
+                    })}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={onClearNew}
-            className="mt-2 text-xs text-rose-600 hover:underline"
-          >
-            Clear all new {bannerKey} files
-          </button>
-        </div>
-      )}
-    </div>
-  );
+        )}
+
+        {filePreviews.length > 0 && (
+          <div className="mt-2">
+            <p className="mb-1.5 text-[10px] font-medium text-stone-600">
+              New uploads ({filePreviews.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {filePreviews.map(({ file, url }, idx) => {
+                const video = isVideoFile(file);
+                const svg = isSvgFile(file);
+                return (
+                  <div key={`${file.name}-${idx}-${file.lastModified}`}>
+                    {renderThumb({
+                      src: url,
+                      isVideo: video,
+                      isSvg: svg,
+                      label: file.name,
+                      onZoom: () => openZoom(url, file.name, video),
+                      onCrop: () =>
+                        openCrop({
+                          kind: "new",
+                          bannerKey: slot.key,
+                          index: idx,
+                          src: url,
+                          fileName: file.name.replace(/\.[^.]+$/, "") + ".jpg",
+                          useCrossOrigin: false,
+                          isVideo: video,
+                          isSvg: svg,
+                        }),
+                      onRemove: () => removeNewFile(slot.key, idx),
+                      canCrop: true,
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setMediaFiles((prev) => ({ ...prev, [slot.key]: [] }))
+              }
+              className="mt-1.5 text-[10px] text-danger hover:underline"
+            >
+              Clear new {slot.label.toLowerCase()} files
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const handleTypeChange = (nextType) => {
+    setType(nextType);
+    if (nextType !== "CATEGORY" && nextType !== "SUBCATEGORY") {
+      setCategoryId("");
+      setSubcategoryId("");
+    }
+    if (nextType !== "SUBCATEGORY") {
+      setSubcategoryId("");
+    }
+    if (nextType === "PERCENT" || nextType === "FLAT" || nextType === "FLASH") {
+      setDiscountType(nextType);
+    }
+  };
 
   return (
     <div className="pb-20 text-stone-900">
@@ -889,149 +917,278 @@ const BannerForm = () => {
         </h1>
       </div>
 
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         {loading && isEdit ? (
           <div className="flex justify-center gap-2 py-16 text-[11px] text-stone-500">
             <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
             Loading…
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-2">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <FormErrors errors={formErrors} onDismiss={clearErrors} />
 
-            <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>
-                  Title <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className={fieldClass}
-                  placeholder="Sale 🔥"
-                  required
+            <FormSection
+              title="Basics"
+              hint="Core banner identity and status."
+            >
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <Field label="Title" required>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className={fieldClass}
+                    placeholder="e.g. Summer Sale — Up to 40% off"
+                    required
+                  />
+                </Field>
+                <Field label="Banner type" required>
+                  <select
+                    value={type}
+                    onChange={(e) => handleTypeChange(e.target.value)}
+                    className={fieldClass}
+                  >
+                    {BANNER_TYPES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <Field
+                label="Banner text"
+                hint="Short supporting copy shown with the banner."
+              >
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className={`${fieldClass} min-h-[64px] resize-y`}
+                  placeholder="e.g. Free shipping on orders above ₹999. Limited time only."
+                  rows={3}
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className={labelClass}>
-                  Banner type <span className="text-danger">*</span>
-                </label>
-                <select
-                  value={type}
-                  onChange={(e) => {
-                    setType(e.target.value);
-                    if (e.target.value !== "CATEGORY") setCategoryId("");
-                  }}
-                  className={fieldClass}
-                >
-                  <option value="NORMAL">NORMAL</option>
-                  <option value="CATEGORY">CATEGORY</option>
-                </select>
-              </div>
-            </div>
+              <label className="inline-flex items-center gap-2 text-[11px] text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border text-brand-600 focus:ring-brand-500"
+                />
+                Active (visible to users)
+              </label>
+            </FormSection>
 
-            {type === "CATEGORY" && (
-              <div className="mt-2.5">
-                <label className={labelClass}>
-                  Category <span className="text-danger">*</span>
-                </label>
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  disabled={categoriesLoading}
-                  className={fieldClass}
-                >
-                  <option value="">
-                    {categoriesLoading ? "Loading categories…" : "Select category"}
-                  </option>
-                  {categories.map((cat) => (
-                    <option key={cat._id} value={cat._id}>
-                      {cat.name || cat.title || "Unnamed"}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {(needsCategory || needsDiscount) && (
+              <FormSection
+                title="Targeting & discount"
+                hint="Shown based on banner type. Fill only what applies."
+              >
+                {needsCategory && (
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <Field label="Category" required>
+                      <select
+                        value={categoryId}
+                        onChange={(e) => {
+                          setCategoryId(e.target.value);
+                          setSubcategoryId("");
+                        }}
+                        disabled={categoriesLoading}
+                        className={fieldClass}
+                      >
+                        <option value="">
+                          {categoriesLoading
+                            ? "Loading categories…"
+                            : "Select category"}
+                        </option>
+                        {categories.map((cat) => (
+                          <option key={cat._id} value={cat._id}>
+                            {cat.name || cat.title || "Unnamed"}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    {needsSubcategory && (
+                      <Field label="Subcategory" required>
+                        <select
+                          value={subcategoryId}
+                          onChange={(e) => setSubcategoryId(e.target.value)}
+                          disabled={!categoryId || subcategoriesLoading}
+                          className={fieldClass}
+                        >
+                          <option value="">
+                            {!categoryId
+                              ? "Select category first"
+                              : subcategoriesLoading
+                                ? "Loading subcategories…"
+                                : "Select subcategory"}
+                          </option>
+                          {subcategories.map((sub) => (
+                            <option key={sub._id} value={sub._id}>
+                              {sub.name || sub.title || "Unnamed"}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                  </div>
+                )}
+
+                {needsDiscount ? (
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <Field
+                      label="Discount type"
+                      hint="Schema: PERCENT | FLAT | FLASH"
+                    >
+                      <select
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value)}
+                        className={fieldClass}
+                      >
+                        <option value="">No discount type</option>
+                        {DISCOUNT_TYPES.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field
+                      label="Discount value"
+                      hint={
+                        discountType === "FLAT"
+                          ? "Amount in ₹"
+                          : discountType === "PERCENT"
+                            ? "Percentage 0–100"
+                            : "Optional numeric value"
+                      }
+                    >
+                      <input
+                        type="number"
+                        value={discount}
+                        onChange={(e) => setDiscount(e.target.value)}
+                        min="0"
+                        step="0.01"
+                        className={fieldClass}
+                        placeholder={
+                          discountType === "FLAT"
+                            ? "e.g. 200"
+                            : discountType === "PERCENT"
+                              ? "e.g. 40"
+                              : "e.g. 10"
+                        }
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+              </FormSection>
             )}
 
-            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-              <div>
-                <label className={labelClass}>Discount type</label>
-                <select
-                  value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value)}
-                  className={fieldClass}
+            {!needsDiscount && (
+              <FormSection
+                title="Optional discount"
+                hint="Optional even for NORMAL / CATEGORY / PROMO banners."
+              >
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <Field label="Discount type">
+                    <select
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value)}
+                      className={fieldClass}
+                    >
+                      <option value="">No discount type</option>
+                      {DISCOUNT_TYPES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Discount value">
+                    <input
+                      type="number"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      min="0"
+                      step="0.01"
+                      className={fieldClass}
+                      placeholder="e.g. 20"
+                    />
+                  </Field>
+                </div>
+              </FormSection>
+            )}
+
+            <FormSection
+              title="Schedule"
+              hint="Optional start / end window for this banner."
+            >
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <Field label="Start date">
+                  <input
+                    type="datetime-local"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={fieldClass}
+                  />
+                </Field>
+                <Field label="End date">
+                  <input
+                    type="datetime-local"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={fieldClass}
+                  />
+                </Field>
+              </div>
+            </FormSection>
+
+            <FormSection
+              title="Navigation"
+              hint="Where tapping the banner should go."
+            >
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <Field
+                  label="In-app path"
+                  hint="navigation.navigate — e.g. /summer or /category/… "
                 >
-                  <option value="PERCENT">PERCENT</option>
-                  <option value="FLAT">FLAT</option>
-                </select>
+                  <input
+                    type="text"
+                    value={navigation}
+                    onChange={(e) => setNavigation(e.target.value)}
+                    className={fieldClass}
+                    placeholder="/summer-sale"
+                  />
+                </Field>
+                <Field
+                  label="External link"
+                  hint="navigation.externalLink — optional full URL"
+                >
+                  <input
+                    type="url"
+                    value={externalLink}
+                    onChange={(e) => setExternalLink(e.target.value)}
+                    className={fieldClass}
+                    placeholder="https://example.com/campaign"
+                  />
+                </Field>
               </div>
-              <div>
-                <label className={labelClass}>Discount</label>
-                <input
-                  type="number"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  min="0"
-                  step="0.01"
-                  className={fieldClass}
-                />
-              </div>
-            </div>
+            </FormSection>
 
-            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <div>
-                <label className={labelClass}>
-                  navigation.navigate <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={navigation}
-                  onChange={(e) => setNavigation(e.target.value)}
-                  className={fieldClass}
-                  placeholder="/summer"
-                  required
-                />
+            <FormSection
+              title="Media slots"
+              hint="Three distinct slots from the Banner schema. Upload multiple images per slot, or one video."
+            >
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                {MEDIA_SLOTS.map((slot) => renderMediaGrid(slot))}
               </div>
-              <div>
-                <label className={labelClass}>External link (optional)</label>
-                <input
-                  type="text"
-                  value={externalLink}
-                  onChange={(e) => setExternalLink(e.target.value)}
-                  className={fieldClass}
-                  placeholder="Optional external URL"
-                />
-              </div>
-            </div>
-            </section>
-
-            <section className="rounded-xl border border-border bg-white p-3 shadow-sm">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {renderMediaGrid(
-                desktopExistingItems,
-                desktopFilePreviews,
-                "desktopBanner",
-                "desktop",
-                "Desktop banner (multiple images)",
-                () => setDesktopBannerFiles([]),
-              )}
-              {renderMediaGrid(
-                mobileExistingItems,
-                mobileFilePreviews,
-                "mobileBanner",
-                "mobile",
-                "Mobile banner (multiple images)",
-                () => setMobileBannerFiles([]),
-              )}
-            </div>
-
-            </section>
+            </FormSection>
 
             <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-white/95 px-3 py-2 backdrop-blur-sm lg:left-[var(--sidebar-width,0)]">
-              <div className="mx-auto flex max-w-4xl justify-end gap-2">
+              <div className="mx-auto flex max-w-5xl justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => navigate(`${basePath}/splash`)}
@@ -1044,7 +1201,11 @@ const BannerForm = () => {
                   disabled={loading || cropBusy}
                   className="rounded-full bg-brand-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
                 >
-                  {loading ? "Saving…" : isEdit ? "Update banner" : "Create banner"}
+                  {loading
+                    ? "Saving…"
+                    : isEdit
+                      ? "Update banner"
+                      : "Create banner"}
                 </button>
               </div>
             </div>
@@ -1052,7 +1213,6 @@ const BannerForm = () => {
         )}
       </div>
 
-      {/* Zoom modal */}
       {zoomPreview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"
@@ -1092,7 +1252,6 @@ const BannerForm = () => {
         </div>
       )}
 
-      {/* Crop modal */}
       {cropSession && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -1103,27 +1262,29 @@ const BannerForm = () => {
             className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-stone-900">
                 <Crop className="h-5 w-5" />
                 Crop banner
               </h2>
               <button
                 type="button"
                 onClick={closeCrop}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                className="rounded-lg p-2 text-stone-500 hover:bg-canvas-muted"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-4 p-5">
-              <div className="relative mx-auto aspect-video max-h-48 overflow-hidden rounded-xl bg-slate-100">
+              <div className="relative mx-auto aspect-video max-h-48 overflow-hidden rounded-xl bg-canvas-muted">
                 <img
                   src={cropSession.src}
                   alt="Crop source"
                   className="h-full w-full object-contain"
-                  crossOrigin={cropSession.useCrossOrigin ? "anonymous" : undefined}
+                  crossOrigin={
+                    cropSession.useCrossOrigin ? "anonymous" : undefined
+                  }
                 />
                 <div
                   className="pointer-events-none absolute border-2 border-brand-500 bg-brand-500/20"
@@ -1143,14 +1304,14 @@ const BannerForm = () => {
                 { key: "h", label: "Height %" },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="mb-1 flex justify-between text-xs font-medium text-slate-600">
+                  <label className="mb-1 flex justify-between text-xs font-medium text-stone-600">
                     <span>{label}</span>
                     <span>{cropPct[key]}%</span>
                   </label>
                   <input
                     type="range"
                     min={key === "w" || key === "h" ? 10 : 0}
-                    max={key === "x" || key === "w" ? 95 : 95}
+                    max={95}
                     value={cropPct[key]}
                     onChange={(e) =>
                       setCropPct((p) => ({
@@ -1165,11 +1326,13 @@ const BannerForm = () => {
 
               {cropPreviewUrl && (
                 <div>
-                  <p className="mb-2 text-xs font-medium text-slate-600">Preview</p>
+                  <p className="mb-2 text-xs font-medium text-stone-600">
+                    Preview
+                  </p>
                   <img
                     src={cropPreviewUrl}
                     alt="Crop preview"
-                    className="mx-auto max-h-32 rounded-lg border border-slate-200 object-contain"
+                    className="mx-auto max-h-32 rounded-lg border border-border object-contain"
                   />
                 </div>
               )}

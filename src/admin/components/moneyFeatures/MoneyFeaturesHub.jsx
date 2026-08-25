@@ -45,7 +45,7 @@ const MoneyFeaturesHub = () => {
       statLabel: "Total INR in wallets",
     },
     {
-      to: ap("money-features/gift-card"),
+      to: ap("gift"),
       icon: Gift,
       title: "Gift card (coupons)",
       border: "border-amber-200 hover:border-amber-400",

@@ -59,6 +59,8 @@ const Sidebar = ({
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [isMoneyFeaturesOpen, setIsMoneyFeaturesOpen] = useState(false);
+  const [isCommunityOpen, setIsCommunityOpen] = useState(false);
+  const [isEarningsOpen, setIsEarningsOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,8 +97,15 @@ const Sidebar = ({
   const isBlogSectionActive = () => location.pathname.startsWith(ap("blog"));
   const isMoneyFeaturesSectionActive = () =>
     location.pathname.includes("/money-features") ||
+    location.pathname.startsWith(ap("gift")) ||
     location.pathname.startsWith(ap("referral")) ||
     location.pathname.startsWith(ap("rewards"));
+
+  const isCommunitySectionActive = () =>
+    location.pathname.startsWith(ap("community"));
+
+  const isEarningsSectionActive = () =>
+    location.pathname.startsWith(ap("earnings"));
 
   const isOrdersSectionActive = () =>
     location.pathname.startsWith(ap("orders")) ||
@@ -128,6 +137,14 @@ const Sidebar = ({
       "reward-wallet",
       "reward-rules",
     ]);
+
+  const showCommunity = isFullAdminUser || canUse(["community"]);
+  const showEarnings = isFullAdminUser || canUse(["earnings"]);
+
+  useEffect(() => {
+    if (isCommunitySectionActive()) setIsCommunityOpen(true);
+    if (isEarningsSectionActive()) setIsEarningsOpen(true);
+  }, [location.pathname]);
 
   useEffect(() => {
     refreshUnreadCount().catch(() => {});
@@ -223,6 +240,8 @@ const Sidebar = ({
     isPolicyOpen,
     isUsersOpen,
     isMoneyFeaturesOpen,
+    isCommunityOpen,
+    isEarningsOpen,
     isOrdersOpen,
   ]);
 
@@ -558,6 +577,14 @@ const Sidebar = ({
               isMoneyFeaturesOpen={isMoneyFeaturesOpen}
               setIsMoneyFeaturesOpen={setIsMoneyFeaturesOpen}
               isMoneyFeaturesSectionActive={isMoneyFeaturesSectionActive}
+              isCommunityOpen={isCommunityOpen}
+              setIsCommunityOpen={setIsCommunityOpen}
+              isCommunitySectionActive={isCommunitySectionActive}
+              showCommunity={showCommunity}
+              isEarningsOpen={isEarningsOpen}
+              setIsEarningsOpen={setIsEarningsOpen}
+              isEarningsSectionActive={isEarningsSectionActive}
+              showEarnings={showEarnings}
               isOrdersOpen={isOrdersOpen}
               setIsOrdersOpen={setIsOrdersOpen}
               isOrdersSectionActive={isOrdersSectionActive}
