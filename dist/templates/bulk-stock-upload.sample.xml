@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="bulk_stock">
+  <Table>
+   <Row>
+    <Cell><Data ss:Type="String">sku</Data></Cell>
+    <Cell><Data ss:Type="String">warehouse_id</Data></Cell>
+    <Cell><Data ss:Type="String">central_stock</Data></Cell>
+    <Cell><Data ss:Type="String">warehouse_delta</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">TS-BLK-S-001</Data></Cell>
+    <Cell><Data ss:Type="String"></Data></Cell>
+    <Cell><Data ss:Type="Number">120</Data></Cell>
+    <Cell><Data ss:Type="String"></Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">TS-BLK-M-001</Data></Cell>
+    <Cell><Data ss:Type="String">69c5308e5033cadea9873121</Data></Cell>
+    <Cell><Data ss:Type="String"></Data></Cell>
+    <Cell><Data ss:Type="Number">10</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">TS-BLK-L-001</Data></Cell>
+    <Cell><Data ss:Type="String">69c5308e5033cadea9873121</Data></Cell>
+    <Cell><Data ss:Type="Number">80</Data></Cell>
+    <Cell><Data ss:Type="Number">-2</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">JD-RED-32-001</Data></Cell>
+    <Cell><Data ss:Type="String">69c5308e5033cadea9873121</Data></Cell>
+    <Cell><Data ss:Type="String"></Data></Cell>
+    <Cell><Data ss:Type="Number">5</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>
