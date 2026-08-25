@@ -54,13 +54,9 @@ export function buildFunnelSteps(metrics = {}) {
 export function buildChannelSplit(metrics = {}) {
   const website = sumTimeline(metrics.websiteUserTimeline);
   const app = sumTimeline(metrics.appUserTimeline);
-  const android = sumTimeline(metrics.androidInstallTimeline);
-  const ios = sumTimeline(metrics.iphoneInstallTimeline);
   return [
     { name: "Website users", value: website, fill: "#6366f1" },
     { name: "App users", value: app, fill: "#8b5cf6" },
-    { name: "Android installs", value: android, fill: "#22c55e" },
-    { name: "iOS installs", value: ios, fill: "#0ea5e9" },
   ].filter((x) => x.value > 0);
 }
 

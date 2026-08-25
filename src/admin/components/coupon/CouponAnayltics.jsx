@@ -112,6 +112,7 @@ const EVENT_TYPE_OPTIONS = [
   "recommendation_click",
   "recommendation_shown",
   "api_error",
+  "api_timeout",
   "validation_error",
   "network_error",
   "ui_exception",
@@ -188,10 +189,9 @@ const EventAnalyticsTab = () => {
 
   const buildEventQueryParams = (page = 1, limit = pageSize) => {
     const params = { page, limit };
-    // Raw event query accepts channel: website/android/ios.
-    // Treat "app" as aggregate only (summary mode), so do not send it to events query.
+    // Raw event query accepts channel: website/android/ios/app (app = android+ios).
     if (filters.platform !== "all") params.channel = filters.platform;
-    else if (filters.channel !== "all" && filters.channel !== "app") params.channel = filters.channel;
+    else if (filters.channel !== "all") params.channel = filters.channel;
     if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
     if (filters.from) params.from = new Date(filters.from).toISOString();
     if (filters.to) params.to = new Date(filters.to).toISOString();
@@ -220,7 +220,7 @@ const EventAnalyticsTab = () => {
   const buildActiveFilterParams = () => {
     const params = {};
     if (filters.platform !== "all") params.channel = filters.platform;
-    else if (filters.channel !== "all" && filters.channel !== "app") params.channel = filters.channel;
+    else if (filters.channel !== "all") params.channel = filters.channel;
     if (filters.eventType.trim()) params.eventType = filters.eventType.trim();
     if (filters.from) params.from = new Date(filters.from).toISOString();
     if (filters.to) params.to = new Date(filters.to).toISOString();
@@ -390,7 +390,7 @@ const EventAnalyticsTab = () => {
         // Primary source: analytics add_to_cart events
       const baseParams = { limit: 200 };
       if (filters.platform !== "all") baseParams.channel = filters.platform;
-      else if (filters.channel !== "all" && filters.channel !== "app") baseParams.channel = filters.channel;
+      else if (filters.channel !== "all") baseParams.channel = filters.channel;
         if (filters.from) baseParams.from = new Date(filters.from).toISOString();
         if (filters.to) baseParams.to = new Date(filters.to).toISOString();
 
@@ -596,7 +596,7 @@ const EventAnalyticsTab = () => {
         limit: 200,
       };
       if (filters.platform !== "all") baseParams.channel = filters.platform;
-      else if (filters.channel !== "all" && filters.channel !== "app") baseParams.channel = filters.channel;
+      else if (filters.channel !== "all") baseParams.channel = filters.channel;
       if (filters.from) baseParams.from = new Date(filters.from).toISOString();
       if (filters.to) baseParams.to = new Date(filters.to).toISOString();
 
@@ -768,9 +768,15 @@ const EventAnalyticsTab = () => {
       (acc, ev) => {
         const source = String(ev?.sourcePlatform || "").toLowerCase();
         const channel = String(ev?.channel || "").toLowerCase();
-        if (source === "website" || channel === "website") acc.website += 1;
-        else if (source === "android") acc.android += 1;
-        else if (source === "iphone" || source === "ios" || channel === "ios") acc.ios += 1;
+        const key =
+          source === "website" || channel === "website"
+            ? "website"
+            : source === "android" || channel === "android"
+              ? "android"
+              : source === "iphone" || source === "ios" || channel === "ios"
+                ? "ios"
+                : null;
+        if (key) acc[key] += 1;
         return acc;
       },
       { website: 0, android: 0, ios: 0 }
@@ -854,7 +860,7 @@ const EventAnalyticsTab = () => {
                 onChange={(e) => setFilters((p) => ({ ...p, channel: e.target.value }))}
                 className={filterInputClass}
               >
-                {(isPhase1SummaryMode ? SOURCE_OPTIONS : SOURCE_OPTIONS.filter((opt) => opt !== "app")).map((opt) => (
+                {SOURCE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt === "all" ? "All sources" : opt}
                   </option>

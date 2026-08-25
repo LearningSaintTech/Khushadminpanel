@@ -1,6 +1,6 @@
 /** User-facing message when the API returns HTTP 429. */
 export const RATE_LIMIT_MESSAGE =
-  "Too many attempts. Please wait a few minutes and try again.";
+  "Too many attempts from this device. Please wait up to 1 hour and try again.";
 
 export function isRateLimitedStatus(status) {
   return status === 429;

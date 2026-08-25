@@ -16,6 +16,7 @@ import {
 import logger from "../../utils/logger.js";
 import { redactForLog } from "../../utils/logRedact.util.js";
 import toast from "react-hot-toast";
+import { reportClientTimeout, isAxiosTimeoutError } from "../../utils/reportClientTimeout";
 
 const apiLog = logger.child("api");
 
@@ -81,6 +82,8 @@ async function runTokenRefresh() {
 
 axiosInstance.interceptors.request.use(
   (config) => {
+    config.metadata = { ...(config.metadata || {}), startedAt: Date.now() };
+
     const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -106,6 +109,8 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response.data,
   async (error) => {
+    reportClientTimeout(error, { client: "admin" });
+
     const payload = error?.response?.data;
     const status = error?.response?.status;
     const originalConfig = error?.config;
@@ -130,6 +135,14 @@ axiosInstance.interceptors.response.use(
         (typeof payload === "object" && payload?.message) ||
         error?.message ||
         "Something went wrong";
+    }
+
+    // Preserve enough context for timeout reporting if callers only see `base`
+    if (isAxiosTimeoutError(error)) {
+      base.code = error.code || "ECONNABORTED";
+      base.timeoutMs = originalConfig?.timeout ?? null;
+      base.__axiosConfig = originalConfig;
+      base.isTimeout = true;
     }
 
     if (isRateLimitedStatus(status)) {
