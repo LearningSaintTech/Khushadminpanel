@@ -6,7 +6,7 @@ import appStore from "../redux/Appstore";
 
 const REPORT_PATH = "/client-errors/timeout";
 const recentKeys = new Map();
-const DEDUPE_MS = 15_000;
+const DEDUPE_MS = 60_000;
 
 export function isAxiosTimeoutError(error) {
   const code = String(error?.code || "").toUpperCase();
@@ -27,6 +27,21 @@ function buildApiPath(config) {
   const url = String(config.url || "");
   if (/^https?:\/\//i.test(url)) return url;
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+/** Collapse search= keystroke variants so one report covers a typing storm. */
+function normalizeTimeoutPath(apiPath) {
+  try {
+    const u = new URL(apiPath, "https://example.invalid");
+    if (/\/admin\/orders/i.test(u.pathname)) {
+      u.searchParams.delete("search");
+      const q = u.searchParams.toString();
+      return `${u.pathname}${q ? `?${q}` : ""}`;
+    }
+  } catch {
+    /* keep raw */
+  }
+  return apiPath;
 }
 
 function shouldSkip(apiPath) {
@@ -50,7 +65,7 @@ export function reportClientTimeout(error, { client = "admin" } = {}) {
       Number(config?.timeout) ||
       (typeof error.timeoutMs === "number" ? error.timeoutMs : null);
     const method = (config?.method || error.method || "GET").toUpperCase();
-    const dedupeKey = `${client}|${method}|${apiPath}|${timeoutMs}`;
+    const dedupeKey = `${client}|${method}|${normalizeTimeoutPath(apiPath)}|${timeoutMs}`;
     const now = Date.now();
     const last = recentKeys.get(dedupeKey) || 0;
     if (now - last < DEDUPE_MS) return;

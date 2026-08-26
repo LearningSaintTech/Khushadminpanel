@@ -4182,6 +4182,8 @@ const Orders = ({
   );
   const openedFromQueryRef = useRef(false);
   const docRefreshRef = useRef({ refreshAfterLabel: async () => {} });
+  const ordersAbortRef = useRef(null);
+  const orderItemsAbortRef = useRef(null);
   const [viewMode, setViewMode] = useState(
     defaultViewMode === VIEW_ITEM ? VIEW_ITEM : VIEW_ORDER,
   ); // "order" | "item"
@@ -4192,6 +4194,7 @@ const Orders = ({
     total: 0,
     totalPages: 1,
   });
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [searchExact, setSearchExact] = useState(false);
   const [statusFilters, setStatusFilters] = useState([]);
@@ -4216,12 +4219,37 @@ const Orders = ({
     total: 0,
     totalPages: 1,
   });
+  const [itemSearchInput, setItemSearchInput] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [itemStatusFilters, setItemStatusFilters] = useState([]);
   const [shippingProviderFilter, setShippingProviderFilter] = useState("");
   const [itemLoading, setItemLoading] = useState(false);
   const [itemError, setItemError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Debounce search so each keystroke does not hit Mongo (was causing 50+ concurrent queries).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch((prev) => {
+        if (prev === searchInput) return prev;
+        setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
+        return searchInput;
+      });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setItemSearch((prev) => {
+        if (prev === itemSearchInput) return prev;
+        setItemPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
+        return itemSearchInput;
+      });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [itemSearchInput]);
+
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState(null);
   const [updatingItemId, setUpdatingItemId] = useState(null);
@@ -5243,6 +5271,9 @@ const Orders = ({
   };
 
   const fetchOrders = useCallback(async () => {
+    ordersAbortRef.current?.abort();
+    const ac = new AbortController();
+    ordersAbortRef.current = ac;
     try {
       setLoading(true);
       setError(null);
@@ -5274,7 +5305,9 @@ const Orders = ({
         !!returnOnly,
         searchExact,
         paymentFiltersParam,
+        { signal: ac.signal },
       );
+      if (ac.signal.aborted) return;
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
       if (consistencyParam && !res?.data?.appliedFilters?.itemStatusConsistency) {
@@ -5314,10 +5347,18 @@ const Orders = ({
         };
       });
     } catch (err) {
+      if (
+        ac.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError" ||
+        err?.name === "AbortError"
+      ) {
+        return;
+      }
       console.error("Failed to fetch orders:", err);
       setError(apiErrMessage(err, "Failed to load orders. Please try again."));
     } finally {
-      setLoading(false);
+      if (!ac.signal.aborted) setLoading(false);
     }
   }, [pagination.page, pagination.limit, search, searchExact, statusFilters, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly]);
 
@@ -5328,6 +5369,9 @@ const Orders = ({
   }, [fetchOrders, viewMode, selectedOrder]);
 
   const fetchOrderItems = useCallback(async () => {
+    orderItemsAbortRef.current?.abort();
+    const ac = new AbortController();
+    orderItemsAbortRef.current = ac;
     try {
       setItemLoading(true);
       setItemError(null);
@@ -5351,7 +5395,9 @@ const Orders = ({
         shippingProviderFilter || undefined,
         searchExact,
         paymentFiltersParam,
+        { signal: ac.signal },
       );
+      if (ac.signal.aborted) return;
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
       dbgOrdersVerbose("getOrderItems:payload", payload);
@@ -5372,10 +5418,18 @@ const Orders = ({
         totalPages: Math.max(1, payload.pagination?.totalPages ?? 1),
       }));
     } catch (err) {
+      if (
+        ac.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError" ||
+        err?.name === "AbortError"
+      ) {
+        return;
+      }
       console.error("Failed to fetch order items:", err);
       setItemError(apiErrMessage(err, "Failed to load order items."));
     } finally {
-      setItemLoading(false);
+      if (!ac.signal.aborted) setItemLoading(false);
     }
   }, [itemPagination.page, itemPagination.limit, itemSearch, searchExact, itemStatusFilters, shippingProviderFilter, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
 
@@ -8646,14 +8700,12 @@ const Orders = ({
                             ? "Order ID, customer, or full product name…"
                             : "Order ID, full product name, or SKU…"
                     }
-                    value={viewMode === VIEW_ORDER ? search : itemSearch}
+                    value={viewMode === VIEW_ORDER ? searchInput : itemSearchInput}
                     onChange={(e) => {
                       if (viewMode === VIEW_ORDER) {
-                        setSearch(e.target.value);
-                        setPagination((p) => ({ ...p, page: 1 }));
+                        setSearchInput(e.target.value);
                       } else {
-                        setItemSearch(e.target.value);
-                        setItemPagination((p) => ({ ...p, page: 1 }));
+                        setItemSearchInput(e.target.value);
                       }
                     }}
                     className={`${ui.inputCompact} w-full min-w-0 pl-8 py-1.5 text-[11px]`}
