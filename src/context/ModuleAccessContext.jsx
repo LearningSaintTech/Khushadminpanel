@@ -2,8 +2,30 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useSelector } from "react-redux";
 import { subadminApi } from "../subadmin/apis/subadminApi";
 import { decodeTokenRole, getRawRoleFromToken, getValidTokenRole, normalizeRole } from "../utils/authRole";
+import {
+  ACCESS_LEVEL_FULL,
+  ACCESS_LEVEL_VIEW,
+  parseModuleAccessResponse,
+} from "../utils/moduleAccessLevels";
 
 const ModuleAccessContext = createContext(null);
+
+const fullAccessFallback = {
+  basePath: "/admin",
+  filterByModules: false,
+  isFullAdmin: true,
+  normalizedRole: "ADMIN",
+  rawRole: "admin",
+  allowedModules: null,
+  moduleLevels: {},
+  source: null,
+  loading: false,
+  error: "",
+  canUse: () => true,
+  canMutate: () => true,
+  getModuleLevel: () => ACCESS_LEVEL_FULL,
+  refetch: () => Promise.resolve(),
+};
 
 export function ModuleAccessProvider({ basePath = "/admin", filterByModules = false, children }) {
   const reduxToken = useSelector((s) => s.global?.token);
@@ -17,6 +39,7 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
     normalizedRole === "ADMIN" || (basePath === "/admin" && !filterByModules);
 
   const [allowedModules, setAllowedModules] = useState(null);
+  const [moduleLevels, setModuleLevels] = useState({});
   const [source, setSource] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +54,7 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
   const loadModules = useCallback(async () => {
     if (!shouldFetch) {
       setAllowedModules(null);
+      setModuleLevels({});
       setSource(null);
       setLoading(false);
       setError("");
@@ -40,11 +64,13 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
     setError("");
     try {
       const res = await subadminApi.getMyModuleAccess();
-      const list = res?.data?.allowedModules ?? res?.allowedModules ?? [];
-      setAllowedModules(new Set(Array.isArray(list) ? list : []));
-      setSource(res?.data?.source ?? res?.source ?? "role");
+      const parsed = parseModuleAccessResponse(res);
+      setAllowedModules(new Set(parsed.allowedModules));
+      setModuleLevels(parsed.moduleLevels);
+      setSource(parsed.source || "role");
     } catch (e) {
       setAllowedModules(new Set());
+      setModuleLevels({});
       setError(e?.message || "Failed to load module access");
     } finally {
       setLoading(false);
@@ -54,6 +80,15 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
   useEffect(() => {
     loadModules();
   }, [loadModules]);
+
+  const getModuleLevel = useCallback(
+    (key) => {
+      if (isFullAdmin || !shouldFetch) return ACCESS_LEVEL_FULL;
+      if (!key) return ACCESS_LEVEL_FULL;
+      return moduleLevels[key] === ACCESS_LEVEL_VIEW ? ACCESS_LEVEL_VIEW : ACCESS_LEVEL_FULL;
+    },
+    [isFullAdmin, shouldFetch, moduleLevels],
+  );
 
   const canUse = useCallback(
     (keys) => {
@@ -66,6 +101,19 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
     [isFullAdmin, shouldFetch, allowedModules],
   );
 
+  const canMutate = useCallback(
+    (keys) => {
+      if (isFullAdmin) return true;
+      if (!keys?.length) return true;
+      if (!shouldFetch) return true;
+      if (allowedModules === null) return false;
+      return keys.some(
+        (k) => allowedModules.has(k) && moduleLevels[k] !== ACCESS_LEVEL_VIEW,
+      );
+    },
+    [isFullAdmin, shouldFetch, allowedModules, moduleLevels],
+  );
+
   const value = useMemo(
     () => ({
       basePath,
@@ -74,10 +122,13 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
       normalizedRole,
       rawRole,
       allowedModules,
+      moduleLevels,
       source,
       loading,
       error,
       canUse,
+      canMutate,
+      getModuleLevel,
       refetch: loadModules,
     }),
     [
@@ -87,10 +138,13 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
       normalizedRole,
       rawRole,
       allowedModules,
+      moduleLevels,
       source,
       loading,
       error,
       canUse,
+      canMutate,
+      getModuleLevel,
       loadModules,
     ],
   );
@@ -102,21 +156,7 @@ export function ModuleAccessProvider({ basePath = "/admin", filterByModules = fa
 
 export function useModuleAccess() {
   const ctx = useContext(ModuleAccessContext);
-  if (!ctx) {
-    return {
-      basePath: "/admin",
-      filterByModules: false,
-      isFullAdmin: true,
-      normalizedRole: "ADMIN",
-      rawRole: "admin",
-      allowedModules: null,
-      source: null,
-      loading: false,
-      error: "",
-      canUse: () => true,
-      refetch: () => Promise.resolve(),
-    };
-  }
+  if (!ctx) return fullAccessFallback;
   return ctx;
 }
 

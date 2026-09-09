@@ -17,6 +17,7 @@ import logger from "../../utils/logger.js";
 import { redactForLog } from "../../utils/logRedact.util.js";
 import toast from "react-hot-toast";
 import { reportClientTimeout, isAxiosTimeoutError } from "../../utils/reportClientTimeout";
+import { areViewOnlyWritesBlocked, isSafeHttpMethod } from "../../utils/staffWriteGate";
 
 const apiLog = logger.child("api");
 
@@ -92,6 +93,26 @@ axiosInstance.interceptors.request.use(
     if (deviceId) {
       config.headers["x-device-id"] = deviceId;
     }
+
+    const method = config.method || "get";
+    const url = String(config.url || "");
+    if (
+      areViewOnlyWritesBlocked() &&
+      !isSafeHttpMethod(method) &&
+      !isAuthRequestUrl(url) &&
+      !/\/logout$/i.test(url)
+    ) {
+      toast.error("View-only access — you cannot change data in this module.", {
+        id: "subadmin-view-only",
+      });
+      const err = new Error(
+        "View-only access: you can browse this module but cannot create, edit, or delete."
+      );
+      err.status = 403;
+      err.config = config;
+      return Promise.reject(err);
+    }
+
     if (import.meta.env.DEV && String(config.url || "").includes("pricing-history")) {
       apiLog.debug("pricing-history request", {
         method: config.method?.toUpperCase(),
@@ -206,7 +227,13 @@ axiosInstance.interceptors.response.use(
     ) {
       const role = normalizeRole(appStore.getState()?.global?.role);
       if (role === "SUBADMIN") {
-        toast.error("Module access denied", { id: "subadmin-module-denied" });
+        const msg = String(base.message || "");
+        toast.error(
+          /view-only/i.test(msg)
+            ? "View-only access: you cannot change data in this module"
+            : "Module access denied",
+          { id: "subadmin-module-denied" }
+        );
       }
     }
 

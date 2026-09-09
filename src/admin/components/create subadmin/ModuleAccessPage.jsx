@@ -4,6 +4,12 @@ import { ArrowLeft, ShieldCheck, Loader2 } from "lucide-react";
 import { moduleAccessApi } from "../../apis/ModuleAccessapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
+  ACCESS_LEVEL_FULL,
+  ACCESS_LEVEL_VIEW,
+  parseModuleAccessResponse,
+  toModuleAccessPayload,
+} from "../../../utils/moduleAccessLevels";
+import {
   alertDanger,
   alertSuccess,
   btnOutline,
@@ -21,6 +27,9 @@ const ROLE_OPTIONS = [
   { value: "super_subadmin", label: "Super subadmin" },
 ];
 
+const emptyLevels = (keys, level = ACCESS_LEVEL_FULL) =>
+  Object.fromEntries((keys || []).map((key) => [key, level]));
+
 export default function ModuleAccessPage() {
   const navigate = useNavigate();
   const basePath = useAdminPanelBasePath();
@@ -36,6 +45,7 @@ export default function ModuleAccessPage() {
   const [availableModules, setAvailableModules] = useState([]);
   const [panelGroups, setPanelGroups] = useState(null);
   const [selectedModules, setSelectedModules] = useState([]);
+  const [moduleLevels, setModuleLevels] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -46,6 +56,10 @@ export default function ModuleAccessPage() {
     [role],
   );
 
+  const viewOnlyCount = selectedModules.filter(
+    (key) => moduleLevels[key] === ACCESS_LEVEL_VIEW,
+  ).length;
+
   const loadMetaAndRole = async (targetRole) => {
     setLoading(true);
     setError("");
@@ -55,14 +69,17 @@ export default function ModuleAccessPage() {
         moduleAccessApi.getMeta(),
         moduleAccessApi.getRoleAccess(targetRole),
       ]);
+      const parsed = parseModuleAccessResponse(roleAccess);
       setAvailableModules(meta?.availableModules || []);
       setPanelGroups(meta?.panelGroups || null);
-      setSelectedModules(roleAccess?.allowedModules || []);
+      setSelectedModules(parsed.allowedModules);
+      setModuleLevels(parsed.moduleLevels);
     } catch (e) {
       setError(e?.message || "Failed to load module access");
       setAvailableModules([]);
       setPanelGroups(null);
       setSelectedModules([]);
+      setModuleLevels({});
     } finally {
       setLoading(false);
     }
@@ -73,13 +90,45 @@ export default function ModuleAccessPage() {
   }, [role]);
 
   const toggleModule = (moduleKey) => {
-    setSelectedModules((prev) =>
-      prev.includes(moduleKey) ? prev.filter((m) => m !== moduleKey) : [...prev, moduleKey],
-    );
+    setSelectedModules((prev) => {
+      if (prev.includes(moduleKey)) {
+        setModuleLevels((levels) => {
+          const next = { ...levels };
+          delete next[moduleKey];
+          return next;
+        });
+        return prev.filter((m) => m !== moduleKey);
+      }
+      setModuleLevels((levels) => ({
+        ...levels,
+        [moduleKey]: levels[moduleKey] || ACCESS_LEVEL_FULL,
+      }));
+      return [...prev, moduleKey];
+    });
   };
 
-  const selectAll = () => setSelectedModules([...availableModules]);
-  const clearAll = () => setSelectedModules([]);
+  const setLevel = (moduleKey, accessLevel) => {
+    setModuleLevels((prev) => ({ ...prev, [moduleKey]: accessLevel }));
+  };
+
+  const selectAll = (level = ACCESS_LEVEL_FULL) => {
+    setSelectedModules([...availableModules]);
+    setModuleLevels(emptyLevels(availableModules, level));
+  };
+
+  const clearAll = () => {
+    setSelectedModules([]);
+    setModuleLevels({});
+  };
+
+  const markSelected = (level) => {
+    const keys = selectedModules.length > 0 ? selectedModules : availableModules;
+    if (selectedModules.length === 0) setSelectedModules([...availableModules]);
+    setModuleLevels((prev) => ({
+      ...prev,
+      ...emptyLevels(keys, level),
+    }));
+  };
 
   const save = async () => {
     setSaving(true);
@@ -88,7 +137,7 @@ export default function ModuleAccessPage() {
     try {
       await moduleAccessApi.setRoleAccess({
         role,
-        allowedModules: selectedModules,
+        allowedModules: toModuleAccessPayload(selectedModules, moduleLevels),
       });
       setSuccess(`Updated module permissions for ${roleLabel}.`);
     } catch (e) {
@@ -131,8 +180,14 @@ export default function ModuleAccessPage() {
             </option>
           ))}
         </select>
-        <button type="button" onClick={selectAll} disabled={loading} className={`${btnOutline} shrink-0`}>
+        <button type="button" onClick={() => selectAll(ACCESS_LEVEL_FULL)} disabled={loading} className={`${btnOutline} shrink-0`}>
           Select all
+        </button>
+        <button type="button" onClick={() => markSelected(ACCESS_LEVEL_VIEW)} disabled={loading} className={`${btnOutline} shrink-0`}>
+          View only
+        </button>
+        <button type="button" onClick={() => markSelected(ACCESS_LEVEL_FULL)} disabled={loading} className={`${btnOutline} shrink-0`}>
+          Full access
         </button>
         <button type="button" onClick={clearAll} disabled={loading} className={`${btnOutline} shrink-0`}>
           Clear
@@ -165,7 +220,10 @@ export default function ModuleAccessPage() {
 
       <FormSection
         title={`Modules for ${roleLabel}`}
-        hint={`${selectedModules.length} of ${availableModules.length} selected`}
+        hint={
+          `${selectedModules.length} of ${availableModules.length} selected` +
+          (viewOnlyCount ? ` · ${viewOnlyCount} view only` : "")
+        }
       >
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-10 text-[11px] text-stone-500">
@@ -179,7 +237,9 @@ export default function ModuleAccessPage() {
             panelGroups={panelGroups}
             availableModules={availableModules}
             selectedModules={selectedModules}
+            moduleLevels={moduleLevels}
             onToggle={toggleModule}
+            onLevelChange={setLevel}
           />
         )}
       </FormSection>
