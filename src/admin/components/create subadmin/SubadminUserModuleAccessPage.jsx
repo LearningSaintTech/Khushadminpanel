@@ -9,6 +9,12 @@ import {
 } from "../../apis/subadminapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
+  ACCESS_LEVEL_FULL,
+  ACCESS_LEVEL_VIEW,
+  parseModuleAccessResponse,
+  toModuleAccessPayload,
+} from "../../../utils/moduleAccessLevels";
+import {
   alertDanger,
   alertSuccess,
   btnOutline,
@@ -19,6 +25,9 @@ import {
   formToolbar,
 } from "./subadminShared";
 import { ModuleAccessCheckboxGroups } from "./ModuleAccessCheckboxGroups";
+
+const emptyLevels = (keys, level = ACCESS_LEVEL_FULL) =>
+  Object.fromEntries((keys || []).map((key) => [key, level]));
 
 export default function SubadminUserModuleAccessPage() {
   const { id } = useParams();
@@ -35,11 +44,16 @@ export default function SubadminUserModuleAccessPage() {
   const [availableModules, setAvailableModules] = useState([]);
   const [panelGroups, setPanelGroups] = useState(null);
   const [selectedModules, setSelectedModules] = useState([]);
+  const [moduleLevels, setModuleLevels] = useState({});
   const [subadminName, setSubadminName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const viewOnlyCount = selectedModules.filter(
+    (key) => moduleLevels[key] === ACCESS_LEVEL_VIEW,
+  ).length;
 
   const loadData = async () => {
     setLoading(true);
@@ -51,9 +65,11 @@ export default function SubadminUserModuleAccessPage() {
         getSubAdminModuleAccess(id),
         getSubAdminById(id),
       ]);
+      const parsed = parseModuleAccessResponse(byUser);
       setAvailableModules(meta?.availableModules || []);
       setPanelGroups(meta?.panelGroups || null);
-      setSelectedModules(byUser?.data?.allowedModules || byUser?.allowedModules || []);
+      setSelectedModules(parsed.allowedModules);
+      setModuleLevels(parsed.moduleLevels);
       setSubadminName(profile?.data?.name || "");
     } catch (e) {
       setError(e?.message || "Failed to load module access");
@@ -67,9 +83,34 @@ export default function SubadminUserModuleAccessPage() {
   }, [id]);
 
   const toggleModule = (moduleKey) => {
-    setSelectedModules((prev) =>
-      prev.includes(moduleKey) ? prev.filter((m) => m !== moduleKey) : [...prev, moduleKey],
-    );
+    setSelectedModules((prev) => {
+      if (prev.includes(moduleKey)) {
+        setModuleLevels((levels) => {
+          const next = { ...levels };
+          delete next[moduleKey];
+          return next;
+        });
+        return prev.filter((m) => m !== moduleKey);
+      }
+      setModuleLevels((levels) => ({
+        ...levels,
+        [moduleKey]: levels[moduleKey] || ACCESS_LEVEL_FULL,
+      }));
+      return [...prev, moduleKey];
+    });
+  };
+
+  const setLevel = (moduleKey, accessLevel) => {
+    setModuleLevels((prev) => ({ ...prev, [moduleKey]: accessLevel }));
+  };
+
+  const markSelected = (level) => {
+    const keys = selectedModules.length > 0 ? selectedModules : availableModules;
+    if (selectedModules.length === 0) setSelectedModules([...availableModules]);
+    setModuleLevels((prev) => ({
+      ...prev,
+      ...emptyLevels(keys, level),
+    }));
   };
 
   const save = async () => {
@@ -77,7 +118,10 @@ export default function SubadminUserModuleAccessPage() {
     setError("");
     setSuccess("");
     try {
-      await setSubAdminModuleAccess(id, selectedModules);
+      await setSubAdminModuleAccess(
+        id,
+        toModuleAccessPayload(selectedModules, moduleLevels),
+      );
       setSuccess("Module access updated successfully.");
     } catch (e) {
       setError(e?.message || "Failed to save module access");
@@ -114,7 +158,8 @@ export default function SubadminUserModuleAccessPage() {
         hint={
           loading
             ? "Loading…"
-            : `${selectedModules.length} of ${availableModules.length} selected — overrides role defaults for this user`
+            : `${selectedModules.length} of ${availableModules.length} selected — overrides role defaults for this user` +
+              (viewOnlyCount ? ` · ${viewOnlyCount} view only` : "")
         }
       >
         {loading ? (
@@ -126,15 +171,39 @@ export default function SubadminUserModuleAccessPage() {
           <p className="py-6 text-center text-[11px] text-stone-500">No modules available.</p>
         ) : (
           <>
-            <div className="mb-2 flex justify-end gap-2">
+            <div className="mb-2 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedModules([...availableModules])}
+                onClick={() => {
+                  setSelectedModules([...availableModules]);
+                  setModuleLevels(emptyLevels(availableModules, ACCESS_LEVEL_FULL));
+                }}
                 className={btnOutline}
               >
                 Select all
               </button>
-              <button type="button" onClick={() => setSelectedModules([])} className={btnOutline}>
+              <button
+                type="button"
+                onClick={() => markSelected(ACCESS_LEVEL_VIEW)}
+                className={btnOutline}
+              >
+                View only
+              </button>
+              <button
+                type="button"
+                onClick={() => markSelected(ACCESS_LEVEL_FULL)}
+                className={btnOutline}
+              >
+                Full access
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedModules([]);
+                  setModuleLevels({});
+                }}
+                className={btnOutline}
+              >
                 Clear
               </button>
             </div>
@@ -142,7 +211,9 @@ export default function SubadminUserModuleAccessPage() {
               panelGroups={panelGroups}
               availableModules={availableModules}
               selectedModules={selectedModules}
+              moduleLevels={moduleLevels}
               onToggle={toggleModule}
+              onLevelChange={setLevel}
             />
           </>
         )}

@@ -91,3 +91,10 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+.khush-view-only a[href*="/create"],
+.khush-view-only a[href*="/edit"],
+.khush-view-only a[href*="/add"] {
+  pointer-events: none;
+  opacity: 0.45;
+}

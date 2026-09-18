@@ -49,8 +49,9 @@ export function OverviewPanel({
     const isInstallEvent = (ev) => INSTALL_EVENT_TYPES.includes(String(ev?.eventType || "").toLowerCase());
     const normalizePlatform = (ev) => {
       const source = String(ev?.sourcePlatform || "").toLowerCase();
-      if (source === "android") return "android";
-      if (source === "iphone" || source === "ios") return "ios";
+      const channel = String(ev?.channel || "").toLowerCase();
+      if (source === "android" || channel === "android") return "android";
+      if (source === "iphone" || source === "ios" || channel === "ios") return "ios";
       return "other";
     };
 
@@ -157,7 +158,11 @@ export function OverviewPanel({
           ? websiteRows
         : selectedKpi === "android_events"
           ? events
-              .filter((ev) => String(ev?.sourcePlatform || "").toLowerCase() === "android")
+              .filter((ev) => {
+                const source = String(ev?.sourcePlatform || "").toLowerCase();
+                const channel = String(ev?.channel || "").toLowerCase();
+                return source === "android" || channel === "android";
+              })
               .slice(0, 25)
               .map((ev) => ({
                 eventType: ev?.eventType || "-",
@@ -167,7 +172,11 @@ export function OverviewPanel({
               }))
             : selectedKpi === "iphone_events"
             ? events
-                .filter((ev) => ["iphone", "ios"].includes(String(ev?.sourcePlatform || "").toLowerCase()))
+                .filter((ev) => {
+                  const source = String(ev?.sourcePlatform || "").toLowerCase();
+                  const channel = String(ev?.channel || "").toLowerCase();
+                  return source === "iphone" || source === "ios" || channel === "ios";
+                })
                 .slice(0, 25)
                 .map((ev) => ({
                   eventType: ev?.eventType || "-",
@@ -667,15 +676,25 @@ export function ExplorerPanel({
   const renderPlatformBadge = (platform) => {
     const value = String(platform || "unknown").toLowerCase();
     const label =
-      value === "iphone" ? "iPhone" : value === "android" ? "Android" : value === "website" ? "Website" : value === "app" ? "App" : "Unknown";
+      value === "ios" || value === "iphone"
+        ? "iOS"
+        : value === "android"
+          ? "Android"
+          : value === "website"
+            ? "Website"
+            : value === "app"
+              ? "App"
+              : "Unknown";
     const tone =
-      value === "iphone"
+      value === "ios" || value === "iphone"
         ? "bg-violet-50 text-violet-700 border-violet-200"
         : value === "android"
           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
           : value === "website"
             ? "bg-sky-50 text-sky-700 border-sky-200"
-            : "bg-slate-50 text-slate-700 border-slate-200";
+            : value === "app"
+              ? "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200"
+              : "bg-slate-50 text-slate-700 border-slate-200";
     return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
   };
 

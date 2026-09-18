@@ -35,6 +35,7 @@ import {
   createDelhiveryForOrderShipments,
 } from "../../apis/Orderapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
 import { isDebugOrders } from "../../../utils/logLevel.js";
 import { getPublicStoreUrl } from "../../../utils/apiConfig.js";
 import logger from "../../../utils/logger.js";
@@ -4166,6 +4167,8 @@ const Orders = ({
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const basePath = useAdminPanelBasePath();
+  const { canMutate } = useModuleAccess();
+  const canEditOrders = canMutate(["order"]);
   const ui = useMemo(() => getOrdersUiTokens(), []);
   const listPageTitle =
     pageTitle ||
@@ -4182,6 +4185,8 @@ const Orders = ({
   );
   const openedFromQueryRef = useRef(false);
   const docRefreshRef = useRef({ refreshAfterLabel: async () => {} });
+  const ordersAbortRef = useRef(null);
+  const orderItemsAbortRef = useRef(null);
   const [viewMode, setViewMode] = useState(
     defaultViewMode === VIEW_ITEM ? VIEW_ITEM : VIEW_ORDER,
   ); // "order" | "item"
@@ -4192,6 +4197,7 @@ const Orders = ({
     total: 0,
     totalPages: 1,
   });
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [searchExact, setSearchExact] = useState(false);
   const [statusFilters, setStatusFilters] = useState([]);
@@ -4216,12 +4222,37 @@ const Orders = ({
     total: 0,
     totalPages: 1,
   });
+  const [itemSearchInput, setItemSearchInput] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [itemStatusFilters, setItemStatusFilters] = useState([]);
   const [shippingProviderFilter, setShippingProviderFilter] = useState("");
   const [itemLoading, setItemLoading] = useState(false);
   const [itemError, setItemError] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Debounce search so each keystroke does not hit Mongo (was causing 50+ concurrent queries).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch((prev) => {
+        if (prev === searchInput) return prev;
+        setPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
+        return searchInput;
+      });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setItemSearch((prev) => {
+        if (prev === itemSearchInput) return prev;
+        setItemPagination((p) => (p.page === 1 ? p : { ...p, page: 1 }));
+        return itemSearchInput;
+      });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [itemSearchInput]);
+
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState(null);
   const [updatingItemId, setUpdatingItemId] = useState(null);
@@ -5243,6 +5274,9 @@ const Orders = ({
   };
 
   const fetchOrders = useCallback(async () => {
+    ordersAbortRef.current?.abort();
+    const ac = new AbortController();
+    ordersAbortRef.current = ac;
     try {
       setLoading(true);
       setError(null);
@@ -5274,7 +5308,9 @@ const Orders = ({
         !!returnOnly,
         searchExact,
         paymentFiltersParam,
+        { signal: ac.signal },
       );
+      if (ac.signal.aborted) return;
       // Backend: successResponse → { success, message, data: { orders, pagination } }
       dbgOrders("getOrders:response", res);
       if (consistencyParam && !res?.data?.appliedFilters?.itemStatusConsistency) {
@@ -5314,10 +5350,18 @@ const Orders = ({
         };
       });
     } catch (err) {
+      if (
+        ac.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError" ||
+        err?.name === "AbortError"
+      ) {
+        return;
+      }
       console.error("Failed to fetch orders:", err);
       setError(apiErrMessage(err, "Failed to load orders. Please try again."));
     } finally {
-      setLoading(false);
+      if (!ac.signal.aborted) setLoading(false);
     }
   }, [pagination.page, pagination.limit, search, searchExact, statusFilters, lineConsistencyFilter, dateFrom, dateTo, sortBy, sortOrder, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly]);
 
@@ -5328,6 +5372,9 @@ const Orders = ({
   }, [fetchOrders, viewMode, selectedOrder]);
 
   const fetchOrderItems = useCallback(async () => {
+    orderItemsAbortRef.current?.abort();
+    const ac = new AbortController();
+    orderItemsAbortRef.current = ac;
     try {
       setItemLoading(true);
       setItemError(null);
@@ -5351,7 +5398,9 @@ const Orders = ({
         shippingProviderFilter || undefined,
         searchExact,
         paymentFiltersParam,
+        { signal: ac.signal },
       );
+      if (ac.signal.aborted) return;
       dbgOrders("getOrderItems:response", res);
       const payload = res?.data ?? {};
       dbgOrdersVerbose("getOrderItems:payload", payload);
@@ -5372,10 +5421,18 @@ const Orders = ({
         totalPages: Math.max(1, payload.pagination?.totalPages ?? 1),
       }));
     } catch (err) {
+      if (
+        ac.signal.aborted ||
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError" ||
+        err?.name === "AbortError"
+      ) {
+        return;
+      }
       console.error("Failed to fetch order items:", err);
       setItemError(apiErrMessage(err, "Failed to load order items."));
     } finally {
-      setItemLoading(false);
+      if (!ac.signal.aborted) setItemLoading(false);
     }
   }, [itemPagination.page, itemPagination.limit, itemSearch, searchExact, itemStatusFilters, shippingProviderFilter, deliveryTypeFilters, paymentFilters, cityFilter, exchangeOnly, returnOnly, dateFrom, dateTo]);
 
@@ -6221,6 +6278,12 @@ const Orders = ({
   };
 
   const handleAssignmentSubmit = async () => {
+    if (!canEditOrders) {
+      toast.error("View-only access — you cannot change order status.", {
+        id: "subadmin-view-only",
+      });
+      return;
+    }
     if (!assignmentOrderId || !selectedDeliveryAgentId) {
       setAssignError("Please select a delivery agent.");
       return;
@@ -6313,6 +6376,12 @@ const Orders = ({
     selfShippingMode = null,
     externalSelfShipping = null,
   ) => {
+    if (!canEditOrders) {
+      toast.error("View-only access — you cannot change order status.", {
+        id: "subadmin-view-only",
+      });
+      return;
+    }
     if (!selectedOrder?.orderId || !newStatus) return;
     setUpdatingWholeOrder(true);
     setOrderError(null);
@@ -6486,6 +6555,12 @@ const Orders = ({
     selfShippingMode = null,
     externalSelfShipping = null,
   ) => {
+    if (!canEditOrders) {
+      toast.error("View-only access — you cannot change order status.", {
+        id: "subadmin-view-only",
+      });
+      return;
+    }
     if (!selectedOrder?.orderId || selectedItemIds.length === 0 || !bulkStatusValue) {
       return;
     }
@@ -6810,6 +6885,12 @@ const Orders = ({
   };
 
   const handleUpdateItemStatus = async (orderId, itemId, newStatus, options = {}) => {
+    if (!canEditOrders) {
+      toast.error("View-only access — you cannot change order status.", {
+        id: "subadmin-view-only",
+      });
+      return;
+    }
     if (!orderId || !itemId || !newStatus) return;
     const stringItemId = String(itemId);
     const {
@@ -8728,14 +8809,12 @@ const Orders = ({
                             ? "Order ID, customer, or full product name…"
                             : "Order ID, full product name, or SKU…"
                     }
-                    value={viewMode === VIEW_ORDER ? search : itemSearch}
+                    value={viewMode === VIEW_ORDER ? searchInput : itemSearchInput}
                     onChange={(e) => {
                       if (viewMode === VIEW_ORDER) {
-                        setSearch(e.target.value);
-                        setPagination((p) => ({ ...p, page: 1 }));
+                        setSearchInput(e.target.value);
                       } else {
-                        setItemSearch(e.target.value);
-                        setItemPagination((p) => ({ ...p, page: 1 }));
+                        setItemSearchInput(e.target.value);
                       }
                     }}
                     className={`${ui.inputCompact} w-full min-w-0 pl-8 py-1.5 text-[11px]`}
@@ -8833,7 +8912,7 @@ const Orders = ({
                         Mark paid + Confirm
                       </button>
                     )}
-                  {!orderDetailFromItemList ? (
+                  {!orderDetailFromItemList && canEditOrders ? (
                     <>
                       <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
                       <span className="shrink-0 whitespace-nowrap text-[10px] font-medium text-stone-600">
@@ -11050,8 +11129,9 @@ const Orders = ({
                   <div className={ui.detailSection}>
                     <div className={ui.detailSectionTitle}>
                       <RefreshCw className="h-3.5 w-3.5 text-brand-600" aria-hidden />
-                      Update status
+                      {canEditOrders ? "Update status" : "Status"}
                     </div>
+                    {canEditOrders ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <select
                         value={focusedItem.status || ""}
@@ -11077,7 +11157,16 @@ const Orders = ({
                         </span>
                       )}
                     </div>
-                    <p className="mt-1.5 text-[10px] text-stone-500">Select a new status for this line.</p>
+                    ) : (
+                      <p className="text-sm font-medium text-stone-800">
+                        {focusedItem.status || "—"}
+                      </p>
+                    )}
+                    <p className="mt-1.5 text-[10px] text-stone-500">
+                      {canEditOrders
+                        ? "Select a new status for this line."
+                        : "View-only access — status cannot be changed."}
+                    </p>
                   </div>
                   {focusedItem.carrierWebhookTimeline && focusedItem.carrierWebhookTimeline.length > 0 && (
                     <div className="rounded-xl border border-orange-200/80 bg-orange-50/40 p-3 shadow-sm">
@@ -11743,6 +11832,8 @@ const Orders = ({
                                 ? `${selectedItemIds.length} selected`
                                 : "Bulk"}
                             </span>
+                            {canEditOrders ? (
+                            <>
                             <select
                               value={bulkStatus}
                               onChange={(e) => setBulkStatus(e.target.value)}
@@ -11794,6 +11885,8 @@ const Orders = ({
                               <UserPlus className="h-3.5 w-3.5" aria-hidden />
                               Assign driver
                             </button>
+                            </>
+                            ) : null}
                           </>
                         ) : null}
                       </div>
@@ -11949,6 +12042,7 @@ const Orders = ({
                                   )}
                                 </td>
                                 <td className="min-w-0 px-1 py-1.5 align-middle text-center">
+                                  {canEditOrders ? (
                                   <div className="relative mx-auto w-full max-w-[6.25rem]">
                                     <select
                                       value={item.status || ""}
@@ -11973,6 +12067,11 @@ const Orders = ({
                                       </div>
                                     )}
                                   </div>
+                                  ) : (
+                                    <span className="text-[11px] font-medium text-stone-700">
+                                      {item.status || "—"}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                               {returnOnly || hasActiveReturnStatus(item) ? (

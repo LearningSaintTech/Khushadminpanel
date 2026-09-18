@@ -6,10 +6,11 @@ import {
   getRequiredModulesForPanelPath,
 } from "../config/adminPanelModuleMap";
 import AccessDenied from "./AccessDenied";
+import ViewOnlyGuard from "./ViewOnlyGuard";
 
 export default function SubadminModuleGate({ children }) {
   const location = useLocation();
-  const { basePath, filterByModules, isFullAdmin, canUse, loading } = useModuleAccess();
+  const { basePath, filterByModules, isFullAdmin, canUse, canMutate, loading } = useModuleAccess();
 
   if (!filterByModules || isFullAdmin) {
     return children;
@@ -48,5 +49,17 @@ export default function SubadminModuleGate({ children }) {
     return <AccessDenied basePath={basePath} reason={reason} />;
   }
 
-  return children;
+  const viewOnly = !exempt && !adminOnly && Boolean(modules?.length) && !canMutate(modules);
+  const writePath = /\/(create|edit|add|new)(?:\/|$)/i.test(location.pathname);
+
+  if (viewOnly && writePath) {
+    return (
+      <AccessDenied
+        basePath={basePath}
+        reason="View-only access: you can browse this module but cannot open create or edit screens."
+      />
+    );
+  }
+
+  return <ViewOnlyGuard enabled={viewOnly}>{children}</ViewOnlyGuard>;
 }

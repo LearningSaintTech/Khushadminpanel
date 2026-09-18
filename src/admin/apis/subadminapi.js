@@ -87,8 +87,9 @@ export const getSubAdminModuleAccess = (id) => {
   return apiConnector("GET", `${subAdminEndpoints.MODULE_ACCESS}/${id}/module-access`);
 };
 
-export const setSubAdminModuleAccess = (id, allowedModules) => {
+export const setSubAdminModuleAccess = (id, allowedModules, moduleLevels) => {
   return apiConnector("PUT", `${subAdminEndpoints.MODULE_ACCESS}/${id}/module-access`, {
     allowedModules,
+    ...(moduleLevels ? { moduleLevels } : {}),
   });
 };

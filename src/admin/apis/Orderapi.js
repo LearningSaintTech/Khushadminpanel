@@ -315,10 +315,14 @@ export const runStaleOrderAlertEmail = (hours = 24) => {
   return apiConnector("POST", orderEndpoints.STALE_ORDERS_RUN, { hours });
 };
 // ✅ Get All Orders
-export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false, paymentFilters = "") => {
+export const getOrders = (page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency = "", city = "", exchangeOnly = false, returnOnly = false, searchExact = false, paymentFilters = "", requestConfig = {}) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly, searchExact, paymentFilters)
+    orderEndpoints.GET_ORDERS(page, limit, search, status, startDate, endDate, sortBy, sortOrder, deliveryType, paymentStatus, paymentMode, itemStatusConsistency, city, exchangeOnly, returnOnly, searchExact, paymentFilters),
+    null,
+    {},
+    {},
+    requestConfig
   );
 };
 
@@ -332,10 +336,14 @@ export const getOrderStatusAnalytics = (params = {}) => {
 };
 
 // ✅ Get All Order Items (item-based list)
-export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false, paymentFilters = "") => {
+export const getOrderItems = (page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city = "", exchangeOnly = false, returnOnly = false, shippingProvider = "", searchExact = false, paymentFilters = "", requestConfig = {}) => {
   return apiConnector(
     "GET",
-    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider, searchExact, paymentFilters)
+    orderEndpoints.GET_ORDER_ITEMS(page, limit, search, orderStatus, itemStatus, startDate, endDate, deliveryType, paymentStatus, paymentMode, city, exchangeOnly, returnOnly, shippingProvider, searchExact, paymentFilters),
+    null,
+    {},
+    {},
+    requestConfig
   );
 };
 

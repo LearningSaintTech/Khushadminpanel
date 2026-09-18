@@ -30,6 +30,7 @@ const STORAGE_CHANNEL_KEY = "khush-dashboard-analytics-channel";
 const ANALYTICS_CHANNELS = [
   { id: "all", label: "All" },
   { id: "website", label: "Website" },
+  { id: "app", label: "App" },
   { id: "android", label: "Android" },
   { id: "ios", label: "iOS" },
 ];
@@ -224,6 +225,7 @@ function readStoredChannel() {
 function metricsForChannel(channel) {
   const hideByChannel = {
     website: new Set(["app_installs", "android_installs", "ios_installs", "app_users"]),
+    app: new Set(["website_users"]),
     android: new Set(["website_users", "ios_installs", "app_installs"]),
     ios: new Set(["website_users", "android_installs", "app_installs"]),
   };
