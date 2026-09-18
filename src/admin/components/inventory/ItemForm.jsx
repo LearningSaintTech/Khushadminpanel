@@ -217,6 +217,8 @@ const ItemForm = () => {
     price: "",
     discountedPrice: "",
     productId: "",
+    designedBy: "",
+    designedById: "",
     skuCodeInputs: {
       styleNu: "",
       gender: "",
@@ -430,6 +432,11 @@ const ItemForm = () => {
             price: itemData.price || "",
             discountedPrice: itemData.discountedPrice || "",
             productId: itemData.productId || "",
+            designedBy:
+              typeof itemData.designedBy === "string"
+                ? itemData.designedBy
+                : itemData.designedBy?.name || "",
+            designedById: itemData.designedById || itemData.designedBy?._id || "",
             skuCodeInputs: {
               styleNu:
                 itemData?.skuCodeInputs?.styleNu ||
@@ -991,6 +998,12 @@ const ItemForm = () => {
       formData.append("price", form.price);
       formData.append("discountedPrice", form.discountedPrice || "");
       formData.append("productId", form.productId || "");
+      formData.append("designedBy", form.designedBy || "");
+      formData.append("designedById", form.designedById || "");
+      console.log("[ItemForm] designedBy", {
+        designedBy: form.designedBy || "",
+        designedById: form.designedById || "",
+      });
       formData.append("skuCodeInputs", JSON.stringify(form.skuCodeInputs || {}));
       formData.append("categoryId", categoryId);
       formData.append("subcategoryId", subcategoryId);

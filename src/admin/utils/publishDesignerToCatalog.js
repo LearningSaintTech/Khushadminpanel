@@ -81,6 +81,7 @@ async function syncDesignerFormOntoCatalog({
     id: catalogItemIdOf(catalogItem) || productId,
     secondaryCategoryId,
     secondarySubcategoryId,
+    designerRow,
   });
   logFormDataSummary(formData, `PATCH /items/update/${productId} (link media sync)`);
   return updateItem(productId, formData);
@@ -314,6 +315,11 @@ export async function publishDesignerToCatalog({
   const formData = buildItemCreateFormData(form, categoryId, subcategoryId, {
     secondaryCategoryId,
     secondarySubcategoryId,
+    designerRow,
+  });
+  console.log(`${LOG} designedBy on create`, {
+    designerName: designerRow?.designerName,
+    designerId: designerRow?.designerId,
   });
   logFormDataSummary(formData, "POST /items/create");
 

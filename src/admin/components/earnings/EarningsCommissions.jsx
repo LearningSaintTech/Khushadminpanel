@@ -52,20 +52,42 @@ const EarningsCommissions = () => {
       Object.entries(filters).forEach(([k, v]) => {
         if (v?.trim()) params[k] = v.trim();
       });
-      console.log("[Earnings] commissions params", params);
+      const qs = new URLSearchParams(params).toString();
+      console.log("[Commission ledger] API", {
+        method: "GET",
+        path: "/admin/earnings/commissions",
+        url: `/api/admin/earnings/commissions?${qs}`,
+        payload: params,
+        filters,
+      });
       const res = await getEarningsCommissions(params);
       const data = res?.data ?? res;
       const list = extractCommunityList(res, ["commissions"]);
-      console.log("[Earnings] parsed commissions", { count: list.length, data, list });
+      const pagination = data?.pagination || {};
+      console.log("[Commission ledger] response", {
+        success: res?.success,
+        message: res?.message,
+        raw: res,
+        data,
+        items: list,
+        count: list.length,
+        pagination,
+        firstRow: list[0] || null,
+      });
       setItems(list);
       setTotalPages(
-        data?.pagination?.pages ||
-          data?.pagination?.totalPages ||
+        pagination.pages ||
+          pagination.totalPages ||
           data?.totalPages ||
           1,
       );
-      setTotal(data?.pagination?.total ?? data?.total ?? list.length);
+      setTotal(pagination.total ?? data?.total ?? list.length);
     } catch (err) {
+      console.error("[Commission ledger] error", {
+        message: err?.message,
+        status: err?.status,
+        err,
+      });
       toast.error(err?.message || "Failed to load commissions");
       setItems([]);
     } finally {
@@ -81,11 +103,13 @@ const EarningsCommissions = () => {
     if (!window.confirm("Run manual earnings settle tick?")) return;
     setSettling(true);
     try {
-      console.log("[Earnings] settle now");
-      await settleEarnings();
+      console.log("[Commission ledger] settle payload", {});
+      const settleRes = await settleEarnings();
+      console.log("[Commission ledger] settle response", settleRes);
       toast.success("Settle requested");
       fetchList();
     } catch (err) {
+      console.error("[Commission ledger] settle error", err);
       toast.error(err?.message || "Settle failed");
     } finally {
       setSettling(false);
@@ -97,7 +121,7 @@ const EarningsCommissions = () => {
       <PageHeader
         icon={ScrollText}
         title="Commissions ledger"
-        subtitle="GET /admin/earnings/commissions?page=1&limit=50"
+        subtitle="GET /admin/earnings/commissions?role=designer|creator&status=pending_return_window|available"
         onRefresh={fetchList}
         loading={loading}
         backLink={
@@ -134,8 +158,8 @@ const EarningsCommissions = () => {
           }}
         >
           <option value="">All roles</option>
-          <option value="creator">creator</option>
-          <option value="designer">designer</option>
+          <option value="designer">designer (designedById)</option>
+          <option value="creator">creator (content / shop CTA)</option>
         </select>
         <input
           className={inputClass}
@@ -179,6 +203,19 @@ const EarningsCommissions = () => {
           {total} records
         </span>
       </div>
+      <p className="mb-2 text-[10px] leading-relaxed text-stone-500">
+        Designer ledger:{" "}
+        <code className="rounded bg-canvas-muted px-1">
+          GET /admin/earnings/commissions?role=designer&amp;page=1&amp;limit=50
+        </code>
+        {" "}(leave status empty for pending + available). Pending only:{" "}
+        <code className="rounded bg-canvas-muted px-1">status=pending_return_window</code>
+        . Available (approved):{" "}
+        <code className="rounded bg-canvas-muted px-1">status=available</code>
+        . One designer: add{" "}
+        <code className="rounded bg-canvas-muted px-1">userId=&lt;designedById&gt;</code>
+        .
+      </p>
 
       <div className={tableScrollShell}>
         <table className="w-full min-w-[900px] text-[11px]">

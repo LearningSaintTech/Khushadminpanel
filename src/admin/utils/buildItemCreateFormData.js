@@ -5,6 +5,7 @@ import {
   normalizeVariantMediaSlot,
 } from "../../utils/variantMedia.js";
 import { getCdnBaseUrl } from "../../utils/apiConfig.js";
+import { designedByFieldsFromSource } from "../components/inventory/designedByMeta.js";
 
 /**
  * Builds multipart FormData for POST /items/create (same field layout as ItemForm.jsx handleSave, create path).
@@ -71,6 +72,18 @@ export function buildItemCreateFormData(form, categoryId, subcategoryId, options
   formData.append("price", form.price);
   formData.append("discountedPrice", form.discountedPrice || "");
   formData.append("productId", form.productId || "");
+  const designedBySource = {
+    ...(options.designerRow || {}),
+    ...form,
+    designedBy: options.designedBy ?? form.designedBy,
+    designedById: options.designedById ?? form.designedById,
+    designerName: options.designerRow?.designerName || form.designerName,
+    designerId: options.designerRow?.designerId || form.designerId,
+  };
+  const { designedBy, designedById } = designedByFieldsFromSource(designedBySource);
+  formData.append("designedBy", designedBy);
+  formData.append("designedById", designedById);
+  console.log("[buildItemCreateFormData] designedBy", { designedBy, designedById });
   formData.append("skuCodeInputs", JSON.stringify(form.skuCodeInputs || {}));
   formData.append("categoryId", categoryId);
   formData.append("subcategoryId", subcategoryId);

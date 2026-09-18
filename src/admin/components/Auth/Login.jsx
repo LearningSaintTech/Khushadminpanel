@@ -5,6 +5,10 @@ import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../../apis/Authapi";
 import { setLoading, setError, clearError } from "../../../redux/GlobalSlice";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
+import { isLoggingEnabled } from "../../../utils/logLevel";
+
+const isDevAuthLog =
+  Boolean(import.meta.env?.DEV) || isLoggingEnabled();
 
 export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -19,8 +23,16 @@ export default function Login() {
     e.preventDefault();
 
     const cleaned = phoneNumber.replace(/\D/g, "");
+    if (isDevAuthLog) {
+      console.log("[Login] submit", {
+        rawLength: phoneNumber.length,
+        cleaned,
+        cleanedLength: cleaned.length,
+      });
+    }
 
     if (cleaned.length !== 10) {
+      if (isDevAuthLog) console.warn("[Login] invalid phone length", cleaned.length);
       setIsValid(false);
       return;
     }
@@ -30,22 +42,39 @@ export default function Login() {
     dispatch(setLoading(true));
 
     try {
+      if (isDevAuthLog) console.log("[Login] calling loginUser…");
       const res = await loginUser({
         countryCode: "+91",
         phoneNumber: cleaned,
       });
+      if (isDevAuthLog) {
+        console.log("[Login] loginUser response", {
+          success: res?.success,
+          message: res?.message,
+          userId: res?.data?.userId,
+        });
+      }
 
       if (res?.success) {
         sessionStorage.setItem("admin_userId", res.data.userId);
         sessionStorage.setItem("admin_phone", cleaned);
+        if (isDevAuthLog) {
+          console.log("[Login] navigating to /admin/otp", {
+            userId: res.data.userId,
+            phone: cleaned,
+          });
+        }
         navigate("/admin/otp", {
           state: {
             phone: cleaned,
             userId: res.data.userId,
           },
         });
+      } else if (isDevAuthLog) {
+        console.warn("[Login] success=false", res);
       }
     } catch (err) {
+      console.error("[Login] failed", err);
       dispatch(
         setError(err?.response?.data?.message || err?.message || "Something went wrong"),
       );

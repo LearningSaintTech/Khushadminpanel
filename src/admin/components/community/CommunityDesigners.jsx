@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Check,
   ExternalLink,
+  KeyRound,
   Loader2,
   X,
   ZoomIn,
@@ -15,6 +16,7 @@ import {
   getCommunityDesigner,
   verifyCommunityDesigner,
   rejectCommunityDesigner,
+  grantCommunityDesignerPanelAccess,
 } from "../../apis/CommunityDesignersapi";
 import {
   PageHeader,
@@ -184,6 +186,38 @@ const CommunityDesigners = () => {
     }
   };
 
+  const handleGrantPanelAccess = async (id) => {
+    if (
+      !window.confirm(
+        "Grant Designers panel access to this community user?\n\nUses the same userId (does not create a new designer). This keeps inventory, earnings, and designedBy links intact.",
+      )
+    ) {
+      return;
+    }
+    setActing(true);
+    try {
+      console.log("[Community designers] grant-panel-access", { userId: id });
+      const res = await grantCommunityDesignerPanelAccess(id);
+      toast.success(
+        res?.message || "Panel access granted — same userId linked as designer",
+      );
+      await openDetail(id);
+      fetchList();
+    } catch (err) {
+      toast.error(err?.message || "Failed to grant panel access");
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const hasPanelAccess = (row) =>
+    Boolean(
+      row?.hasDesignerPanelAccess ??
+        row?.designerPanelAccess ??
+        row?.hasPanelAccess ??
+        row?.panelAccessGranted,
+    );
+
   const skills = Array.isArray(detail?.designerSkills)
     ? detail.designerSkills
     : [];
@@ -219,14 +253,16 @@ const CommunityDesigners = () => {
       <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-900">
         <strong>Community designer</strong> = app user with{" "}
         <code className="rounded bg-white/80 px-1">isDesigner</code> who
-        completed onboarding. Separate from the staff{" "}
+        completed onboarding. To let them manage inventory in the staff{" "}
         <Link
           to={ap("designer")}
           className="font-medium text-brand-700 underline hover:text-brand-800"
         >
           Designers
         </Link>{" "}
-        inventory panel.
+        panel without creating a new account, use{" "}
+        <strong>Grant panel access</strong> (same{" "}
+        <code className="rounded bg-white/80 px-1">userId</code>).
       </p>
 
       <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -376,6 +412,18 @@ const CommunityDesigners = () => {
                           </button>
                         </>
                       ) : null}
+                      {row.designerVerificationStatus === "verified" &&
+                      !hasPanelAccess(row) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleGrantPanelAccess(id)}
+                          disabled={acting}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                          title="Grant Designers panel access (same userId)"
+                        >
+                          <KeyRound size={13} />
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -462,6 +510,11 @@ const CommunityDesigners = () => {
                       {detail.isCreator ? (
                         <span className="rounded-full border border-border bg-canvas-muted px-2 py-0.5 text-[10px] text-stone-600">
                           also creator
+                        </span>
+                      ) : null}
+                      {hasPanelAccess(detail) ? (
+                        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-800">
+                          panel access
                         </span>
                       ) : null}
                     </div>
@@ -607,6 +660,40 @@ const CommunityDesigners = () => {
                         Reject
                       </button>
                     </div>
+                  </div>
+                ) : null}
+
+                {detail.designerVerificationStatus === "verified" ? (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-[10px] text-stone-600">
+                      Promote to staff Designers panel with the same{" "}
+                      <code className="rounded bg-canvas-muted px-1">
+                        {communityRowId(detail) || "userId"}
+                      </code>
+                      . Do not create a new designer — that would break linked
+                      inventory and earnings.
+                    </p>
+                    {hasPanelAccess(detail) ? (
+                      <p className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-[11px] text-indigo-900">
+                        Panel access already granted.
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={acting}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                        onClick={() =>
+                          handleGrantPanelAccess(communityRowId(detail))
+                        }
+                      >
+                        {acting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <KeyRound className="h-3.5 w-3.5" />
+                        )}
+                        Grant panel access
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>

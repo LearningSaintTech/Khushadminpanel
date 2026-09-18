@@ -2,8 +2,10 @@
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { getSingleItem } from "../../apis/itemapi";
 import SkuUidsModal from "./SkuUidsModal.jsx";
+import CrossSellPanel from "./CrossSellPanel.jsx";
 import DesignerSizeChartReadonlyTables from "../../../components/designer/DesignerSizeChartReadonlyTables.jsx";
 import { itemHasSizeChartContent } from "../../../utils/designerSizeChartDisplay.js";
+import { designedByMeta } from "./designedByMeta.js";
 import {
   firstCatalogHeroImageUrl,
   inferVariantMediaType,
@@ -47,6 +49,10 @@ export default function ItemDetails() {
         null;
 
       console.log("[ItemDetails] Parsed itemData:", itemData);
+      console.log("[ItemDetails] designedBy", designedByMeta(itemData), {
+        rawDesignedBy: itemData?.designedBy,
+        designedById: itemData?.designedById,
+      });
       console.log("[ItemDetails] itemData.sizeChart:", itemData?.sizeChart);
       if (itemData?.sizeChart) {
         console.log(
@@ -300,8 +306,15 @@ export default function ItemDetails() {
         {/* Tabs - scrollable only when necessary */}
         <div className="border-b border-border mb-4 sm:mb-6 lg:mb-8 bg-white rounded-t-xl">
           <div className="flex gap-2 sm:gap-3 md:gap-4 lg:gap-6 overflow-x-auto pb-3 px-4 sm:px-5 lg:px-6 scrollbar-thin scrollbar-thumb-gray-300">
-            {["general", "variants", "size", "care", "policies", "filters"].map(
-              (tab) => (
+            {[
+              "general",
+              "variants",
+              "size",
+              "care",
+              "policies",
+              "filters",
+              "cross-sell",
+            ].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -311,10 +324,11 @@ export default function ItemDetails() {
                       : "text-stone-500 hover:text-gray-800"
                   }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === "cross-sell"
+                    ? "Cross-sell"
+                    : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
-              ),
-            )}
+              ))}
           </div>
         </div>
 
@@ -331,6 +345,27 @@ export default function ItemDetails() {
                     </dt>
                     <dd className="mt-1 text-sm sm:text-base font-semibold break-words">
                       {item.productId || "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs sm:text-sm text-stone-500 font-medium">
+                      Designed by
+                    </dt>
+                    <dd className="mt-1 text-sm sm:text-base font-semibold break-words">
+                      {(() => {
+                        const designer = designedByMeta(item);
+                        if (!designer.name && !designer.id) return "—";
+                        return (
+                          <span>
+                            {designer.name || "Designer"}
+                            {designer.id ? (
+                              <span className="mt-0.5 block font-mono text-xs font-normal text-stone-500">
+                                {designer.id}
+                              </span>
+                            ) : null}
+                          </span>
+                        );
+                      })()}
                     </dd>
                   </div>
                   <div>
@@ -783,6 +818,19 @@ export default function ItemDetails() {
                   </p>
                 )}
               </div>
+            )}
+
+            {/* CROSS-SELL */}
+            {activeTab === "cross-sell" && (
+              <CrossSellPanel
+                itemId={item._id || itemId}
+                initialIds={item.crossSellItemIds || []}
+                onSaved={(nextIds) => {
+                  setItem((prev) =>
+                    prev ? { ...prev, crossSellItemIds: nextIds } : prev,
+                  );
+                }}
+              />
             )}
           </div>
         </div>

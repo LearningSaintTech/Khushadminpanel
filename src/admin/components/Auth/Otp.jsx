@@ -14,6 +14,10 @@ import {
 } from "../../../redux/GlobalSlice";
 import { clearOtherPanelSessions } from "../../../utils/authRole";
 import { selectLoading, selectError } from "../../../redux/GlobalSelector";
+import { isLoggingEnabled } from "../../../utils/logLevel";
+
+const isDevAuthLog =
+  Boolean(import.meta.env?.DEV) || isLoggingEnabled();
 
 export default function OTP() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -36,6 +40,13 @@ export default function OTP() {
   // Auto-focus first input on mount
   useEffect(() => {
     inputs.current[0]?.focus();
+    if (isDevAuthLog) {
+      console.log("[OTP] mount", {
+        phone,
+        userId,
+        hasLocationState: Boolean(location.state),
+      });
+    }
   }, []);
 
   // Resend OTP countdown timer
@@ -101,7 +112,23 @@ export default function OTP() {
     e.preventDefault();
     const otpValue = otp.join("");
 
+    if (isDevAuthLog) {
+      console.log("[OTP] verify submit", {
+        userId,
+        otpLength: otpValue.length,
+        phone,
+      });
+    }
+
     if (otpValue.length !== 6) {
+      if (isDevAuthLog) console.warn("[OTP] invalid otp length", otpValue.length);
+      setIsValid(false);
+      return;
+    }
+
+    if (!userId) {
+      console.error("[OTP] missing userId — cannot verify");
+      dispatch(setError("User ID is missing. Please login again."));
       setIsValid(false);
       return;
     }
@@ -113,6 +140,13 @@ export default function OTP() {
 
     try {
       const res = await verifyOtp({ userId, otp: otpValue });
+      if (isDevAuthLog) {
+        console.log("[OTP] verifyOtp response", {
+          success: res?.success,
+          message: res?.message,
+          hasAccessToken: Boolean(res?.data?.accessToken),
+        });
+      }
 
       if (res.success) {
         const accessToken = res.data.accessToken;
@@ -121,6 +155,12 @@ export default function OTP() {
 
         const decoded = jwtDecode(accessToken);
         const role = decoded?.role?.toUpperCase();
+        if (isDevAuthLog) {
+          console.log("[OTP] token decoded", {
+            role,
+            decodedKeys: decoded ? Object.keys(decoded) : [],
+          });
+        }
 
         if (!role) throw new Error("Role not found in token");
 
@@ -129,32 +169,40 @@ export default function OTP() {
 
         switch (role) {
           case "ADMIN":
+            if (isDevAuthLog) console.log("[OTP] navigate → /admin/dashboard");
             navigate("/admin/dashboard", { replace: true });
             break;
           case "SUBADMIN":
           case "SUPER_SUBADMIN":
+            if (isDevAuthLog) console.log("[OTP] navigate → /subadmin/dashboard");
             navigate("/subadmin/dashboard", { replace: true });
             break;
           case "DESIGNER":
+            if (isDevAuthLog) console.log("[OTP] navigate → /designer/dashboard");
             navigate("/designer/dashboard", { replace: true });
             break;
           case "INFLUENCER":
+            if (isDevAuthLog) console.log("[OTP] navigate → /influencer/dashboard");
             navigate("/influencer/dashboard", { replace: true });
             break;
           case "DRIVER":
+            if (isDevAuthLog) console.log("[OTP] navigate → /driver/dashboard");
             navigate("/driver/dashboard", { replace: true });
             break;
           default: {
+            console.warn("[OTP] role not allowed on admin login", role);
             dispatch(logout());
             dispatch(setError("This account is not allowed on admin login."));
             break;
           }
         }
       } else {
+        if (isDevAuthLog) console.warn("[OTP] verify failed", res);
         setIsValid(false);
         dispatch(setError(res.message || "Invalid OTP"));
       }
     } catch (err) {
+      console.error("[OTP] verify error", err);
       setIsValid(false);
       dispatch(setError(err.message || "Verification failed"));
     } finally {
@@ -173,8 +221,10 @@ export default function OTP() {
     try {
       dispatch(clearError());
       dispatch(setLoading(true));
+      if (isDevAuthLog) console.log("[OTP] resend →", { userId });
 
       const res = await resendOtp({ userId });
+      if (isDevAuthLog) console.log("[OTP] resend ←", res);
 
       if (res.success) {
         setOtp(["", "", "", "", "", ""]);
@@ -185,6 +235,7 @@ export default function OTP() {
         dispatch(setError(res.message || "Failed to resend OTP"));
       }
     } catch (err) {
+      console.error("[OTP] resend error", err);
       dispatch(setError(err.message || "Failed to resend OTP"));
     } finally {
       dispatch(setLoading(false));

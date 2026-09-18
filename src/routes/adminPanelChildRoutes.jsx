@@ -108,6 +108,8 @@ import BlogDetail from "../admin/components/Blog/BlogDetail";
 import BlogForm from "../admin/components/Blog/BlogForm";
 import BlogCategory from "../admin/components/Blog/BlogCategory";
 import BlogComments from "../admin/components/Blog/BlogComments";
+import News from "../admin/components/news/News";
+import NewsForm from "../admin/components/news/NewsForm";
 import Marque from "../admin/components/Marque/Marque";
 import Feedback from "../admin/components/Feedback/Feedback";
 import UsPolicy from "../admin/components/Policy/uspPolicy";
@@ -118,6 +120,7 @@ import CommunityContent from "../admin/components/community/CommunityContent";
 import CommunityDesigners from "../admin/components/community/CommunityDesigners";
 import CommunityProjects from "../admin/components/community/CommunityProjects";
 import CommunityProjectCategories from "../admin/components/community/CommunityProjectCategories";
+import CommunityReports from "../admin/components/community/CommunityReports";
 import EarningsHub from "../admin/components/earnings/EarningsHub";
 import EarningsPolicy from "../admin/components/earnings/EarningsPolicy";
 import EarningsCommissions from "../admin/components/earnings/EarningsCommissions";
@@ -206,6 +209,9 @@ export const adminPanelChildRoutes = [
       <Route key="blog-comments" path="blog/comments" element={<BlogComments />} />,
       <Route key="blog-cr" path="blog/create" element={<BlogForm />} />,
       <Route key="blog-ed" path="blog/edit/:id" element={<BlogForm />} />,
+      <Route key="news" path="news" element={<News />} />,
+      <Route key="news-cr" path="news/create" element={<NewsForm />} />,
+      <Route key="news-ed" path="news/edit/:id" element={<NewsForm />} />,
       <Route key="marque" path="marque" element={<Marque/>}/>,
 
   <Route key="splash" path="splash" element={<SplashPage />} />,
@@ -268,6 +274,7 @@ export const adminPanelChildRoutes = [
   <Route key="community-designers" path="community/designers" element={<CommunityDesigners />} />,
   <Route key="community-projects" path="community/projects" element={<CommunityProjects />} />,
   <Route key="community-project-cats" path="community/project-categories" element={<CommunityProjectCategories />} />,
+  <Route key="community-reports" path="community/reports" element={<CommunityReports />} />,
   <Route key="earnings" path="earnings" element={<EarningsHub />} />,
   <Route key="earnings-policy" path="earnings/policy" element={<EarningsPolicy />} />,
   <Route key="earnings-commissions" path="earnings/commissions" element={<EarningsCommissions />} />,

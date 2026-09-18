@@ -80,6 +80,7 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^notifications(?:\/|$)/, modules: ["notification"] },
   { pattern: /^faq(?:\/|$)/, modules: ["faq"] },
   { pattern: /^blog(?:\/|$)/, modules: ["blog"] },
+  { pattern: /^news(?:\/|$)/, modules: ["news"] },
   { pattern: /^marque(?:\/|$)/, modules: ["marque-headings"] },
 ];
 

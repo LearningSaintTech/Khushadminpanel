@@ -24,10 +24,16 @@ export const updateEarningsPolicy = (body) =>
     apiConnector("PATCH", `${BASE}/policy`, body),
   );
 
-export const getEarningsCommissions = (params = {}) =>
-  loggedEarningsCall("list commissions", "GET", `${BASE}/commissions`, () =>
-    apiConnector("GET", `${BASE}/commissions`, null, {}, params),
-  );
+export const getEarningsCommissions = (params = {}) => {
+  const url = `${BASE}/commissions`;
+  return loggedEarningsCall("list commissions", "GET", url, () =>
+    apiConnector("GET", url, null, {}, params),
+  ).then((res) => {
+    console.log("[Earnings] commissions request payload (query)", params);
+    console.log("[Earnings] commissions raw response", res);
+    return res;
+  });
+};
 
 export const getEarningsPayouts = (params = {}) =>
   loggedEarningsCall("list payouts", "GET", `${BASE}/payouts`, () =>

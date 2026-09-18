@@ -41,3 +41,30 @@ export const rejectCommunityDesigner = (id, reason) =>
   loggedDesignerCall("reject", "PATCH", `${BASE}/${id}/reject`, () =>
     apiConnector("PATCH", `${BASE}/${id}/reject`, { reason }),
   );
+
+/**
+ * Promote community designer → staff Designers panel using the same userId
+ * (avoids createDesigner which would mint a new id and break inventory / earnings links).
+ * POST (fallback PATCH) /admin/panels/community-designers/:userId/grant-panel-access
+ */
+export const grantCommunityDesignerPanelAccess = async (userId) => {
+  if (!userId) throw new Error("userId is required");
+  const path = `${BASE}/${userId}/grant-panel-access`;
+  return loggedDesignerCall("grant-panel-access", "POST", path, async () => {
+    try {
+      return await apiConnector("POST", path);
+    } catch (err) {
+      if (
+        err?.status === 404 ||
+        /route not found|Cannot POST/i.test(String(err?.message || ""))
+      ) {
+        console.warn(
+          "[Community designers] POST grant-panel-access 404 — retrying PATCH",
+          err?.message,
+        );
+        return apiConnector("PATCH", path);
+      }
+      throw err;
+    }
+  });
+};

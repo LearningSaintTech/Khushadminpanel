@@ -34,13 +34,13 @@ export function shortId(id) {
 
 export function statusPill(status) {
   const s = String(status || "").toLowerCase();
-  if (["available", "paid", "verified", "published", "active", "approved"].some((k) => s.includes(k))) {
+  if (["available", "paid", "verified", "published", "active", "approved", "dismissed"].some((k) => s.includes(k))) {
     return "rounded-full bg-success-bg px-2 py-0.5 text-[10px] font-medium text-success";
   }
-  if (["pending", "pending_return_window"].some((k) => s.includes(k))) {
+  if (["pending", "pending_return_window", "open"].some((k) => s.includes(k))) {
     return "rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800";
   }
-  if (["reject", "cancel", "inactive"].some((k) => s.includes(k))) {
+  if (["reject", "cancel", "inactive", "actioned"].some((k) => s.includes(k))) {
     return "rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-medium text-danger";
   }
   return "rounded-full border border-border bg-canvas-muted px-2 py-0.5 text-[10px] font-medium text-stone-700";
@@ -77,7 +77,8 @@ export function extractCommunityRecord(res) {
   const nested = root.data && typeof root.data === "object" ? root.data : null;
   if (nested?.project && typeof nested.project === "object") return nested.project;
   if (nested?.category && typeof nested.category === "object") return nested.category;
-  if (nested && !Array.isArray(nested) && (nested._id || nested.id || nested.name)) {
+  if (nested?.report && typeof nested.report === "object") return nested.report;
+  if (nested && !Array.isArray(nested) && (nested._id || nested.id || nested.name || nested.reason)) {
     return nested;
   }
   if (root._id || root.id) return root;

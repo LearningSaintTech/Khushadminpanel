@@ -5,6 +5,7 @@ import { apiConnector } from "../services/Apiconnector";
 const HASHTAGS = "/community/admin/hashtags";
 const PROJECT_CATEGORIES = "/community/admin/project-categories";
 const PROJECTS = "/community/admin/projects";
+const REPORTS = "/community/admin/reports";
 const FEED = "/community/feed";
 const CONTENT = "/community/content";
 
@@ -82,6 +83,33 @@ export const rejectCommunityProject = (projectId, reason) =>
       `${PROJECTS}/${projectId}/reject`,
       reason ? { reason } : {},
     ),
+  );
+
+// —— Reports (moderation) ——
+/** GET /community/admin/reports?status=open&limit=20&cursor=… */
+export const listCommunityReports = (params = {}) =>
+  loggedCommunityCall("list reports", "GET", REPORTS, () =>
+    apiConnector("GET", REPORTS, null, {}, params),
+  );
+
+/** GET /community/admin/reports/:reportId */
+export const getCommunityReport = (reportId) =>
+  loggedCommunityCall("get report", "GET", `${REPORTS}/${reportId}`, () =>
+    apiConnector("GET", `${REPORTS}/${reportId}`),
+  );
+
+/**
+ * PATCH /community/admin/reports/:reportId/resolve
+ * Body examples:
+ *   { status: "dismissed", adminNote: "…", action: "none" }
+ *   { status: "actioned", adminNote: "…", action: "hide_content" }
+ */
+export const resolveCommunityReport = (reportId, body = {}) =>
+  loggedCommunityCall(
+    "resolve report",
+    "PATCH",
+    `${REPORTS}/${reportId}/resolve`,
+    () => apiConnector("PATCH", `${REPORTS}/${reportId}/resolve`, body),
   );
 
 // —— Content browse / moderation ——

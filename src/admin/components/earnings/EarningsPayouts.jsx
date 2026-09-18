@@ -105,16 +105,52 @@ const EarningsPayouts = () => {
     }
   };
 
-  const methodLabel = (row) => {
-    const m = row.method || row.payoutMethod || {};
-    if (m.type === "upi" || row.type === "upi") {
-      return `UPI ${m.upiId || ""}`.trim();
-    }
-    if (m.type === "bank" || row.type === "bank") {
-      return `Bank ${m.bankName || ""} …${String(m.accountNumber || "").slice(-4)}`.trim();
-    }
-    return m.type || row.type || "—";
-  };
+ const methodLabel = (row) => {
+  const m = row.methodSnapshot || row.method || row.payoutMethod || {};
+
+  if (m.type === "upi") {
+    return (
+      <div className="space-y-1">
+        <div className="font-semibold text-stone-900">UPI</div>
+        <div>UPI ID: {m.upiId || "—"}</div>
+        <div>Label: {m.label || "—"}</div>
+        <div>Verified: {m.isVerified ? "Yes" : "No"}</div>
+      </div>
+    );
+  }
+
+  if (m.type === "bank") {
+    return (
+      <div className="space-y-1">
+        <div className="font-semibold text-stone-900">
+          {m.bankName || "Bank"}
+        </div>
+
+        <div>
+          <span className="font-medium">Account Holder:</span>{" "}
+          {m.accountHolderName || "—"}
+        </div>
+
+        <div>
+          <span className="font-medium">Account Number:</span>{" "}
+          {m.accountNumber || "—"}
+        </div>
+
+        <div>
+          <span className="font-medium">IFSC:</span>{" "}
+          {m.ifsc || "—"}
+        </div>
+
+        <div>
+          <span className="font-medium">Verified:</span>{" "}
+          {m.isVerified ? "Yes" : "No"}
+        </div>
+      </div>
+    );
+  }
+
+  return "—";
+};
 
   return (
     <div className="text-stone-900">
@@ -167,7 +203,7 @@ const EarningsPayouts = () => {
       </div>
 
       <div className={tableScrollShell}>
-        <table className="w-full min-w-[800px] text-[11px]">
+        <table className="w-full min-w-[1100px] text-[11px]">
           <thead className={tableHeadClass}>
             <tr>
               <th className={thClass}>User</th>

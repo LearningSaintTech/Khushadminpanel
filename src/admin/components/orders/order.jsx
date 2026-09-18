@@ -5776,30 +5776,60 @@ const Orders = ({
   };
 
   const fetchSingleOrder = async (orderId) => {
-    if (!orderId) return;
+    console.log("[Orders] fetchSingleOrder called", {
+      orderId,
+      itemLimit,
+      exchangeOnly,
+      returnOnly,
+      viewMode,
+    });
+    if (!orderId) {
+      console.warn("[Orders] fetchSingleOrder aborted — empty orderId");
+      return;
+    }
     try {
       setOrderLoading(true);
       setOrderError(null);
       setUnassignError(null);
       setOrderAssignments(null);
       // Fetch with page 1 and high limit so all items in the order are returned
+      console.log("[Orders] getSingleOrder → request", { orderId, page: 1, itemLimit });
       const res = await getSingleOrder(orderId, 1, itemLimit);
+      console.log("[Orders] getSingleOrder ← response", { orderId, res });
       dbgOrders("getSingleOrder:response", { orderId, res });
       const singlePayload = res?.data ?? res;
+      console.log("[Orders] getSingleOrder parsed payload", {
+        orderId: singlePayload?.orderId,
+        _id: singlePayload?._id,
+        itemsCount: Array.isArray(singlePayload?.items) ? singlePayload.items.length : null,
+        keys: singlePayload && typeof singlePayload === "object" ? Object.keys(singlePayload) : null,
+      });
       dbgOrdersVerbose("getSingleOrder:order", singlePayload);
       if (exchangeOnly && singlePayload?.items) {
         const filteredItems = singlePayload.items.filter((it) =>
           hasActiveExchangeStatus(it),
         );
+        console.log("[Orders] exchange filter applied", {
+          before: singlePayload.items.length,
+          after: filteredItems.length,
+        });
         setSelectedOrder({ ...singlePayload, items: filteredItems });
       } else if (returnOnly && singlePayload?.items) {
         const filteredItems = singlePayload.items.filter(
           (it) => hasActiveReturnStatus(it) || getItemReturns(it).length > 0,
         );
+        console.log("[Orders] return filter applied", {
+          before: singlePayload.items.length,
+          after: filteredItems.length,
+        });
         setSelectedOrder({ ...singlePayload, items: filteredItems });
       } else {
         setSelectedOrder(singlePayload || null);
       }
+      console.log("[Orders] selectedOrder set", {
+        orderId: singlePayload?.orderId || orderId,
+        hasPayload: Boolean(singlePayload),
+      });
       // Fetch assignment view for Reassign / Remove driver
       try {
         const assignRes = await getAssignmentView(orderId);
@@ -5808,15 +5838,41 @@ const Orders = ({
         dbgOrdersVerbose("getAssignmentView:data", assignData);
         setOrderAssignments(assignData || null);
       } catch (e) {
+        console.warn("[Orders] getAssignmentView failed", e);
         if (isDebugOrders()) logger.warn("Orders", "getAssignmentView failed:", e);
         setOrderAssignments(null);
       }
     } catch (err) {
+      console.error("[Orders] fetchSingleOrder failed", { orderId, err });
       console.error("Failed to load order:", err);
       setOrderError(apiErrMessage(err, "Could not load order details."));
     } finally {
       setOrderLoading(false);
+      console.log("[Orders] fetchSingleOrder finished", { orderId });
     }
+  };
+
+  /** Open order detail view from list row / order id click. */
+  const openOrderDetailsFromList = (orderId, itemId = null) => {
+    const id = String(orderId || "").trim();
+    console.log("[Orders] openOrderDetailsFromList (Details / row click)", {
+      rawOrderId: orderId,
+      resolvedId: id,
+      itemId,
+      viewMode,
+      selectedOrderId: selectedOrder?.orderId || null,
+    });
+    if (!id) {
+      console.warn("[Orders] openOrderDetailsFromList aborted — missing orderId", {
+        orderId,
+        itemId,
+      });
+      setError("Order is missing valid orderId");
+      return;
+    }
+    setSelectedItemIdFromListView(itemId != null && itemId !== "" ? String(itemId) : null);
+    setItemPage(1);
+    fetchSingleOrder(id);
   };
 
   docRefreshRef.current.refreshAfterLabel = async (orderId = null) => {
@@ -7511,19 +7567,27 @@ const Orders = ({
       case "orderId":
         return (
           <div className="min-w-0 space-y-1">
-            <span
-              className="block truncate text-xs font-medium text-brand-700"
-              title={order.orderId || order._id}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openOrderDetailsFromList(order.orderId);
+              }}
+              className="block w-full truncate text-left text-xs font-medium text-brand-700 hover:text-brand-800 hover:underline"
+              title={`View details for ${order.orderId || order._id || ""}`}
             >
               {order.orderId || order._id?.slice(-8).toUpperCase() || "—"}
-            </span>
+            </button>
             {isExchangeReplacementOrderDoc(order, replacementOrderIds) ? (
               <>
                 <ExchangeReplacementOrderBadge compact />
                 {order.exchangeMeta?.originalOrderId ? (
                   <button
                     type="button"
-                    onClick={() => openOrderById(order.exchangeMeta.originalOrderId)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openOrderById(order.exchangeMeta.originalOrderId);
+                    }}
                     className="block truncate text-left text-[10px] font-semibold text-brand-700 hover:underline"
                     title={`Open original order ${order.exchangeMeta.originalOrderId}`}
                   >
@@ -7560,7 +7624,10 @@ const Orders = ({
             : "");
         const hasNote = Boolean(String(latestText || "").trim());
         return (
-          <div className="flex items-center gap-1 min-w-0 max-w-[8.5rem]">
+          <div
+            className="flex items-center gap-1 min-w-0 max-w-[8.5rem]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               onClick={() => openOrderNotesModal(order.orderId)}
@@ -7940,16 +8007,30 @@ const Orders = ({
       case "orderId":
         return (
           <div className="min-w-0 space-y-1">
-            <span className="font-medium text-brand-600 truncate block" title={row.orderId}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openOrderDetailsFromList(
+                  row.orderId,
+                  row.itemId ?? row.productItemId ?? "",
+                );
+              }}
+              className="block w-full truncate text-left text-xs font-medium text-brand-600 hover:text-brand-800 hover:underline"
+              title={`View details for ${row.orderId || ""}`}
+            >
               {row.orderId || "—"}
-            </span>
+            </button>
             {isExchangeReplacementOrderDoc(row, replacementOrderIds) ? (
               <>
                 <ExchangeReplacementOrderBadge compact />
                 {row.exchangeMeta?.originalOrderId ? (
                   <button
                     type="button"
-                    onClick={() => openOrderById(row.exchangeMeta.originalOrderId)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openOrderById(row.exchangeMeta.originalOrderId);
+                    }}
                     className="block truncate text-left text-[10px] font-semibold text-brand-700 hover:underline"
                     title={`Open original order ${row.exchangeMeta.originalOrderId}`}
                   >
@@ -8178,28 +8259,27 @@ const Orders = ({
   };
 
   const renderOrderListActions = (order) => (
-    <div className="flex flex-col items-center gap-1">
+    <div className="relative z-10 flex flex-col items-center gap-1">
       <button
-        onClick={() => {
-          const customOrderId = order.orderId;
-          if (!customOrderId) {
-            setError("Order is missing valid orderId");
-            return;
-          }
-          setSelectedItemIdFromListView(null);
-          setItemPage(1);
-          fetchSingleOrder(customOrderId);
-        }}
-        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-brand-700 transition hover:bg-brand-50 hover:text-brand-800"
-        title="View order details"
         type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openOrderDetailsFromList(order.orderId);
+        }}
+        className="cursor-pointer rounded-md px-1.5 py-1 text-[11px] font-semibold text-brand-700 underline-offset-2 transition hover:bg-brand-50 hover:text-brand-800 hover:underline"
+        title="View order details"
       >
         Details
       </button>
       <button
         type="button"
-        onClick={() => openOrderNotesModal(order.orderId)}
-        className="rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100 border border-gray-200 transition"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openOrderNotesModal(order.orderId);
+        }}
+        className="cursor-pointer rounded-md border border-gray-200 px-1.5 py-1 text-[11px] font-medium text-gray-700 transition hover:bg-gray-100"
         title="Order notes"
       >
         Notes
@@ -8228,13 +8308,15 @@ const Orders = ({
       <div className="flex flex-col items-stretch gap-1 min-w-[7rem]">
         <button
           type="button"
-          onClick={() => {
-            if (!row.orderId) return;
-            setSelectedItemIdFromListView(String(row.itemId ?? row.productItemId ?? ""));
-            setItemPage(1);
-            fetchSingleOrder(row.orderId);
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openOrderDetailsFromList(
+              row.orderId,
+              row.itemId ?? row.productItemId ?? "",
+            );
           }}
-          className="rounded-md px-2 py-1 text-[11px] font-medium text-brand-600 hover:bg-brand-50"
+          className="relative z-10 cursor-pointer rounded-md px-2 py-1 text-[11px] font-semibold text-brand-600 underline-offset-2 hover:bg-brand-50 hover:underline"
           title="View & update item status"
         >
           View details
@@ -9525,13 +9607,25 @@ const Orders = ({
                     orders.map((order) => (
                       <tr
                         key={order._id}
-                        className={`border-t border-border/80 transition-colors ${ui.rowHover} ${
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openOrderDetailsFromList(order.orderId)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openOrderDetailsFromList(order.orderId);
+                          }
+                        }}
+                        className={`cursor-pointer border-t border-border/80 transition-colors ${ui.rowHover} ${
                           orderLineItems(order, lineStackFilterProps).length > 1
                             ? "[&>td]:align-top"
                             : ""
                         }`}
                       >
-                        <td className="px-1.5 py-2 align-middle text-center">
+                        <td
+                          className="px-1.5 py-2 align-middle text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <input
                             type="checkbox"
                             aria-label={`Select order ${order?.orderId || ""}`}
@@ -9554,7 +9648,10 @@ const Orders = ({
                             {renderOrderListCell(col.key, order)}
                           </td>
                         ))}
-                        <td className="px-1 py-2 align-middle text-center">
+                        <td
+                          className="px-1 py-2 align-middle text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {renderOrderListActions(order)}
                         </td>
                       </tr>
@@ -9872,9 +9969,29 @@ const Orders = ({
                           <>
                             <tr
                               key={`${row.orderId}-${row.itemId}`}
-                              className={`border-t border-border/80 transition-colors ${ui.rowHover}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() =>
+                                openOrderDetailsFromList(
+                                  row.orderId,
+                                  row.itemId ?? row.productItemId ?? "",
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  openOrderDetailsFromList(
+                                    row.orderId,
+                                    row.itemId ?? row.productItemId ?? "",
+                                  );
+                                }
+                              }}
+                              className={`cursor-pointer border-t border-border/80 transition-colors ${ui.rowHover}`}
                             >
-                              <td className="px-1.5 py-2 align-top text-center">
+                              <td
+                                className="px-1.5 py-2 align-top text-center"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <input
                                   type="checkbox"
                                   aria-label={`Select item ${row?.itemId || ""}`}
@@ -9897,7 +10014,12 @@ const Orders = ({
                                   {renderItemListCell(col.key, row)}
                                 </td>
                               ))}
-                              <td className="px-1.5 py-2 align-top">{renderItemListActions(row)}</td>
+                              <td
+                                className="px-1.5 py-2 align-top"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {renderItemListActions(row)}
+                              </td>
                             </tr>
                             {returnOnly && (hasActiveReturnStatus(rowItem) || returnHasVisibleDetails(getLatestReturn(rowItem), rowItem)) ? (
                               <tr
@@ -9922,7 +10044,24 @@ const Orders = ({
                   {orderItems.map((row) => (
                     <div
                       key={`${row.orderId}-${row.itemId}`}
-                      className="group rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-brand-200 hover:shadow-md transition-all duration-200 overflow-hidden"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        openOrderDetailsFromList(
+                          row.orderId,
+                          row.itemId ?? row.productItemId ?? "",
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openOrderDetailsFromList(
+                            row.orderId,
+                            row.itemId ?? row.productItemId ?? "",
+                          );
+                        }
+                      }}
+                      className="group cursor-pointer rounded-xl border-2 border-gray-200 bg-white shadow-sm hover:border-brand-200 hover:shadow-md transition-all duration-200 overflow-hidden"
                     >
                       <div className="p-5 flex flex-wrap items-center gap-4 sm:gap-6">
                         <TableItemImageThumb
@@ -10180,15 +10319,16 @@ const Orders = ({
                               )}
                             </div>
                             <button
-                              onClick={() => {
-                                if (!row.orderId) return;
-                                setSelectedItemIdFromListView(
-                                  String(row.itemId ?? row.productItemId ?? ""),
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openOrderDetailsFromList(
+                                  row.orderId,
+                                  row.itemId ?? row.productItemId ?? "",
                                 );
-                                setItemPage(1);
-                                fetchSingleOrder(row.orderId);
                               }}
-                              className="rounded-lg p-2.5 text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-800 transition-colors"
+                              className="relative z-10 cursor-pointer rounded-lg bg-brand-50 p-2.5 text-brand-600 transition-colors hover:bg-brand-100 hover:text-brand-800"
                               title="View & update item status"
                             >
                               <span className="text-sm font-medium">View details</span>

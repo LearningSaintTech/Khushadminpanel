@@ -1,4 +1,13 @@
 import { apiConnector } from "../services/Apiconnector";
+import { isLoggingEnabled } from "../../utils/logLevel";
+
+const isDevAuthLog =
+  Boolean(import.meta.env?.DEV) || isLoggingEnabled();
+
+function logAuth(label, payload) {
+  if (!isDevAuthLog) return;
+  console.log(`[Auth] ${label}`, payload);
+}
 
 /**
  * ================================
@@ -11,7 +20,7 @@ export const authEndpoints = {
   RESEND_OTP: "/admin/resend-otp",     // resend OTP  ✅ NEW
   LOGIN: "/admin/login",
   LOGOUT: "/admin/logout",
-GET_PROFILE: "/admin/getProfile",
+  GET_PROFILE: "/admin/getProfile",
   UPDATE_PROFILE: "/admin/update-profile",
 };
 
@@ -29,8 +38,25 @@ export const registerUser = (data) => {
  * VERIFY OTP
  * ================================
  */
-export const verifyOtp = (data) => {
-  return apiConnector("POST", authEndpoints.VERIFY_OTP, data);
+export const verifyOtp = async (data) => {
+  logAuth("verifyOtp →", {
+    userId: data?.userId,
+    otpLength: String(data?.otp || "").length,
+    endpoint: authEndpoints.VERIFY_OTP,
+  });
+  try {
+    const res = await apiConnector("POST", authEndpoints.VERIFY_OTP, data);
+    logAuth("verifyOtp ←", {
+      success: res?.success,
+      message: res?.message,
+      hasAccessToken: Boolean(res?.data?.accessToken),
+      roleHint: res?.data?.role || res?.data?.user?.role,
+    });
+    return res;
+  } catch (err) {
+    console.error("[Auth] verifyOtp ✕", err);
+    throw err;
+  }
 };
 
 /**
@@ -42,8 +68,16 @@ export const verifyOtp = (data) => {
  *   userId: string
  * }
  */
-export const resendOtp = (data) => {
-  return apiConnector("POST", authEndpoints.RESEND_OTP, data);
+export const resendOtp = async (data) => {
+  logAuth("resendOtp →", { userId: data?.userId, endpoint: authEndpoints.RESEND_OTP });
+  try {
+    const res = await apiConnector("POST", authEndpoints.RESEND_OTP, data);
+    logAuth("resendOtp ←", { success: res?.success, message: res?.message });
+    return res;
+  } catch (err) {
+    console.error("[Auth] resendOtp ✕", err);
+    throw err;
+  }
 };
 
 /**
@@ -51,8 +85,24 @@ export const resendOtp = (data) => {
  * LOGIN
  * ================================
  */
-export const loginUser = (data) => {
-  return apiConnector("POST", authEndpoints.LOGIN, data);
+export const loginUser = async (data) => {
+  logAuth("login →", {
+    countryCode: data?.countryCode,
+    phoneNumber: data?.phoneNumber,
+    endpoint: authEndpoints.LOGIN,
+  });
+  try {
+    const res = await apiConnector("POST", authEndpoints.LOGIN, data);
+    logAuth("login ←", {
+      success: res?.success,
+      message: res?.message,
+      userId: res?.data?.userId,
+    });
+    return res;
+  } catch (err) {
+    console.error("[Auth] login ✕", err);
+    throw err;
+  }
 };
 
 /**

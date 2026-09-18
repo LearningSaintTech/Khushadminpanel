@@ -217,6 +217,39 @@ export const getItemsForSelect = async (limit = 50, search = '') => {
   return searchItems(q ? { limit, keywords: q } : { limit });
 };
 
+/**
+ * Update cross-sell pairings for an item (e.g. top → jeans)
+ * Endpoint: PATCH|PUT /items/cross-sell/:itemId
+ * Body: { crossSellItemIds: string[] }
+ *
+ * There is no GET on this path — read pairings from GET /items/single/:itemId
+ * (`crossSellItemIds`).
+ */
+export const updateCrossSellItems = async (itemId, crossSellItemIds = []) => {
+  if (!itemId) throw new Error("itemId is required");
+  const body = {
+    crossSellItemIds: Array.isArray(crossSellItemIds)
+      ? crossSellItemIds.map(String).filter(Boolean)
+      : [],
+  };
+  const path = `/items/cross-sell/${itemId}`;
+  console.log("[itemapi] PATCH cross-sell →", { itemId, body });
+  try {
+    const res = await apiConnector("PATCH", path, body);
+    console.log("[itemapi] PATCH cross-sell ←", res);
+    return res;
+  } catch (err) {
+    // Backend may only register PUT (Postman collections often omit the method).
+    if (err?.status === 404 || /route not found|Cannot PATCH/i.test(String(err?.message || ""))) {
+      console.warn("[itemapi] PATCH cross-sell 404 — retrying PUT", err?.message);
+      const res = await apiConnector("PUT", path, body);
+      console.log("[itemapi] PUT cross-sell ←", res);
+      return res;
+    }
+    throw err;
+  }
+};
+
 
 export const getItemsWithSkus = (
   page = 1,
@@ -313,6 +346,7 @@ export default {
   createItem,
   updateItem,
   getItemsForSelect,
+  updateCrossSellItems,
   getItemsWithSkus,
   bulkUploadItems,
   getItemPricingHistory,

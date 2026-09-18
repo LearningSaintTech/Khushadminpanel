@@ -29,6 +29,8 @@ import {
   Hash,
   Clapperboard,
   FolderKanban,
+  Flag,
+  Newspaper,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -257,6 +259,20 @@ export default function SidebarMainNav({
       >
         <Megaphone size={ICON} className={iconClass} />
         <span className="truncate">Marque Text</span>
+      </Link>,
+    );
+
+    push(
+      "News & Press",
+      ["news", "press", "media", "coverage", "article"],
+      canUse(["news"]),
+      <Link
+        key="news"
+        to={ap("news")}
+        className={linkClass(location.pathname.startsWith(ap("news")))}
+      >
+        <Newspaper size={ICON} className={iconClass} />
+        <span className="truncate">News & Press</span>
       </Link>,
     );
 
@@ -824,12 +840,19 @@ export default function SidebarMainNav({
         keywords: ["hashtag", "keyword"],
         icon: Hash,
       },
+      // {
+      //   label: "Content",
+      //   to: ap("community/content"),
+      //   active: isActive(ap("community/content")),
+      //   keywords: ["post", "reel", "feed"],
+      //   icon: Clapperboard,
+      // },
       {
-        label: "Content",
-        to: ap("community/content"),
-        active: isActive(ap("community/content")),
-        keywords: ["post", "reel", "feed"],
-        icon: Clapperboard,
+        label: "Reports",
+        to: ap("community/reports"),
+        active: isActive(ap("community/reports")),
+        keywords: ["report", "moderation", "flag", "hide content"],
+        icon: Flag,
       },
       {
         label: "Community designers",
@@ -862,6 +885,7 @@ export default function SidebarMainNav({
         "keyword",
         "reel",
         "post",
+        "report",
         "project",
         ...communityLinks.map((l) => l.label),
       ],

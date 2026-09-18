@@ -16,6 +16,7 @@ import {
   Columns3,
 } from "lucide-react";
 import ComingSoonListCell from "./ComingSoonListCell.jsx";
+import { designedByMeta, logDesignedByFromItems } from "./designedByMeta.js";
 import {
   searchItems,
   getItemsBySubcategory,
@@ -89,6 +90,7 @@ const ITEM_LIST_TABLE_COLUMNS = [
   { key: "image", label: "Image", defaultVisible: true },
   { key: "name", label: "Name", defaultVisible: true, alwaysVisible: true },
   { key: "productId", label: "Product ID", defaultVisible: true },
+  { key: "designedBy", label: "Designed by", defaultVisible: true },
   { key: "description", label: "Description", defaultVisible: true },
   { key: "seo", label: "SEO", defaultVisible: false },
   { key: "sizeChart", label: "Size chart", defaultVisible: true },
@@ -640,6 +642,7 @@ const ShowItems = () => {
       }
 
       const { items: itemsList, pagination: pag } = parseItemsResponse(res);
+      logDesignedByFromItems("ShowItems", itemsList);
       setItems(itemsList);
       setPagination(pag);
     } catch (err) {
@@ -1204,6 +1207,28 @@ const ShowItems = () => {
             </span>
           </td>
         );
+      case "designedBy": {
+        const designer = designedByMeta(item);
+        return (
+          <td className={`${tdClass} max-w-[140px]`}>
+            {designer.name || designer.id ? (
+              <div className="min-w-0">
+                <p className="truncate font-medium text-slate-900" title={designer.name}>
+                  {designer.name || "Designer"}
+                </p>
+                <p
+                  className="truncate font-mono text-[10px] text-slate-500"
+                  title={designer.id}
+                >
+                  {designer.id || "—"}
+                </p>
+              </div>
+            ) : (
+              <span className="text-slate-300">—</span>
+            )}
+          </td>
+        );
+      }
       case "description":
         return (
           <td

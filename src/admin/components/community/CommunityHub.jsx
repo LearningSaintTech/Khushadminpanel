@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Hash, Users, Clapperboard, ArrowRight, UsersRound, FolderKanban, Tags } from "lucide-react";
+import { Hash, Users, Clapperboard, ArrowRight, UsersRound, FolderKanban, Tags, Flag } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 
 const CommunityHub = () => {
@@ -25,12 +25,20 @@ const CommunityHub = () => {
       desc: "Browse posts & reels from explore feed. View details; delete when permitted.",
     },
     {
+      to: ap("community/reports"),
+      icon: Flag,
+      title: "Reports",
+      border: "border-rose-200 hover:border-rose-400",
+      iconClass: "text-rose-600",
+      desc: "Review user reports — GET /community/admin/reports · PATCH …/:id/resolve (dismiss / hide content).",
+    },
+    {
       to: ap("community/designers"),
       icon: Users,
       title: "Community designers",
       border: "border-amber-200 hover:border-amber-400",
       iconClass: "text-amber-600",
-      desc: "Verify end-user community designers only — not staff Designers panel. APIs under /admin/panels/community-designers.",
+      desc: "Verify community designers, then grant panel access (same userId → staff Designers). APIs under /admin/panels/community-designers.",
     },
     {
       to: ap("community/projects"),
@@ -61,7 +69,7 @@ const CommunityHub = () => {
 
       <p className="mb-2 max-w-3xl text-[11px] text-stone-600">
         Admin tools for the Khush community: curated keywords, content browse,
-        community designer verification, project approval, and project categories.
+        reports, community designer verification, project approval, and project categories.
       </p>
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">

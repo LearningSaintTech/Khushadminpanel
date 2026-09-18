@@ -1,0 +1,247 @@
+{
+  "info": {
+    "_postman_id": "c85d8869-d3e9-4e78-bfae-news-integration",
+    "name": "Khush News & Press",
+    "description": "API collection for News & Press features (Public and Admin CRUD with media logos and links).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Public (User - No Auth)",
+      "item": [
+        {
+          "name": "Get Active News",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/news/getActive",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "getActive"]
+            },
+            "description": "List all active news/press items sorted by sortOrder then newest. Hide section if data is empty."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single News Item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/news/getSingle/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "getSingle", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "6a9689dcbffcd62c5983fb0b",
+                  "description": "News Item MongoDB ID"
+                }
+              ]
+            },
+            "description": "Retrieve single news item by its ID."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin (CRUD - Bearer Token)",
+      "item": [
+        {
+          "name": "Get All News (Paginated & Filtered)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/news/getAll?page=1&limit=10&isActive=",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "getAll"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "isActive",
+                  "value": "",
+                  "description": "Optional: 'true', 'false', or empty for all"
+                }
+              ]
+            },
+            "description": "Retrieve paginated list of news items."
+          },
+          "response": []
+        },
+        {
+          "name": "Create News Item",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Khush Summer",
+                  "type": "text",
+                  "description": "Required string"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Required image file"
+                },
+                {
+                  "key": "links",
+                  "value": "[\"https://instagram.com/khush\",\"https://youtube.com/@khush\"]",
+                  "type": "text",
+                  "description": "Required JSON array of URL strings (min 1, max 20, starting with http/https)"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Optional boolean (default: true)"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "0",
+                  "type": "text",
+                  "description": "Optional number (default: 0)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/news/create",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "create"]
+            },
+            "description": "Create a new press / media news item (multipart/form-data)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update News Item",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Khush Summer 2026",
+                  "type": "text"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional: New logo file replaces previous image"
+                },
+                {
+                  "key": "links",
+                  "value": "[\"https://instagram.com/khush\",\"https://youtube.com/@khush\",\"https://vogue.in/article/khush-summer\"]",
+                  "type": "text",
+                  "description": "Optional: Replaces full links array if sent"
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "1",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/news/update/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "update", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "6a9689dcbffcd62c5983fb0b",
+                  "description": "News Item MongoDB ID"
+                }
+              ]
+            },
+            "description": "Update an existing news item (multipart/form-data). Only sends changed fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete News Item",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/news/delete/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["news", "delete", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "6a9689dcbffcd62c5983fb0b",
+                  "description": "News Item MongoDB ID"
+                }
+              ]
+            },
+            "description": "Deletes news item and removes logo from S3."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
