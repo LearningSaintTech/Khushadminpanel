@@ -77,7 +77,9 @@ export const formatDt = (value) => {
 };
 
 const STATUS_TONES = {
+  CREATED: "bg-slate-100 text-slate-800 ring-1 ring-slate-300",
   CONFIRMED: "bg-blue-100 text-blue-800",
+  STITCHING: "bg-violet-100 text-violet-900 ring-2 ring-violet-400",
   PROCESSING: "bg-amber-100 text-amber-900",
   SHIPPED: "bg-indigo-100 text-indigo-800",
   OUT_FOR_DELIVERY: "bg-violet-100 text-violet-800",
@@ -176,6 +178,7 @@ export function groupRowsByOrder(
 const KNOWN_LINE_STATUS_TOKENS = new Set([
   "CREATED",
   "CONFIRMED",
+  "STITCHING",
   "PROCESSING",
   "SHIPPED",
   "OUT_FOR_DELIVERY",

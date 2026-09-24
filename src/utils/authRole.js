@@ -80,6 +80,7 @@ export function getLoginPathForRole(role) {
     case "DRIVER":
       return "/driver/login";
     case "DESIGNER":
+    case "DESIGNER_OPS":
       return "/designer/login";
     case "INFLUENCER":
       return "/influencer/login";
@@ -102,6 +103,8 @@ export function getHomePathForRole(role) {
       return "/driver/dashboard";
     case "DESIGNER":
       return "/designer/dashboard";
+    case "DESIGNER_OPS":
+      return "/designer/select-panel";
     case "INFLUENCER":
       return "/influencer/dashboard";
     case "AGENT":
@@ -177,7 +180,7 @@ export function clearOrderAgentSessionStorage() {
 /** Drop tokens from other panels so refresh does not cross-login. */
 export function clearOtherPanelSessions(activeRole) {
   const role = normalizeRole(activeRole);
-  if (role !== "DESIGNER") clearDesignerSessionStorage();
+  if (role !== "DESIGNER" && role !== "DESIGNER_OPS") clearDesignerSessionStorage();
   if (role !== "AGENT") clearSupportAgentSessionStorage();
   if (role !== "ORDER_AGENT") clearOrderAgentSessionStorage();
   if (role !== "ADMIN" && role !== "SUBADMIN") clearAdminOtpSessionStorage();

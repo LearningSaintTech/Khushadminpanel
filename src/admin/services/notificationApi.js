@@ -124,6 +124,13 @@ export const adminNotificationApi = {
   createWhatsappTemplateOnMeta: (body) =>
     apiConnector("POST", `${ADMIN_BASE}/whatsapp/templates/create`, body).then(getData),
 
+  resubmitWhatsappTemplateOnMeta: (id, body) =>
+    apiConnector(
+      "POST",
+      `${ADMIN_BASE}/whatsapp/templates/${encodeURIComponent(id)}/resubmit`,
+      body
+    ).then(getData),
+
   listWhatsappMessages: (params = {}) =>
     apiConnector("GET", `${ADMIN_BASE}/whatsapp/messages`, null, {}, params).then(getData),
 

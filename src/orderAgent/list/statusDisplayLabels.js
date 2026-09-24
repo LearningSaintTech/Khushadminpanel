@@ -4,6 +4,7 @@
 const STATUS_LABEL_OVERRIDES = {
   CREATED: "Created",
   CONFIRMED: "Confirmed",
+  STITCHING: "Stitching",
   PROCESSING: "Processing",
   SHIPPED: "Shipped",
   OUT_FOR_DELIVERY: "Out for delivery",

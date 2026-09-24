@@ -50,10 +50,12 @@ import ExchangeForm from "../admin/components/Policy/exchnagePolicyform";
 import Exchanges from "../admin/components/Policy/exchangePolicy";
 import Status from "../admin/components/Status/Status";
 import StatusPage from "../admin/components/Status/Statusform";
-import Orders from "../admin/components/orders/order";
-import StaleOrdersPage from "../admin/components/orders/StaleOrdersPage";
-import ExchangeOrders from "../admin/components/orders/ExchangeOrders";
-import ReturnOrders from "../admin/components/orders/ReturnOrders";
+import Orders from "../admin/features/orders/pages/OrdersListPage.jsx";
+import StaleOrdersPage from "../admin/features/orders/pages/StaleOrdersPage.jsx";
+import ExchangeOrders from "../admin/features/orders/pages/ExchangeOrdersPage.jsx";
+import ReturnOrders from "../admin/features/orders/pages/ReturnOrdersPage.jsx";
+import SupportRoomPage from "../admin/features/supportRoom/SupportRoomPage.jsx";
+import RefundsPage from "../admin/features/orders/pages/RefundsPage.jsx";
 import Reviews from "../admin/components/Review/Reviews";
 import Cancellation from "../admin/components/Policy/cancellationPolicy";
 import CancellationForm from "../admin/components/Policy/cancellationform";
@@ -219,6 +221,8 @@ export const adminPanelChildRoutes = [
   <Route key="splash-f-id" path="banner-form/:id" element={<SplashForm />} />,
   <Route key="delivery" path="delivery" element={<Delivery />} />,
   <Route key="orders" path="orders" element={<Orders />} />,
+  <Route key="orders-support" path="orders/support" element={<SupportRoomPage />} />,
+  <Route key="orders-refunds" path="orders/refunds" element={<RefundsPage />} />,
   <Route key="orders-stale" path="orders/stale" element={<StaleOrdersPage />} />,
   <Route key="exchange-orders" path="exchange-orders" element={<ExchangeOrders />} />,
   <Route key="return-orders" path="return-orders" element={<ReturnOrders />} />,

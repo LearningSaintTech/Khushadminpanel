@@ -6,26 +6,31 @@ import { designerApi } from "../../apis/designerApi";
 import { Smartphone } from "lucide-react";
 
 const COUNTRY_CODE = "+91";
+/** Ops access number — OTP is always sent here; then pick a designer panel. */
+const DESIGNER_OPS_PHONE = "9956216407";
 
 export default function DesignerLogin() {
   const navigate = useNavigate();
   const rehydrated = useSelector((state) => state._persist?.rehydrated);
   const reduxToken = useSelector((state) => state.global?.token);
-  const [phoneNumber, setPhoneNumber] = useState("");
-
-  useEffect(() => {
-    if (rehydrated !== true) return;
-    if (getValidTokenRole(reduxToken) === "DESIGNER") {
-      navigate("/designer/dashboard", { replace: true });
-    }
-  }, [rehydrated, reduxToken, navigate]);
+  const [phoneNumber, setPhoneNumber] = useState(DESIGNER_OPS_PHONE);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (rehydrated !== true) return;
+    const role = getValidTokenRole(reduxToken);
+    if (role === "DESIGNER") {
+      navigate("/designer/dashboard", { replace: true });
+    } else if (role === "DESIGNER_OPS") {
+      navigate("/designer/select-panel", { replace: true });
+    }
+  }, [rehydrated, reduxToken, navigate]);
+
   const handleContinue = async () => {
-    const trimmed = (phoneNumber || "").trim().replace(/\D/g, "");
-    if (!trimmed || trimmed.length !== 10) {
-      setError("Enter a valid 10-digit mobile number");
+    const trimmed = (phoneNumber || "").trim().replace(/\D/g, "").slice(-10);
+    if (trimmed !== DESIGNER_OPS_PHONE) {
+      setError(`Use access number ${DESIGNER_OPS_PHONE} to open the designer panel.`);
       return;
     }
     setError("");
@@ -36,8 +41,15 @@ export default function DesignerLogin() {
       const userId = payload?.userId;
       if (!userId) throw new Error("Could not send OTP. Please try again.");
       sessionStorage.setItem("designerUserId", String(userId));
-      sessionStorage.setItem("designerPhone", trimmed);
-      navigate("/designer/verify-otp", { state: { userId: String(userId), phone: trimmed } });
+      sessionStorage.setItem("designerPhone", DESIGNER_OPS_PHONE);
+      sessionStorage.setItem("designerOtpSentTo", String(payload?.otpSentTo || DESIGNER_OPS_PHONE));
+      navigate("/designer/verify-otp", {
+        state: {
+          userId: String(userId),
+          phone: DESIGNER_OPS_PHONE,
+          otpSentTo: String(payload?.otpSentTo || DESIGNER_OPS_PHONE),
+        },
+      });
     } catch (err) {
       setError(typeof err === "string" ? err : err?.message || "Something went wrong");
     } finally {
@@ -52,9 +64,12 @@ export default function DesignerLogin() {
           <Smartphone size={24} />
         </div>
         <h1 className="text-center text-2xl font-bold text-gray-900 sm:text-3xl">Designer login</h1>
-        <p className="mt-1 text-center text-sm text-gray-600">Sign in with your registered mobile number</p>
+        <p className="mt-1 text-center text-sm text-gray-600">
+          Sign in with the access number. OTP is sent to this number, then choose which designer
+          panel to open. Listing updates do not require OTP again.
+        </p>
         <label className="mt-6 block text-xs font-semibold uppercase tracking-wide text-indigo-900/80">
-          Mobile number
+          Access mobile number
         </label>
         <div className="relative mt-1">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -64,7 +79,7 @@ export default function DesignerLogin() {
             type="tel"
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
-            placeholder="XXXXXXXXXX"
+            placeholder={DESIGNER_OPS_PHONE}
             maxLength={15}
             disabled={loading}
             className="w-full rounded-xl border border-indigo-100 bg-indigo-50/30 py-3 pl-14 pr-4 text-gray-900 outline-none ring-indigo-200 transition focus:ring-2"

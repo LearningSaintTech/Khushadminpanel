@@ -230,6 +230,47 @@ export default function AdminWhatsappTemplatesPage() {
     }
   };
 
+  const canEditMetaContent = (row) => {
+    const st = String(row?.status || "").toUpperCase();
+    if (!row?.metaTemplateId) return true;
+    return ["REJECTED", "PAUSED", "DISABLED", "APPROVED"].includes(st);
+  };
+
+  const handleSaveAndResubmit = async (e) => {
+    e.preventDefault();
+    if (!configRow?._id) return;
+    if (
+      !window.confirm(
+        "Save changes and send this template to Meta for review? Status will become PENDING until Meta approves."
+      )
+    ) {
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      await adminNotificationApi.resubmitWhatsappTemplateOnMeta(configRow._id, {
+        module: configForm.module,
+        bodyText: configForm.bodyText,
+        variableSlots: configForm.variableSlots,
+        headerConfig: configForm.headerConfig,
+        footerText: configForm.footerText,
+        buttons: configForm.buttons,
+        attachedEventKeys: configForm.attachedEventKeys,
+        templateKey: configForm.templateKey || null,
+        category: configForm.category || configRow.category || "UTILITY",
+      });
+      setSuccess("Template updated on Meta and sent for review (PENDING).");
+      closeConfig();
+      await loadPage(page);
+    } catch (err) {
+      setError(err?.message || "Failed to submit for review");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-w-0 p-2 sm:p-3">
       <PageToolbar
@@ -430,23 +471,50 @@ export default function AdminWhatsappTemplatesPage() {
           <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-white p-4 shadow-xl">
             <h3 className="text-sm font-semibold text-stone-900">Configure template</h3>
             <p className="mt-1 font-mono text-[11px] text-stone-600">{configRow.metaTemplateName}</p>
+            <p className="mt-0.5 text-[10px] text-stone-500">
+              Status: <StatusBadge status={configRow.status} />
+              {configRow.metaTemplateId ? (
+                <span className="ml-2 font-mono">id: {configRow.metaTemplateId}</span>
+              ) : null}
+            </p>
             {configRow.rejectedReason ? (
               <p className="mt-1 text-[10px] text-red-600">Rejected: {configRow.rejectedReason}</p>
             ) : null}
+            {canEditMetaContent(configRow) ? (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-800">
+                You can edit Meta body/header/footer/buttons here, then use{" "}
+                <strong>Save &amp; send for review</strong> to resubmit on Meta.
+              </p>
+            ) : (
+              <p className="mt-2 rounded-lg border border-border bg-canvas-muted px-2.5 py-1.5 text-[10px] text-stone-600">
+                Meta content is locked while status is PENDING. Wait for review, or Sync after Meta
+                finishes. You can still update module / event mapping below.
+              </p>
+            )}
             <form onSubmit={handleSaveConfig} className="mt-3 space-y-3">
               <WhatsappTemplateConfigFields
                 form={configForm}
                 setForm={setConfigForm}
                 modules={modules}
-                readOnlyMeta
+                readOnlyMeta={!canEditMetaContent(configRow)}
               />
-              <div className="flex justify-end gap-2 border-t border-border pt-3">
+              <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
                 <button type="button" onClick={closeConfig} className={btnOutline} disabled={submitting}>
                   Cancel
                 </button>
-                <button type="submit" className={btnPrimary} disabled={submitting}>
+                <button type="submit" className={btnOutline} disabled={submitting}>
                   {submitting ? "Saving…" : "Save configuration"}
                 </button>
+                {canEditMetaContent(configRow) && configRow.metaTemplateId ? (
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={submitting}
+                    onClick={handleSaveAndResubmit}
+                  >
+                    {submitting ? "Submitting…" : "Save & send for review"}
+                  </button>
+                ) : null}
               </div>
             </form>
           </div>

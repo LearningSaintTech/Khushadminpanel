@@ -9,13 +9,19 @@ import { ShieldCheck } from "lucide-react";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN_SEC = 45;
+const DESIGNER_OPS_PHONE = "9956216407";
 
 export default function DesignerOtp() {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
   const stateUserId = location.state?.userId;
-  const statePhone = location.state?.phone || sessionStorage.getItem("designerPhone") || "";
+  const otpSentTo =
+    location.state?.otpSentTo ||
+    sessionStorage.getItem("designerOtpSentTo") ||
+    location.state?.phone ||
+    sessionStorage.getItem("designerPhone") ||
+    DESIGNER_OPS_PHONE;
   const userId = stateUserId || sessionStorage.getItem("designerUserId");
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(""));
   const [loading, setLoading] = useState(false);
@@ -53,6 +59,18 @@ export default function DesignerOtp() {
       if (!token) throw new Error("Verification failed");
       let role = String(payload?.role || "").toUpperCase();
       if (!role) role = String(jwtDecode(token)?.role || "").toUpperCase();
+
+      if (payload?.requiresPanelSelection || role === "DESIGNER_OPS") {
+        clearOtherPanelSessions("DESIGNER_OPS");
+        dispatch(setToken(token));
+        dispatch(setRole("DESIGNER_OPS"));
+        if (Array.isArray(payload?.designers)) {
+          sessionStorage.setItem("designerPanelOptions", JSON.stringify(payload.designers));
+        }
+        navigate("/designer/select-panel", { replace: true });
+        return;
+      }
+
       if (role !== "DESIGNER") throw new Error("This account is not allowed on designer login.");
       clearOtherPanelSessions(role);
       dispatch(setToken(token));
@@ -68,7 +86,11 @@ export default function DesignerOtp() {
   const handleResend = async () => {
     if (!userId || resendCooldown > 0) return;
     try {
-      await designerApi.resendOtp({ userId });
+      const res = await designerApi.resendOtp({ userId });
+      const payload = res?.data ?? res;
+      if (payload?.otpSentTo) {
+        sessionStorage.setItem("designerOtpSentTo", String(payload.otpSentTo));
+      }
       setResendCooldown(RESEND_COOLDOWN_SEC);
     } catch (err) {
       setError(typeof err === "string" ? err : err?.message || "Failed to resend OTP");
@@ -83,7 +105,8 @@ export default function DesignerOtp() {
         </div>
         <h1 className="text-center text-2xl font-bold text-gray-900">Verify OTP</h1>
         <p className="mt-1 text-center text-sm text-gray-600">
-          Code sent to <span className="font-semibold text-indigo-700">+91 {statePhone}</span>
+          Code sent to{" "}
+          <span className="font-semibold text-indigo-700">+91 {String(otpSentTo).slice(-10)}</span>
         </p>
         <div className="mt-6 grid grid-cols-6 gap-2">
           {otp.map((digit, index) => (

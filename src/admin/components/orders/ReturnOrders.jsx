@@ -1,7 +1,2 @@
-import Orders from "./order";
-
-const ReturnOrders = () => (
-  <Orders returnOnly defaultViewMode="item" pageTitle="Return pickup orders" />
-);
-
-export default ReturnOrders;
+/** @deprecated Import from `admin/features/orders`. */
+export { default } from "../../features/orders/pages/ReturnOrdersPage.jsx";

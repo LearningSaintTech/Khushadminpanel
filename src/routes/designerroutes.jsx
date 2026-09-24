@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../utils/ProtectedRoute";
 import DesignerLogin from "../designer/components/Auth/Login";
 import DesignerOtp from "../designer/components/Auth/Otp";
+import DesignerSelectPanel from "../designer/components/Auth/SelectPanel";
 import DesignerLayout from "../designer/components/common/DesignerLayout";
 import DesignerDashboard from "../designer/components/dashboard/Dashboard";
 import DesignerInventoryList from "../designer/components/inventory/DesignerInventoryList";
@@ -16,6 +17,7 @@ const DesignerRoutes = () => {
     <Routes>
       <Route path="login" element={<DesignerLogin />} />
       <Route path="verify-otp" element={<DesignerOtp />} />
+      <Route path="select-panel" element={<DesignerSelectPanel />} />
 
       <Route
         element={
@@ -41,9 +43,8 @@ const DesignerRoutes = () => {
         index
         element={
           <PanelEntryRedirect
-            allowedRoles={["DESIGNER"]}
+            allowedRoles={["DESIGNER", "DESIGNER_OPS"]}
             loginPath="/designer/login"
-            homePath="/designer/dashboard"
           />
         }
       />
@@ -53,4 +54,3 @@ const DesignerRoutes = () => {
 };
 
 export default DesignerRoutes;
-

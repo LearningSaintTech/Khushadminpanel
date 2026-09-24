@@ -62,6 +62,8 @@ export const ROUTE_MODULE_RULES = [
   { pattern: /^earnings(?:\/|$)/, modules: ["earnings"] },
   { pattern: /^referral(?:\/|$)/, modules: ["referral"] },
   { pattern: /^delivery(?:\/|$)/, modules: ["delivery"] },
+  { pattern: /^orders\/support(?:\/|$)/, modules: ["support-room"] },
+  { pattern: /^orders\/refunds(?:\/|$)/, modules: ["refunds"] },
   { pattern: /^orders(?:\/|$)/, modules: ["order"] },
   { pattern: /^exchange-orders(?:\/|$)/, modules: ["order", "exchangeUser"] },
   { pattern: /^return-orders(?:\/|$)/, modules: ["order"] },

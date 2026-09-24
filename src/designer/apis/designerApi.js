@@ -14,6 +14,8 @@ export const designerApi = {
   login: (data) => apiConnector("POST", `${AUTH}/login`, data),
   verifyOtp: (data) => apiConnector("POST", `${AUTH}/verify-otp`, data),
   resendOtp: (data) => apiConnector("POST", `${AUTH}/resend-otp`, data),
+  listPanels: () => apiConnector("GET", `${AUTH}/panels`),
+  selectPanel: (data) => apiConnector("POST", `${AUTH}/select-panel`, data),
   logout: () => apiConnector("POST", `${AUTH}/logout`),
   getProfile: () => apiConnector("GET", `${AUTH}/getProfile`),
   /** Pass plain object (JSON) or FormData (e.g. with profileImage file). */

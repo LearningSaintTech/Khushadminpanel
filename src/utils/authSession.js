@@ -20,6 +20,7 @@ export function getRefreshEndpointForRole(role) {
     case "INFLUENCER":
       return "/influencer/newAccessToken";
     case "DESIGNER":
+    case "DESIGNER_OPS":
       return "/designer/auth/newAccessToken";
     case "AGENT":
       return "/agent/auth/newAccessToken";

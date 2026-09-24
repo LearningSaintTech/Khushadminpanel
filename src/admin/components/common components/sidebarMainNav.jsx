@@ -465,19 +465,7 @@ export default function SidebarMainNav({
       </Link>,
     );
 
-    push(
-      "Exchange Orders",
-      ["exchange", "order"],
-      canUse(["order", "exchangeUser"]),
-      <Link
-        key="exchange-orders"
-        to={ap("exchange-orders")}
-        className={linkClass(isActive(ap("exchange-orders")))}
-      >
-        <Receipt size={ICON} className={iconClass} />
-        <span className="truncate">Exchange Orders</span>
-      </Link>,
-    );
+    // Duplicate top-level "Exchange Orders" removed — use Orders → Exchange orders
 
     push(
       "Designer",
@@ -1158,8 +1146,8 @@ export default function SidebarMainNav({
 
     push(
       "Orders",
-      ["order", "orders", "exchange"],
-      canUse(["order"]),
+      ["order", "orders", "exchange", "refund", "refunds", "support"],
+      canUse(["order", "support-room", "refunds"]),
       <div key="orders">
         <button
           type="button"
@@ -1179,32 +1167,65 @@ export default function SidebarMainNav({
         </button>
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            showChildren && isOrdersOpen ? "max-h-40 opacity-100 mt-0.5" : "max-h-0 opacity-0"
+            showChildren && isOrdersOpen ? "max-h-96 opacity-100 mt-0.5" : "max-h-0 opacity-0"
           }`}
         >
           <div className="pl-7 pr-2 py-1 space-y-0.5">
-            <Link
-              to={ap("orders")}
-              className={subLinkClass(
-                isActive(ap("orders")) &&
-                  !location.pathname.startsWith(ap("exchange-orders")) &&
-                  !location.pathname.startsWith(ap("return-orders")),
-              )}
-            >
-              Orders
-            </Link>
-            <Link
-              to={ap("exchange-orders")}
-              className={subLinkClass(isActive(ap("exchange-orders")))}
-            >
-              Exchange orders
-            </Link>
-            <Link
-              to={ap("return-orders")}
-              className={subLinkClass(isActive(ap("return-orders")))}
-            >
-              Return orders
-            </Link>
+            {canUse(["order"]) ? (
+              <Link
+                to={ap("orders")}
+                className={subLinkClass(
+                  isActive(ap("orders")) &&
+                    !location.pathname.startsWith(ap("exchange-orders")) &&
+                    !location.pathname.startsWith(ap("return-orders")) &&
+                    !location.pathname.startsWith(ap("orders/stale")) &&
+                    !location.pathname.startsWith(ap("orders/support")) &&
+                    !location.pathname.startsWith(ap("orders/refunds")),
+                )}
+              >
+                Orders
+              </Link>
+            ) : null}
+            {canUse(["support-room"]) ? (
+              <Link
+                to={ap("orders/support")}
+                className={subLinkClass(isActive(ap("orders/support")))}
+              >
+                Support Room
+              </Link>
+            ) : null}
+            {canUse(["refunds"]) ? (
+              <Link
+                to={ap("orders/refunds")}
+                className={subLinkClass(isActive(ap("orders/refunds")))}
+              >
+                Refunds
+              </Link>
+            ) : null}
+            {canUse(["order"]) ? (
+              <Link
+                to={ap("exchange-orders")}
+                className={subLinkClass(isActive(ap("exchange-orders")))}
+              >
+                Exchange orders
+              </Link>
+            ) : null}
+            {canUse(["order"]) ? (
+              <Link
+                to={ap("return-orders")}
+                className={subLinkClass(isActive(ap("return-orders")))}
+              >
+                Return orders
+              </Link>
+            ) : null}
+            {canUse(["order"]) ? (
+              <Link
+                to={ap("orders/stale")}
+                className={subLinkClass(isActive(ap("orders/stale")))}
+              >
+                Stale orders
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>,
