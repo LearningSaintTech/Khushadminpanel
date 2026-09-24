@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Khush Admin — Feature Test Guide</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #1c1917; }
+  h1 { font-size: 18pt; margin: 0 0 8pt; color: #0c0a09; border-bottom: 2px solid #b45309; padding-bottom: 6pt; }
+  h2 { font-size: 13pt; margin: 16pt 0 6pt; color: #292524; page-break-after: avoid; border-left: 3px solid #b45309; padding-left: 8pt; }
+  h3 { font-size: 11pt; margin: 12pt 0 4pt; color: #44403c; page-break-after: avoid; }
+  p { margin: 4pt 0; }
+  hr { border: none; border-top: 1px solid #e7e5e4; margin: 12pt 0; }
+  code, pre { font-family: Consolas, 'Courier New', monospace; font-size: 8.5pt; }
+  code { background: #f5f5f4; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 8pt; white-space: pre-wrap; page-break-inside: avoid; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 9pt; }
+  th, td { border: 1px solid #d6d3d1; padding: 4pt 6pt; vertical-align: top; text-align: left; }
+  th { background: #fafaf9; font-weight: 600; color: #57534e; }
+  tr { page-break-inside: avoid; }
+  ul, ol { margin: 4pt 0 8pt; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  strong { color: #0c0a09; }
+  .footer { margin-top: 18pt; font-size: 8.5pt; color: #a8a29e; border-top: 1px solid #e7e5e4; padding-top: 6pt; }
+</style>
+</head>
+<body>
+<h1>Khush Admin — Feature Test Guide</h1>
+<p><strong>Audience:</strong> Fellow developers / QA  </p>
+<p><strong>Date:</strong> 24 Sep 2026  </p>
+<p><strong>Scope:</strong> Support Room, Refunds (approval flow), Module Access, iOS static OTP, WhatsApp Meta template edit &amp; review</p>
+<hr/>
+<h2>0. Before you start</h2>
+<h3>Services to restart / run</h3>
+<table><thead><tr><th>Service</th><th>Why</th></tr></thead><tbody>
+<tr><td><code>auth-service</code></td><td>iOS static OTP + module access catalog (<code>support-room</code>, <code>refunds</code>)</td></tr>
+<tr><td><code>backend-service</code></td><td>Support APIs, refunds APIs, WhatsApp resubmit</td></tr>
+<tr><td><code>api-gateway</code></td><td>Routes <code>/api/admin/support</code>, <code>/api/admin/refunds</code></td></tr>
+<tr><td><code>Khushadminpanel</code> (Vite)</td><td>New pages / UI</td></tr>
+</tbody></table>
+<h3>Roles</h3>
+<table><thead><tr><th>Role</th><th>Access</th></tr></thead><tbody>
+<tr><td><strong>admin</strong></td><td>Full access (no module filter)</td></tr>
+<tr><td><strong>subadmin / super_subadmin</strong></td><td>Only modules granted in Module Access</td></tr>
+</tbody></table>
+<h3>Module keys (assign under Module Access → Orders group)</h3>
+<table><thead><tr><th>Key</th><th>UI</th><th>APIs</th></tr></thead><tbody>
+<tr><td><code>order</code></td><td>Orders list / exchange / return / stale</td><td><code>/api/admin/orders</code></td></tr>
+<tr><td><code>support-room</code></td><td>Orders → Support Room</td><td><code>/api/admin/support</code></td></tr>
+<tr><td><code>refunds</code></td><td>Orders → Refunds</td><td><code>/api/admin/refunds</code></td></tr>
+</tbody></table>
+<p><strong>Tip:</strong> Support Room search needs <strong>Orders</strong> (view is enough) + <strong>Support Room</strong> (full to submit actions). Refund approve needs <strong>Refunds</strong> (full).</p>
+<hr/>
+<h2>1. Navigation map</h2>
+<pre><code>
+Admin sidebar
+
+└── Orders (dropdown)
+
+    ├── Orders              → /admin/orders          [module: order]
+
+    ├── Support Room        → /admin/orders/support  [module: support-room]
+
+    ├── Refunds             → /admin/orders/refunds  [module: refunds]
+
+    ├── Exchange orders     → /admin/exchange-orders [module: order]
+
+    ├── Return orders       → /admin/return-orders   [module: order]
+
+    └── Stale orders        → /admin/orders/stale    [module: order]
+
+
+
+Notifications
+
+└── WhatsApp templates      → /admin/notifications/whatsapp-templates
+
+</code></pre>
+<p>Subadmin paths use <code>/subadmin/...</code> instead of <code>/admin/...</code>.</p>
+<hr/>
+<h2>2. Support Room — purpose &amp; flow</h2>
+<h3>Purpose</h3>
+<p>Ops/support opens a customer order case and runs actions (address, cancel, status, return, exchange, sync tracking, <strong>refund request</strong>) with a mandatory reason and audit log.</p>
+<h3>How to open</h3>
+<ol>
+<li>Sidebar → <strong>Orders</strong> → <strong>Support Room</strong></li>
+<li>Search box: order ID, phone, or name → <strong>Search</strong></li>
+<li>If multiple matches → click a row  </li>
+<li>If one match / exact order ID → case opens automatically  </li>
+<li><strong>Recent cases</strong> chips reopen last opened orders (localStorage)</li>
+</ol>
+<h3>Case workspace layout</h3>
+<table><thead><tr><th>Area</th><th>What it does</th></tr></thead><tbody>
+<tr><td>Header</td><td>Order ID (copy), status, customer, payment mode</td></tr>
+<tr><td>Left</td><td>Issue picker (Address, Cancel, Status, Return, Exchange, Sync, <strong>Send refund request</strong>)</td></tr>
+<tr><td>Center</td><td>Action form for selected issue</td></tr>
+<tr><td>Right / bottom</td><td>Support action history (audit)</td></tr>
+</tbody></table>
+<h3>Issue actions (buttons &amp; purpose)</h3>
+<table><thead><tr><th>Issue</th><th>Main buttons</th><th>Purpose</th><th>Result</th></tr></thead><tbody>
+<tr><td>Wrong address / phone</td><td><strong>Save</strong></td><td>Patch shipping contact/address</td><td>Logged as address change</td></tr>
+<tr><td>Cancel after processing</td><td>Select lines + policy reason + support reason → <strong>Submit</strong></td><td>Cancel lines on behalf</td><td>Uses cancel-order policy</td></tr>
+<tr><td>Status incorrectly set</td><td>Pick line + new status + reason → <strong>Submit</strong></td><td>Correct bad status</td><td>Logged</td></tr>
+<tr><td>Create return</td><td><strong>Requested</strong> = create only; <strong>Schedule</strong> = create + approve + carrier pickup</td><td>Return on behalf</td><td>Same carrier flow as Orders</td></tr>
+<tr><td>Create / fix exchange</td><td>Same Requested / Schedule pattern</td><td>Exchange on behalf</td><td>Same as Orders exchange</td></tr>
+<tr><td>Sync courier tracking</td><td><strong>Sync</strong></td><td>Pull Delhivery / Shadowfax</td><td>Shiprocket = phase 2 note</td></tr>
+<tr><td><strong>Send refund request</strong></td><td>Amount, destination, reason → <strong>Send refund request</strong></td><td>Queue refund for approval</td><td>Does <strong>not</strong> pay money yet</td></tr>
+</tbody></table>
+<h3>Refund request destinations (in Support form)</h3>
+<table><thead><tr><th>Destination</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><strong>AUTO</strong></td><td>Detect: Razorpay prepaid → RAZORPAY; else WALLET; Nimble → OTHER</td></tr>
+<tr><td><strong>RAZORPAY</strong></td><td>Must have successful Razorpay <code>paymentId</code></td></tr>
+<tr><td><strong>WALLET</strong></td><td>Credit Khush Wallet (after approval)</td></tr>
+<tr><td><strong>OTHER</strong></td><td>External payout; after approval → Mark done on Refunds tab</td></tr>
+</tbody></table>
+<h3>Expected toast after Send refund request</h3>
+<p>&gt; “Refund request sent — approve it on Orders → Refunds to pay out”</p>
+<p>Status in DB: <strong>REQUESTED</strong> (pending approval).</p>
+<h3>Pass criteria — Support Room</h3>
+<ul>
+<li>☐ Search finds order by ID / phone / name  </li>
+<li>☐ Case opens with lines, AWBs, payment info  </li>
+<li>☐ Each issue form requires a support reason  </li>
+<li>☐ Action appears in support history  </li>
+<li>☐ Refund request appears on <strong>Refunds</strong> tab as REQUESTED  </li>
+<li>☐ View-only <code>support-room</code> cannot submit actions  </li>
+<li>☐ Without <code>order</code> module, search is blocked with clear message  </li>
+</ul>
+<hr/>
+<h2>3. Refunds tab — purpose &amp; flow</h2>
+<h3>Purpose</h3>
+<p>Central queue for all support/admin refund requests. <strong>Money moves only after Approve</strong> (or Mark done for Other).</p>
+<h3>How to open</h3>
+<p>Sidebar → <strong>Orders</strong> → <strong>Refunds</strong></p>
+<h3>Screen elements</h3>
+<table><thead><tr><th>Control</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><strong>Refresh</strong></td><td>Reload list</td></tr>
+<tr><td>Filters: Order ID / Status / Destination + <strong>Search</strong></td><td>Narrow list</td></tr>
+<tr><td>Counters</td><td>Pending / Done / Manual / Failed (current page)</td></tr>
+<tr><td>Table columns</td><td>Created, Order, Amount, Channel, Status, Reason, Refs, Actions</td></tr>
+</tbody></table>
+<h3>Status meanings</h3>
+<table><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><strong>REQUESTED</strong></td><td>Waiting for Approve</td></tr>
+<tr><td><strong>PROCESSING</strong></td><td>Payout in progress</td></tr>
+<tr><td><strong>COMPLETED</strong></td><td>Paid (Razorpay / Wallet / marked Other)</td></tr>
+<tr><td><strong>FAILED</strong></td><td>Approve tried; API/wallet failed — use Re-approve / Retry</td></tr>
+<tr><td><strong>NEEDS_MANUAL</strong></td><td>Approved as Other — ops must pay outside, then Mark done</td></tr>
+<tr><td><strong>CANCELLED</strong></td><td>Cancelled (if used)</td></tr>
+</tbody></table>
+<h3>Channel meanings</h3>
+<table><thead><tr><th>Channel</th><th>After Approve</th></tr></thead><tbody>
+<tr><td><strong>RAZORPAY</strong></td><td>Calls Razorpay refund API → <code>rfnd_…</code> in Refs</td></tr>
+<tr><td><strong>WALLET</strong></td><td>Credits customer cash wallet</td></tr>
+<tr><td><strong>OTHER</strong></td><td>No auto pay → NEEDS_MANUAL → <strong>Mark done</strong></td></tr>
+</tbody></table>
+<h3>Action buttons</h3>
+<table><thead><tr><th>Button</th><th>When shown</th><th>What happens</th></tr></thead><tbody>
+<tr><td><strong>Approve</strong></td><td>REQUESTED</td><td>Confirm → Razorpay/Wallet process, or OTHER → NEEDS_MANUAL</td></tr>
+<tr><td><strong>Re-approve</strong></td><td>FAILED</td><td>Retry approve + process</td></tr>
+<tr><td><strong>Retry</strong></td><td>FAILED + Razorpay/Wallet</td><td>Process again</td></tr>
+<tr><td><strong>Mark done</strong></td><td>OTHER + NEEDS_MANUAL</td><td>Prompt for note → COMPLETED</td></tr>
+</tbody></table>
+<h3>End-to-end test script (happy paths)</h3>
+<p>#### A) Razorpay auto refund</p>
+<ol>
+<li>Open a <strong>prepaid SUCCESS Razorpay</strong> order in Support Room  </li>
+<li>Issue → Send refund request → amount small (e.g. ₹1–3) → destination AUTO or RAZORPAY → reason → Send  </li>
+<li>Go to <strong>Refunds</strong> → row status <strong>REQUESTED</strong>, channel <strong>RAZORPAY</strong>  </li>
+<li>Click <strong>Approve</strong> → confirm  </li>
+<li>Expect <strong>COMPLETED</strong>, Refs show <code>rz: rfnd_…</code> and <code>pay: pay_…</code>  </li>
+</ol>
+<p>#### B) Wallet auto refund</p>
+<ol>
+<li>Use <strong>COD</strong> (or non-Razorpay) order  </li>
+<li>Send refund → AUTO/WALLET  </li>
+<li>Approve on Refunds  </li>
+<li>Expect <strong>COMPLETED</strong>, channel <strong>WALLET</strong>, wallet tx id in Refs  </li>
+<li>Optionally verify customer wallet transactions (<code>transaction_source: REFUND</code>)  </li>
+</ol>
+<p>#### C) Other source (manual)</p>
+<ol>
+<li>Send refund with destination <strong>OTHER</strong>  </li>
+<li>Approve → status <strong>NEEDS_MANUAL</strong>  </li>
+<li>Ops pays outside (UPI/bank)  </li>
+<li><strong>Mark done</strong> + optional note → <strong>COMPLETED</strong>  </li>
+</ol>
+<h3>Pass criteria — Refunds</h3>
+<ul>
+<li>☐ Support request always lands as REQUESTED (no instant payout)  </li>
+<li>☐ Approve is required before Razorpay/Wallet call  </li>
+<li>☐ Failed rows can be re-tried  </li>
+<li>☐ View-only <code>refunds</code> cannot Approve / Mark done  </li>
+<li>☐ Subadmin without <code>refunds</code> gets Access denied on <code>/orders/refunds</code>  </li>
+</ul>
+<hr/>
+<h2>4. Module Access — how to grant &amp; test</h2>
+<h3>Where</h3>
+<p>Admin → Module Access (role: subadmin / super_subadmin) <strong>or</strong> per-user module override if your panel supports it.</p>
+<h3>Grant checklist for a “Support agent”</h3>
+<ul>
+<li>☐ <code>order</code> — <strong>view</strong> (search/open orders)  </li>
+<li>☐ <code>support-room</code> — <strong>full</strong> (submit actions + refund request)  </li>
+<li>☐ <code>refunds</code> — <strong>full</strong> if they should approve payouts; <strong>view</strong> if only browse  </li>
+</ul>
+<h3>Grant checklist for “Refunds ops only”</h3>
+<ul>
+<li>☐ <code>refunds</code> — <strong>full</strong>  </li>
+<li>☐ (optional) <code>order</code> — view, to jump to order from table link  </li>
+</ul>
+<h3>UI checks after grant</h3>
+<ul>
+<li>☐ Sidebar shows only allowed Orders children  </li>
+<li>☐ Direct URL without module → Access denied  </li>
+<li>☐ View-only shows gold banner; mutating buttons disabled / blocked  </li>
+</ul>
+<hr/>
+<h2>5. iOS static OTP (App Store review login)</h2>
+<h3>Purpose</h3>
+<p>Apple reviewers log in without SMS using a fixed phone + OTP.</p>
+<h3>Credentials (from auth-service <code>.env</code> / defaults)</h3>
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>
+<tr><td>Phone</td><td><code>9988776655</code> (or <code>APPLE_REVIEW_PHONE</code>)</td></tr>
+<tr><td>OTP</td><td><code>567894</code> (or <code>APPLE_REVIEW_OTP</code>)</td></tr>
+<tr><td>Flag</td><td><code>APPLE_REVIEW_OTP_ENABLED=true</code></td></tr>
+</tbody></table>
+<h3>Flow</h3>
+<ol>
+<li>App / web login with phone <strong>9988776655</strong> (+91 ok)  </li>
+<li>Request OTP → API returns success <strong>without SMS</strong>  </li>
+<li>Enter OTP <strong>567894</strong> → login succeeds  </li>
+<li>User auto-created as “Apple Review” if missing  </li>
+</ol>
+<h3>Pass criteria</h3>
+<ul>
+<li>☐ Works with <code>9988776655</code>, <code>+919988776655</code>, spaced formats  </li>
+<li>☐ Wrong OTP fails  </li>
+<li>☐ Other phones still use real 2Factor SMS  </li>
+<li>☐ Restart auth-service after env change  </li>
+</ul>
+<hr/>
+<h2>6. WhatsApp Meta templates — edit &amp; send for review</h2>
+<h3>Purpose</h3>
+<p>Configure template mapping <strong>and</strong> edit Meta body/header/footer/buttons, then <strong>resubmit to Meta</strong> for approval.</p>
+<h3>How to open</h3>
+<p>Notifications → <strong>WhatsApp templates</strong></p>
+<h3>Create new (already worked)</h3>
+<ol>
+<li><strong>Create template</strong> → fill name, category, body (<code>{{1}}</code> vars), header/footer/buttons  </li>
+<li><strong>Submit to Meta</strong> → status <strong>PENDING</strong>  </li>
+</ol>
+<h3>Configure existing (fixed)</h3>
+<ol>
+<li>Row → configure (gear / Configure)  </li>
+<li>If status <strong>REJECTED / PAUSED / DISABLED / APPROVED</strong>:  </li>
+</ol>
+<p>   - Meta fields are <strong>editable</strong>  </p>
+<p>   - Amber hint explains review flow  </p>
+<ol>
+<li>Buttons:  </li>
+</ol>
+<p>   - <strong>Save configuration</strong> — local mapping only (module, events, variable keys)  </p>
+<p>   - <strong>Save &amp; send for review</strong> — POST edit to Meta → status <strong>PENDING</strong>  </p>
+<ol>
+<li>If status <strong>PENDING</strong>: Meta content locked; mapping still editable  </li>
+</ol>
+<h3>Pass criteria</h3>
+<ul>
+<li>☐ Rejected template: can edit body and click <strong>Save &amp; send for review</strong>  </li>
+<li>☐ Success toast: sent for review / PENDING  </li>
+<li>☐ Sync from Meta updates status after Meta decides  </li>
+<li>☐ PENDING cannot edit Meta body (by design)  </li>
+</ul>
+<hr/>
+<h2>7. API cheat sheet (for Postman / debugging)</h2>
+<p>Base via gateway: <code>/api/...</code> with admin JWT.</p>
+<table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/admin/support/orders/:orderId/actions</code></td><td>Support history</td></tr>
+<tr><td>POST</td><td><code>/admin/support/orders/:orderId/refunds</code></td><td>Create refund request (queued)</td></tr>
+<tr><td>GET</td><td><code>/admin/refunds?status=&amp;orderId=</code></td><td>List refund requests</td></tr>
+<tr><td>POST</td><td><code>/admin/refunds/:id/approve</code></td><td>Approve → process</td></tr>
+<tr><td>POST</td><td><code>/admin/refunds/:id/process</code></td><td>Retry process</td></tr>
+<tr><td>POST</td><td><code>/admin/refunds/:id/mark-manual-complete</code></td><td>Other source done</td></tr>
+<tr><td>POST</td><td><code>/admin/notification/whatsapp/templates/:id/resubmit</code></td><td>Meta edit + review</td></tr>
+<tr><td>POST</td><td><code>/user/auth/login</code> then verify OTP</td><td>iOS static OTP path</td></tr>
+</tbody></table>
+<p>Exact notification admin prefix may be <code>/api/admin/notification/...</code> — match existing Postman collection.</p>
+<hr/>
+<h2>8. Suggested smoke test order (30–40 min)</h2>
+<ol>
+<li>Admin login → see Support Room + Refunds under Orders  </li>
+<li>Support Room → open known Razorpay order → send ₹1–3 refund AUTO  </li>
+<li>Refunds → Approve → COMPLETED + <code>rfnd_</code>  </li>
+<li>Support Room → COD order → wallet refund → Approve → wallet credit  </li>
+<li>Support Room → OTHER refund → Approve → Mark done  </li>
+<li>Module Access: subadmin with only <code>support-room</code> + <code>order</code> view — can request refund, cannot open Refunds approve  </li>
+<li>Subadmin with <code>refunds</code> full — can Approve  </li>
+<li>Login as Apple Review phone + OTP <code>567894</code>  </li>
+<li>WhatsApp: open REJECTED template → edit → Save &amp; send for review  </li>
+</ol>
+<hr/>
+<h2>9. Common failures</h2>
+<table><thead><tr><th>Symptom</th><th>Likely cause</th></tr></thead><tbody>
+<tr><td>Support APIs 404</td><td>Gateway missing <code>/api/admin/support</code> or backend not restarted</td></tr>
+<tr><td>Refunds list empty / 404</td><td>Gateway missing <code>/api/admin/refunds</code></td></tr>
+<tr><td>Approve fails Razorpay</td><td>No <code>paymentId</code>, amount &amp;lt; ₹1, or Razorpay keys / TLS</td></tr>
+<tr><td>Search blocked</td><td>Missing <code>order</code> module</td></tr>
+<tr><td>Cannot Approve</td><td>View-only <code>refunds</code> or wrong role</td></tr>
+<tr><td>WhatsApp resubmit error</td><td>Missing <code>metaTemplateId</code> — Sync from Meta first</td></tr>
+<tr><td>iOS OTP invalid</td><td>Wrong phone digits / OTP / auth-service not restarted</td></tr>
+</tbody></table>
+<hr/>
+<h2>10. Change log (what landed)</h2>
+<ol>
+<li>Support Room under Orders + case actions + refund request issue  </li>
+<li>Refunds tab with <strong>Approve-then-payout</strong> (Razorpay / Wallet / Other)  </li>
+<li>Module Access keys: <code>support-room</code>, <code>refunds</code>  </li>
+<li>iOS static OTP hardening (phone normalize)  </li>
+<li>WhatsApp Meta: editable configure + <strong>Save &amp; send for review</strong>  </li>
+<li>UI aligned to shared admin tokens (<code>PageToolbar</code>, <code>border-border</code>, <code>brand-600</code>)  </li>
+</ol>
+<hr/>
+<p>*Internal test handoff — Khush MicroService / Admin Panel*  </p>
+<p>*Share this PDF with developers before merge / staging QA.*</p>
+<div class="footer">Khush MicroService — Internal QA handoff · Share with developers for staging / local testing</div>
+</body>
+</html>
