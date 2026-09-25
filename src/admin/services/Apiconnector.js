@@ -41,12 +41,21 @@ function isAuthRequestUrl(url = "") {
   );
 }
 
+/** Panel switch APIs — 401 should not force a full logout (show error on select screen). */
+function isDesignerPanelSwitchUrl(url = "") {
+  return (
+    /\/designer\/auth\/select-panel/i.test(url) ||
+    /\/designer\/auth\/panels/i.test(url)
+  );
+}
+
 function isAuthPagePath() {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname || "";
   return (
     /\/login$|\/verify-otp$|\/otp$|^\/admin\/?$/.test(path) ||
-    path.endsWith("/admin")
+    path.endsWith("/admin") ||
+    path.includes("/designer/select-panel")
   );
 }
 
@@ -86,7 +95,11 @@ axiosInstance.interceptors.request.use(
     config.metadata = { ...(config.metadata || {}), startedAt: Date.now() };
 
     const token = getStoredToken();
-    if (token) {
+    // Don't overwrite an explicit Authorization header (e.g. designer switch with ops token).
+    const hasAuthHeader =
+      config.headers?.Authorization ||
+      config.headers?.authorization;
+    if (token && !hasAuthHeader) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     const deviceId = getOrCreateDeviceId();
@@ -211,7 +224,12 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    if (status === 401 && typeof window !== "undefined" && !isAuthPagePath()) {
+    if (
+      status === 401 &&
+      typeof window !== "undefined" &&
+      !isAuthPagePath() &&
+      !isDesignerPanelSwitchUrl(originalConfig?.url)
+    ) {
       await performLogout({ server: true });
       const loginPath = getLoginPathForPathname(window.location.pathname);
       if (window.location.pathname !== loginPath) {

@@ -3,16 +3,18 @@ import { persistStore, persistReducer, createTransform } from "redux-persist";
 import storage from "redux-persist/lib/storage";
 import rootReducer from "./Rootreducer";
 
-/** Never persist access/refresh tokens — memory only; refresh cookie lives on server. */
+/**
+ * Persist access token + role so refresh keeps the user logged in.
+ * Do not persist refreshToken (httpOnly cookie on the API is the source of truth for rotation).
+ */
 const authTransform = createTransform(
   (inboundState) => {
     if (!inboundState || typeof inboundState !== "object") return inboundState;
-    const { token, refreshToken, ...rest } = inboundState;
+    const { refreshToken, ...rest } = inboundState;
     return rest;
   },
   (outboundState) => ({
     ...(outboundState || {}),
-    token: null,
     refreshToken: null,
   }),
   { whitelist: ["global"] }

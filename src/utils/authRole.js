@@ -138,6 +138,62 @@ export function clearDesignerSessionStorage() {
   try {
     sessionStorage.removeItem("designerUserId");
     sessionStorage.removeItem("designerPhone");
+    sessionStorage.removeItem("designerOtpSentTo");
+    clearDesignerPanelSwitchStorage();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Ops → work-as-designer: stash ops token so sidebar can return to the panel list. */
+export const DESIGNER_OPS_TOKEN_KEY = "designerOpsAccessToken";
+export const DESIGNER_CAN_SWITCH_KEY = "designerCanSwitchPanels";
+
+export function stashDesignerOpsToken(token) {
+  if (!token || typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(DESIGNER_OPS_TOKEN_KEY, String(token));
+    sessionStorage.setItem(DESIGNER_CAN_SWITCH_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Mark this browser session as allowed to switch designer panels (ops → Anisha → Sakshi). */
+export function markDesignerPanelSwitchable() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(DESIGNER_CAN_SWITCH_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function canSwitchDesignerPanels() {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(DESIGNER_CAN_SWITCH_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function getStashedDesignerOpsToken() {
+  if (typeof window === "undefined") return null;
+  try {
+    return sessionStorage.getItem(DESIGNER_OPS_TOKEN_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearDesignerPanelSwitchStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(DESIGNER_OPS_TOKEN_KEY);
+    sessionStorage.removeItem(DESIGNER_CAN_SWITCH_KEY);
+    sessionStorage.removeItem("designerPanelOptions");
+    sessionStorage.removeItem("designerPanelName");
   } catch {
     /* ignore */
   }
