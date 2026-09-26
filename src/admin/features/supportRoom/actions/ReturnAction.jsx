@@ -83,7 +83,6 @@ export default function ReturnAction({ order, onDone }) {
   const [itemId, setItemId] = useState("");
   const [returnReason, setReturnReason] = useState("SIZE");
   const [description, setDescription] = useState("");
-  const [bypassWindow, setBypassWindow] = useState(false);
   const [returnId, setReturnId] = useState("");
   const [patchDescription, setPatchDescription] = useState("");
   const [supportReason, setSupportReason] = useState("");
@@ -116,7 +115,8 @@ export default function ReturnAction({ order, onDone }) {
           reason: returnReason,
           description,
           supportReason,
-          bypassReturnWindow: bypassWindow,
+          // Support Room always skips customer day-window; app users still enforced.
+          bypassReturnWindow: true,
           intent,
           bookShadowfax: intent === "schedule" ? bookShadowfax : undefined,
           bookDelhivery: intent === "schedule" ? bookDelhivery : undefined,
@@ -253,6 +253,9 @@ export default function ReturnAction({ order, onDone }) {
             {selectedItem ? (
               <p className="mt-1 text-[11px] text-stone-500">{inferPickupHint(selectedItem)}</p>
             ) : null}
+            <p className="mt-1 text-[11px] text-stone-500">
+              Return day-window does not apply in Support Room (customer app still enforced).
+            </p>
           </div>
           <div>
             <label className={labelClass}>Return reason *</label>
@@ -276,14 +279,6 @@ export default function ReturnAction({ order, onDone }) {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-stone-700">
-            <input
-              type="checkbox"
-              checked={bypassWindow}
-              onChange={(e) => setBypassWindow(e.target.checked)}
-            />
-            Bypass return window (staff override)
-          </label>
         </>
       ) : null}
 

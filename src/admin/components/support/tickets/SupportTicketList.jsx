@@ -97,6 +97,11 @@ export default function SupportTicketList() {
   }, [tab, page, debouncedSearch, statusFilter, priorityFilter]);
 
   const openAssign = (ticket) => {
+    const status = String(ticket?.status || "").toUpperCase();
+    if (["RESOLVED", "CLOSED"].includes(status)) {
+      toast.error("Cannot assign a resolved/closed ticket. Reopen it first.");
+      return;
+    }
     setAssignModal(ticket);
     setSelectedAgentId(refId(ticket?.assignedAgentId));
   };
@@ -104,6 +109,12 @@ export default function SupportTicketList() {
   const handleAssign = async () => {
     if (!assignModal || !selectedAgentId) {
       toast.error("Select an agent");
+      return;
+    }
+    const status = String(assignModal?.status || "").toUpperCase();
+    if (["RESOLVED", "CLOSED"].includes(status)) {
+      toast.error("Cannot assign a resolved/closed ticket. Reopen it first.");
+      setAssignModal(null);
       return;
     }
     setAssigning(true);
@@ -281,14 +292,16 @@ export default function SupportTicketList() {
                   <td className="px-3 py-2 text-stone-600">{agentLabel(ticket)}</td>
                   <td className="px-3 py-2 text-stone-500">{formatDt(ticket.updatedAt)}</td>
                   <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="rounded-lg p-1.5 text-stone-500 hover:bg-canvas-muted hover:text-brand-600"
-                      title="Assign agent"
-                      onClick={() => openAssign(ticket)}
-                    >
-                      <UserPlus size={14} />
-                    </button>
+                    {!["RESOLVED", "CLOSED"].includes(String(ticket.status || "").toUpperCase()) && (
+                      <button
+                        type="button"
+                        className="rounded-lg p-1.5 text-stone-500 hover:bg-canvas-muted hover:text-brand-600"
+                        title="Assign agent"
+                        onClick={() => openAssign(ticket)}
+                      >
+                        <UserPlus size={14} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

@@ -111,6 +111,11 @@ export default function SupportTicketDetail() {
   };
 
   const handleAssign = async () => {
+    const status = String(ticket?.status || "").toUpperCase();
+    if (["RESOLVED", "CLOSED"].includes(status)) {
+      toast.error("Cannot assign a resolved/closed ticket. Reopen it first.");
+      return;
+    }
     if (!selectedAgentId) {
       toast.error("Select an agent");
       return;

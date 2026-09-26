@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import {
   supportCreateExchange,
@@ -6,6 +6,7 @@ import {
   supportScheduleExchange,
 } from "../api/supportRoomApi";
 import { getBackendErrorMessage } from "../supportRoom.constants";
+import { getSingleItem } from "../../../apis/itemapi";
 
 const fieldClass =
   "w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100";
@@ -24,6 +25,51 @@ function collectExchanges(order) {
     }
   }
   return out;
+}
+
+function productCatalogId(line) {
+  if (!line) return "";
+  const raw = line.itemId?._id || line.itemId || line.productId || line.product?._id;
+  return raw != null ? String(raw) : "";
+}
+
+function colorNameOf(variant) {
+  if (!variant) return "";
+  if (typeof variant.color === "string") return variant.color.trim();
+  return String(variant.color?.name || "").trim();
+}
+
+function sizeLabelOf(sizeRow) {
+  if (sizeRow == null) return "";
+  if (typeof sizeRow === "string" || typeof sizeRow === "number") {
+    return String(sizeRow).trim();
+  }
+  return String(sizeRow.size || sizeRow.name || "").trim();
+}
+
+/** Build color list + sizes-per-color from catalog item.variants. */
+function extractVariantOptions(catalogItem) {
+  const variants = Array.isArray(catalogItem?.variants) ? catalogItem.variants : [];
+  const colors = [];
+  const sizesByColor = {};
+  for (const v of variants) {
+    const color = colorNameOf(v);
+    if (!color) continue;
+    if (!colors.includes(color)) colors.push(color);
+    const sizes = (Array.isArray(v.sizes) ? v.sizes : [])
+      .map(sizeLabelOf)
+      .filter(Boolean);
+    const existing = sizesByColor[color] || [];
+    sizesByColor[color] = [...new Set([...existing, ...sizes])];
+  }
+  return { colors, sizesByColor };
+}
+
+function unwrapItemPayload(res) {
+  const body =
+    res?.data !== undefined && res?.success !== undefined ? res : res?.data || res;
+  const payload = body?.data ?? body;
+  return payload?.item || payload;
 }
 
 function inferPickupHint(item) {
@@ -60,6 +106,92 @@ function toastPickupResult(pickup, kind = "Exchange") {
   }
 }
 
+function SizeColorFields({
+  colors,
+  sizes,
+  color,
+  size,
+  onColor,
+  onSize,
+  loading,
+  required,
+  currentLabel,
+}) {
+  const hasColors = colors.length > 0;
+  const hasSizes = sizes.length > 0;
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelClass}>Desired color{required && hasColors ? " *" : ""}</label>
+          {hasColors ? (
+            <select
+              className={fieldClass}
+              value={color}
+              onChange={(e) => onColor(e.target.value)}
+              required={required}
+              disabled={loading}
+            >
+              <option value="">{loading ? "Loading…" : "Select color…"}</option>
+              {colors.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className={fieldClass}
+              value={color}
+              onChange={(e) => onColor(e.target.value)}
+              placeholder={loading ? "Loading variants…" : "No catalog colors — type carefully"}
+              disabled={loading}
+            />
+          )}
+        </div>
+        <div>
+          <label className={labelClass}>Desired size{required && hasSizes ? " *" : ""}</label>
+          {hasSizes ? (
+            <select
+              className={fieldClass}
+              value={size}
+              onChange={(e) => onSize(e.target.value)}
+              required={required}
+              disabled={loading || (hasColors && !color)}
+            >
+              <option value="">
+                {!color && hasColors ? "Pick color first…" : loading ? "Loading…" : "Select size…"}
+              </option>
+              {sizes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className={fieldClass}
+              value={size}
+              onChange={(e) => onSize(e.target.value)}
+              placeholder={
+                loading
+                  ? "Loading variants…"
+                  : hasColors && !color
+                    ? "Pick color first"
+                    : "No catalog sizes — type carefully"
+              }
+              disabled={loading}
+            />
+          )}
+        </div>
+      </div>
+      {currentLabel ? (
+        <p className="text-[11px] text-stone-500">Ordered as: {currentLabel}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ExchangeAction({ order, onDone }) {
   const items = order?.items || [];
   const allExchanges = useMemo(() => collectExchanges(order), [order]);
@@ -93,10 +225,146 @@ export default function ExchangeAction({ order, onDone }) {
   const [manualTrackingId, setManualTrackingId] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [variantOptions, setVariantOptions] = useState({ colors: [], sizesByColor: {} });
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [patchVariantOptions, setPatchVariantOptions] = useState({
+    colors: [],
+    sizesByColor: {},
+  });
+  const [patchVariantsLoading, setPatchVariantsLoading] = useState(false);
+
   const selectedItem = useMemo(
     () => items.find((it) => String(it._id || it.itemId) === String(itemId)),
     [items, itemId]
   );
+
+  const selectedPatchExchange = useMemo(
+    () => openExchanges.find((x) => String(x._id || x.id) === String(exchangeId)),
+    [openExchanges, exchangeId]
+  );
+
+  const createSizes = useMemo(() => {
+    if (!desiredColor) return [];
+    return variantOptions.sizesByColor[desiredColor] || [];
+  }, [variantOptions, desiredColor]);
+
+  const patchSizes = useMemo(() => {
+    if (!patchColor) return [];
+    return patchVariantOptions.sizesByColor[patchColor] || [];
+  }, [patchVariantOptions, patchColor]);
+
+  const orderedLabel = selectedItem
+    ? [selectedItem.variant?.color, selectedItem.variant?.size].filter(Boolean).join(" / ") ||
+      "—"
+    : "";
+
+  // Load catalog variants when create-line changes
+  useEffect(() => {
+    let cancelled = false;
+    const catalogId = productCatalogId(selectedItem);
+    setVariantOptions({ colors: [], sizesByColor: {} });
+    if (!catalogId) {
+      setDesiredColor(selectedItem?.variant?.color || "");
+      setDesiredSize(selectedItem?.variant?.size || "");
+      return undefined;
+    }
+    setVariantsLoading(true);
+    (async () => {
+      try {
+        const res = await getSingleItem(catalogId);
+        if (cancelled) return;
+        const opts = extractVariantOptions(unwrapItemPayload(res));
+        setVariantOptions(opts);
+        const orderedColor = String(selectedItem?.variant?.color || "").trim();
+        const orderedSize = String(selectedItem?.variant?.size || "").trim();
+        const nextColor =
+          orderedColor && opts.colors.includes(orderedColor)
+            ? orderedColor
+            : opts.colors[0] || orderedColor || "";
+        const sizesFor = opts.sizesByColor[nextColor] || [];
+        const nextSize =
+          orderedSize && sizesFor.includes(orderedSize)
+            ? orderedSize
+            : sizesFor[0] || orderedSize || "";
+        setDesiredColor(nextColor);
+        setDesiredSize(nextSize);
+      } catch {
+        if (!cancelled) {
+          setVariantOptions({ colors: [], sizesByColor: {} });
+          setDesiredColor(selectedItem?.variant?.color || "");
+          setDesiredSize(selectedItem?.variant?.size || "");
+          toast.error("Could not load item sizes/colors — type carefully");
+        }
+      } finally {
+        if (!cancelled) setVariantsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, selectedItem]);
+
+  // Load catalog variants when patching an open exchange
+  useEffect(() => {
+    let cancelled = false;
+    if (mode !== "patch" || !selectedPatchExchange) {
+      setPatchVariantOptions({ colors: [], sizesByColor: {} });
+      return undefined;
+    }
+    const line = selectedPatchExchange.line;
+    const catalogId = productCatalogId(line);
+    setPatchVariantsLoading(true);
+    (async () => {
+      try {
+        if (!catalogId) {
+          setPatchVariantOptions({ colors: [], sizesByColor: {} });
+          return;
+        }
+        const res = await getSingleItem(catalogId);
+        if (cancelled) return;
+        const opts = extractVariantOptions(unwrapItemPayload(res));
+        setPatchVariantOptions(opts);
+        const nextColor =
+          (selectedPatchExchange.desiredColor &&
+            opts.colors.includes(selectedPatchExchange.desiredColor) &&
+            selectedPatchExchange.desiredColor) ||
+          opts.colors[0] ||
+          selectedPatchExchange.desiredColor ||
+          "";
+        const sizesFor = opts.sizesByColor[nextColor] || [];
+        const nextSize =
+          (selectedPatchExchange.desiredSize &&
+            sizesFor.includes(selectedPatchExchange.desiredSize) &&
+            selectedPatchExchange.desiredSize) ||
+          sizesFor[0] ||
+          selectedPatchExchange.desiredSize ||
+          "";
+        setPatchColor(nextColor);
+        setPatchSize(nextSize);
+      } catch {
+        if (!cancelled) {
+          setPatchVariantOptions({ colors: [], sizesByColor: {} });
+        }
+      } finally {
+        if (!cancelled) setPatchVariantsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, exchangeId, selectedPatchExchange]);
+
+  const onCreateColor = (color) => {
+    setDesiredColor(color);
+    const sizes = variantOptions.sizesByColor[color] || [];
+    setDesiredSize((prev) => (sizes.includes(prev) ? prev : sizes[0] || ""));
+  };
+
+  const onPatchColor = (color) => {
+    setPatchColor(color);
+    const sizes = patchVariantOptions.sizesByColor[color] || [];
+    setPatchSize((prev) => (sizes.includes(prev) ? prev : sizes[0] || ""));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -109,6 +377,16 @@ export default function ExchangeAction({ order, onDone }) {
       if (mode === "create") {
         if (!itemId) {
           toast.error("Select an item");
+          setSaving(false);
+          return;
+        }
+        if (variantOptions.colors.length && !desiredColor) {
+          toast.error("Select a desired color");
+          setSaving(false);
+          return;
+        }
+        if ((variantOptions.sizesByColor[desiredColor] || []).length && !desiredSize) {
+          toast.error("Select a desired size");
           setSaving(false);
           return;
         }
@@ -150,6 +428,16 @@ export default function ExchangeAction({ order, onDone }) {
       } else {
         if (!exchangeId) {
           toast.error("Select an exchange to patch");
+          setSaving(false);
+          return;
+        }
+        if (patchVariantOptions.colors.length && !patchColor) {
+          toast.error("Select a desired color");
+          setSaving(false);
+          return;
+        }
+        if ((patchVariantOptions.sizesByColor[patchColor] || []).length && !patchSize) {
+          toast.error("Select a desired size");
           setSaving(false);
           return;
         }
@@ -245,9 +533,14 @@ export default function ExchangeAction({ order, onDone }) {
               <option value="">Select…</option>
               {items.map((it) => {
                 const id = String(it._id || it.itemId);
+                const variantBit = [it.variant?.color, it.variant?.size]
+                  .filter(Boolean)
+                  .join("/");
                 return (
                   <option key={id} value={id}>
-                    {(it.sku || "Item") + ` · ${it.status}`}
+                    {(it.sku || "Item") +
+                      (variantBit ? ` · ${variantBit}` : "") +
+                      ` · ${it.status}`}
                   </option>
                 );
               })}
@@ -265,24 +558,17 @@ export default function ExchangeAction({ order, onDone }) {
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Desired size</label>
-              <input
-                className={fieldClass}
-                value={desiredSize}
-                onChange={(e) => setDesiredSize(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Desired color</label>
-              <input
-                className={fieldClass}
-                value={desiredColor}
-                onChange={(e) => setDesiredColor(e.target.value)}
-              />
-            </div>
-          </div>
+          <SizeColorFields
+            colors={variantOptions.colors}
+            sizes={createSizes}
+            color={desiredColor}
+            size={desiredSize}
+            onColor={onCreateColor}
+            onSize={setDesiredSize}
+            loading={variantsLoading}
+            required
+            currentLabel={orderedLabel}
+          />
         </>
       ) : null}
 
@@ -302,7 +588,9 @@ export default function ExchangeAction({ order, onDone }) {
                 <option key={id} value={id}>
                   {(ex.lineSku || "Exchange") +
                     ` · ${ex.status}` +
-                    (ex.desiredSize ? ` · size ${ex.desiredSize}` : "")}
+                    (ex.desiredColor || ex.desiredSize
+                      ? ` · want ${[ex.desiredColor, ex.desiredSize].filter(Boolean).join("/")}`
+                      : "")}
                 </option>
               );
             })}
@@ -320,15 +608,7 @@ export default function ExchangeAction({ order, onDone }) {
             <select
               className={fieldClass}
               value={exchangeId}
-              onChange={(e) => {
-                const id = e.target.value;
-                setExchangeId(id);
-                const found = openExchanges.find((x) => String(x._id || x.id) === id);
-                if (found) {
-                  setPatchSize(found.desiredSize || "");
-                  setPatchColor(found.desiredColor || "");
-                }
-              }}
+              onChange={(e) => setExchangeId(e.target.value)}
               required
             >
               <option value="">Select…</option>
@@ -338,30 +618,31 @@ export default function ExchangeAction({ order, onDone }) {
                   <option key={id} value={id}>
                     {(ex.lineSku || "Exchange") +
                       ` · ${ex.status}` +
-                      (ex.desiredSize ? ` · size ${ex.desiredSize}` : "")}
+                      (ex.desiredColor || ex.desiredSize
+                        ? ` · want ${[ex.desiredColor, ex.desiredSize].filter(Boolean).join("/")}`
+                        : "")}
                   </option>
                 );
               })}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Desired size</label>
-              <input
-                className={fieldClass}
-                value={patchSize}
-                onChange={(e) => setPatchSize(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Desired color</label>
-              <input
-                className={fieldClass}
-                value={patchColor}
-                onChange={(e) => setPatchColor(e.target.value)}
-              />
-            </div>
-          </div>
+          <SizeColorFields
+            colors={patchVariantOptions.colors}
+            sizes={patchSizes}
+            color={patchColor}
+            size={patchSize}
+            onColor={onPatchColor}
+            onSize={setPatchSize}
+            loading={patchVariantsLoading}
+            required
+            currentLabel={
+              selectedPatchExchange?.line
+                ? [selectedPatchExchange.line.variant?.color, selectedPatchExchange.line.variant?.size]
+                    .filter(Boolean)
+                    .join(" / ") || "—"
+                : ""
+            }
+          />
         </>
       ) : null}
 
