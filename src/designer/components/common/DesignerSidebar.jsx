@@ -1,13 +1,33 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Package, Ruler, FileText, User, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Ruler,
+  FileText,
+  User,
+  LogOut,
+  ArrowLeft,
+  Users,
+} from "lucide-react";
 import { useDispatch } from "react-redux";
 import { logout } from "../../../redux/GlobalSlice";
+import { canSwitchDesignerPanels } from "../../../utils/authRole";
 import { designerApi } from "../../apis/designerApi";
+
+function readPanelName() {
+  try {
+    return sessionStorage.getItem("designerPanelName") || "";
+  } catch {
+    return "";
+  }
+}
 
 const DesignerSidebar = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const canSwitch = canSwitchDesignerPanels();
+  const panelName = readPanelName();
 
   const doLogout = async () => {
     try {
@@ -17,6 +37,17 @@ const DesignerSidebar = () => {
     }
     dispatch(logout());
     navigate("/designer/login");
+  };
+
+  /** Open designer list to switch panel (Anisha → Sakshi) without logout. */
+  const backToDesignerList = () => {
+    console.log("[Designer] open switch list (stay logged in)", {
+      panelName,
+      path: location.pathname,
+    });
+    navigate("/designer/select-panel?switch=1", {
+      state: { switch: true },
+    });
   };
 
   const itemClass = (path) => {
@@ -31,8 +62,29 @@ const DesignerSidebar = () => {
       <aside className="fixed left-0 top-0 z-30 hidden h-screen w-64 flex-col border-r border-indigo-900/40 bg-linear-to-b from-indigo-950 via-slate-900 to-indigo-950 p-3 text-white shadow-xl md:flex">
         <div className="mb-4 rounded-lg bg-white/5 px-3 py-2 ring-1 ring-white/10">
           <h2 className="text-sm font-bold tracking-tight text-white">Designer panel</h2>
-          <p className="text-[10px] text-indigo-200">Khush</p>
+          <p className="truncate text-[10px] text-indigo-200">
+            {panelName ? panelName : "Khush"}
+          </p>
         </div>
+
+        {canSwitch ? (
+          <button
+            type="button"
+            onClick={backToDesignerList}
+            className="mb-3 flex w-full items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500/35"
+            title="Choose another designer without logging out"
+          >
+            <ArrowLeft size={18} className="shrink-0" />
+            <span className="flex min-w-0 flex-col items-start leading-tight">
+              <span>Back to designers</span>
+              <span className="text-[10px] font-normal text-indigo-200">
+                Switch panel (choose another designer)
+              </span>
+            </span>
+            <Users size={16} className="ml-auto shrink-0 text-indigo-200" />
+          </button>
+        ) : null}
+
         <nav className="flex flex-1 flex-col gap-1">
           <Link className={itemClass("/designer/dashboard")} to="/designer/dashboard">
             <LayoutDashboard size={18} className="shrink-0 text-indigo-300" /> Dashboard
@@ -59,9 +111,20 @@ const DesignerSidebar = () => {
         </button>
       </aside>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-indigo-900/20 bg-indigo-950 px-3 py-2 text-white md:hidden">
-        <span className="text-sm font-semibold">Designer</span>
-        <div className="flex gap-1">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-2 border-b border-indigo-900/20 bg-indigo-950 px-3 py-2 text-white md:hidden">
+        <span className="truncate text-sm font-semibold">
+          {panelName || "Designer"}
+        </span>
+        <div className="flex flex-wrap gap-1">
+          {canSwitch ? (
+            <button
+              type="button"
+              onClick={backToDesignerList}
+              className="rounded-md bg-indigo-500/80 px-2 py-1 text-xs font-semibold"
+            >
+              Switch
+            </button>
+          ) : null}
           <Link to="/designer/dashboard" className="rounded-md bg-white/10 px-2 py-1 text-xs">
             Home
           </Link>

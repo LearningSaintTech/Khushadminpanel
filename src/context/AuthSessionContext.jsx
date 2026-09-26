@@ -24,6 +24,14 @@ const VALIDATED_PANEL_ROLES = new Set([
   "AGENT",
 ]);
 
+function authErrorStatus(err) {
+  return (
+    err?.status ||
+    err?.response?.status ||
+    (typeof err?.message === "string" && /\b401\b/.test(err.message) ? 401 : null)
+  );
+}
+
 export function useAuthSession() {
   return useContext(AuthSessionContext);
 }
@@ -54,7 +62,7 @@ async function validateSessionWithServer(role) {
   }
 }
 
-/** Restore access token from httpOnly refresh cookie after page load. */
+/** Restore access token from persist / httpOnly refresh cookie after page load. */
 export function AuthSessionProvider({ children }) {
   const dispatch = useDispatch();
   const rehydrated = useSelector((state) => state._persist?.rehydrated);
@@ -71,8 +79,19 @@ export function AuthSessionProvider({ children }) {
 
       const state = appStore.getState().global;
       let currentToken = state?.token;
+      const hadValidPersisted =
+        Boolean(currentToken) && !isTokenExpired(currentToken);
       const needsRefresh = !currentToken || isTokenExpired(currentToken);
-      const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+      const pathname =
+        typeof window !== "undefined" ? window.location.pathname : "";
+
+      console.log("[AuthSession] boot", {
+        pathname,
+        hasToken: Boolean(currentToken),
+        expired: currentToken ? isTokenExpired(currentToken) : null,
+        role: state?.role,
+        needsRefresh,
+      });
 
       if (needsRefresh) {
         const refreshRole = resolveRefreshRole({
@@ -83,35 +102,64 @@ export function AuthSessionProvider({ children }) {
 
         if (refreshRole && normalizeRole(refreshRole) !== "ORDER_AGENT") {
           try {
-            const newToken = await refreshAccessTokenWithFallback(refreshRole, pathname);
+            const newToken = await refreshAccessTokenWithFallback(
+              refreshRole,
+              pathname,
+            );
             if (!cancelled && newToken) {
               currentToken = newToken;
               dispatch(setToken(newToken));
               dispatch(setRole(decodeTokenRole(newToken)));
+              console.log("[AuthSession] refresh ok", {
+                role: decodeTokenRole(newToken),
+              });
             } else if (!cancelled && !newToken) {
-              await performLogout({ server: false });
-              currentToken = null;
+              // Keep a still-valid persisted token; only logout when nothing usable.
+              if (!hadValidPersisted) {
+                console.warn(
+                  "[AuthSession] refresh returned empty — logging out",
+                );
+                await performLogout({ server: false });
+                currentToken = null;
+              } else {
+                console.warn(
+                  "[AuthSession] refresh failed — keeping persisted token",
+                );
+              }
             }
-          } catch {
-            if (!cancelled) {
+          } catch (err) {
+            console.warn("[AuthSession] refresh error", err);
+            if (!cancelled && !hadValidPersisted) {
               await performLogout({ server: false });
               currentToken = null;
             }
           }
+        } else if (!cancelled && !hadValidPersisted) {
+          // No role hint and no token — stay logged out quietly.
+          currentToken = null;
         }
       }
 
       if (!cancelled && currentToken && !isTokenExpired(currentToken)) {
-        const role = decodeTokenRole(currentToken);
+        const role = decodeTokenRole(currentToken) || state?.role;
         if (role) dispatch(setRole(role));
 
         const normalized = normalizeRole(role);
         if (VALIDATED_PANEL_ROLES.has(normalized)) {
           try {
             await validateSessionWithServer(role);
-          } catch {
-            if (!cancelled) {
+            console.log("[AuthSession] profile validate ok", { role: normalized });
+          } catch (err) {
+            const status = authErrorStatus(err);
+            console.warn("[AuthSession] profile validate failed", {
+              role: normalized,
+              status,
+              err,
+            });
+            // Only force logout on auth rejection — network blips should not kick the user out.
+            if (!cancelled && (status === 401 || status === 403)) {
               await performLogout({ server: true });
+              currentToken = null;
             }
           }
         }

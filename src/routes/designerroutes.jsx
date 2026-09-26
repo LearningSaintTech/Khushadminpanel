@@ -24,7 +24,7 @@ const DesignerRoutes = () => {
           <ProtectedRoute
             allowedRoles={["DESIGNER"]}
             loginPath="/designer/login"
-            wrongRolePolicy="login"
+            wrongRolePolicy="home"
           >
             <DesignerLayout />
           </ProtectedRoute>
