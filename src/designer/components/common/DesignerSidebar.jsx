@@ -78,7 +78,7 @@ const DesignerSidebar = () => {
             <span className="flex min-w-0 flex-col items-start leading-tight">
               <span>Back to designers</span>
               <span className="text-[10px] font-normal text-indigo-200">
-                Switch panel (no logout)
+                Switch panel (choose another designer)
               </span>
             </span>
             <Users size={16} className="ml-auto shrink-0 text-indigo-200" />
