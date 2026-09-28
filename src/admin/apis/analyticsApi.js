@@ -3,7 +3,7 @@ import { apiConnector } from "../services/Apiconnector";
 const ANALYTICS_API = {
   EVENTS: "/analytics/events",
 };
-
+//ss  
 export const getEventAnalytics = (params = {}) => {
   return apiConnector("GET", ANALYTICS_API.EVENTS, null, {}, params);
 };
