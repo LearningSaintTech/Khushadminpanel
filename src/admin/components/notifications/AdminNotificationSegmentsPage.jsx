@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { adminNotificationApi } from "../../services/notificationApi.js";
 import { Users, Send, Settings2, Eye, Loader2, CheckCircle2, Clock, History, CalendarClock, X } from "lucide-react";
 import {
@@ -13,7 +13,10 @@ import {
   btnOutline,
   FormSection,
   Field,
+  PlaceholderChips,
+  PersonalisedPreview,
 } from "./notificationsShared";
+import { insertAtCursor } from "./personalisation.js";
 
 const MODULE_LABELS = {
   cart: "Cart",
@@ -221,6 +224,9 @@ export default function AdminNotificationSegmentsPage() {
     scheduleMode: false,
     scheduledFor: "",
   });
+  const segmentTitleRef = useRef(null);
+  const segmentBodyRef = useRef(null);
+  const segmentLastFieldRef = useRef("body");
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1073,22 +1079,40 @@ export default function AdminNotificationSegmentsPage() {
             <div className="mt-3 space-y-3">
               {(sendRow.code === "G5" || sendRow.code === "CUSTOM") ? (
                 <>
+                  <PlaceholderChips
+                    onInsert={(token) => {
+                      if (segmentLastFieldRef.current === "title") {
+                        setSendForm((f) => ({ ...f, title: insertAtCursor(segmentTitleRef.current, f.title, token) }));
+                      } else {
+                        setSendForm((f) => ({ ...f, body: insertAtCursor(segmentBodyRef.current, f.body, token) }));
+                      }
+                    }}
+                  />
                   <Field label="Title (broadcast data)">
                     <input
+                      ref={segmentTitleRef}
                       value={sendForm.title}
                       onChange={(e) => setSendForm((f) => ({ ...f, title: e.target.value }))}
+                      onFocus={() => {
+                        segmentLastFieldRef.current = "title";
+                      }}
                       className={fieldClass}
-                      placeholder="Khush Pehno"
+                      placeholder="e.g. Hi {{userName}}, new arrivals are here"
                     />
                   </Field>
                   <Field label="Body">
                     <textarea
+                      ref={segmentBodyRef}
                       value={sendForm.body}
                       onChange={(e) => setSendForm((f) => ({ ...f, body: e.target.value }))}
+                      onFocus={() => {
+                        segmentLastFieldRef.current = "body";
+                      }}
                       rows={3}
                       className={fieldClass}
                     />
                   </Field>
+                  <PersonalisedPreview title={sendForm.title} body={sendForm.body} warnUnknown={false} />
                 </>
               ) : null}
               {(sendRow.code === "G1" || sendRow.code === "G2" || sendRow.code === "G4") ? (

@@ -61,6 +61,12 @@ export const adminNotificationApi = {
   cancelBroadcast: (id) =>
     apiConnector("POST", `${ADMIN_BASE}/broadcast/${id}/cancel`).then(getPayload),
 
+  listBroadcasts: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/broadcasts`, null, {}, params).then(getPayload),
+
+  previewRender: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/preview-render`, body).then(getPayload),
+
   listTemplates: (params = {}) =>
     apiConnector("GET", `${ADMIN_BASE}/templates`, null, {}, params).then(getData),
 

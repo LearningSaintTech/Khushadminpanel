@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { adminNotificationApi } from "../../services/notificationApi.js";
+import { NAME_PLACEHOLDERS } from "./personalisation.js";
 
 export {
   btnOutline,
@@ -114,6 +117,83 @@ export function PaginationBar({ page, totalPages, onPage, disabled }) {
   );
 }
 
+export function PlaceholderChips({ onInsert }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] text-stone-500">Personalise:</span>
+      {NAME_PLACEHOLDERS.map((p) => (
+        <button
+          key={p.token}
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onInsert(p.token)}
+          title={p.hint}
+          className="rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700 hover:bg-brand-100"
+        >
+          + {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Server-rendered preview of title/body for a named and an unnamed user. */
+export function PersonalisedPreview({ title, body, extraTokens, warnUnknown = true }) {
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState("");
+  const hasTokens = `${title || ""} ${body || ""}`.includes("{{");
+  const extraKey = (extraTokens || []).join(",");
+
+  useEffect(() => {
+    if (!hasTokens) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await adminNotificationApi.previewRender({
+          title: title || "",
+          body: body || "",
+          extraTokens: extraKey ? extraKey.split(",") : [],
+        });
+        if (!cancelled) {
+          setPreview(res);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) setError(err?.response?.data?.message || err?.message || "Preview failed");
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [title, body, hasTokens, extraKey]);
+
+  if (!hasTokens) return null;
+  return (
+    <div className="rounded-lg border border-border bg-canvas-muted p-2 text-[11px]">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Preview</p>
+      {error ? <p className="text-danger">{error}</p> : null}
+      {preview ? (
+        <div className="space-y-1.5">
+          {[preview.withName, preview.withoutName].map((row, idx) => (
+            <div key={idx} className="rounded-md bg-white px-2 py-1.5">
+              <p className="text-[10px] text-stone-400">
+                {row?.name ? `User named “${row.name}”` : "User with no name"}
+              </p>
+              <p className="font-semibold text-stone-900">{row?.title}</p>
+              {row?.body ? <p className="whitespace-pre-line text-stone-700">{row.body}</p> : null}
+            </div>
+          ))}
+          {warnUnknown && preview.unknownTokens?.length ? (
+            <p className="text-danger">
+              Unknown placeholder(s): {preview.unknownTokens.map((t) => `{{${t}}}`).join(", ")} — they will be blank.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 export function TableActionBtn({ onClick, title, variant = "edit", disabled, children }) {
   const cls =
     variant === "delete"

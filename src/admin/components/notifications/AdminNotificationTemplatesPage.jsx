@@ -236,11 +236,14 @@ export default function AdminNotificationTemplatesPage() {
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Hello {{customerName}}"
+                  placeholder="e.g. Hi {{userName}}, your order is confirmed"
                   className={fieldClass}
                   required
                 />
-                <p className="mt-1 text-[10px] text-stone-500">Use {"{{placeholder}}"} for dynamic values.</p>
+                <p className="mt-1 text-[10px] text-stone-500">
+                  Use {"{{placeholder}}"} for dynamic values. Names: {"{{userName}}"} (first name, “there” if
+                  missing), {"{{fullName}}"}, {"{{userName|Friend}}"} (custom fallback).
+                </p>
               </div>
               <div>
                 <label className={labelClass}>Body</label>

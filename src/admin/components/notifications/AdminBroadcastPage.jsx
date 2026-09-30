@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminNotificationApi } from "../../services/notificationApi.js";
-import { Megaphone, X, Loader2, Send } from "lucide-react";
+import { Megaphone, X, Loader2, Send, CalendarClock, Trash2 } from "lucide-react";
 import {
   Alert,
   FormSection,
@@ -10,7 +10,11 @@ import {
   formPageWrap,
   formStickyFooter,
   formToolbar,
+  PlaceholderChips,
+  PersonalisedPreview,
+  TableActionBtn,
 } from "./notificationsShared";
+import { insertAtCursor, minScheduleInputValue } from "./personalisation.js";
 
 const CHANNELS = [
   { value: "in_app", label: "In-app" },
@@ -45,12 +49,19 @@ function campaignToResult(payload) {
     total,
     sent,
     error: inner.error || null,
+    scheduledFor: inner.scheduledFor || null,
   };
+}
+
+function formatWhen(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function broadcastStatusMessage(result) {
   if (!result) return "";
   const { status, sent, total, error } = result;
+  if (status === "scheduled") return `Scheduled for ${formatWhen(result.scheduledFor)}.`;
   if (status === "completed") return `Sent to ${sent} of ${total} users.`;
   if (status === "failed") return error || "Broadcast failed.";
   if (status === "cancelled") return "Broadcast cancelled.";
@@ -70,11 +81,56 @@ export default function AdminBroadcastPage() {
   const [result, setResult] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [scheduled, setScheduled] = useState([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState(null);
+  const titleRef = useRef(null);
+  const bodyRef = useRef(null);
+  const lastFieldRef = useRef("body");
+
+  const loadScheduled = useCallback(async () => {
+    setScheduledLoading(true);
+    try {
+      const res = await adminNotificationApi.listBroadcasts({ status: "scheduled", limit: 50 });
+      setScheduled(Array.isArray(res?.list) ? res.list : []);
+    } catch {
+      setScheduled([]);
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScheduled();
+  }, [loadScheduled]);
+
+  const insertToken = (token) => {
+    if (lastFieldRef.current === "title") {
+      setTitle((v) => insertAtCursor(titleRef.current, v, token));
+    } else {
+      setBody((v) => insertAtCursor(bodyRef.current, v, token));
+    }
+  };
+
+  const cancelScheduled = async (id) => {
+    if (!window.confirm("Cancel this scheduled broadcast?")) return;
+    setCancellingId(id);
+    try {
+      await adminNotificationApi.cancelBroadcast(id);
+      await loadScheduled();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || "Cancel failed");
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   useEffect(() => {
     const campaignId = result?.campaignId;
     const status = result?.status;
-    if (!campaignId || ["completed", "failed", "cancelled"].includes(status)) {
+    if (!campaignId || ["completed", "failed", "cancelled", "scheduled"].includes(status)) {
       return undefined;
     }
     let cancelled = false;
@@ -126,6 +182,20 @@ export default function AdminBroadcastPage() {
       return;
     }
 
+    let scheduledIso = null;
+    if (scheduleMode) {
+      const when = scheduledFor ? new Date(scheduledFor) : null;
+      if (!when || Number.isNaN(when.getTime())) {
+        setError("Pick a date and time to schedule");
+        return;
+      }
+      if (when.getTime() <= Date.now()) {
+        setError("Scheduled time must be in the future");
+        return;
+      }
+      scheduledIso = when.toISOString();
+    }
+
     setSubmitting(true);
     setError("");
     setResult(null);
@@ -144,12 +214,19 @@ export default function AdminBroadcastPage() {
       if (imageFile) {
         form.append("image", imageFile);
       }
+      if (scheduledIso) {
+        form.append("scheduledFor", scheduledIso);
+      }
 
       const response = await adminNotificationApi.broadcast(form);
       setResult(campaignToResult(response));
       setTitle("");
       setBody("");
       setImageFile(null);
+      if (scheduledIso) {
+        setScheduledFor("");
+        loadScheduled();
+      }
     } catch (err) {
       console.error("Broadcast failed:", err);
       setError(err?.response?.data?.message || err?.message || "Broadcast failed");
@@ -180,26 +257,39 @@ export default function AdminBroadcastPage() {
       ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        <FormSection title="Message" hint="Title and body for all selected channels">
+        <FormSection
+          title="Message"
+          hint="Title and body for all selected channels. Add the user's name with the buttons below."
+        >
+          <PlaceholderChips onInsert={insertToken} />
           <Field label="Title" required>
             <input
+              ref={titleRef}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Maintenance notice"
+              onFocus={() => {
+                lastFieldRef.current = "title";
+              }}
+              placeholder="e.g. Hi {{userName}}, our sale is live!"
               className={fieldClass}
               required
             />
           </Field>
           <Field label="Body (optional)">
             <textarea
+              ref={bodyRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onFocus={() => {
+                lastFieldRef.current = "body";
+              }}
               placeholder="Message content…"
               rows={4}
               className={`${fieldClass} resize-none`}
             />
           </Field>
+          <PersonalisedPreview title={title} body={body} />
           <Field label="Image (optional)">
             <input
               type="file"
@@ -284,12 +374,51 @@ export default function AdminBroadcastPage() {
           ) : null}
         </FormSection>
 
+        <FormSection title="When" hint="Send now, or pick a time (your local time).">
+          <div className="flex flex-wrap gap-3">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                checked={!scheduleMode}
+                onChange={() => setScheduleMode(false)}
+                className="h-3.5 w-3.5 accent-brand-600"
+              />
+              <span className="text-[11px] text-stone-700">Send now</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                checked={scheduleMode}
+                onChange={() => setScheduleMode(true)}
+                className="h-3.5 w-3.5 accent-brand-600"
+              />
+              <span className="text-[11px] text-stone-700">Schedule</span>
+            </label>
+          </div>
+          {scheduleMode ? (
+            <Field label="Send at" required>
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                min={minScheduleInputValue()}
+                onChange={(e) => setScheduledFor(e.target.value)}
+                className={fieldClass}
+              />
+            </Field>
+          ) : null}
+        </FormSection>
+
         <div className={formStickyFooter}>
           <button type="submit" disabled={submitting} className={btnPrimary}>
             {submitting ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Sending…
+                {scheduleMode ? "Scheduling…" : "Sending…"}
+              </>
+            ) : scheduleMode ? (
+              <>
+                <CalendarClock className="h-3.5 w-3.5" aria-hidden />
+                Schedule broadcast
               </>
             ) : (
               <>
@@ -300,6 +429,44 @@ export default function AdminBroadcastPage() {
           </button>
         </div>
       </form>
+
+      <div className="mt-3">
+        <FormSection title="Scheduled broadcasts" hint="Waiting to be sent. Cancel any you no longer want.">
+          {scheduledLoading ? (
+            <p className="text-[11px] text-stone-500">Loading…</p>
+          ) : scheduled.length === 0 ? (
+            <p className="text-[11px] text-stone-500">Nothing scheduled.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {scheduled.map((row) => (
+                <li key={row._id} className="flex items-start gap-2 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-semibold text-stone-900">{row.title}</p>
+                    {row.body ? (
+                      <p className="line-clamp-2 text-[10px] text-stone-600">{row.body}</p>
+                    ) : null}
+                    <p className="mt-0.5 text-[10px] text-stone-500">
+                      {formatWhen(row.scheduledFor)} · {(row.channels || []).join(", ")}
+                    </p>
+                  </div>
+                  <TableActionBtn
+                    variant="delete"
+                    title="Cancel"
+                    disabled={cancellingId === row._id}
+                    onClick={() => cancelScheduled(row._id)}
+                  >
+                    {cancellingId === row._id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </TableActionBtn>
+                </li>
+              ))}
+            </ul>
+          )}
+        </FormSection>
+      </div>
 
       {zoomOpen && imagePreviewUrl ? (
         <div
