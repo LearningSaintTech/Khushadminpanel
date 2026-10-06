@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Coins, Settings } from "lucide-react";
+import { Coins, History, Settings, X } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import { getRewardRules } from "../../apis/Rewardapi";
 import {
@@ -48,6 +48,8 @@ const MoneyFeaturesPointsWallet = () => {
   const [tx, setTx] = useState({ items: [], page: 1, totalPages: 1 });
   const [search, setSearch] = useState("");
   const [txType, setTxType] = useState("");
+  const [txSearch, setTxSearch] = useState("");
+  const [historyUser, setHistoryUser] = useState(null);
   const [listLoading, setListLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -73,7 +75,11 @@ const MoneyFeaturesPointsWallet = () => {
           const d = res?.data ?? res;
           setWallets({ items: d?.items ?? [], page: d?.page ?? 1, totalPages: d?.totalPages ?? 1 });
         } else {
-          const res = await getRewardTransactions(page, 25, { type: txType });
+          const res = await getRewardTransactions(page, 25, {
+            type: txType,
+            search: txSearch,
+            userId: historyUser?.userId,
+          });
           const d = res?.data ?? res;
           setTx({ items: d?.items ?? [], page: d?.page ?? 1, totalPages: d?.totalPages ?? 1 });
         }
@@ -83,8 +89,16 @@ const MoneyFeaturesPointsWallet = () => {
         setListLoading(false);
       }
     },
-    [tab, search, txType],
+    [tab, search, txType, txSearch, historyUser],
   );
+
+  const openHistory = (row) => {
+    const uid = String(row.userId || "");
+    if (!uid) return;
+    setHistoryUser({ userId: uid, name: row.userName || row.userPhone || uid });
+    setTxSearch("");
+    setTab("tx");
+  };
 
   useEffect(() => {
     load();
@@ -217,6 +231,31 @@ const MoneyFeaturesPointsWallet = () => {
               className={`${inputClass} min-w-[200px] flex-1`}
             />
           )}
+          {tab === "tx" &&
+            (historyUser ? (
+              <div className="flex h-[34px] min-w-[200px] flex-1 items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 text-[11px] text-violet-800">
+                <span className="truncate">
+                  History for <span className="font-semibold">{historyUser.name}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistoryUser(null)}
+                  title="Show all customers"
+                  className="rounded p-0.5 text-violet-600 hover:bg-violet-100"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <input
+                type="search"
+                placeholder="Search customer…"
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadTab(1)}
+                className={`${inputClass} min-w-[200px] flex-1`}
+              />
+            ))}
           {tab === "tx" && (
             <select
               value={txType}
@@ -251,6 +290,7 @@ const MoneyFeaturesPointsWallet = () => {
                   <th className="px-2.5 py-1.5">Phone</th>
                   <th className="px-2.5 py-1.5">Points</th>
                   <th className="px-2.5 py-1.5">User ID</th>
+                  <th className="w-12 px-2 py-1.5" />
                 </tr>
               </thead>
               <tbody>
@@ -262,6 +302,16 @@ const MoneyFeaturesPointsWallet = () => {
                       {Number(row.points_balance ?? 0).toLocaleString("en-IN")}
                     </td>
                     <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500 break-all">{String(row.userId)}</td>
+                    <td className="px-2 py-1.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => openHistory(row)}
+                        title="Points history"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-violet-700"
+                      >
+                        <History size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -289,7 +339,20 @@ const MoneyFeaturesPointsWallet = () => {
                           })
                         : "—"}
                     </td>
-                    <td className="px-2.5 py-1.5">{row.userName || "—"}</td>
+                    <td className="px-2.5 py-1.5">
+                      {row.userId && !historyUser ? (
+                        <button
+                          type="button"
+                          onClick={() => openHistory(row)}
+                          title="Show this customer's history"
+                          className="text-left text-violet-700 hover:underline"
+                        >
+                          {row.userName || "—"}
+                        </button>
+                      ) : (
+                        row.userName || "—"
+                      )}
+                    </td>
                     <td className="px-2.5 py-1.5">
                       <span
                         className={

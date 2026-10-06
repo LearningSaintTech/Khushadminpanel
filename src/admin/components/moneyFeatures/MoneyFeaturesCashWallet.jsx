@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Download,
+  History,
 } from "lucide-react";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import {
@@ -229,6 +230,8 @@ const MoneyFeaturesCashWallet = () => {
   const [search, setSearch] = useState("");
   const [txSource, setTxSource] = useState("");
   const [txType, setTxType] = useState("");
+  const [txSearch, setTxSearch] = useState("");
+  const [historyUser, setHistoryUser] = useState(null);
   const [listLoading, setListLoading] = useState(false);
   const [showFlow, setShowFlow] = useState(false);
 
@@ -268,6 +271,8 @@ const MoneyFeaturesCashWallet = () => {
           const res = await getCashTransactions(page, 25, {
             source: txSource,
             type: txType,
+            search: txSearch,
+            userId: historyUser?.userId,
           });
           const d = res?.data ?? res;
           setTx({
@@ -282,7 +287,7 @@ const MoneyFeaturesCashWallet = () => {
         setListLoading(false);
       }
     },
-    [tab, search, txSource, txType],
+    [tab, search, txSource, txType, txSearch, historyUser],
   );
 
   useEffect(() => {
@@ -298,6 +303,15 @@ const MoneyFeaturesCashWallet = () => {
     setEditingUserId((prev) => (prev === uid ? null : uid));
   };
 
+  const openHistory = (row) => {
+    const uid = String(row.userId || "");
+    if (!uid) return;
+    setHistoryUser({ userId: uid, name: row.userName || row.userPhone || uid });
+    setTxSearch("");
+    setEditingUserId(null);
+    setTab("tx");
+  };
+
   const handleDownloadTransactions = async () => {
     setExporting(true);
     setExportError("");
@@ -305,6 +319,9 @@ const MoneyFeaturesCashWallet = () => {
       const { filename, count } = await exportCashTransactions({
         source: txSource,
         type: txType,
+        search: txSearch,
+        userId: historyUser?.userId,
+        userLabel: historyUser?.name,
       });
       setFlashMessage({
         message: `Downloaded ${count} transaction${count === 1 ? "" : "s"} as ${filename}`,
@@ -482,6 +499,35 @@ const MoneyFeaturesCashWallet = () => {
           )}
           {tab === "tx" && (
             <>
+              <div className="min-w-[200px] flex-1">
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  Customer
+                </label>
+                {historyUser ? (
+                  <div className="flex h-[34px] items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 text-[11px] text-brand-800">
+                    <span className="truncate">
+                      History for <span className="font-semibold">{historyUser.name}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryUser(null)}
+                      title="Show all customers"
+                      className="rounded p-0.5 text-brand-600 hover:bg-brand-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="search"
+                    placeholder="Name, phone or email…"
+                    value={txSearch}
+                    onChange={(e) => setTxSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && loadTab(1)}
+                    className={`${inputClass} w-full`}
+                  />
+                )}
+              </div>
               <div>
                 <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-500">
                   Source
@@ -552,7 +598,7 @@ const MoneyFeaturesCashWallet = () => {
                   <th className="px-3 py-2">Phone</th>
                   <th className="px-3 py-2 text-right">Balance</th>
                   <th className="px-3 py-2">User ID</th>
-                  <th className="w-12 px-2 py-2 text-center" />
+                  <th className="w-20 px-2 py-2 text-center" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -584,7 +630,15 @@ const MoneyFeaturesCashWallet = () => {
                           >
                             {uid}
                           </td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="whitespace-nowrap px-2 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => openHistory(row)}
+                              title="Transaction history"
+                              className="mr-1 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-brand-700"
+                            >
+                              <History size={14} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => toggleEditRow(row)}
@@ -649,7 +703,20 @@ const MoneyFeaturesCashWallet = () => {
                             })
                           : "—"}
                       </td>
-                      <td className="px-3 py-2">{row.userName || row.userPhone || "—"}</td>
+                      <td className="px-3 py-2">
+                        {row.userId && !historyUser ? (
+                          <button
+                            type="button"
+                            onClick={() => openHistory(row)}
+                            title="Show this customer's history"
+                            className="text-left text-brand-700 hover:underline"
+                          >
+                            {row.userName || row.userPhone || "—"}
+                          </button>
+                        ) : (
+                          row.userName || row.userPhone || "—"
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <span
                           className={

@@ -53,6 +53,15 @@ export async function fetchAllRewardTransactions(filters = {}) {
   );
 }
 
+function customerFilenamePart(filters = {}) {
+  const raw = filters.userLabel || filters.search || "";
+  return String(raw)
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
 function buildExportFilename(prefix, items, filterParts = []) {
   const timestamps = items
     .map((row) => row.createdAt)
@@ -138,7 +147,7 @@ export function downloadCashTransactionsCsv(items, filters = {}) {
     ];
   });
 
-  const filterParts = [filters.source, filters.type, filters.status];
+  const filterParts = [customerFilenamePart(filters), filters.source, filters.type, filters.status];
   const filename = buildExportFilename("cash-wallet-transactions", items, filterParts);
   triggerCsvDownload(filename, buildCsv(headers, rows));
   return { filename, count: items.length };
@@ -171,7 +180,7 @@ export function downloadRewardTransactionsCsv(items, filters = {}) {
     row.expiry_date ? formatWalletTransactionDate(row.expiry_date) : "",
   ]);
 
-  const filterParts = [filters.type, filters.source];
+  const filterParts = [customerFilenamePart(filters), filters.type, filters.source];
   const filename = buildExportFilename("reward-wallet-transactions", items, filterParts);
   triggerCsvDownload(filename, buildCsv(headers, rows));
   return { filename, count: items.length };
