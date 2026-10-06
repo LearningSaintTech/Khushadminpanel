@@ -105,6 +105,8 @@ export default function AdminBroadcastPage() {
   const [scheduled, setScheduled] = useState([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
+  const [recent, setRecent] = useState([]);
+  const [recentLoading, setRecentLoading] = useState(true);
   const titleRef = useRef(null);
   const bodyRef = useRef(null);
   const lastFieldRef = useRef("body");
@@ -124,6 +126,43 @@ export default function AdminBroadcastPage() {
   useEffect(() => {
     loadScheduled();
   }, [loadScheduled]);
+
+  const loadRecent = useCallback(async () => {
+    try {
+      const res = await adminNotificationApi.listBroadcasts({ limit: 10 });
+      const list = Array.isArray(res?.list) ? res.list : [];
+      setRecent(list.filter((row) => row.status !== "scheduled"));
+    } catch {
+      // keep the last list
+    } finally {
+      setRecentLoading(false);
+    }
+  }, []);
+
+  const hasActiveBroadcast = recent.some((row) => ["queued", "running"].includes(row.status));
+
+  useEffect(() => {
+    loadRecent();
+  }, [loadRecent, result?.campaignId, result?.status]);
+
+  useEffect(() => {
+    if (!hasActiveBroadcast) return undefined;
+    const timer = setInterval(loadRecent, 5000);
+    return () => clearInterval(timer);
+  }, [hasActiveBroadcast, loadRecent]);
+
+  const cancelRunning = async (id) => {
+    if (!window.confirm("Stop this broadcast? Messages already sent cannot be recalled.")) return;
+    setCancellingId(id);
+    try {
+      await adminNotificationApi.cancelBroadcast(id);
+      await loadRecent();
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || "Cancel failed");
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!channels.includes("whatsapp")) return undefined;
@@ -573,6 +612,73 @@ export default function AdminBroadcastPage() {
           </button>
         </div>
       </form>
+
+      <div className="mt-3">
+        <FormSection
+          title="Recent broadcasts"
+          hint={hasActiveBroadcast ? "Live progress, refreshes every 5 seconds." : "Latest 10 sends."}
+        >
+          {recentLoading ? (
+            <p className="text-[11px] text-stone-500">Loading…</p>
+          ) : recent.length === 0 ? (
+            <p className="text-[11px] text-stone-500">No broadcasts yet.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {recent.map((row) => {
+                const total = Number(row.totalUsers) || 0;
+                const processed = Number(row.processedUsers) || 0;
+                const pct = total ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+                const active = ["queued", "running"].includes(row.status);
+                return (
+                  <li key={row._id} className="flex items-start gap-2 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-[11px] font-semibold text-stone-900">{row.title}</p>
+                        <span
+                          className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                            active
+                              ? "bg-amber-100 text-amber-800"
+                              : row.status === "completed"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-stone-100 text-stone-600"
+                          }`}
+                        >
+                          {row.status}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[10px] text-stone-500">
+                        {formatWhen(row.startedAt || row.createdAt)} · {(row.channels || []).join(", ")}
+                      </p>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-stone-100">
+                        <div className="h-full bg-brand-600 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="mt-0.5 text-[10px] text-stone-600">
+                        {processed} of {total} users processed ({pct}%).
+                        {whatsappStatsMessage(row.whatsappStats)}
+                      </p>
+                      {row.error ? <p className="text-[10px] text-red-700">{row.error}</p> : null}
+                    </div>
+                    {active ? (
+                      <TableActionBtn
+                        variant="delete"
+                        title="Stop broadcast"
+                        disabled={cancellingId === row._id}
+                        onClick={() => cancelRunning(row._id)}
+                      >
+                        {cancellingId === row._id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                      </TableActionBtn>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </FormSection>
+      </div>
 
       <div className="mt-3">
         <FormSection title="Scheduled broadcasts" hint="Waiting to be sent. Cancel any you no longer want.">
