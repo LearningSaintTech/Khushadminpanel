@@ -29,6 +29,7 @@ const STATUS_STYLES = {
   REJECTED: "bg-red-50 text-red-800 border-red-200",
   PAUSED: "bg-stone-100 text-stone-700 border-stone-200",
   DISABLED: "bg-stone-100 text-stone-500 border-stone-200",
+  DELETED: "bg-stone-100 text-stone-400 border-stone-200 line-through",
   UNKNOWN: "bg-stone-50 text-stone-600 border-stone-200",
 };
 
@@ -307,6 +308,7 @@ export default function AdminWhatsappTemplatesPage() {
             <option value="APPROVED">Approved</option>
             <option value="PENDING">Pending</option>
             <option value="REJECTED">Rejected</option>
+            <option value="DELETED">Deleted on Meta</option>
           </select>
         </div>
         <div className="min-w-48 flex-1">

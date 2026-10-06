@@ -18,6 +18,68 @@ export const BUTTON_TYPES = [
   { id: "QUICK_REPLY", label: "Quick reply" },
 ];
 
+const HEADER_SAMPLE_ACCEPT = {
+  IMAGE: "image/jpeg,image/png",
+  VIDEO: "video/mp4",
+  DOCUMENT: "application/pdf",
+};
+
+const HEADER_SAMPLE_LIMIT_HINT = {
+  IMAGE: "JPG or PNG, up to 5 MB",
+  VIDEO: "MP4, up to 16 MB",
+  DOCUMENT: "PDF, up to 16 MB",
+};
+
+function HeaderSampleUpload({ format, onUploaded }) {
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setStatus(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await adminNotificationApi.uploadWhatsappHeaderSample(body);
+      if (!res?.url) throw new Error("Upload did not return a URL");
+      onUploaded(res.url);
+      setStatus({ ok: true, text: `Uploaded ${file.name}` });
+    } catch (err) {
+      setStatus({
+        ok: false,
+        text: err?.response?.data?.message || err?.message || "Upload failed",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-white px-2.5 py-1.5 text-[11px] font-medium text-stone-700 hover:bg-canvas-muted">
+        <Image className="h-3.5 w-3.5" aria-hidden />
+        {uploading ? "Uploading…" : "Upload from computer"}
+        <input
+          type="file"
+          accept={HEADER_SAMPLE_ACCEPT[format] || ""}
+          onChange={handleFile}
+          disabled={uploading}
+          className="hidden"
+        />
+      </label>
+      <span className="text-[10px] text-stone-500">{HEADER_SAMPLE_LIMIT_HINT[format]}</span>
+      {status ? (
+        <span className={`text-[10px] ${status.ok ? "text-emerald-700" : "text-red-700"}`}>
+          {status.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export const FORM_INITIAL_TEMPLATE = {
   name: "",
   language: "en",
@@ -392,17 +454,30 @@ export function WhatsappTemplateConfigFields({
           {["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat) ? (
             <>
               <Field
-                label="Sample media URL (for Meta approval)"
-                hint="Public HTTPS URL used when submitting template to Meta."
+                label="Sample media (for Meta approval)"
+                hint="Upload from your computer or paste a public HTTPS link. Meta reviews the template with this file."
               >
+                {!readOnlyMeta ? (
+                  <HeaderSampleUpload
+                    format={headerFormat}
+                    onUploaded={(url) => setHeader({ mediaSampleUrl: url })}
+                  />
+                ) : null}
                 <input
                   type="url"
                   value={form.headerConfig?.mediaSampleUrl || ""}
                   onChange={(e) => setHeader({ mediaSampleUrl: e.target.value })}
                   placeholder="https://cdn.example.com/banner.jpg"
-                  className={fieldClass}
+                  className={`${fieldClass} mt-1.5`}
                   readOnly={readOnlyMeta}
                 />
+                {headerFormat === "IMAGE" && form.headerConfig?.mediaSampleUrl ? (
+                  <img
+                    src={form.headerConfig.mediaSampleUrl}
+                    alt="Header sample"
+                    className="mt-2 h-28 w-44 rounded-md border border-border object-cover"
+                  />
+                ) : null}
               </Field>
               <Field label="Dynamic media variable (at send)" hint="Maps to imageUrl, invoiceUrl, mediaUrl, etc.">
                 <VariableSelect
@@ -630,4 +705,4 @@ export function WhatsappTemplateConfigFields({
     </div>
   );
 }
-
+

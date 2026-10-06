@@ -50,7 +50,19 @@ function campaignToResult(payload) {
     sent,
     error: inner.error || null,
     scheduledFor: inner.scheduledFor || null,
+    whatsappStats: inner.whatsappStats || null,
   };
+}
+
+const LEGACY_WHATSAPP_CHOICE = "key:BROADCAST";
+
+function whatsappStatsMessage(stats) {
+  if (!stats) return "";
+  const { queued = 0, sent = 0, delivered = 0, read = 0, failed = 0, skippedOptOut = 0 } = stats;
+  if (!queued && !failed && !skippedOptOut) return "";
+  const parts = [`${sent} sent`, `${delivered} delivered`, `${read} read`, `${failed} failed`];
+  if (skippedOptOut) parts.push(`${skippedOptOut} opted out`);
+  return ` WhatsApp: ${parts.join(", ")} (of ${queued} queued).`;
 }
 
 function formatWhen(value) {
@@ -61,11 +73,12 @@ function formatWhen(value) {
 function broadcastStatusMessage(result) {
   if (!result) return "";
   const { status, sent, total, error } = result;
+  const wa = whatsappStatsMessage(result.whatsappStats);
   if (status === "scheduled") return `Scheduled for ${formatWhen(result.scheduledFor)}.`;
-  if (status === "completed") return `Sent to ${sent} of ${total} users.`;
+  if (status === "completed") return `Processed ${sent} of ${total} users.${wa}`;
   if (status === "failed") return error || "Broadcast failed.";
   if (status === "cancelled") return "Broadcast cancelled.";
-  if (status === "running") return `Sending… ${sent} of ${total} users.`;
+  if (status === "running") return `Sending… ${sent} of ${total} users.${wa}`;
   return `Queued for ${total} users. Sending…`;
 }
 
@@ -74,7 +87,13 @@ export default function AdminBroadcastPage() {
   const [body, setBody] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [channels, setChannels] = useState(["in_app"]);
-  const [whatsappTemplateKey, setWhatsappTemplateKey] = useState("BROADCAST");
+  const [whatsappChoice, setWhatsappChoice] = useState(LEGACY_WHATSAPP_CHOICE);
+  const [marketingTemplates, setMarketingTemplates] = useState([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [testCountryCode, setTestCountryCode] = useState("+91");
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
   const [smsTemplateKey, setSmsTemplateKey] = useState("BROADCAST");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -105,6 +124,22 @@ export default function AdminBroadcastPage() {
   useEffect(() => {
     loadScheduled();
   }, [loadScheduled]);
+
+  useEffect(() => {
+    if (!channels.includes("whatsapp")) return undefined;
+    let cancelled = false;
+    adminNotificationApi
+      .listApprovedWhatsappTemplates({ category: "MARKETING" })
+      .then((res) => {
+        if (!cancelled) setMarketingTemplates(Array.isArray(res?.list) ? res.list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMarketingTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [channels]);
 
   const insertToken = (token) => {
     if (lastFieldRef.current === "title") {
@@ -169,6 +204,49 @@ export default function AdminBroadcastPage() {
     );
   };
 
+  const appendWhatsappFields = (form) => {
+    if (whatsappChoice.startsWith("id:")) {
+      form.append("whatsappTemplateId", whatsappChoice.slice(3));
+    } else {
+      form.append("whatsappTemplateKey", whatsappChoice.slice(4));
+    }
+    if (couponCode.trim()) form.append("couponCode", couponCode.trim());
+  };
+
+  const handleTestSend = async () => {
+    setTestResult(null);
+    if (!title?.trim()) {
+      setTestResult({ ok: false, text: "Add a title first — it's part of the message." });
+      return;
+    }
+    if (testPhone.replace(/\D/g, "").length < 10) {
+      setTestResult({ ok: false, text: "Enter a 10-digit phone number." });
+      return;
+    }
+    setTesting(true);
+    try {
+      const form = new FormData();
+      form.append("title", title.trim());
+      form.append("body", body?.trim() ?? "");
+      form.append("countryCode", testCountryCode.trim() || "+91");
+      form.append("phoneNumber", testPhone.trim());
+      appendWhatsappFields(form);
+      if (imageFile) form.append("image", imageFile);
+      const res = await adminNotificationApi.testBroadcastWhatsapp(form);
+      const who = res?.matchedUser
+        ? `${res?.recipientName || "user"} (${res?.to})`
+        : `${res?.to} — not a registered user, so the name shows as the fallback`;
+      setTestResult({ ok: true, text: `Sent to ${who}. Check WhatsApp on that phone.` });
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        text: err?.response?.data?.message || err?.message || "Test send failed",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -206,7 +284,7 @@ export default function AdminBroadcastPage() {
       form.append("body", body?.trim() ?? "");
       channels.forEach((channel) => form.append("channels", channel));
       if (channels.includes("whatsapp")) {
-        form.append("whatsappTemplateKey", whatsappTemplateKey);
+        appendWhatsappFields(form);
       }
       if (channels.includes("sms")) {
         form.append("smsTemplateKey", smsTemplateKey);
@@ -290,10 +368,13 @@ export default function AdminBroadcastPage() {
             />
           </Field>
           <PersonalisedPreview title={title} body={body} />
-          <Field label="Image (optional)">
+          <Field
+            label="Image (optional)"
+            hint={channels.includes("whatsapp") ? "WhatsApp needs JPG or PNG, up to 5 MB." : undefined}
+          >
             <input
               type="file"
-              accept="image/*"
+              accept={channels.includes("whatsapp") ? "image/jpeg,image/png" : "image/*"}
               onChange={(e) => setImageFile(e.target.files?.[0] || null)}
               className="block w-full text-[11px] text-stone-600 file:mr-3 file:rounded-md file:border-0 file:bg-canvas-muted file:px-2.5 file:py-1.5 file:text-[11px] file:font-medium"
             />
@@ -342,19 +423,82 @@ export default function AdminBroadcastPage() {
           </div>
 
           {channels.includes("whatsapp") ? (
-            <Field label="WhatsApp template" hint="Registered template for WhatsApp.">
+            <Field
+              label="WhatsApp template"
+              hint="Only approved MARKETING templates can be broadcast. Users who replied STOP are skipped."
+            >
               <select
-                value={whatsappTemplateKey}
-                onChange={(e) => setWhatsappTemplateKey(e.target.value)}
+                value={whatsappChoice}
+                onChange={(e) => setWhatsappChoice(e.target.value)}
                 className={fieldClass}
               >
-                {TEMPLATE_KEY_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                <option value={LEGACY_WHATSAPP_CHOICE}>BROADCAST (default announcement template)</option>
+                {marketingTemplates.map((t) => (
+                  <option key={t._id} value={`id:${t._id}`}>
+                    {t.metaTemplateName} ({t.language})
                   </option>
                 ))}
               </select>
             </Field>
+          ) : null}
+
+          {channels.includes("whatsapp") ? (
+            <Field label="Coupon code" hint="Fills the template's coupon variable, e.g. FESTIVE15.">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="FESTIVE15"
+                className={fieldClass}
+              />
+            </Field>
+          ) : null}
+
+          {channels.includes("whatsapp") ? (
+            <div className="rounded-lg border border-border bg-canvas-muted p-2.5">
+              <p className="text-[11px] font-semibold text-stone-800">Test on one number</p>
+              <p className="mb-2 text-[10px] text-stone-500">
+                Sends this exact WhatsApp message (title, body, image, coupon, template) right now to
+                a single number. Nothing is sent to other users.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={testCountryCode}
+                  onChange={(e) => setTestCountryCode(e.target.value)}
+                  className={`${fieldClass} w-16`}
+                  aria-label="Country code"
+                />
+                <input
+                  type="tel"
+                  value={testPhone}
+                  onChange={(e) => setTestPhone(e.target.value)}
+                  placeholder="10-digit phone number"
+                  className={`${fieldClass} min-w-0 flex-1`}
+                  aria-label="Test phone number"
+                />
+                <button
+                  type="button"
+                  onClick={handleTestSend}
+                  disabled={testing}
+                  className={btnPrimary}
+                >
+                  {testing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  Send test
+                </button>
+              </div>
+              {testResult ? (
+                <p
+                  className={`mt-2 text-[11px] ${testResult.ok ? "text-emerald-700" : "text-red-700"}`}
+                >
+                  {testResult.text}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {channels.includes("sms") ? (

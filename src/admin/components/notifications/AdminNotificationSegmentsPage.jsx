@@ -288,9 +288,9 @@ export default function AdminNotificationSegmentsPage() {
 
   useEffect(() => {
     adminNotificationApi
-      .listWhatsappTemplates({ status: "APPROVED", limit: 100 })
+      .listApprovedWhatsappTemplates()
       .then((data) => {
-        const items = data?.list ?? data?.data?.list ?? [];
+        const items = data?.list ?? [];
         setWaTemplates(Array.isArray(items) ? items : []);
       })
       .catch(() => setWaTemplates([]));

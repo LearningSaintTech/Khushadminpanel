@@ -55,6 +55,10 @@ export const adminNotificationApi = {
   broadcast: (body) =>
     apiConnector("POST", `${ADMIN_BASE}/broadcast`, body).then(getPayload),
 
+  /** Send the broadcast's WhatsApp message to one number now (FormData, same fields as broadcast + phoneNumber). */
+  testBroadcastWhatsapp: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/broadcast/test-whatsapp`, body).then(getPayload),
+
   getBroadcastStatus: (id) =>
     apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}`).then(getPayload),
 
@@ -114,6 +118,14 @@ export const adminNotificationApi = {
 
   listWhatsappTemplates: (params = {}) =>
     apiConnector("GET", `${ADMIN_BASE}/whatsapp/templates`, null, {}, params).then(getData),
+
+  /** APPROVED + active templates for pickers; pass { category: "MARKETING" } for broadcasts. */
+  listApprovedWhatsappTemplates: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/whatsapp/templates/approved`, null, {}, params).then(getPayload),
+
+  /** FormData with `file` (JPG/PNG ≤5MB, MP4 ≤16MB, PDF ≤16MB) → { url } for headerConfig.mediaSampleUrl. */
+  uploadWhatsappHeaderSample: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/whatsapp/templates/upload-sample`, body).then(getPayload),
 
   updateWhatsappTemplateConfig: (id, body) =>
     apiConnector("PUT", `${ADMIN_BASE}/whatsapp/templates/${id}/config`, body).then(getData),
