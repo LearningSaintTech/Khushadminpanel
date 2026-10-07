@@ -237,10 +237,18 @@ function GenericLinkReportModal({ link, onClose }) {
             <Stat label="Add to cart" value={steps.addToCart || 0} />
             <Stat label="Checkouts" value={steps.checkout || 0} />
           </div>
-          <p className="mt-2 text-[10px] text-stone-500">
-            Shared links aren't personal, so activity is counted per visit rather than per customer.
-            Use a broadcast offer link to see who exactly clicked.
-          </p>
+          {report.link.kind === "test" ? (
+            <p className="mt-2 text-[10px] text-stone-500">
+              Test send to {[report.link.recipientName, report.link.recipientPhone].filter(Boolean).join(" ") || "one number"}
+              {report.link.firstClickedAt ? ` · first opened ${formatWhen(report.link.firstClickedAt)}` : " · not opened yet"}
+              {(report.pagesVisited || []).length ? ` · pages: ${report.pagesVisited.join(", ")}` : ""}
+            </p>
+          ) : (
+            <p className="mt-2 text-[10px] text-stone-500">
+              Shared links aren't personal, so activity is counted per visit rather than per customer.
+              Use a broadcast offer link to see who exactly clicked.
+            </p>
+          )}
         </>
       ) : null}
     </ModalShell>
@@ -300,7 +308,7 @@ export function TrackedLinksSection() {
   return (
     <FormSection
       title="Tracked links"
-      hint="Make a short link for any offer page. Every click, visit, add-to-cart and order from it is counted."
+      hint="Make a short link for any offer page. Every click, visit, add-to-cart and order from it is counted. WhatsApp test sends with an offer link show up here too."
     >
       <form onSubmit={create} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.5fr_0.6fr_auto] sm:items-end">
         <Field label="Name">
@@ -328,7 +336,15 @@ export function TrackedLinksSection() {
           {list.map((link) => (
             <li key={link._id} className="flex items-center gap-2 py-1.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-semibold text-stone-900">{link.name}</p>
+                <p className="truncate text-[11px] font-semibold text-stone-900">
+                  {link.kind === "test" ? (
+                    <span className="mr-1 rounded bg-amber-100 px-1 text-[9px] font-semibold uppercase text-amber-800">Test send</span>
+                  ) : null}
+                  {link.name}
+                  {link.kind === "test" && (link.recipientName || link.recipientPhone) ? (
+                    <span className="font-normal text-stone-500"> · {[link.recipientName, link.recipientPhone].filter(Boolean).join(" ")}</span>
+                  ) : null}
+                </p>
                 <p className="truncate text-[10px] text-stone-500">
                   {link.shortUrl} → {link.destinationUrl}
                 </p>
