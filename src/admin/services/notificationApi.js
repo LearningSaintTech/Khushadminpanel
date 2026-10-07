@@ -62,6 +62,18 @@ export const adminNotificationApi = {
   getBroadcastStatus: (id) =>
     apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}`).then(getPayload),
 
+  getBroadcastLinkReport: (id) =>
+    apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}/link-report`).then(getPayload),
+
+  listTrackedLinks: (params = {}) =>
+    apiConnector("GET", `${ADMIN_BASE}/links`, null, {}, params).then(getPayload),
+
+  createTrackedLink: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/links`, body).then(getPayload),
+
+  getTrackedLinkReport: (id) =>
+    apiConnector("GET", `${ADMIN_BASE}/links/${id}/report`).then(getPayload),
+
   cancelBroadcast: (id) =>
     apiConnector("POST", `${ADMIN_BASE}/broadcast/${id}/cancel`).then(getPayload),
 
