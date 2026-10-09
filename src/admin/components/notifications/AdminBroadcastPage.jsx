@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminNotificationApi } from "../../services/notificationApi.js";
-import { Megaphone, X, Loader2, Send, CalendarClock, Trash2 } from "lucide-react";
+import { Megaphone, X, Loader2, Send, CalendarClock, Trash2, BarChart3 } from "lucide-react";
+import { BroadcastLinkReportModal, TrackedLinksSection } from "./TrackedLinkReports.jsx";
 import {
   Alert,
   FormSection,
@@ -90,6 +91,8 @@ export default function AdminBroadcastPage() {
   const [whatsappChoice, setWhatsappChoice] = useState(LEGACY_WHATSAPP_CHOICE);
   const [marketingTemplates, setMarketingTemplates] = useState([]);
   const [couponCode, setCouponCode] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [reportCampaign, setReportCampaign] = useState(null);
   const [testCountryCode, setTestCountryCode] = useState("+91");
   const [testPhone, setTestPhone] = useState("");
   const [testing, setTesting] = useState(false);
@@ -250,6 +253,7 @@ export default function AdminBroadcastPage() {
       form.append("whatsappTemplateKey", whatsappChoice.slice(4));
     }
     if (couponCode.trim()) form.append("couponCode", couponCode.trim());
+    if (linkUrl.trim()) form.append("linkUrl", linkUrl.trim());
   };
 
   const handleTestSend = async () => {
@@ -275,7 +279,8 @@ export default function AdminBroadcastPage() {
       const who = res?.matchedUser
         ? `${res?.recipientName || "user"} (${res?.to})`
         : `${res?.to} — not a registered user, so the name shows as the fallback`;
-      setTestResult({ ok: true, text: `Sent to ${who}. Check WhatsApp on that phone.` });
+      const linkNote = res?.trackedLink ? ` Their tracked link: ${res.trackedLink}` : "";
+      setTestResult({ ok: true, text: `Sent to ${who}. Check WhatsApp on that phone.${linkNote}` });
     } catch (err) {
       setTestResult({
         ok: false,
@@ -494,6 +499,21 @@ export default function AdminBroadcastPage() {
           ) : null}
 
           {channels.includes("whatsapp") ? (
+            <Field
+              label="Offer link (tracked)"
+              hint="Page the button opens. Each person gets their own link, so you can see who clicked, what they viewed and ordered. Needs a template whose button is khushpehno.com/r/{{1}} mapped to trackingCode."
+            >
+              <input
+                type="text"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://khushpehno.com/section/… or /"
+                className={fieldClass}
+              />
+            </Field>
+          ) : null}
+
+          {channels.includes("whatsapp") ? (
             <div className="rounded-lg border border-border bg-canvas-muted p-2.5">
               <p className="text-[11px] font-semibold text-stone-800">Test on one number</p>
               <p className="mb-2 text-[10px] text-stone-500">
@@ -658,6 +678,11 @@ export default function AdminBroadcastPage() {
                       </p>
                       {row.error ? <p className="text-[10px] text-red-700">{row.error}</p> : null}
                     </div>
+                    {(row.channels || []).includes("whatsapp") ? (
+                      <TableActionBtn title="Link report" onClick={() => setReportCampaign(row)}>
+                        <BarChart3 className="h-3.5 w-3.5" aria-hidden />
+                      </TableActionBtn>
+                    ) : null}
                     {active ? (
                       <TableActionBtn
                         variant="delete"
@@ -678,6 +703,14 @@ export default function AdminBroadcastPage() {
             </ul>
           )}
         </FormSection>
+      </div>
+
+      {reportCampaign ? (
+        <BroadcastLinkReportModal campaign={reportCampaign} onClose={() => setReportCampaign(null)} />
+      ) : null}
+
+      <div className="mt-3">
+        <TrackedLinksSection />
       </div>
 
       <div className="mt-3">

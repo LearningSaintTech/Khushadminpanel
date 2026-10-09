@@ -202,9 +202,16 @@ export default function Reviews() {
     if (!id) return;
     setDetailLoading(true);
     try {
-      const res = await getReviews(id, 1, 200);
-      const list = res?.data?.reviews ?? [];
-      setItemReviews(Array.isArray(list) ? list : []);
+      const pageSize = 200;
+      const all = [];
+      for (let p = 1; ; p++) {
+        const res = await getReviews(id, p, pageSize);
+        const list = Array.isArray(res?.data?.reviews) ? res.data.reviews : [];
+        all.push(...list);
+        const totalPages = Number(res?.data?.pagination?.totalPages) || 1;
+        if (p >= totalPages || list.length < pageSize) break;
+      }
+      setItemReviews(all);
     } catch (err) {
       toast.error(typeof err === "string" ? err : "Failed to load reviews");
       setItemReviews([]);
@@ -355,6 +362,7 @@ export default function Reviews() {
                 const stats = statsMap[id];
                 const total = stats?.totalReviews ?? 0;
                 const avg = stats?.averageRating;
+                const cardMaxDist = Math.max(1, ...Object.values(stats?.distribution || {}));
 
                 return (
                   <button
@@ -398,7 +406,7 @@ export default function Reviews() {
                           <div className="mt-2 space-y-1 border-t border-border/80 pt-2">
                             {[5, 4, 3, 2, 1].map((star) => {
                               const c = stats.distribution[star] || 0;
-                              const pct = (c / maxDist) * 100;
+                              const pct = (c / cardMaxDist) * 100;
                               return (
                                 <div
                                   key={star}
@@ -530,7 +538,9 @@ export default function Reviews() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-3">
-              <h3 className="mb-2 text-xs font-semibold text-stone-800">All reviews</h3>
+              <h3 className="mb-2 text-xs font-semibold text-stone-800">
+                All reviews{!detailLoading ? ` (${itemReviews.length})` : ""}
+              </h3>
               {detailLoading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="h-7 w-7 animate-spin text-stone-400" />
