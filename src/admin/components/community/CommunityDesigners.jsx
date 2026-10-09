@@ -236,7 +236,7 @@ const CommunityDesigners = () => {
       <PageHeader
         icon={BadgeCheck}
         title="Community designers"
-        subtitle="GET /admin/panels/community-designers/list"
+        subtitle="Verify community designers, then grant panel access on the same user."
         onRefresh={fetchList}
         loading={loading}
         accentClass="text-amber-600"

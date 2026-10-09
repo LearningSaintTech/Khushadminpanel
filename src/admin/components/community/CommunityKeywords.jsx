@@ -160,7 +160,7 @@ const handleSubmit = async (e) => {
       <PageHeader
         icon={Hash}
         title="Community keywords"
-        subtitle="Admin curated explore chips — /community/admin/hashtags"
+        subtitle="Explore chips shown in the app."
         onRefresh={fetchList}
         loading={loading}
         backLink={

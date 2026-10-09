@@ -123,6 +123,10 @@ import CommunityDesigners from "../admin/components/community/CommunityDesigners
 import CommunityProjects from "../admin/components/community/CommunityProjects";
 import CommunityProjectCategories from "../admin/components/community/CommunityProjectCategories";
 import CommunityReports from "../admin/components/community/CommunityReports";
+import CommunityUsers from "../admin/components/community/CommunityUsers";
+import CommunityOrders from "../admin/components/community/CommunityOrders";
+import CommunitySources from "../admin/components/community/CommunitySources";
+import CommunityAuditLog from "../admin/components/community/CommunityAuditLog";
 import EarningsHub from "../admin/components/earnings/EarningsHub";
 import EarningsPolicy from "../admin/components/earnings/EarningsPolicy";
 import EarningsCommissions from "../admin/components/earnings/EarningsCommissions";
@@ -279,6 +283,10 @@ export const adminPanelChildRoutes = [
   <Route key="community-projects" path="community/projects" element={<CommunityProjects />} />,
   <Route key="community-project-cats" path="community/project-categories" element={<CommunityProjectCategories />} />,
   <Route key="community-reports" path="community/reports" element={<CommunityReports />} />,
+  <Route key="community-users" path="community/users" element={<CommunityUsers />} />,
+  <Route key="community-orders" path="community/orders" element={<CommunityOrders />} />,
+  <Route key="community-sources" path="community/sources" element={<CommunitySources />} />,
+  <Route key="community-audit" path="community/audit-log" element={<CommunityAuditLog />} />,
   <Route key="earnings" path="earnings" element={<EarningsHub />} />,
   <Route key="earnings-policy" path="earnings/policy" element={<EarningsPolicy />} />,
   <Route key="earnings-commissions" path="earnings/commissions" element={<EarningsCommissions />} />,

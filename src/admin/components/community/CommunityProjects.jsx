@@ -239,7 +239,7 @@ const CommunityProjects = () => {
       <PageHeader
         icon={FolderKanban}
         title="Community projects"
-        subtitle="GET /community/admin/projects · PATCH …/approve · PATCH …/reject"
+        subtitle="Approve or reject community projects."
         onRefresh={fetchList}
         loading={loading}
         accentClass="text-teal-600"

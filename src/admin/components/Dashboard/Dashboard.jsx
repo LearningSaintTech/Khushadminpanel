@@ -9,6 +9,7 @@ import {
   getOrdersCount,
   getActiveUsers,
 } from "../../apis/Dashboardapi";
+import { listAdminCommunityUsers } from "../../apis/Communityapi";
 import { getAnalyticsSummary } from "../../apis/analyticsApi";
 import { DashboardLineChart } from "../coupon/AnalyticsCharts";
 import { tabActive, tabInactive } from "../coupon/analyticsShared";
@@ -299,6 +300,7 @@ export default function Dashboard() {
           couponsRes,
           ordersRes,
           activeUsersRes,
+          communityUsersRes,
         ] = await Promise.all([
           getItemsCount(),
           getCategoryCount(),
@@ -306,6 +308,7 @@ export default function Dashboard() {
           getCouponAnalytics(),
           getOrdersCount(),
           getActiveUsers({ page: 1, limit: 20 }),
+          listAdminCommunityUsers({ page: 1, limit: 1, active: "true" }).catch(() => null),
         ]);
 
         setCounts({
@@ -341,6 +344,14 @@ export default function Dashboard() {
               (activeUsersRes?.data?.totalUsers ?? 0) -
               (activeUsersRes?.data?.totalActiveUsers ?? 0),
             path: ap("users/real"),
+            icon: <FiUsers className="h-4 w-4 text-brand-500" />,
+          },
+          "Community users": {
+            title: "Community users",
+            total: communityUsersRes?.data?.total ?? 0,
+            single: true,
+            hint: "Active profiles",
+            path: ap("community/users?active=true"),
             icon: <FiUsers className="h-4 w-4 text-brand-500" />,
           },
         });
@@ -475,24 +486,28 @@ export default function Dashboard() {
         {data.total.toLocaleString()}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <div>
-          <span className="text-stone-500">Active</span>
-          <p className="font-medium text-success">{data.active.toLocaleString()}</p>
+      {data.single ? (
+        data.hint ? <p className="text-[11px] text-stone-500">{data.hint}</p> : null
+      ) : (
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span className="text-stone-500">Active</span>
+            <p className="font-medium text-success">{data.active.toLocaleString()}</p>
+          </div>
+          <div>
+            <span className="text-stone-500">Inactive</span>
+            <p className="font-medium text-danger">{data.inactive.toLocaleString()}</p>
+          </div>
         </div>
-        <div>
-          <span className="text-stone-500">Inactive</span>
-          <p className="font-medium text-danger">{data.inactive.toLocaleString()}</p>
-        </div>
-      </div>
+      )}
     </div>
   );
 
   return (
     <div>
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {Object.entries(counts).map(([key, value]) => (
-          <StatCard key={key} title={key} data={value} />
+          <StatCard key={key} title={value.title || key} data={value} />
         ))}
       </div>
 

@@ -120,7 +120,7 @@ const CommunityProjectCategories = () => {
       <PageHeader
         icon={FolderKanban}
         title="Project categories"
-        subtitle="POST / GET / PATCH / DELETE /community/admin/project-categories"
+        subtitle="Categories used when someone submits a project."
         onRefresh={fetchList}
         loading={loading}
         accentClass="text-teal-600"

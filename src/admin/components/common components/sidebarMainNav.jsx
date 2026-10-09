@@ -31,6 +31,9 @@ import {
   FolderKanban,
   Flag,
   Newspaper,
+  ShoppingBag,
+  ScrollText,
+  Library,
 } from "lucide-react";
 import { GrDeliver } from "react-icons/gr";
 
@@ -822,25 +825,53 @@ export default function SidebarMainNav({
         icon: UsersRound,
       },
       {
-        label: "Keywords",
-        to: ap("community/keywords"),
-        active: isActive(ap("community/keywords")),
-        keywords: ["hashtag", "keyword"],
-        icon: Hash,
+        label: "Posts and reels",
+        to: ap("community/content"),
+        active: isActive(ap("community/content")),
+        keywords: ["post", "reel", "content", "moderation", "remove", "restore"],
+        icon: Clapperboard,
       },
-      // {
-      //   label: "Content",
-      //   to: ap("community/content"),
-      //   active: isActive(ap("community/content")),
-      //   keywords: ["post", "reel", "feed"],
-      //   icon: Clapperboard,
-      // },
       {
         label: "Reports",
         to: ap("community/reports"),
         active: isActive(ap("community/reports")),
         keywords: ["report", "moderation", "flag", "hide content"],
         icon: Flag,
+      },
+      {
+        label: "Users",
+        to: ap("community/users"),
+        active: isActive(ap("community/users")),
+        keywords: ["community user", "creator"],
+        icon: Users,
+      },
+      {
+        label: "Community orders",
+        to: ap("community/orders"),
+        active: isActive(ap("community/orders")),
+        keywords: ["community order", "attribution", "sales"],
+        icon: ShoppingBag,
+      },
+      {
+        label: "Sources",
+        to: ap("community/sources"),
+        active: isActive(ap("community/sources")),
+        keywords: ["source", "instagram"],
+        icon: Library,
+      },
+      {
+        label: "Audit log",
+        to: ap("community/audit-log"),
+        active: isActive(ap("community/audit-log")),
+        keywords: ["audit", "moderation log"],
+        icon: ScrollText,
+      },
+      {
+        label: "Keywords",
+        to: ap("community/keywords"),
+        active: isActive(ap("community/keywords")),
+        keywords: ["hashtag", "keyword"],
+        icon: Hash,
       },
       {
         label: "Community designers",
@@ -1531,7 +1562,7 @@ export default function SidebarMainNav({
     if (matchesQuery("Users", ["fake", "real"], q)) setIsUsersOpen(true);
     if (matchesQuery("Money features", ["wallet", "gift", "referral"], q))
       setIsMoneyFeaturesOpen(true);
-    if (matchesQuery("Community", ["community", "hashtag", "reel", "keyword", "project"], q))
+    if (matchesQuery("Community", ["community", "hashtag", "reel", "keyword", "project", "order", "source", "audit", "report"], q))
       setIsCommunityOpen(true);
     if (matchesQuery("Earnings", ["earnings", "commission", "payout"], q))
       setIsEarningsOpen(true);

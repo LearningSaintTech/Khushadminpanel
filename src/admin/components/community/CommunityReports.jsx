@@ -7,7 +7,8 @@ import {
   listCommunityReports,
   getCommunityReport,
   resolveCommunityReport,
-  getCommunityContent,
+  getAdminCommunityContent,
+  getAdminCommunityUser,
 } from "../../apis/Communityapi";
 import {
   PageHeader,
@@ -27,6 +28,9 @@ import {
   communityRowId,
   extractCommunityList,
   extractCommunityRecord,
+  unwrapCommunityData,
+  authorLabel,
+  ContentMedia,
 } from "./communityShared";
 
 const STATUS_TABS = [
@@ -34,11 +38,6 @@ const STATUS_TABS = [
   { id: "dismissed", label: "Dismissed" },
   { id: "actioned", label: "Actioned" },
   { id: "all", label: "All" },
-];
-
-const RESOLVE_ACTIONS = [
-  { id: "none", label: "None (no content change)" },
-  { id: "hide_content", label: "Hide reported content" },
 ];
 
 function fmtDate(value) {
@@ -56,6 +55,32 @@ function fmtDate(value) {
 
 function reportStatus(row) {
   return String(row?.status || "").toLowerCase();
+}
+
+function PersonBlock({ user, pending, userId, to }) {
+  if (!user) {
+    return (
+      <p className="font-mono text-[10px] text-stone-500">
+        {pending ? "Loading name…" : shortId(userId)}
+      </p>
+    );
+  }
+  return (
+    <div className="min-w-0">
+      <p className="font-medium text-stone-800">{authorLabel(user, userId)}</p>
+      {user.username ? <p className="text-[10px] text-stone-500">@{user.username}</p> : null}
+      {user.phoneNumber ? (
+        <p className="text-[10px] text-stone-500">
+          {user.countryCode || ""} {user.phoneNumber}
+        </p>
+      ) : null}
+      {to ? (
+        <Link to={to} className="text-[10px] font-medium text-brand-700 hover:underline" onClick={(e) => e.stopPropagation()}>
+          Open profile
+        </Link>
+      ) : null}
+    </div>
+  );
 }
 
 function Section({ title, children }) {
@@ -88,8 +113,10 @@ const CommunityReports = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [targetPreview, setTargetPreview] = useState(null);
   const [adminNote, setAdminNote] = useState("");
-  const [resolveAction, setResolveAction] = useState("none");
   const [acting, setActing] = useState(false);
+  const [pendingResolve, setPendingResolve] = useState(null);
+  const [notifyAuthor, setNotifyAuthor] = useState(true);
+  const [people, setPeople] = useState({});
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -129,11 +156,50 @@ const CommunityReports = () => {
     fetchList();
   }, [fetchList]);
 
+  useEffect(() => {
+    const ids = new Set();
+    for (const row of items) {
+      if (row?.reporterId) ids.add(String(row.reporterId));
+      if (String(row?.targetType || "").toLowerCase() === "user" && row?.targetId) {
+        ids.add(String(row.targetId));
+      }
+    }
+    if (detail?.reporterId) ids.add(String(detail.reporterId));
+    if (String(detail?.targetType || "").toLowerCase() === "user" && detail?.targetId) {
+      ids.add(String(detail.targetId));
+    }
+    const missing = [...ids].filter((id) => people[id] === undefined);
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      for (let i = 0; i < missing.length; i += 3) {
+        const batch = missing.slice(i, i + 3);
+        const settled = await Promise.all(
+          batch.map(async (id) => {
+            try {
+              const res = await getAdminCommunityUser(id);
+              const data = unwrapCommunityData(res);
+              return [id, data?.user || null];
+            } catch {
+              return [id, null];
+            }
+          }),
+        );
+        for (const [id, user] of settled) next[id] = user;
+      }
+      if (!cancelled) setPeople((prev) => ({ ...prev, ...next }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items, detail, people]);
+
   const openDetail = async (id) => {
     if (!id) return;
     setDetailLoading(true);
     setAdminNote("");
-    setResolveAction("none");
+    setPendingResolve(null);
     setTargetPreview(null);
     setDetail({ id });
     try {
@@ -142,15 +208,11 @@ const CommunityReports = () => {
       console.log("[Community] parsed report detail", record);
       setDetail(record);
       setAdminNote(String(record?.adminNote || ""));
-      if (String(record?.status || "").toLowerCase() === "open") {
-        setResolveAction("none");
-      }
-
       const targetType = String(record?.targetType || "").toLowerCase();
       const targetId = record?.targetId;
       if (targetType === "content" && targetId) {
         try {
-          const contentRes = await getCommunityContent(targetId);
+          const contentRes = await getAdminCommunityContent(targetId);
           const content = extractCommunityRecord(contentRes);
           setTargetPreview(content);
         } catch (err) {
@@ -174,31 +236,29 @@ const CommunityReports = () => {
       toast.error("Admin note is required");
       return;
     }
-    const action =
-      resolveStatus === "dismissed"
-        ? "none"
-        : actionOverride || resolveAction || "hide_content";
+    const action = resolveStatus === "dismissed" ? "none" : actionOverride || "hide_content";
+    const hidingContent =
+      action === "hide_content" && String(detail?.targetType || "").toLowerCase() === "content";
     const body = {
       status: resolveStatus,
       adminNote: note,
       action,
+      ...(hidingContent ? { notify: notifyAuthor } : {}),
     };
-    if (
-      !window.confirm(
-        resolveStatus === "dismissed"
-          ? "Dismiss this report? No content action will be taken."
-          : `Resolve as actioned with action "${action}"?`,
-      )
-    ) {
-      return;
-    }
     setActing(true);
     try {
       console.log("[Community] resolve report →", { id, body });
       await resolveCommunityReport(id, body);
       toast.success(
-        resolveStatus === "dismissed" ? "Report dismissed" : "Report actioned",
+        resolveStatus === "dismissed"
+          ? "Report dismissed"
+          : action === "hide_content"
+            ? notifyAuthor && String(detail?.targetType || "").toLowerCase() === "content"
+              ? "Content hidden and the author was notified"
+              : "Report actioned. Hidden content can be restored from Posts and reels."
+            : "Report actioned",
       );
+      setPendingResolve(null);
       setDetail(null);
       fetchList();
     } catch (err) {
@@ -234,7 +294,7 @@ const CommunityReports = () => {
       <PageHeader
         icon={Flag}
         title="Community reports"
-        subtitle="GET /community/admin/reports · GET …/:id · PATCH …/:id/resolve"
+        subtitle="Dismiss a report, or hide the reported post, reel, project, or comment."
         onRefresh={fetchList}
         loading={loading}
         accentClass="text-rose-600"
@@ -281,7 +341,7 @@ const CommunityReports = () => {
         <table className="min-w-full text-left text-[11px]">
           <thead className={tableHeadClass}>
             <tr>
-              <th className={thClass}>Report</th>
+              <th className={thClass}>Reporter</th>
               <th className={thClass}>Target</th>
               <th className={thClass}>Reason</th>
               <th className={thClass}>Status</th>
@@ -321,18 +381,27 @@ const CommunityReports = () => {
                     className="cursor-pointer border-b border-border/70 hover:bg-canvas-muted/30"
                   >
                     <td className="px-3 py-2">
-                      <p className="font-mono text-[10px] text-stone-700">{shortId(id)}</p>
-                      <p className="text-[10px] text-stone-500">
-                        Reporter {shortId(row.reporterId)}
-                      </p>
+                      <PersonBlock
+                        user={people[String(row.reporterId)] || null}
+                        pending={people[String(row.reporterId)] === undefined}
+                        userId={row.reporterId}
+                        to={row.reporterId ? ap(`community/users?userId=${row.reporterId}`) : ""}
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <p className="font-medium capitalize text-stone-800">
                         {row.targetType || "—"}
                       </p>
-                      <p className="font-mono text-[10px] text-stone-500">
-                        {shortId(row.targetId)}
-                      </p>
+                      {String(row.targetType || "").toLowerCase() === "user" ? (
+                        <PersonBlock
+                          user={people[String(row.targetId)] || null}
+                          pending={people[String(row.targetId)] === undefined}
+                          userId={row.targetId}
+                          to={row.targetId ? ap(`community/users?userId=${row.targetId}`) : ""}
+                        />
+                      ) : (
+                        <p className="font-mono text-[10px] text-stone-500">{shortId(row.targetId)}</p>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <p className="font-medium capitalize text-stone-800">
@@ -435,9 +504,14 @@ const CommunityReports = () => {
                         {detail.details || "—"}
                       </p>
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <p className="text-stone-500">Reporter</p>
-                      <p className="font-mono">{shortId(detail.reporterId)}</p>
+                      <PersonBlock
+                        user={people[String(detail.reporterId)] || null}
+                        pending={people[String(detail.reporterId)] === undefined}
+                        userId={detail.reporterId}
+                        to={detail.reporterId ? ap(`community/users?userId=${detail.reporterId}`) : ""}
+                      />
                     </div>
                     <div>
                       <p className="text-stone-500">Created</p>
@@ -454,40 +528,79 @@ const CommunityReports = () => {
                     </div>
                     <div>
                       <p className="text-stone-500">ID</p>
-                      <p className="font-mono">{shortId(detail.targetId)}</p>
+                      {String(detail.targetType || "").toLowerCase() === "user" ? (
+                        <PersonBlock
+                          user={people[String(detail.targetId)] || null}
+                          pending={people[String(detail.targetId)] === undefined}
+                          userId={detail.targetId}
+                          to={detail.targetId ? ap(`community/users?userId=${detail.targetId}`) : ""}
+                        />
+                      ) : (
+                        <p className="font-mono">{shortId(detail.targetId)}</p>
+                      )}
                     </div>
                   </div>
-                  {String(detail.targetType || "").toLowerCase() === "content" &&
-                  detail.targetId ? (
-                    <div className="mt-2 rounded-lg border border-border bg-white p-2">
-                      {targetPreview?._loadError ? (
-                        <p className="text-stone-500">{targetPreview._loadError}</p>
-                      ) : targetPreview ? (
-                        <>
-                          <p className="font-semibold text-stone-900">
-                            {targetPreview.title ||
-                              targetPreview.caption ||
-                              targetPreview.text ||
-                              "Content"}
-                          </p>
-                          <p className="mt-0.5 line-clamp-3 text-stone-600">
-                            {targetPreview.description ||
-                              targetPreview.body ||
-                              targetPreview.caption ||
-                              "—"}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-stone-500">Loading target…</p>
-                      )}
-                      <Link
-                        to={ap("community/content")}
-                        className="mt-1.5 inline-block text-[10px] font-medium text-brand-600 hover:underline"
-                      >
-                        Open content tools →
-                      </Link>
-                    </div>
-                  ) : null}
+                  {(() => {
+                    const targetType = String(detail.targetType || "").toLowerCase();
+                    if (!detail.targetId) return null;
+                    if (targetType === "content") {
+                      return (
+                        <div className="mt-2 rounded-lg border border-border bg-white p-2">
+                          {targetPreview?._loadError ? (
+                            <p className="text-stone-500">{targetPreview._loadError}</p>
+                          ) : targetPreview ? (
+                            <>
+                              <p className="font-semibold capitalize text-stone-900">
+                                {targetPreview.type || "Content"} · {targetPreview.status || ""}
+                              </p>
+                              <p className="mt-0.5 text-stone-600">
+                                {authorLabel(targetPreview.author, targetPreview.authorId)}
+                              </p>
+                              <p className="mt-0.5 line-clamp-3 text-stone-600">
+                                {targetPreview.caption || "No caption"}
+                              </p>
+                              <div className="mt-2">
+                                <ContentMedia media={targetPreview.media} />
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-stone-500">Loading target…</p>
+                          )}
+                          <Link
+                            to={ap(`community/content?id=${detail.targetId}`)}
+                            className="mt-1.5 inline-block text-[10px] font-medium text-brand-600 hover:underline"
+                          >
+                            Open this post →
+                          </Link>
+                        </div>
+                      );
+                    }
+                    if (targetType === "project") {
+                      return (
+                        <Link
+                          to={ap("community/projects")}
+                          className="mt-2 inline-block text-[10px] font-medium text-brand-600 hover:underline"
+                        >
+                          Open projects →
+                        </Link>
+                      );
+                    }
+                    if (targetType === "comment") {
+                      return (
+                        <p className="mt-2 text-[10px] text-stone-500">
+                          Hiding a comment deletes it permanently and closes its open reports.
+                        </p>
+                      );
+                    }
+                    if (targetType === "user") {
+                      return (
+                        <p className="mt-2 text-[10px] text-amber-800">
+                          User reports can be dismissed. Hiding a person is not supported.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </Section>
 
                 {(detail.resolvedAt || detail.adminNote) && (
@@ -516,52 +629,70 @@ const CommunityReports = () => {
                       rows={3}
                       value={adminNote}
                       onChange={(e) => setAdminNote(e.target.value)}
-                      placeholder="e.g. No violation found / Removed violating content"
+                      placeholder="Why you are dismissing or hiding this"
                       className={`${fieldClass} mb-2`}
                     />
-                    <label className={labelClass}>Action (for actioned)</label>
-                    <select
-                      value={resolveAction}
-                      onChange={(e) => setResolveAction(e.target.value)}
-                      className={`${fieldClass} mb-2`}
-                    >
-                      {RESOLVE_ACTIONS.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={acting}
-                        onClick={() => handleResolve("dismissed")}
-                        className={btnOutline}
-                      >
-                        {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                        Dismiss (none)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={acting}
-                        onClick={() => handleResolve("actioned", "hide_content")}
-                        className={btnPrimary}
-                      >
-                        {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                        Action & hide
-                      </button>
-                    </div>
-                    <p className="mt-1.5 text-[10px] text-stone-500">
-                      Dismiss →{" "}
-                      <code className="rounded bg-white px-1">
-                        status: dismissed, action: none
-                      </code>
-                      . Action →{" "}
-                      <code className="rounded bg-white px-1">
-                        status: actioned, action: hide_content
-                      </code>
-                      .
-                    </p>
+                    {pendingResolve ? (
+                      <div className="rounded-lg border border-border bg-white p-2">
+                        <p className="mb-2 text-stone-700">
+                          {pendingResolve === "dismissed"
+                            ? "Dismiss this report? The content stays as it is."
+                            : "Hide this target? Posts and projects leave the app. Comments are deleted."}
+                        </p>
+                        {pendingResolve !== "dismissed" &&
+                        String(detail.targetType || "").toLowerCase() === "content" ? (
+                          <label className="mb-2 flex items-center gap-2 text-[11px] text-stone-700">
+                            <input
+                              type="checkbox"
+                              checked={notifyAuthor}
+                              onChange={(e) => setNotifyAuthor(e.target.checked)}
+                            />
+                            Notify the author
+                          </label>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" className={btnOutline} disabled={acting} onClick={() => setPendingResolve(null)}>
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            className={btnPrimary}
+                            disabled={acting}
+                            onClick={() =>
+                              handleResolve(
+                                pendingResolve,
+                                pendingResolve === "dismissed" ? "none" : "hide_content",
+                              )
+                            }
+                          >
+                            {acting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                            Confirm
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={acting}
+                          onClick={() => setPendingResolve("dismissed")}
+                          className={btnOutline}
+                        >
+                          Dismiss
+                        </button>
+                        <button
+                          type="button"
+                          disabled={acting || String(detail.targetType || "").toLowerCase() === "user"}
+                          onClick={() => {
+                            setNotifyAuthor(true);
+                            setPendingResolve("actioned");
+                          }}
+                          className={btnPrimary}
+                        >
+                          Hide content
+                        </button>
+                      </div>
+                    )}
                   </Section>
                 ) : (
                   <p className="rounded-lg border border-border bg-canvas-muted/50 px-2.5 py-2 text-stone-600">

@@ -113,6 +113,8 @@ export const resolveCommunityReport = (reportId, body = {}) =>
   );
 
 // —— Content browse / moderation ——
+const ADMIN = "/community/admin";
+
 export const getCommunityFeed = (params = {}) =>
   apiConnector("GET", FEED, null, {}, params);
 
@@ -121,6 +123,48 @@ export const getCommunityContent = (id) =>
 
 export const deleteCommunityContent = (id) =>
   apiConnector("DELETE", `${CONTENT}/${id}`);
+
+export const getCommunityOverview = () =>
+  apiConnector("GET", `${ADMIN}/overview`);
+
+export const listAdminCommunityContent = (params = {}) =>
+  apiConnector("GET", `${ADMIN}/content`, null, {}, params);
+
+export const getAdminCommunityContent = (id) =>
+  apiConnector("GET", `${ADMIN}/content/${id}`);
+
+export const removeAdminCommunityContent = (id, body = {}) =>
+  apiConnector("DELETE", `${ADMIN}/content/${id}`, body);
+
+export const restoreAdminCommunityContent = (id, body = {}) =>
+  apiConnector("PATCH", `${ADMIN}/content/${id}/restore`, body);
+
+export const listAdminCommunityComments = (id, params = {}) =>
+  apiConnector("GET", `${ADMIN}/content/${id}/comments`, null, {}, params);
+
+export const deleteAdminCommunityComment = (id, body = {}) =>
+  apiConnector("DELETE", `${ADMIN}/comments/${id}`, body);
+
+export const listAdminCommunityUsers = (params = {}) =>
+  apiConnector("GET", `${ADMIN}/users`, null, {}, params);
+
+export const getAdminCommunityUser = (userId) =>
+  apiConnector("GET", `${ADMIN}/users/${userId}`);
+
+export const listCommunitySources = (params = {}) =>
+  apiConnector("GET", `${ADMIN}/sources`, null, {}, params);
+
+export const createCommunitySource = (body) =>
+  apiConnector("POST", `${ADMIN}/sources`, body);
+
+export const updateCommunitySource = (id, body) =>
+  apiConnector("PATCH", `${ADMIN}/sources/${id}`, body);
+
+export const disableCommunitySource = (id) =>
+  apiConnector("DELETE", `${ADMIN}/sources/${id}`);
+
+export const listCommunityModerationLogs = (params = {}) =>
+  apiConnector("GET", `${ADMIN}/moderation-logs`, null, {}, params);
 
 // Community designer verification lives in CommunityDesignersapi.js
 // (/admin/panels/community-designers — not staff /designer)
