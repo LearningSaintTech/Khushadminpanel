@@ -2616,6 +2616,16 @@ const EXCHANGE_MANUAL_PICKUP_METHODS = new Set([
   "KHUSH_INTERNAL",
 ]);
 
+/** Values match backend inferred provider (`?shippingProvider=`); NONE = not yet assigned. */
+const DELIVERY_PARTNER_FILTER_OPTIONS = [
+  { value: "", label: "All partners" },
+  { value: "SHIPROCKET", label: "Shiprocket" },
+  { value: "DELHIVERY", label: "Delhivery" },
+  { value: "SHADOWFAX", label: "Shadowfax" },
+  { value: "SELF_SHIPPING", label: "Self shipping (Khush)" },
+  { value: "NONE", label: "Unassigned" },
+];
+
 const RETURN_ASSIGNABLE_PICKUP_METHODS = new Set([
   "DELHIVERY_MANUAL",
   "SHADOWFAX_MANUAL",
@@ -5834,12 +5844,61 @@ const Orders = ({
     fetchStatusAnalytics();
   }, [analyticsOpen, selectedOrder, fetchStatusAnalytics]);
 
-  // Clear list selections whenever filters / paging changes
+  // Selections survive paging (Mfg PDF/Excel + bulk actions across pages). Keep a snapshot of
+  // each selected row while it is visible, so bulk actions can use rows from other pages.
+  const selectedOrderRowsRef = useRef(new Map());
+  const selectedItemRowsRef = useRef(new Map());
+
+  useEffect(() => {
+    const map = selectedOrderRowsRef.current;
+    const selected = new Set(listSelectedOrderIds.map(String));
+    for (const id of [...map.keys()]) if (!selected.has(id)) map.delete(id);
+    for (const o of orders || []) {
+      const id = String(o?.orderId || "");
+      if (id && selected.has(id)) map.set(id, o);
+    }
+  }, [listSelectedOrderIds, orders]);
+
+  useEffect(() => {
+    const map = selectedItemRowsRef.current;
+    const selected = new Set(listSelectedItemKeys);
+    for (const key of [...map.keys()]) if (!selected.has(key)) map.delete(key);
+    for (const r of orderItems || []) {
+      const key = `${String(r?.orderId || "")}__${String(r?.itemId || "")}`;
+      if (selected.has(key)) map.set(key, r);
+    }
+  }, [listSelectedItemKeys, orderItems]);
+
+  const getSelectedOrderRows = useCallback(
+    () =>
+      listSelectedOrderIds
+        .map((id) => selectedOrderRowsRef.current.get(String(id)))
+        .filter(Boolean),
+    [listSelectedOrderIds],
+  );
+
+  const getSelectedItemRows = useCallback(
+    () => listSelectedItemKeys.map((k) => selectedItemRowsRef.current.get(k)).filter(Boolean),
+    [listSelectedItemKeys],
+  );
+
+  const selectedOrdersOffPage = useMemo(() => {
+    const onPage = new Set((orders || []).map((o) => String(o?.orderId || "")));
+    return listSelectedOrderIds.filter((id) => !onPage.has(String(id))).length;
+  }, [listSelectedOrderIds, orders]);
+
+  const selectedItemsOffPage = useMemo(() => {
+    const onPage = new Set(
+      (orderItems || []).map((r) => `${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
+    );
+    return listSelectedItemKeys.filter((k) => !onPage.has(k)).length;
+  }, [listSelectedItemKeys, orderItems]);
+
+  // Clear list selections when the result set changes (filters / search / view) — not on paging
   useEffect(() => {
     setListSelectedOrderIds([]);
   }, [
     viewMode,
-    pagination.page,
     search,
     statusFilters,
     dateFrom,
@@ -5857,7 +5916,6 @@ const Orders = ({
     setListSelectedItemKeys([]);
   }, [
     viewMode,
-    itemPagination.page,
     itemSearch,
     itemStatusFilters,
     shippingProviderFilter,
@@ -5914,6 +5972,8 @@ const Orders = ({
       startDate: dateFrom || undefined,
       endDate: dateTo || undefined,
       city: cityFilter.trim() || undefined,
+      shippingProvider:
+        viewMode === VIEW_ITEM && shippingProviderFilter ? shippingProviderFilter : undefined,
       allPages: true,
       maxExportRows: 8000,
       ...(exchangeOnly ? { exchangeOnly: true } : {}),
@@ -5934,6 +5994,7 @@ const Orders = ({
     dateFrom,
     dateTo,
     cityFilter,
+    shippingProviderFilter,
     exchangeOnly,
     returnOnly,
     listSelectedOrderIds,
@@ -9557,6 +9618,20 @@ const Orders = ({
                         </span>
                       ) : null}
                     </button>
+                    {listBulkSelectedCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          viewMode === VIEW_ITEM
+                            ? setListSelectedItemKeys([])
+                            : setListSelectedOrderIds([])
+                        }
+                        className={`${ui.btnOutline} text-[11px] py-1`}
+                        title="Clear the selected rows on all pages"
+                      >
+                        Clear selection
+                      </button>
+                    ) : null}
 
                   {!exchangeOnly ? (
                     <button
@@ -9939,16 +10014,26 @@ const Orders = ({
                     <span className="font-medium text-stone-900">
                       {listSelectedOrderIds.length}
                     </span>
+                    {selectedOrdersOffPage > 0 && (
+                      <span className="text-stone-500"> ({selectedOrdersOffPage} on other pages)</span>
+                    )}
                   </span>
+                  {listSelectedOrderIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setListSelectedOrderIds([])}
+                      className="text-[11px] font-medium text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     disabled={listSelectedOrderIds.length === 0 || docDownloadLoading}
                     onClick={() => {
-                      const selected = new Set(listSelectedOrderIds.map(String));
-                      const shipmentIds = orders
-                        .filter((o) => selected.has(String(o?.orderId)))
+                      const shipmentIds = getSelectedOrderRows()
                         .flatMap((o) => getOrderShipmentIds(o))
                         .filter(Boolean);
                       const uniq = Array.from(new Set(shipmentIds.map(String)));
@@ -9967,9 +10052,7 @@ const Orders = ({
                     type="button"
                     disabled={listSelectedOrderIds.length === 0 || docDownloadLoading}
                     onClick={() => {
-                      const selected = new Set(listSelectedOrderIds.map(String));
-                      const shipmentIds = orders
-                        .filter((o) => selected.has(String(o?.orderId)))
+                      const shipmentIds = getSelectedOrderRows()
                         .flatMap((o) => getOrderShipmentIds(o))
                         .filter(Boolean);
                       const uniq = Array.from(new Set(shipmentIds.map(String)));
@@ -10207,7 +10290,7 @@ const Orders = ({
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="flex flex-col gap-1">
                     <label htmlFor="item-filter-from" className="text-[10px] font-semibold text-stone-500">
                       From date
@@ -10274,12 +10357,33 @@ const Orders = ({
                       className={ui.inputCompact}
                     />
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="item-filter-partner" className="text-[10px] font-semibold text-stone-500">
+                      Delivery partner
+                    </label>
+                    <select
+                      id="item-filter-partner"
+                      value={shippingProviderFilter || ""}
+                      onChange={(e) => {
+                        setShippingProviderFilter(e.target.value);
+                        setItemPagination((p) => ({ ...p, page: 1 }));
+                      }}
+                      className={ui.inputCompact}
+                    >
+                      {DELIVERY_PARTNER_FILTER_OPTIONS.map((opt) => (
+                        <option key={opt.value || "all"} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <p className="border-t border-border px-3 py-2.5 text-[11px] text-stone-500 leading-snug">
                   The list is paginated for speed. <span className="font-medium">Mfg PDF</span>{" "}
                   / <span className="font-medium">Mfg Excel</span>{" "}
-                  above exports <span className="font-medium">all</span> lines matching dates, city, delivery, payment, status, and
-                  search (not only this page).
+                  above export only the <span className="font-medium">selected</span> lines (selection is kept across
+                  pages). With nothing selected they export <span className="font-medium">all</span> lines matching
+                  dates, city, delivery partner, delivery, payment, status, and search.
                 </p>
               </div>
               ) : null}
@@ -10311,18 +10415,26 @@ const Orders = ({
                           <span className="font-medium text-stone-900">
                             {listSelectedItemKeys.length}
                           </span>
+                          {selectedItemsOffPage > 0 && (
+                            <span className="text-stone-500"> ({selectedItemsOffPage} on other pages)</span>
+                          )}
                         </span>
+                        {listSelectedItemKeys.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setListSelectedItemKeys([])}
+                            className="text-[11px] font-medium text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
                           disabled={listSelectedItemKeys.length === 0 || docDownloadLoading}
                           onClick={() => {
-                            const selected = new Set(listSelectedItemKeys);
-                            const shipmentIds = orderItems
-                              .filter((r) =>
-                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
-                              )
+                            const shipmentIds = getSelectedItemRows()
                               .flatMap((r) => getShipmentIdsFromItemRow(r));
                             const uniq = Array.from(new Set(shipmentIds));
                             if (uniq.length === 0) {
@@ -10339,11 +10451,7 @@ const Orders = ({
                           type="button"
                           disabled={listSelectedItemKeys.length === 0 || docDownloadLoading}
                           onClick={() => {
-                            const selected = new Set(listSelectedItemKeys);
-                            const shipmentIds = orderItems
-                              .filter((r) =>
-                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
-                              )
+                            const shipmentIds = getSelectedItemRows()
                               .flatMap((r) => getShipmentIdsFromItemRow(r));
                             const uniq = Array.from(new Set(shipmentIds));
                             if (uniq.length === 0) {
@@ -10360,15 +10468,11 @@ const Orders = ({
                           type="button"
                           disabled={listSelectedItemKeys.length === 0 || listBulkProcessing}
                           onClick={() => {
-                            const selected = new Set(listSelectedItemKeys);
-                            const targets = orderItems
-                              .filter((r) =>
-                                selected.has(`${String(r?.orderId || "")}__${String(r?.itemId || "")}`),
-                              )
-                              .map((r) => ({
-                                orderId: String(r?.orderId || ""),
-                                itemId: String(r?.itemId || ""),
-                              }))
+                            const targets = listSelectedItemKeys
+                              .map((k) => {
+                                const [orderId, itemId] = String(k).split("__");
+                                return { orderId: orderId || "", itemId: itemId || "" };
+                              })
                               .filter((t) => t.orderId && t.itemId);
                             if (targets.length === 0) return;
                             setSelectedShippingProvider("SHIPROCKET");
