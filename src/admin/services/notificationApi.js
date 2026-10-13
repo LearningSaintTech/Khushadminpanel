@@ -62,6 +62,23 @@ export const adminNotificationApi = {
   getBroadcastStatus: (id) =>
     apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}`).then(getPayload),
 
+  /** Order-based customer segments (broadcast audience). */
+  listCustomerSegments: () =>
+    apiConnector("GET", `${ADMIN_BASE}/customer-segments`).then(getPayload),
+
+  createCustomerSegment: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/customer-segments`, body).then(getPayload),
+
+  updateCustomerSegment: (id, body) =>
+    apiConnector("PUT", `${ADMIN_BASE}/customer-segments/${id}`, body).then(getPayload),
+
+  deleteCustomerSegment: (id) =>
+    apiConnector("DELETE", `${ADMIN_BASE}/customer-segments/${id}`).then(getPayload),
+
+  /** body: { filters } or { segmentId }, plus channels[] for the eligible-recipient count. */
+  previewCustomerSegment: (body) =>
+    apiConnector("POST", `${ADMIN_BASE}/customer-segments/preview`, body).then(getPayload),
+
   getBroadcastLinkReport: (id) =>
     apiConnector("GET", `${ADMIN_BASE}/broadcast/${id}/link-report`).then(getPayload),
 
