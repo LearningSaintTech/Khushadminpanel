@@ -1,5 +1,6 @@
 // Admin orders workspace (list + detail) — feature home: src/admin/features/orders
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { resolveOrderCustomer } from "../utils/customerDisplay.js";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getOrders,
@@ -2184,44 +2185,6 @@ function FilterMultiSelectDropdown({
   );
 }
 
-/** Resolve customer name/phone/email from list (`user`) or detail (`userId`) payloads. */
-function resolveOrderCustomer(orderOrCtx) {
-  const src = orderOrCtx || {};
-  const profile =
-    (src.user && typeof src.user === "object" ? src.user : null) ||
-    (src.userId && typeof src.userId === "object" ? src.userId : null) ||
-    null;
-  const address = src.address && typeof src.address === "object" ? src.address : null;
-  const billName = String(profile?.name || "").trim();
-  const shipName = String(address?.name || "").trim();
-  const name = billName || shipName || "";
-  const countryCode = String(profile?.countryCode || "").trim();
-  const billPhone = String(profile?.phoneNumber || profile?.phone || "").trim();
-  const shipPhone = String(address?.phone || address?.phoneNumber || "").trim();
-  const phoneDigits = billPhone || shipPhone || "";
-  const phone =
-    phoneDigits
-      ? `${countryCode && billPhone ? countryCode : ""}${phoneDigits}`
-      : "";
-  const email = String(profile?.email || "").trim();
-  return {
-    profile,
-    address,
-    billName,
-    shipName,
-    name: name || "—",
-    countryCode,
-    billPhone,
-    shipPhone,
-    phone: phone || "—",
-    email: email || "—",
-    displayName:
-      billName && shipName && billName !== shipName
-        ? `${billName} → ${shipName}`
-        : name || "—",
-  };
-}
-
 function manufacturingPaymentLabel(payment, source = {}) {
   const mode = payment?.mode != null ? String(payment.mode) : "";
   const status = payment?.status != null ? String(payment.status) : "";
@@ -2247,7 +2210,7 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
         ? String(item.quantity)
         : "—";
   const cust = resolveOrderCustomer(ctx);
-  const custName = cust.displayName;
+  const custName = cust.name;
   const phone = cust.phone;
   const pay = manufacturingPaymentLabel(ctx.payment, {
     pricing: ctx.pricing,
@@ -2308,6 +2271,7 @@ function ManufacturingLineCard({ line, lineIndex, totalLines, onPickImage }) {
           {field("Payment (order)", pay, "col-span-2 lg:col-span-3")}
           {field("Ship-to pincode", ctx.address?.pincode)}
           {field("Customer name", custName)}
+          {cust.shipToName ? field("Ship to (recipient)", cust.shipToName) : null}
           {field("Customer phone", phone)}
           <div className="col-span-2 rounded-lg border border-brand-100 bg-brand-50/70 px-3 py-2 lg:col-span-3">
             <dt className="text-[10px] font-semibold uppercase tracking-wide text-brand-900">
@@ -11780,20 +11744,10 @@ const Orders = ({
                       const cust = resolveOrderCustomer(selectedOrder);
                       return (
                     <OrderDetailDenseGrid>
-                      <OrderDetailRow label="Name">
-                        {cust.billName &&
-                        cust.shipName &&
-                        cust.billName !== cust.shipName ? (
-                          <span>
-                            {cust.billName}{" "}
-                            <span className="font-normal text-stone-500">
-                              → {cust.shipName}
-                            </span>
-                          </span>
-                        ) : (
-                          cust.name
-                        )}
-                      </OrderDetailRow>
+                      <OrderDetailRow label="Name">{cust.name}</OrderDetailRow>
+                      {cust.shipToName ? (
+                        <OrderDetailRow label="Ship to">{cust.shipToName}</OrderDetailRow>
+                      ) : null}
                       <OrderDetailRow label="Bill ph.">
                         {cust.billPhone
                           ? `${cust.countryCode || ""}${cust.billPhone}`
