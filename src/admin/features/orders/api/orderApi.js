@@ -85,6 +85,7 @@ const orderEndpoints = {
     city = "",
     exchangeOnly = false,
     returnOnly = false,
+    shippingProvider = "",
   } = {}) => {
     const params = new URLSearchParams();
     params.set("view", view || "order");
@@ -95,6 +96,7 @@ const orderEndpoints = {
     if (paymentStatus) params.set("paymentStatus", paymentStatus);
     if (paymentMode) params.set("paymentMode", paymentMode);
     if (city) params.set("city", city);
+    if (shippingProvider) params.set("shippingProvider", shippingProvider);
     if (itemStatusConsistency) {
       params.set("itemStatusConsistency", itemStatusConsistency);
     }
