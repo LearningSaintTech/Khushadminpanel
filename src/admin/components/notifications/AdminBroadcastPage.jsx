@@ -16,6 +16,8 @@ import {
   TableActionBtn,
 } from "./notificationsShared";
 import { insertAtCursor, minScheduleInputValue } from "./personalisation.js";
+import BroadcastAudienceSection from "./BroadcastAudienceSection.jsx";
+import { DEFAULT_AUDIENCE, audienceToPayload } from "./broadcastAudience.js";
 
 const CHANNELS = [
   { value: "in_app", label: "In-app" },
@@ -88,6 +90,7 @@ export default function AdminBroadcastPage() {
   const [body, setBody] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [channels, setChannels] = useState(["in_app"]);
+  const [audience, setAudience] = useState(DEFAULT_AUDIENCE);
   const [whatsappChoice, setWhatsappChoice] = useState(LEGACY_WHATSAPP_CHOICE);
   const [marketingTemplates, setMarketingTemplates] = useState([]);
   const [couponCode, setCouponCode] = useState("");
@@ -339,6 +342,7 @@ export default function AdminBroadcastPage() {
       if (scheduledIso) {
         form.append("scheduledFor", scheduledIso);
       }
+      form.append("audience", JSON.stringify(audienceToPayload(audience)));
 
       const response = await adminNotificationApi.broadcast(form);
       setResult(campaignToResult(response));
@@ -577,6 +581,8 @@ export default function AdminBroadcastPage() {
           ) : null}
         </FormSection>
 
+        <BroadcastAudienceSection value={audience} onChange={setAudience} channels={channels} />
+
         <FormSection title="When" hint="Send now, or pick a time (your local time).">
           <div className="flex flex-wrap gap-3">
             <label className="flex cursor-pointer items-center gap-2">
@@ -731,6 +737,11 @@ export default function AdminBroadcastPage() {
                     <p className="mt-0.5 text-[10px] text-stone-500">
                       {formatWhen(row.scheduledFor)} · {(row.channels || []).join(", ")}
                     </p>
+                    {row.audience?.type === "customerSegment" ? (
+                      <p className="mt-0.5 text-[10px] text-brand-700">
+                        Segment: {row.audience.segmentName || row.audience.description || "custom filters"}
+                      </p>
+                    ) : null}
                   </div>
                   <TableActionBtn
                     variant="delete"
