@@ -29,6 +29,7 @@ const COUPON_LIST_TABLE_COLUMNS = [
   { key: "maxCart", label: "Max cart", defaultVisible: false },
   { key: "type", label: "Type", defaultVisible: true },
   { key: "include", label: "Inclusion", defaultVisible: true },
+  { key: "visibility", label: "Visibility", defaultVisible: true },
   { key: "status", label: "Status", defaultVisible: true },
   { key: "startDate", label: "Start date", defaultVisible: false },
   { key: "expiryDate", label: "Expiry date", defaultVisible: false },
@@ -371,6 +372,12 @@ const CouponPage = () => {
             {coupon.isAutoIncluded ? "Auto" : "Manual"}
           </Badge>
         );
+      case "visibility":
+        return (
+          <Badge tone={coupon.isVisible === false ? "purple" : "slate"}>
+            {coupon.isVisible === false ? "Hidden" : "Listed"}
+          </Badge>
+        );
       case "status":
         return (
           <button
@@ -683,6 +690,14 @@ const CouponPage = () => {
                     <dd className="mt-0.5">
                       <Badge tone={selectedCoupon.isAutoIncluded ? "blue" : "slate"}>
                         {selectedCoupon.isAutoIncluded ? "Auto" : "Manual"}
+                      </Badge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-stone-400">Visibility</dt>
+                    <dd className="mt-0.5">
+                      <Badge tone={selectedCoupon.isVisible === false ? "purple" : "slate"}>
+                        {selectedCoupon.isVisible === false ? "Hidden (code only)" : "Listed"}
                       </Badge>
                     </dd>
                   </div>

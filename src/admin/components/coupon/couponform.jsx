@@ -7,6 +7,8 @@ import {
   getCouponById,
 } from "../../apis/Couponapi";
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
+import CouponTargetsPicker from "./CouponTargetsPicker";
+import { loadItemLabels } from "./couponTargets.util";
 
 const fieldClass =
   "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted disabled:text-stone-500";
@@ -48,6 +50,7 @@ const CouponForm = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(isEdit);
   const [error, setError] = useState(null);
+  const [targets, setTargets] = useState({ categories: [], subcategories: [], items: [] });
   const [formData, setFormData] = useState({
     code: "",
     description: "",
@@ -63,6 +66,7 @@ const CouponForm = () => {
     applicableOn: "ALL",
     isInfluencer: false,
     isAutoIncluded: false,
+    isVisible: true,
   });
 
   useEffect(() => {
@@ -93,6 +97,13 @@ const CouponForm = () => {
             applicableOn: coupon.applicableOn || "ALL",
             isInfluencer: !!coupon.isInfluencer,
             isAutoIncluded: !!coupon.isAutoIncluded,
+            isVisible: coupon.isVisible !== false,
+          });
+          const toIds = (arr) => (Array.isArray(arr) ? arr : []).map((v) => String(v?._id || v));
+          setTargets({
+            categories: toIds(coupon.categories),
+            subcategories: toIds(coupon.subcategories),
+            items: await loadItemLabels(coupon.items || []),
           });
         } else {
           setError("Coupon not found");
@@ -131,6 +142,18 @@ const CouponForm = () => {
       setError("Start and expiry dates are required");
       return;
     }
+    if (
+      formData.applicableOn === "CATEGORY" &&
+      targets.categories.length === 0 &&
+      targets.subcategories.length === 0
+    ) {
+      setError("Pick at least one category or subcategory");
+      return;
+    }
+    if (formData.applicableOn === "PRODUCT" && targets.items.length === 0) {
+      setError("Pick at least one product");
+      return;
+    }
 
     const payload = {
       code: formData.code.trim().toUpperCase(),
@@ -155,8 +178,13 @@ const CouponForm = () => {
       startDate: formData.startDate,
       expiryDate: formData.expiryDate,
       applicableOn: formData.applicableOn,
+      // Only the lists for the chosen scope are kept; "All products" clears every restriction
+      categories: formData.applicableOn === "CATEGORY" ? targets.categories : [],
+      subcategories: formData.applicableOn === "CATEGORY" ? targets.subcategories : [],
+      items: formData.applicableOn === "PRODUCT" ? targets.items.map((i) => i._id) : [],
       isInfluencer: !!formData.isInfluencer,
       isAutoIncluded: !!formData.isAutoIncluded,
+      isVisible: !!formData.isVisible,
     };
 
     try {
@@ -392,6 +420,11 @@ const CouponForm = () => {
               <option value="PRODUCT">Specific product</option>
             </select>
           </Field>
+          <CouponTargetsPicker
+            applicableOn={formData.applicableOn}
+            value={targets}
+            onChange={setTargets}
+          />
         </FormSection>
 
         <FormSection title="Options">
@@ -427,6 +460,23 @@ const CouponForm = () => {
                 </span>
                 <span className="block text-[10px] leading-snug text-stone-500">
                   Can be auto-applied in cart / checkout
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-white p-2.5 transition hover:border-brand-300 hover:bg-brand-50/40 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50/60">
+              <input
+                type="checkbox"
+                name="isVisible"
+                checked={!!formData.isVisible}
+                onChange={handleInputChange}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-border text-brand-600 focus:ring-brand-100"
+              />
+              <span className="min-w-0">
+                <span className="block text-[11px] font-medium text-stone-800">
+                  Show in coupon list
+                </span>
+                <span className="block text-[10px] leading-snug text-stone-500">
+                  Untick to hide it; customers can still apply it by typing the code you give them
                 </span>
               </span>
             </label>
