@@ -9,6 +9,9 @@ import {
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import CouponTargetsPicker from "./CouponTargetsPicker";
 import { loadItemLabels } from "./couponTargets.util";
+import { getActiveGiftItems } from "../../apis/giftItemsApi";
+
+const GIFT_NOTE = "The gift item is delivered along with the item(s) you ordered.";
 
 const fieldClass =
   "w-full rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11px] text-stone-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-canvas-muted disabled:text-stone-500";
@@ -67,7 +70,25 @@ const CouponForm = () => {
     isInfluencer: false,
     isAutoIncluded: false,
     isVisible: true,
+    giftItemId: "",
   });
+  const [giftItems, setGiftItems] = useState([]);
+  const isGift = formData.discountType === "GIFT";
+
+  useEffect(() => {
+    if (!isGift || giftItems.length) return undefined;
+    let cancelled = false;
+    getActiveGiftItems()
+      .then((res) => {
+        const root = res?.data ?? res ?? {};
+        const list = root?.data?.items || root?.items || root?.data || root;
+        if (!cancelled) setGiftItems(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isGift, giftItems.length]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -98,6 +119,7 @@ const CouponForm = () => {
             isInfluencer: !!coupon.isInfluencer,
             isAutoIncluded: !!coupon.isAutoIncluded,
             isVisible: coupon.isVisible !== false,
+            giftItemId: coupon.giftItemId?._id || coupon.giftItemId || "",
           });
           const toIds = (arr) => (Array.isArray(arr) ? arr : []).map((v) => String(v?._id || v));
           setTargets({
@@ -134,7 +156,11 @@ const CouponForm = () => {
       setError("Coupon code is required");
       return;
     }
-    if (!formData.discountValue || formData.discountValue <= 0) {
+    if (isGift && !formData.giftItemId) {
+      setError("Choose the gift item for this coupon");
+      return;
+    }
+    if (!isGift && (!formData.discountValue || formData.discountValue <= 0)) {
       setError("Discount value must be greater than 0");
       return;
     }
@@ -159,10 +185,11 @@ const CouponForm = () => {
       code: formData.code.trim().toUpperCase(),
       description: formData.description.trim(),
       discountType: formData.discountType,
-      discountValue: Number(formData.discountValue),
-      maxDiscountAmount: formData.maxDiscountAmount
+      discountValue: isGift ? 0 : Number(formData.discountValue),
+      maxDiscountAmount: !isGift && formData.maxDiscountAmount
         ? Number(formData.maxDiscountAmount)
         : undefined,
+      giftItemId: isGift ? formData.giftItemId : null,
       minCartValue: formData.minCartValue
         ? Number(formData.minCartValue)
         : undefined,
@@ -269,7 +296,11 @@ const CouponForm = () => {
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              placeholder="e.g. 30% off on Holi sale"
+              placeholder={
+                isGift
+                  ? `Leave empty for: Free gift: <gift name>. ${GIFT_NOTE}`
+                  : "e.g. 30% off on Holi sale"
+              }
               rows={2}
               className={`${fieldClass} resize-none`}
             />
@@ -287,8 +318,32 @@ const CouponForm = () => {
               >
                 <option value="PERCENT">Percent (%)</option>
                 <option value="FIXED">Flat (₹)</option>
+                <option value="GIFT">Free gift</option>
               </select>
             </Field>
+            {isGift ? (
+              <Field label="Gift item" required hint={GIFT_NOTE}>
+                <select
+                  name="giftItemId"
+                  value={formData.giftItemId}
+                  onChange={handleInputChange}
+                  className={fieldClass}
+                >
+                  <option value="">Choose a gift…</option>
+                  {giftItems.map((g) => (
+                    <option key={g._id} value={g._id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+                {giftItems.length === 0 ? (
+                  <p className="mt-1 text-[10px] text-stone-500">
+                    No active gift items. Add one under Gift items first.
+                  </p>
+                ) : null}
+              </Field>
+            ) : null}
+            {!isGift ? (
             <Field label="Value" required>
               <div className="relative">
                 <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-stone-400">
@@ -307,6 +362,8 @@ const CouponForm = () => {
                 />
               </div>
             </Field>
+            ) : null}
+            {!isGift ? (
             <Field label="Max discount (₹)" hint="For % discounts only">
               <div className="relative">
                 <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-stone-400">
@@ -323,6 +380,7 @@ const CouponForm = () => {
                 />
               </div>
             </Field>
+            ) : null}
           </div>
         </FormSection>
 

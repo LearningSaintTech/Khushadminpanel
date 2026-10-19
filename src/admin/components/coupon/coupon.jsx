@@ -299,9 +299,11 @@ const CouponPage = () => {
   };
 
   const formatDiscount = (coupon) =>
-    coupon.discountType === "PERCENT"
-      ? `${coupon.discountValue}%`
-      : `₹${coupon.discountValue}`;
+    coupon.discountType === "GIFT"
+      ? "Free gift"
+      : coupon.discountType === "PERCENT"
+        ? `${coupon.discountValue}%`
+        : `₹${coupon.discountValue}`;
 
   const formatDate = (d) =>
     d
@@ -340,7 +342,9 @@ const CouponPage = () => {
         );
       case "discountType":
         return (
-          <Badge tone="slate">{coupon.discountType === "FIXED" ? "Flat ₹" : "Percent"}</Badge>
+          <Badge tone={coupon.discountType === "GIFT" ? "purple" : "slate"}>
+            {coupon.discountType === "GIFT" ? "Free gift" : coupon.discountType === "FIXED" ? "Flat ₹" : "Percent"}
+          </Badge>
         );
       case "maxDiscount":
         return (
