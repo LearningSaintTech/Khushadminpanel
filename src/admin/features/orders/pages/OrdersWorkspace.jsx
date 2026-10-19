@@ -34,6 +34,7 @@ import {
   forceSuccessPaymentAndConfirm,
   createShiprocketForOrderShipments,
   createDelhiveryForOrderShipments,
+  bulkProcessToProcessing,
 } from "../api/orderApi.js";
 import { useAdminPanelBasePath } from "../../../../context/AdminPanelBasePathContext";
 import { useModuleAccess } from "../../../../hooks/useModuleAccess";
@@ -3774,6 +3775,40 @@ const shippingProviderLabel = (value) =>
     (opt) => opt.value === String(value || "").toUpperCase(),
   )?.label || value || "Carrier";
 
+/**
+ * Delhivery bulk PROCESSING goes through one backend call so same-customer orders share an AWB.
+ * Returns Promise.allSettled-shaped rows (one per input, same order) so callers keep their handling.
+ */
+const runDelhiveryBulkProcessing = async (body, inputs) => {
+  const res = await bulkProcessToProcessing(body);
+  const data = res?.data ?? res ?? {};
+  const rows = Array.isArray(data.results) ? data.results : [];
+  const keyOf = (r) => `${r.orderId}|${r.itemId || ""}`;
+  const byKey = new Map(rows.map((r) => [keyOf(r), r]));
+  const settled = inputs.map((input) => {
+    const row = byKey.get(keyOf(input));
+    if (!row) return { status: "rejected", reason: new Error("No result returned") };
+    return row.success
+      ? { status: "fulfilled", value: { data: row.result } }
+      : { status: "rejected", reason: new Error(row.error || "Failed") };
+  });
+  const combined = (data.consolidated || []).filter((c) => c?.consolidated);
+  if (combined.length) {
+    toast.success(
+      `Combined into ${combined.length} Delhivery AWB(s): ` +
+        combined.map((c) => `${c.waybill} (${(c.orderIds || []).join(", ")})`).join("; "),
+      { duration: 8000 },
+    );
+  }
+  const combineFailures = (data.consolidated || []).filter((c) => c && !c.consolidated && c.error);
+  if (combineFailures.length) {
+    toast.error(
+      `Could not combine ${combineFailures.length} group(s); those orders got separate AWBs.`,
+    );
+  }
+  return settled;
+};
+
 const extractShippingFallbackEntries = (apiRes, extras = {}) => {
   const data = apiRes?.data ?? apiRes;
   const entries = [];
@@ -6937,7 +6972,40 @@ const Orders = ({
     setOrderError(null);
     const bulkFallbackEntries = [];
     try {
-      for (const itemId of selectedItemIds) {
+      // Delhivery: selected lines of this order go in ONE package (one AWB), not one per line
+      const delhiveryBulk =
+        bulkStatusValue === "PROCESSING" &&
+        shippingProvider === "DELHIVERY" &&
+        selectedItemIds.length > 1;
+      if (delhiveryBulk) {
+        const inputs = selectedItemIds.map((itemId) => ({
+          orderId: String(selectedOrder.orderId),
+          itemId: String(itemId),
+        }));
+        const settled = await runDelhiveryBulkProcessing(
+          { targets: inputs, shippingProvider: "DELHIVERY" },
+          inputs,
+        );
+        settled.forEach((r, idx) => {
+          if (r.status !== "fulfilled") return;
+          const currentItem = selectedOrder?.items?.find(
+            (it) => String(it.itemId || it._id) === inputs[idx].itemId,
+          );
+          bulkFallbackEntries.push(
+            ...extractShippingFallbackEntries(r.value, {
+              orderId: selectedOrder.orderId,
+              itemId: inputs[idx].itemId,
+              sku: currentItem?.sku,
+              deliveryPincode: selectedOrder?.address?.pincode,
+            }),
+          );
+        });
+        const failedCount = settled.filter((r) => r.status === "rejected").length;
+        if (failedCount) {
+          throw new Error(`${failedCount}/${inputs.length} item(s) failed to move to PROCESSING.`);
+        }
+      }
+      for (const itemId of delhiveryBulk ? [] : selectedItemIds) {
         const currentItem = selectedOrder?.items?.find(
           (it) => String(it.itemId || it._id) === String(itemId),
         );
@@ -7172,7 +7240,12 @@ const Orders = ({
         const ids = pending.orderIds || [];
         setListBulkProcessing(true);
         try {
-          const results = await Promise.allSettled(
+          const results = selectedShippingProvider === "DELHIVERY"
+            ? await runDelhiveryBulkProcessing(
+                { orderIds: ids, shippingProvider: "DELHIVERY" },
+                ids.map((orderId) => ({ orderId })),
+              )
+            : await Promise.allSettled(
             ids.map((orderId) => {
               const body = {
                 status: "PROCESSING",
@@ -7207,7 +7280,15 @@ const Orders = ({
         const targets = pending.targets || [];
         setListBulkProcessing(true);
         try {
-          const results = await Promise.allSettled(
+          const results = selectedShippingProvider === "DELHIVERY"
+            ? await runDelhiveryBulkProcessing(
+                {
+                  targets: targets.map((t) => ({ orderId: t.orderId, itemId: t.itemId })),
+                  shippingProvider: "DELHIVERY",
+                },
+                targets.map((t) => ({ orderId: String(t.orderId), itemId: String(t.itemId) })),
+              )
+            : await Promise.allSettled(
             targets.map((t) => {
               const body = {
                 status: "PROCESSING",

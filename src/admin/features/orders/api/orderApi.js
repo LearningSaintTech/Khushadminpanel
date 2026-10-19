@@ -164,6 +164,9 @@ const orderEndpoints = {
   // Update whole order status (all items to same status)
   UPDATE_WHOLE_ORDER_STATUS: (orderId) => `/admin/orders/${orderId}/status`,
 
+  /** Bulk PROCESSING; Delhivery books same-customer orders as one AWB */
+  BULK_PROCESSING: `/admin/orders/bulk/processing`,
+
   /** Admin cancel item(s) with policy reasons */
   CANCEL_ORDER_ITEMS: (orderId) => `/admin/orders/${orderId}/cancel`,
 
@@ -416,6 +419,15 @@ export const updateOrderItemStatus = (orderId, itemId, data) => {
     orderEndpoints.UPDATE_ITEM_STATUS(orderId, itemId),
     data
   );
+};
+
+/**
+ * Bulk PROCESSING for orders and/or lines in one call.
+ * body: { orderIds?: string[], targets?: [{ orderId, itemId }], shippingProvider, ... }
+ * Returns { total, failed, consolidated: [...], results: [{ orderId, itemId?, success, result?, error? }] }
+ */
+export const bulkProcessToProcessing = (body) => {
+  return apiConnector("POST", orderEndpoints.BULK_PROCESSING, body);
 };
 
 // ✅ Update whole order status (all items to same status)
