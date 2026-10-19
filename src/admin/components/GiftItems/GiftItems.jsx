@@ -186,6 +186,14 @@ const GiftItems = () => {
                     >
                       {item.isActive ? "Active" : "Inactive"}
                     </span>
+                    {item.isVisible === false ? (
+                      <span
+                        className="ml-1 inline-flex rounded-full bg-canvas-muted px-2 py-0.5 text-[10px] font-semibold text-stone-600"
+                        title="Not offered in the checkout gift picker; usable by gift coupons"
+                      >
+                        Hidden
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">

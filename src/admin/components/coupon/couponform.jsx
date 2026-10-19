@@ -9,7 +9,7 @@ import {
 import { useAdminPanelBasePath } from "../../../context/AdminPanelBasePathContext";
 import CouponTargetsPicker from "./CouponTargetsPicker";
 import { loadItemLabels } from "./couponTargets.util";
-import { getActiveGiftItems } from "../../apis/giftItemsApi";
+import { getGiftItems } from "../../apis/giftItemsApi";
 
 const GIFT_NOTE = "The gift item is delivered along with the item(s) you ordered.";
 
@@ -78,7 +78,8 @@ const CouponForm = () => {
   useEffect(() => {
     if (!isGift || giftItems.length) return undefined;
     let cancelled = false;
-    getActiveGiftItems()
+    // All active gifts, including ones hidden from the checkout picker (coupon-only gifts)
+    getGiftItems(1, 500, "true")
       .then((res) => {
         const root = res?.data ?? res ?? {};
         const list = root?.data?.items || root?.items || root?.data || root;
@@ -333,6 +334,7 @@ const CouponForm = () => {
                   {giftItems.map((g) => (
                     <option key={g._id} value={g._id}>
                       {g.name}
+                      {g.isVisible === false ? " (coupon only)" : ""}
                     </option>
                   ))}
                 </select>

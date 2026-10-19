@@ -48,6 +48,7 @@ const GiftItemsForm = () => {
     description: "",
     sortOrder: 0,
     isActive: true,
+    isVisible: true,
     image: "",
     imageFile: null,
   });
@@ -69,6 +70,7 @@ const GiftItemsForm = () => {
           description: item.description || "",
           sortOrder: item.sortOrder ?? 0,
           isActive: Boolean(item.isActive),
+          isVisible: item.isVisible !== false,
           image: item.image || "",
           imageFile: null,
         });
@@ -104,6 +106,7 @@ const GiftItemsForm = () => {
       formData.append("description", form.description || "");
       formData.append("sortOrder", String(Number(form.sortOrder) || 0));
       formData.append("isActive", String(form.isActive));
+      formData.append("isVisible", String(form.isVisible));
       if (form.imageFile) {
         formData.append("image", form.imageFile);
       }
@@ -210,6 +213,28 @@ const GiftItemsForm = () => {
                     />
                     <span className="font-medium">Active</span>
                   </label>
+                </Field>
+                <Field label="Visibility">
+                  <label
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px] transition-colors ${
+                      form.isVisible
+                        ? "border-brand-200 bg-brand-50 text-brand-800"
+                        : "border-border bg-canvas-muted/40 text-stone-600"
+                    } ${formDisabled ? "pointer-events-none opacity-60" : ""}`}
+                    title="Untick to keep this gift for gift coupons only"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-brand-600"
+                      checked={form.isVisible}
+                      onChange={(e) => setField("isVisible", e.target.checked)}
+                      disabled={formDisabled}
+                    />
+                    <span className="font-medium">Show in checkout gift picker</span>
+                  </label>
+                  <p className="mt-1 text-[10px] text-stone-500">
+                    Hidden gifts can still be given through a free gift coupon.
+                  </p>
                 </Field>
               </div>
             </FormSection>
