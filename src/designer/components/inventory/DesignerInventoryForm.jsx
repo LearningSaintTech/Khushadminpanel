@@ -490,10 +490,10 @@ const hasMeasurementValue = (v) =>
   v !== undefined && v !== null && String(v).trim() !== "" && Number.isFinite(Number(v));
 
 /**
- * Size chart rule: at least one size chart image is required; the measurement table is optional.
- * Blank rows are ignored, but a row with some values must have every column filled.
+ * What one unit (IN or CM) of the size chart has: an image, a complete table, and/or a half-filled row.
+ * Blank rows are ignored; a row with some values must have every column filled.
  */
-const chartMeetsRequirement = (body) => {
+const chartSideSummary = (body) => {
   const headers = Array.isArray(body?.headers) ? body.headers : [];
   const rows = Array.isArray(body?.rows) ? body.rows : [];
   const images = Array.isArray(body?.measureImage) ? body.measureImage : [];
@@ -502,12 +502,28 @@ const chartMeetsRequirement = (body) => {
       img &&
       (String(img.url || "").trim() || String(img.imageKey || "").trim()),
   );
-  if (!hasImage) return false;
   const keys = headers.map((h) => String(h?.key || "").trim()).filter(Boolean);
-  return rows.every((row) => {
+  let completeRows = 0;
+  let partial = false;
+  for (const row of rows) {
     const filled = keys.filter((key) => hasMeasurementValue(row?.measurements?.[key]));
-    return filled.length === 0 || filled.length === keys.length;
-  });
+    if (keys.length && filled.length === keys.length) completeRows += 1;
+    else if (filled.length > 0) partial = true;
+  }
+  return { hasImage, hasTable: completeRows > 0, partial };
+};
+
+/** Badge text for one unit: what it has, e.g. "image + table", "image", "table", "incomplete row", "empty". */
+const sizeChartBadge = (s) => {
+  if (s?.partial) return "incomplete row";
+  const parts = [s?.hasImage && "image", s?.hasTable && "table"].filter(Boolean);
+  return parts.length ? parts.join(" + ") : "empty";
+};
+
+/** Size chart rule: a size chart image OR a complete size table (either is enough), and no half-filled rows. */
+const chartMeetsRequirement = (body) => {
+  const s = chartSideSummary(body);
+  return (s.hasImage || s.hasTable) && !s.partial;
 };
 
 function normalizeCodeOptionsResponse(res) {
@@ -1711,7 +1727,7 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
         !chartMeetsRequirement(sizeChartsPayload.cm)
       ) {
         throw new Error(
-          "Please upload a size chart image (IN or CM). The measurement table is optional, but any row you start must have every column filled.",
+          "Add a size chart: upload a size chart image or enter the sizes manually (IN or CM).",
         );
       }
       formData.append("sizeCharts", JSON.stringify(sizeChartsPayload));
@@ -1963,9 +1979,19 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
         .filter(Boolean);
       return { headers, rows, measureImage };
     };
-    const inValid = chartMeetsRequirement(normalizePreview("in"));
-    const cmValid = chartMeetsRequirement(normalizePreview("cm"));
-    return { inValid, cmValid, anyValid: inValid || cmValid };
+    const inPreview = normalizePreview("in");
+    const cmPreview = normalizePreview("cm");
+    const inValid = chartMeetsRequirement(inPreview);
+    const cmValid = chartMeetsRequirement(cmPreview);
+    const inSummary = chartSideSummary(inPreview);
+    const cmSummary = chartSideSummary(cmPreview);
+    return {
+      inValid,
+      cmValid,
+      anyValid: (inValid || cmValid) && !inSummary.partial && !cmSummary.partial,
+      inSummary,
+      cmSummary,
+    };
   })();
   const steps = [
     { id: 1, label: "Core" },
@@ -2051,7 +2077,7 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
       return chartStatus.anyValid
         ? []
         : [
-            "Please upload a size chart image (IN or CM). If you fill the measurement table, complete every column of each row you start.",
+            "Add a size chart: upload a size chart image or enter the sizes manually (IN or CM). Every size row you start needs all columns filled.",
           ];
     }
     return [];
@@ -3482,7 +3508,7 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
                     : "bg-amber-100 text-amber-800"
                 }`}
               >
-                IN {chartStatus.inValid ? "valid" : "missing"}
+                IN: {sizeChartBadge(chartStatus.inSummary)}
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 font-semibold ${
@@ -3491,14 +3517,15 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
                     : "bg-amber-100 text-amber-800"
                 }`}
               >
-                CM {chartStatus.cmValid ? "valid" : "missing"}
+                CM: {sizeChartBadge(chartStatus.cmSummary)}
               </span>
             </div>
           </div>
           {!chartStatus.anyValid ? (
             <p className="mt-1 text-xs text-amber-800">
-              Upload a size chart image on IN or CM — this is what shows on the website.
-              The measurement table is optional (complete any row you start).
+              Add a size chart in IN or CM — <strong>either</strong> upload a size chart
+              image (Option A) <strong>or</strong> enter the sizes manually (Option B).
+              Both are fine too. Any size row you start must have every column filled.
             </p>
           ) : null}
 
@@ -3692,140 +3719,15 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
                 key={side}
                 className="mt-4 rounded-lg border border-indigo-200/80 bg-white/70 p-3 shadow-sm"
               >
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-indigo-950">
-                    {sideTitle}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => addSizeChartHeader(side)}
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
-                    >
-                      + Header
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => addSizeChartRow(side)}
-                      className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
-                    >
-                      + Row
-                    </button>
-                  </div>
-                </div>
+                <h3 className="mb-2 text-sm font-semibold text-indigo-950">
+                  {sideTitle}
+                </h3>
 
-                {chart.headers.length === 0 ? (
-                  <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
-                    No headers for this table yet
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {chart.headers.map((header, idx) => (
-                      <div
-                        key={idx}
-                        className="flex flex-col sm:flex-row gap-2 items-stretch bg-white/80 border border-gray-200 rounded-lg p-2"
-                      >
-                        <input
-                          className={fieldClass}
-                          value={header.key}
-                          placeholder="Key (e.g. chest, length)"
-                          onChange={(e) =>
-                            updateSizeChartHeader(
-                              side,
-                              idx,
-                              "key",
-                              e.target.value,
-                            )
-                          }
-                        />
-                        <input
-                          className={fieldClass}
-                          value={header.label}
-                          placeholder={labelPh}
-                          onChange={(e) =>
-                            updateSizeChartHeader(
-                              side,
-                              idx,
-                              "label",
-                              e.target.value,
-                            )
-                          }
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeSizeChartHeader(side, idx)}
-                          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {chart.rows.length === 0 ? (
-                  <p className="mt-2 text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
-                    No size rows for this table yet
-                  </p>
-                ) : (
-                  <div className="mt-2 space-y-2">
-                    {chart.rows.map((row, rowIndex) => (
-                      <div
-                        key={rowIndex}
-                        className="border border-gray-200 rounded-lg bg-white/80 p-2 space-y-2"
-                      >
-                        <div className="flex flex-col sm:flex-row gap-2 items-stretch">
-                          <input
-                            className={fieldClass}
-                            value={row.size}
-                            placeholder="Size (e.g. S, M, L)"
-                            onChange={(e) =>
-                              updateSizeChartRow(
-                                side,
-                                rowIndex,
-                                "size",
-                                e.target.value,
-                              )
-                            }
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeSizeChartRow(side, rowIndex)}
-                            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {(chart.headers || []).map((h) => (
-                            <input
-                              key={h.key}
-                              type="number"
-                              step="any"
-                              className={fieldClass}
-                              value={row.measurements?.[h.key] ?? ""}
-                              placeholder={h.label || h.key}
-                              onChange={(e) =>
-                                updateSizeChartRow(
-                                  side,
-                                  rowIndex,
-                                  h.key,
-                                  e.target.value,
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-3">
+                <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-2">
                   <div className="mb-2 flex items-center justify-between">
                     <h4 className="text-xs font-semibold text-gray-700">
-                      Measurement images (
-                      {side === "in" ? "measureImagesIn" : "measureImagesCm"})
+                      Option A — Size chart image{" "}
+                      <span className="font-normal text-gray-500">(shown on the website)</span>
                     </h4>
                     <label className="cursor-pointer inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
                       + Add
@@ -3871,6 +3773,137 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
                           >
                             ×
                           </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 rounded-lg border border-indigo-100 bg-white/60 p-2">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold text-gray-700">
+                      Option B — Enter sizes manually{" "}
+                      <span className="font-normal text-gray-500">(optional if you upload an image)</span>
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addSizeChartHeader(side)}
+                        className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                      >
+                        + Header
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addSizeChartRow(side)}
+                        className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-50"
+                      >
+                        + Row
+                      </button>
+                    </div>
+                  </div>
+                  {chart.headers.length === 0 ? (
+                    <p className="text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
+                      No headers for this table yet
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {chart.headers.map((header, idx) => (
+                        <div
+                          key={idx}
+                          className="flex flex-col sm:flex-row gap-2 items-stretch bg-white/80 border border-gray-200 rounded-lg p-2"
+                        >
+                          <input
+                            className={fieldClass}
+                            value={header.key}
+                            placeholder="Key (e.g. chest, length)"
+                            onChange={(e) =>
+                              updateSizeChartHeader(
+                                side,
+                                idx,
+                                "key",
+                                e.target.value,
+                              )
+                            }
+                          />
+                          <input
+                            className={fieldClass}
+                            value={header.label}
+                            placeholder={labelPh}
+                            onChange={(e) =>
+                              updateSizeChartHeader(
+                                side,
+                                idx,
+                                "label",
+                                e.target.value,
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSizeChartHeader(side, idx)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {chart.rows.length === 0 ? (
+                    <p className="mt-2 text-xs text-gray-500 italic bg-gray-50 rounded-lg p-3">
+                      No size rows for this table yet
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {chart.rows.map((row, rowIndex) => (
+                        <div
+                          key={rowIndex}
+                          className="border border-gray-200 rounded-lg bg-white/80 p-2 space-y-2"
+                        >
+                          <div className="flex flex-col sm:flex-row gap-2 items-stretch">
+                            <input
+                              className={fieldClass}
+                              value={row.size}
+                              placeholder="Size (e.g. S, M, L)"
+                              onChange={(e) =>
+                                updateSizeChartRow(
+                                  side,
+                                  rowIndex,
+                                  "size",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeSizeChartRow(side, rowIndex)}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {(chart.headers || []).map((h) => (
+                              <input
+                                key={h.key}
+                                type="number"
+                                step="any"
+                                className={fieldClass}
+                                value={row.measurements?.[h.key] ?? ""}
+                                placeholder={h.label || h.key}
+                                onChange={(e) =>
+                                  updateSizeChartRow(
+                                    side,
+                                    rowIndex,
+                                    h.key,
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
