@@ -485,22 +485,29 @@ const toNumberOrZero = (value) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** A measurement value the designer actually typed (blank cells don't count). */
+const hasMeasurementValue = (v) =>
+  v !== undefined && v !== null && String(v).trim() !== "" && Number.isFinite(Number(v));
+
+/**
+ * Size chart rule: at least one size chart image is required; the measurement table is optional.
+ * Blank rows are ignored, but a row with some values must have every column filled.
+ */
 const chartMeetsRequirement = (body) => {
   const headers = Array.isArray(body?.headers) ? body.headers : [];
   const rows = Array.isArray(body?.rows) ? body.rows : [];
   const images = Array.isArray(body?.measureImage) ? body.measureImage : [];
-  if (headers.length === 0 || rows.length === 0) return false;
-  const keys = headers.map((h) => String(h?.key || "").trim()).filter(Boolean);
-  if (keys.length === 0) return false;
   const hasImage = images.some(
     (img) =>
       img &&
       (String(img.url || "").trim() || String(img.imageKey || "").trim()),
   );
   if (!hasImage) return false;
-  return rows.every((row) =>
-    keys.every((key) => Number.isFinite(Number(row?.measurements?.[key]))),
-  );
+  const keys = headers.map((h) => String(h?.key || "").trim()).filter(Boolean);
+  return rows.every((row) => {
+    const filled = keys.filter((key) => hasMeasurementValue(row?.measurements?.[key]));
+    return filled.length === 0 || filled.length === keys.length;
+  });
 };
 
 function normalizeCodeOptionsResponse(res) {
@@ -1704,7 +1711,7 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
         !chartMeetsRequirement(sizeChartsPayload.cm)
       ) {
         throw new Error(
-          "Size chart must have headers, at least one complete row (all measurement columns numeric), and at least one measure image in IN or CM.",
+          "Please upload a size chart image (IN or CM). The measurement table is optional, but any row you start must have every column filled.",
         );
       }
       formData.append("sizeCharts", JSON.stringify(sizeChartsPayload));
@@ -1929,8 +1936,9 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
         .filter((row) => row && String(row.size || "").trim())
         .map((row) => ({
           size: String(row.size || "").trim(),
+          // raw values: blank cells must stay blank for chartMeetsRequirement
           measurements: keys.reduce((acc, key) => {
-            acc[key] = Number(row.measurements?.[key]);
+            acc[key] = row.measurements?.[key];
             return acc;
           }, {}),
         }));
@@ -2043,7 +2051,7 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
       return chartStatus.anyValid
         ? []
         : [
-            "Size chart must be valid in IN or CM (headers, complete numeric rows, and at least one image).",
+            "Please upload a size chart image (IN or CM). If you fill the measurement table, complete every column of each row you start.",
           ];
     }
     return [];
@@ -3489,8 +3497,8 @@ const DesignerInventoryForm = ({ panel = "designer" } = {}) => {
           </div>
           {!chartStatus.anyValid ? (
             <p className="mt-1 text-xs text-amber-800">
-              Add complete chart data on IN or CM: headers, numeric values for each
-              measurement column, and at least one measure image.
+              Upload a size chart image on IN or CM — this is what shows on the website.
+              The measurement table is optional (complete any row you start).
             </p>
           ) : null}
 
