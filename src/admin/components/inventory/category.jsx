@@ -5,6 +5,7 @@ import {
   getAllCategories,
   toggleCategoryActiveStatus,
   toggleCategoryNavbarStatus,
+  toggleCategoryWebNavbarStatus,
 } from "../../apis/categoryapi";
 export default function Categories() {
   const navigate = useNavigate();
@@ -55,6 +56,8 @@ export default function Categories() {
         image: cat.imageUrl || "https://via.placeholder.com/150",
         isActive: cat.isActive ?? true,
         isNavbar: cat.isNavbar ?? false,
+        // Not set yet = the website follows the app flag
+        isWebNavbar: typeof cat.isWebNavbar === "boolean" ? cat.isWebNavbar : (cat.isNavbar ?? false),
         isFooter: cat.isFooter ?? false,
       }));
       setCategories(formatted);
@@ -120,6 +123,26 @@ export default function Categories() {
         ),
       );
       alert(err.response?.data?.message || "Failed to update navbar status");
+    }
+  };
+  const handleToggleWebNavbar = async (category) => {
+    const original = { ...category };
+    setCategories((prev) =>
+      prev.map((cat) =>
+        cat.id === category.id ? { ...cat, isWebNavbar: !cat.isWebNavbar } : cat,
+      ),
+    );
+    try {
+      await toggleCategoryWebNavbarStatus(category.id);
+    } catch (err) {
+      setCategories((prev) =>
+        prev.map((cat) =>
+          cat.id === category.id
+            ? { ...cat, isWebNavbar: original.isWebNavbar }
+            : cat,
+        ),
+      );
+      alert(err.response?.data?.message || "Failed to update web navbar status");
     }
   };
   // EDIT - Navigate to edit page
@@ -202,7 +225,10 @@ export default function Categories() {
                       Status
                     </th>
                     <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-stone-600">
-                      Navbar
+                      App navbar
+                    </th>
+                    <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-stone-600">
+                      Web navbar
                     </th>
                     <th className="hidden xl:table-cell w-24 shrink-0 px-2 sm:px-3 py-2 lg:py-3 text-left text-xs lg:text-xs font-semibold text-stone-600">
                       Footer
@@ -216,7 +242,7 @@ export default function Categories() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="px-6 py-12 text-center text-stone-500 text-xs"
                       >
                         Loading categories...
@@ -225,7 +251,7 @@ export default function Categories() {
                   ) : categories.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="px-6 py-12 text-center text-stone-500 text-xs"
                       >
                         {debouncedSearchTerm
@@ -333,6 +359,21 @@ export default function Categories() {
                             }`}
                           >
                             {cat.isNavbar ? "Shown" : "Hidden"}
+                          </button>
+                        </td>
+                        <td className="hidden xl:table-cell px-2 sm:px-3 py-2 lg:py-3 whitespace-nowrap">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleWebNavbar(cat);
+                            }}
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                              cat.isWebNavbar
+                                ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                : "bg-canvas-muted text-stone-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            {cat.isWebNavbar ? "Shown" : "Hidden"}
                           </button>
                         </td>
                         <td className="hidden xl:table-cell px-2 sm:px-3 py-3 whitespace-nowrap">
@@ -448,7 +489,20 @@ export default function Categories() {
                               : "bg-canvas-muted text-stone-700"
                           }`}
                         >
-                          {cat.isNavbar ? "Navbar" : "Hidden"}
+                          {cat.isNavbar ? "App navbar" : "App hidden"}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleWebNavbar(cat);
+                          }}
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            cat.isWebNavbar
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-canvas-muted text-stone-700"
+                          }`}
+                        >
+                          {cat.isWebNavbar ? "Web navbar" : "Web hidden"}
                         </button>
                       </div>
                     </div>

@@ -10,7 +10,8 @@
     GET_ALL_CATEGORIES: "/categories/getAll",
     UPDATE_CATEGORY: "/categories/update",   // + /:id
     TOGGLE_ACTIVE_STATUS: "/categories/activeStatus",
-    TOGGLE_NAVBAR_STATUS: "/categories/navbarStatus",   // + /:id
+    TOGGLE_NAVBAR_STATUS: "/categories/navbarStatus",   // + /:id  (app navbar)
+    TOGGLE_WEB_NAVBAR_STATUS: "/categories/webNavbarStatus",   // + /:id  (website navbar)
   };
 
   /**
@@ -72,6 +73,14 @@
     return apiConnector(
       "PATCH",
       `${categoryEndpoints.TOGGLE_NAVBAR_STATUS}/${categoryId}`
+    );
+  };
+
+  /** Website header menu flag (separate from the app's isNavbar). */
+  export const toggleCategoryWebNavbarStatus = (categoryId) => {
+    return apiConnector(
+      "PATCH",
+      `${categoryEndpoints.TOGGLE_WEB_NAVBAR_STATUS}/${categoryId}`
     );
   };
 

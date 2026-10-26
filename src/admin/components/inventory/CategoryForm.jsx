@@ -26,6 +26,7 @@ const CategoryForm = () => {
     imagePreview: null,
     isActive: true,
     isNavbar: false,
+    isWebNavbar: false,
     isFooter: false,
     isSidebar: false,
   });
@@ -77,6 +78,11 @@ const CategoryForm = () => {
               imagePreview: category.imageUrl || null,
               isActive: category.isActive ?? true,
               isNavbar: category.isNavbar ?? false,
+              // Not set yet = the website follows the app flag
+              isWebNavbar:
+                typeof category.isWebNavbar === "boolean"
+                  ? category.isWebNavbar
+                  : (category.isNavbar ?? false),
               isFooter: category.isFooter ?? false,
               isSidebar: category.isSidebar ?? false,
             });
@@ -217,6 +223,7 @@ const CategoryForm = () => {
       formData.append("description", form.description.trim());
       formData.append("isActive", form.isActive);
       formData.append("isNavbar", form.isNavbar);
+      formData.append("isWebNavbar", form.isWebNavbar);
       formData.append("isFooter", form.isFooter);
       formData.append("isSidebar", form.isSidebar);
       if (form.iconFile) {
@@ -540,7 +547,20 @@ const CategoryForm = () => {
                     className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
                   />
                   <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
-                    Show in Navbar
+                    Show in app navbar
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="isWebNavbar"
+                    checked={form.isWebNavbar}
+                    onChange={handleChange}
+                    className="w-4 h-4 rounded border-border text-black focus:ring-2 focus:ring-brand-100 cursor-pointer"
+                  />
+                  <span className="text-xs font-medium text-stone-700 group-hover:text-stone-900">
+                    Show in web navbar
                   </span>
                 </label>
 
